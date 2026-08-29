@@ -51,6 +51,7 @@ describe("email settings endpoints", () => {
         languageCode: "AR",
         theme: "SYSTEM",
         sidebarCollapsed: false,
+        calendarShowAdjacentDates: false,
         timezone: "Asia/Riyadh",
       },
     });

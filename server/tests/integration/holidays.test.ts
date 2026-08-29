@@ -23,6 +23,7 @@ function profile(roleCode: "USER" | "ADMIN"): AuthMeData {
       languageCode: "AR",
       theme: "SYSTEM",
       sidebarCollapsed: false,
+      calendarShowAdjacentDates: false,
       timezone: "Asia/Riyadh",
     },
   };

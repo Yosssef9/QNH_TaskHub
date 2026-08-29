@@ -50,6 +50,7 @@ export function createAuthService(repository: AuthRepository): AuthService {
         access.languageCode === null ||
         access.theme === null ||
         access.sidebarCollapsed === null ||
+        access.calendarShowAdjacentDates === null ||
         access.timezone === null ||
         !access.hasDefaultList
       ) {

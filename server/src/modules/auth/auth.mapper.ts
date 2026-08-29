@@ -42,7 +42,11 @@ export function mapAuthMeData(
   portalUser: PortalUserRecord,
   access: AccessProfileRecord,
 ): AuthMeData {
-  if (access.sidebarCollapsed === null || access.timezone !== "Asia/Riyadh") {
+  if (
+    access.sidebarCollapsed === null ||
+    access.calendarShowAdjacentDates === null ||
+    access.timezone !== "Asia/Riyadh"
+  ) {
     throw new AppError({
       statusCode: 500,
       code: "INVALID_PREFERENCE_CONFIGURATION",
@@ -64,6 +68,7 @@ export function mapAuthMeData(
       languageCode: toLanguageCode(access.languageCode),
       theme: toTheme(access.theme),
       sidebarCollapsed: access.sidebarCollapsed,
+      calendarShowAdjacentDates: access.calendarShowAdjacentDates,
       timezone: access.timezone,
     },
   };

@@ -17,6 +17,7 @@ export interface UserPreferences {
   languageCode: LanguageCode
   theme: ThemePreference
   sidebarCollapsed: boolean
+  calendarShowAdjacentDates: boolean
   timezone: 'Asia/Riyadh'
 }
 

@@ -16,6 +16,7 @@ export interface AccessProfileRecord {
   languageCode: string | null;
   theme: string | null;
   sidebarCollapsed: boolean | null;
+  calendarShowAdjacentDates: boolean | null;
   timezone: string | null;
   hasDefaultList: boolean;
 }
@@ -52,6 +53,7 @@ export async function findAccessProfile(userId: number): Promise<AccessProfileRe
         settings.language_code AS languageCode,
         settings.theme,
         settings.sidebar_collapsed AS sidebarCollapsed,
+        settings.calendar_show_adjacent_dates AS calendarShowAdjacentDates,
         settings.timezone_name AS timezone,
         CAST(
           CASE WHEN EXISTS (

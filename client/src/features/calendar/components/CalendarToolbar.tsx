@@ -2,6 +2,7 @@ import { CalendarDays, ChevronLeft, ChevronRight, List } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/cn'
 
 import type { CalendarViewMode } from '../types/calendar.types'
@@ -13,6 +14,9 @@ interface Props {
   onPrevious: () => void
   onToday: () => void
   onNext: () => void
+  showAdjacentDates: boolean
+  displayPreferencePending: boolean
+  onShowAdjacentDatesChange: (showAdjacentDates: boolean) => void
 }
 
 export function CalendarToolbar({
@@ -22,6 +26,9 @@ export function CalendarToolbar({
   onViewModeChange,
   title,
   viewMode,
+  showAdjacentDates,
+  displayPreferencePending,
+  onShowAdjacentDatesChange,
 }: Props) {
   const { i18n, t } = useTranslation()
   const isRtl = i18n.dir() === 'rtl'
@@ -59,40 +66,59 @@ export function CalendarToolbar({
         </div>
       </div>
 
-      <div
-        className="bg-muted/60 grid grid-cols-2 gap-1 rounded-xl p-1 sm:w-fit"
-        aria-label={t('calendar.viewModeLabel')}
-      >
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          aria-pressed={viewMode === 'MONTH'}
-          className={cn(
-            'justify-center',
-            viewMode === 'MONTH' &&
-              'bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary',
-          )}
-          onClick={() => onViewModeChange('MONTH')}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        {viewMode === 'MONTH' ? (
+          <Select
+            value={showAdjacentDates ? 'ADJACENT' : 'CURRENT'}
+            disabled={displayPreferencePending}
+            onValueChange={(value) => onShowAdjacentDatesChange(value === 'ADJACENT')}
+          >
+            <SelectTrigger className="h-9 w-full sm:w-56" aria-label={t('calendar.monthDisplayLabel')}>
+              <CalendarDays aria-hidden="true" className="text-primary size-4 shrink-0" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="CURRENT">{t('calendar.currentMonthOnly')}</SelectItem>
+              <SelectItem value="ADJACENT">{t('calendar.includeAdjacentDates')}</SelectItem>
+            </SelectContent>
+          </Select>
+        ) : null}
+
+        <div
+          className="bg-muted/60 grid grid-cols-2 gap-1 rounded-xl p-1 sm:w-fit"
+          aria-label={t('calendar.viewModeLabel')}
         >
-          <CalendarDays aria-hidden="true" className="size-4" />
-          {t('calendar.monthView')}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          aria-pressed={viewMode === 'AGENDA'}
-          className={cn(
-            'justify-center',
-            viewMode === 'AGENDA' &&
-              'bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary',
-          )}
-          onClick={() => onViewModeChange('AGENDA')}
-        >
-          <List aria-hidden="true" className="size-4" />
-          {t('calendar.agendaView')}
-        </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-pressed={viewMode === 'MONTH'}
+            className={cn(
+              'justify-center',
+              viewMode === 'MONTH' &&
+                'bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary',
+            )}
+            onClick={() => onViewModeChange('MONTH')}
+          >
+            <CalendarDays aria-hidden="true" className="size-4" />
+            {t('calendar.monthView')}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-pressed={viewMode === 'AGENDA'}
+            className={cn(
+              'justify-center',
+              viewMode === 'AGENDA' &&
+                'bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary',
+            )}
+            onClick={() => onViewModeChange('AGENDA')}
+          >
+            <List aria-hidden="true" className="size-4" />
+            {t('calendar.agendaView')}
+          </Button>
+        </div>
       </div>
     </div>
   )

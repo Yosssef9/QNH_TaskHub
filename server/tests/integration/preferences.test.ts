@@ -23,6 +23,7 @@ describe("PATCH /api/users/me/preferences", () => {
         languageCode: "AR",
         theme: "SYSTEM",
         sidebarCollapsed: false,
+        calendarShowAdjacentDates: false,
         timezone: "Asia/Riyadh",
       },
     });
@@ -33,19 +34,26 @@ describe("PATCH /api/users/me/preferences", () => {
       languageCode: "EN",
       theme: "DARK",
       sidebarCollapsed: true,
+      calendarShowAdjacentDates: true,
       timezone: "Asia/Riyadh",
     });
 
     const response = await request(app)
       .patch("/api/users/me/preferences")
       .set("Authorization", `Bearer ${createToken()}`)
-      .send({ languageCode: "EN", theme: "DARK", sidebarCollapsed: true });
+      .send({
+        languageCode: "EN",
+        theme: "DARK",
+        sidebarCollapsed: true,
+        calendarShowAdjacentDates: true,
+      });
 
     expect(response.status).toBe(200);
     expect(preferencesService.update).toHaveBeenCalledWith(7, {
       languageCode: "EN",
       theme: "DARK",
       sidebarCollapsed: true,
+      calendarShowAdjacentDates: true,
     });
   });
 

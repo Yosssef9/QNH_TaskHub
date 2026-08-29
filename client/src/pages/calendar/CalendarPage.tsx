@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import toast from 'react-hot-toast'
 
 import { ErrorState } from '@/components/shared/ErrorState'
 import { PageHeader } from '@/components/shared/PageHeader'
@@ -10,12 +11,14 @@ import {
 } from '@/features/calendar/components/CalendarFilters'
 import { TaskCalendar } from '@/features/calendar/components/TaskCalendar'
 import { useCalendarTasks } from '@/features/calendar/hooks/use-calendar-tasks'
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import type {
   CalendarTaskFilters,
   CalendarViewMode,
   CalendarVisibleRange,
 } from '@/features/calendar/types/calendar.types'
 import { useLists } from '@/features/lists/hooks/use-lists'
+import { useUpdatePreferences } from '@/features/preferences/hooks/use-update-preferences'
 import { TaskDetailsDrawer } from '@/features/tasks/components/TaskDetailsDrawer'
 import { TaskEditorDialog } from '@/features/tasks/components/TaskEditorDialog'
 import { useWorkCycles } from '@/features/work-cycles/hooks/use-work-cycles'
@@ -27,13 +30,22 @@ export function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [detailsTaskId, setDetailsTaskId] = useState<number | null>(null)
   const [editorOpen, setEditorOpen] = useState(false)
+  const [showAdjacentDatesOverride, setShowAdjacentDatesOverride] = useState<boolean | null>(null)
   const [filters, setFilters] = useState<CalendarFilterState>({
     scope: 'PERSONAL',
     search: '',
   })
 
+  const currentUserQuery = useCurrentUser()
+  const updatePreferencesMutation = useUpdatePreferences()
   const listsQuery = useLists()
   const cyclesQuery = useWorkCycles()
+  const savedShowAdjacentDates = currentUserQuery.data?.preferences.calendarShowAdjacentDates ?? true
+  const showAdjacentDates = showAdjacentDatesOverride ?? savedShowAdjacentDates
+
+  useEffect(() => {
+    setShowAdjacentDatesOverride(null)
+  }, [savedShowAdjacentDates])
 
   const queryFilters = useMemo<CalendarTaskFilters | null>(() => {
     if (!range) return null
@@ -108,6 +120,21 @@ export function CalendarPage() {
           ? t('calendar.createOpenCycleRequired')
           : undefined
 
+  function changeAdjacentDateDisplay(nextValue: boolean) {
+    if (nextValue === showAdjacentDates) return
+
+    setShowAdjacentDatesOverride(nextValue)
+    updatePreferencesMutation.mutate(
+      { calendarShowAdjacentDates: nextValue },
+      {
+        onError: () => {
+          setShowAdjacentDatesOverride(null)
+          toast.error(t('calendar.displayPreferenceError'))
+        },
+      },
+    )
+  }
+
   function openTask(taskId: number) {
     setSelectedDate(null)
     setDetailsTaskId(taskId)
@@ -138,7 +165,10 @@ export function CalendarPage() {
         showEmpty={tasksQuery.isSuccess && tasks.length === 0}
         viewMode={viewMode}
         selectedDate={selectedDate}
+        showAdjacentDates={showAdjacentDates}
+        displayPreferencePending={updatePreferencesMutation.isPending}
         onViewModeChange={setViewMode}
+        onShowAdjacentDatesChange={changeAdjacentDateDisplay}
         onRangeChange={setRange}
         onSelectDate={setSelectedDate}
         onOpenTask={openTask}

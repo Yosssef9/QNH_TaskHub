@@ -30,10 +30,13 @@ interface Props {
   showEmpty: boolean
   viewMode: CalendarViewMode
   selectedDate: string | null
+  showAdjacentDates: boolean
+  displayPreferencePending: boolean
   onViewModeChange: (viewMode: CalendarViewMode) => void
   onRangeChange: (range: CalendarVisibleRange) => void
   onSelectDate: (date: string) => void
   onOpenTask: (taskId: number) => void
+  onShowAdjacentDatesChange: (showAdjacentDates: boolean) => void
 }
 
 function dateOnlyInTimeZone(value: Date): string {
@@ -47,6 +50,16 @@ function dateOnlyInTimeZone(value: Date): string {
   return `${values.year}-${values.month}-${values.day}`
 }
 
+function dayOfWeekInAppTimeZone(value: Date): number {
+  const [year, month, day] = dateOnlyInTimeZone(value).split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay()
+}
+
+function isWeekendInAppTimeZone(value: Date): boolean {
+  const day = dayOfWeekInAppTimeZone(value)
+  return day === 5 || day === 6
+}
+
 export function TaskCalendar({
   isFetching,
   onOpenTask,
@@ -54,9 +67,12 @@ export function TaskCalendar({
   onSelectDate,
   onViewModeChange,
   selectedDate,
+  showAdjacentDates,
+  displayPreferencePending,
   showEmpty,
   tasks,
   viewMode,
+  onShowAdjacentDatesChange,
 }: Props) {
   const { i18n, t } = useTranslation()
   const { resolvedTheme } = useTheme()
@@ -131,6 +147,9 @@ export function TaskCalendar({
         title={currentTitle}
         viewMode={viewMode}
         onViewModeChange={onViewModeChange}
+        showAdjacentDates={showAdjacentDates}
+        displayPreferencePending={displayPreferencePending}
+        onShowAdjacentDatesChange={onShowAdjacentDatesChange}
         onPrevious={() => api()?.prev()}
         onToday={() => api()?.today()}
         onNext={() => api()?.next()}
@@ -165,27 +184,44 @@ export function TaskCalendar({
           timeZone={APP_TIME_ZONE}
           height="auto"
           borderless
-          fixedWeekCount
-          showNonCurrentDates
+          fixedWeekCount={false}
+          showNonCurrentDates={showAdjacentDates}
           dayNarrowWidth={72}
           dayMaxEvents={isCompactMonth ? 2 : 3}
           eventInteractive
           events={events}
           className="taskhub-calendar text-foreground"
           viewClass="overflow-hidden rounded-xl border border-border/80 bg-card"
-          dayHeaderClass="border-primary/15 bg-primary/[0.08] text-primary text-[11px] font-semibold sm:text-sm"
+          dayHeaderClass={(state) =>
+            cn(
+              'border-primary/15 text-[11px] font-semibold sm:text-sm',
+              isWeekendInAppTimeZone(state.date)
+                ? 'border-border/80 bg-muted/70 text-muted-foreground'
+                : 'bg-primary/[0.08] text-primary',
+            )
+          }
           dayHeaderInnerClass="py-2.5"
           dayCellTopClass="taskhub-calendar-day-top"
           dayCellInnerClass="taskhub-calendar-day-inner"
           dayCellBottomClass="taskhub-calendar-day-bottom"
           dayCellClass={(state) => {
             const cellDate = dateOnlyInTimeZone(state.date)
+            const isWeekend = isWeekendInAppTimeZone(state.date)
             return cn(
-              'bg-card align-top min-h-16 cursor-pointer sm:min-h-24 xl:min-h-28',
-              state.isOther && 'bg-muted/20 text-muted-foreground hover:bg-muted/35',
-              !state.isOther && !state.isToday && selectedDate !== cellDate && 'hover:bg-primary/[0.035]',
-              state.isToday && 'bg-primary/[0.055] hover:bg-primary/[0.075]',
-              selectedDate === cellDate && 'bg-primary/[0.08] ring-primary/30 ring-1 ring-inset hover:bg-primary/[0.1]',
+              'bg-card align-top min-h-16 sm:min-h-24 xl:min-h-28',
+              !state.isOther || showAdjacentDates ? 'cursor-pointer' : 'cursor-default',
+              isWeekend && !state.isOther && 'bg-muted/[0.18]',
+              state.isOther && showAdjacentDates &&
+                'bg-muted/20 text-muted-foreground hover:bg-muted/35',
+              state.isOther && !showAdjacentDates && 'bg-muted/[0.08] text-muted-foreground',
+              !state.isOther && !state.isToday && selectedDate !== cellDate &&
+                (isWeekend ? 'hover:bg-muted/35' : 'hover:bg-primary/[0.035]'),
+              state.isToday && selectedDate !== cellDate &&
+                'bg-primary/[0.11] ring-primary/35 ring-1 ring-inset hover:bg-primary/[0.14]',
+              state.isToday && selectedDate === cellDate &&
+                'bg-primary/[0.15] ring-primary/50 ring-2 ring-inset hover:bg-primary/[0.17]',
+              !state.isToday && selectedDate === cellDate &&
+                'bg-primary/[0.08] ring-primary/30 ring-1 ring-inset hover:bg-primary/[0.1]',
             )
           }}
           eventClass={(info) =>
@@ -211,7 +247,8 @@ export function TaskCalendar({
                 type="button"
                 className={cn(
                   'focus-visible:ring-ring inline-grid min-w-7 place-items-center rounded-full px-1 py-0.5 text-xs font-semibold outline-none focus-visible:ring-2 sm:text-sm',
-                  info.isToday && 'bg-primary text-primary-foreground',
+                  info.isToday &&
+                    'bg-primary text-primary-foreground shadow-sm ring-2 ring-primary/20',
                   info.isOther && !info.isToday && 'text-muted-foreground',
                   selectedDate === cellDate && !info.isToday && 'bg-primary/12 text-primary',
                 )}
@@ -248,7 +285,11 @@ export function TaskCalendar({
             />
           )}
           dateClick={(info) => {
-            if (info.allDay) onSelectDate(info.dateStr.slice(0, 10))
+            if (!info.allDay) return
+            const clickedDate = info.dateStr.slice(0, 10)
+            const currentMonth = dateOnlyInTimeZone(info.view.currentStart).slice(0, 7)
+            if (!showAdjacentDates && clickedDate.slice(0, 7) !== currentMonth) return
+            onSelectDate(clickedDate)
           }}
           moreLinkClick={(info) => {
             info.jsEvent.preventDefault()

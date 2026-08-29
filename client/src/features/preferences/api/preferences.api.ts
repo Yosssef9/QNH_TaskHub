@@ -4,7 +4,10 @@ import type { ApiSuccessResponse } from '@/types/api.types'
 import type { UserPreferences } from '@/features/auth/types/auth.types'
 
 export type UpdatePreferencesInput = Partial<
-  Pick<UserPreferences, 'languageCode' | 'theme' | 'sidebarCollapsed'>
+  Pick<
+    UserPreferences,
+    'languageCode' | 'theme' | 'sidebarCollapsed' | 'calendarShowAdjacentDates'
+  >
 >
 
 export async function updatePreferences(input: UpdatePreferencesInput): Promise<UserPreferences> {

@@ -6,6 +6,7 @@ interface PreferencesRecord {
   languageCode: "AR" | "EN";
   theme: "LIGHT" | "DARK" | "SYSTEM";
   sidebarCollapsed: boolean;
+  calendarShowAdjacentDates: boolean;
   timezone: "Asia/Riyadh";
 }
 
@@ -19,17 +20,27 @@ export async function updatePreferences(
     .input("userId", sql.Int, userId)
     .input("languageCode", sql.VarChar(2), input.languageCode ?? null)
     .input("theme", sql.VarChar(10), input.theme ?? null)
-    .input("sidebarCollapsed", sql.Bit, input.sidebarCollapsed ?? null).query<PreferencesRecord>(`
+    .input("sidebarCollapsed", sql.Bit, input.sidebarCollapsed ?? null)
+    .input(
+      "calendarShowAdjacentDates",
+      sql.Bit,
+      input.calendarShowAdjacentDates ?? null,
+    ).query<PreferencesRecord>(`
       UPDATE dbo.TM_user_settings
       SET
         language_code = COALESCE(@languageCode, language_code),
         theme = COALESCE(@theme, theme),
         sidebar_collapsed = COALESCE(@sidebarCollapsed, sidebar_collapsed),
+        calendar_show_adjacent_dates = COALESCE(
+          @calendarShowAdjacentDates,
+          calendar_show_adjacent_dates
+        ),
         updated_at_utc = SYSUTCDATETIME()
       OUTPUT
         inserted.language_code AS languageCode,
         inserted.theme,
         inserted.sidebar_collapsed AS sidebarCollapsed,
+        inserted.calendar_show_adjacent_dates AS calendarShowAdjacentDates,
         inserted.timezone_name AS timezone
       WHERE portal_user_id = @userId;
     `);

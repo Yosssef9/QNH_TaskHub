@@ -22,6 +22,7 @@ const accessProfile: AccessProfileRecord = {
   languageCode: "AR",
   theme: "SYSTEM",
   sidebarCollapsed: false,
+  calendarShowAdjacentDates: false,
   timezone: "Asia/Riyadh",
   hasDefaultList: true,
 };
