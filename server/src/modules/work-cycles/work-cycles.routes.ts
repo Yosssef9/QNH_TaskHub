@@ -1,0 +1,21 @@
+import { Router, type Router as ExpressRouter } from "express";
+import { resolveTaskHubAccess } from "../../middleware/resolveTaskHubAccess.middleware.js";
+import { validateRequest } from "../../middleware/validate.middleware.js";
+import { verifyPortalJwt } from "../../middleware/verifyPortalJwt.middleware.js";
+import { addWorkCycleKpis, archiveWorkCycle, closeWorkCycle, createWorkCycle, getWorkCycle, listWorkCycles, removeWorkCycleKpi, reopenWorkCycle, reorderWorkCycleKpis, reorderWorkCycles, setCurrentWorkCycle, updateWorkCycle } from "./work-cycles.controller.js";
+import { addCycleKpisBodySchema, createCycleBodySchema, cycleParamsSchema, instanceParamsSchema, reorderCyclesBodySchema, reorderInstancesBodySchema, updateCycleBodySchema } from "./work-cycles.schemas.js";
+
+export const workCyclesRouter: ExpressRouter = Router();
+workCyclesRouter.use(verifyPortalJwt, resolveTaskHubAccess);
+workCyclesRouter.get("/", listWorkCycles);
+workCyclesRouter.post("/", validateRequest({ body: createCycleBodySchema }), createWorkCycle);
+workCyclesRouter.put("/reorder", validateRequest({ body: reorderCyclesBodySchema }), reorderWorkCycles);
+workCyclesRouter.get("/:cycleId", validateRequest({ params: cycleParamsSchema }), getWorkCycle);
+workCyclesRouter.patch("/:cycleId", validateRequest({ params: cycleParamsSchema, body: updateCycleBodySchema }), updateWorkCycle);
+workCyclesRouter.post("/:cycleId/current", validateRequest({ params: cycleParamsSchema }), setCurrentWorkCycle);
+workCyclesRouter.post("/:cycleId/close", validateRequest({ params: cycleParamsSchema }), closeWorkCycle);
+workCyclesRouter.post("/:cycleId/reopen", validateRequest({ params: cycleParamsSchema }), reopenWorkCycle);
+workCyclesRouter.delete("/:cycleId", validateRequest({ params: cycleParamsSchema }), archiveWorkCycle);
+workCyclesRouter.post("/:cycleId/kpis", validateRequest({ params: cycleParamsSchema, body: addCycleKpisBodySchema }), addWorkCycleKpis);
+workCyclesRouter.put("/:cycleId/kpis/reorder", validateRequest({ params: cycleParamsSchema, body: reorderInstancesBodySchema }), reorderWorkCycleKpis);
+workCyclesRouter.delete("/:cycleId/kpis/:instanceId", validateRequest({ params: instanceParamsSchema }), removeWorkCycleKpi);
