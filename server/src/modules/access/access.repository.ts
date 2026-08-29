@@ -1,0 +1,199 @@
+import type { DatabaseTransaction } from "../../database/types.js";
+import { getDatabasePool, sql } from "../../database/sql.js";
+import { ensureUserFoundationInTransaction } from "../auth/auth.repository.js";
+import type { PortalUserRecord } from "../auth/auth.repository.js";
+import type { TaskHubRoleCode } from "../auth/auth.types.js";
+import type { AccessUserRecord } from "./access.mapper.js";
+import type { AccessListQuery, CurrentAccessRecord } from "./access.types.js";
+
+interface AccessUserRecordsPage {
+  items: AccessUserRecord[];
+  total: number;
+}
+
+interface CountRecord {
+  total: number;
+}
+
+export async function listAccessUsers(query: AccessListQuery): Promise<AccessUserRecordsPage> {
+  const pool = await getDatabasePool();
+  const offset = (query.page - 1) * query.pageSize;
+  const search = query.search?.trim() || null;
+
+  const baseRequest = () =>
+    pool
+      .request()
+      .input("search", sql.NVarChar(100), search)
+      .input("offset", sql.Int, offset)
+      .input("pageSize", sql.Int, query.pageSize);
+
+  const [itemsResult, countResult] = await Promise.all([
+    baseRequest().query<AccessUserRecord>(`
+      SELECT
+        portal.USER_ID AS userId,
+        portal.USER_CODE AS userCode,
+        portal.USER_NAME AS userName,
+        portal.email,
+        CAST(portal.IS_ACTIVE AS BIT) AS portalIsActive,
+        access.role_code AS roleCode,
+        access.is_active AS accessIsActive
+      FROM dbo.users AS portal
+      LEFT JOIN dbo.TM_user_access AS access
+        ON access.portal_user_id = portal.USER_ID
+      WHERE portal.IS_ACTIVE = 1
+        AND (
+          @search IS NULL
+          OR portal.USER_CODE LIKE N'%' + @search + N'%'
+          OR portal.USER_NAME LIKE N'%' + @search + N'%'
+          OR portal.email LIKE N'%' + @search + N'%'
+        )
+      ORDER BY portal.USER_NAME, portal.USER_ID
+      OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;
+    `),
+    baseRequest().query<CountRecord>(`
+      SELECT COUNT_BIG(1) AS total
+      FROM dbo.users AS portal
+      WHERE portal.IS_ACTIVE = 1
+        AND (
+          @search IS NULL
+          OR portal.USER_CODE LIKE N'%' + @search + N'%'
+          OR portal.USER_NAME LIKE N'%' + @search + N'%'
+          OR portal.email LIKE N'%' + @search + N'%'
+        );
+    `),
+  ]);
+
+  return {
+    items: itemsResult.recordset,
+    total: Number(countResult.recordset[0]?.total ?? 0),
+  };
+}
+
+export async function findAccessUserById(userId: number): Promise<AccessUserRecord | null> {
+  const pool = await getDatabasePool();
+  const result = await pool.request().input("userId", sql.Int, userId).query<AccessUserRecord>(`
+      SELECT TOP (1)
+        portal.USER_ID AS userId,
+        portal.USER_CODE AS userCode,
+        portal.USER_NAME AS userName,
+        portal.email,
+        CAST(portal.IS_ACTIVE AS BIT) AS portalIsActive,
+        access.role_code AS roleCode,
+        access.is_active AS accessIsActive
+      FROM dbo.users AS portal
+      LEFT JOIN dbo.TM_user_access AS access
+        ON access.portal_user_id = portal.USER_ID
+      WHERE portal.USER_ID = @userId;
+    `);
+
+  return result.recordset[0] ?? null;
+}
+
+export async function findPortalUserForUpdate(
+  transaction: DatabaseTransaction,
+  userId: number,
+): Promise<PortalUserRecord | null> {
+  const result = await transaction.request().input("userId", sql.Int, userId)
+    .query<PortalUserRecord>(`
+      SELECT TOP (1)
+        USER_ID AS userId,
+        USER_CODE AS userCode,
+        USER_NAME AS userName,
+        email,
+        CAST(IS_ACTIVE AS BIT) AS isActive
+      FROM dbo.users WITH (UPDLOCK, HOLDLOCK)
+      WHERE USER_ID = @userId;
+    `);
+
+  return result.recordset[0] ?? null;
+}
+
+export async function findCurrentAccessForUpdate(
+  transaction: DatabaseTransaction,
+  userId: number,
+): Promise<CurrentAccessRecord | null> {
+  const result = await transaction.request().input("userId", sql.Int, userId)
+    .query<CurrentAccessRecord>(`
+      SELECT
+        role_code AS roleCode,
+        is_active AS isActive
+      FROM dbo.TM_user_access WITH (UPDLOCK, HOLDLOCK)
+      WHERE portal_user_id = @userId;
+    `);
+
+  return result.recordset[0] ?? null;
+}
+
+export async function countActiveAdminsForUpdate(
+  transaction: DatabaseTransaction,
+): Promise<number> {
+  const result = await transaction.request().query<CountRecord>(`
+    SELECT COUNT_BIG(1) AS total
+    FROM dbo.TM_user_access WITH (UPDLOCK, HOLDLOCK)
+    WHERE role_code = 'ADMIN'
+      AND is_active = 1;
+  `);
+
+  return Number(result.recordset[0]?.total ?? 0);
+}
+
+export async function saveAccess(
+  transaction: DatabaseTransaction,
+  input: {
+    actorUserId: number;
+    targetUserId: number;
+    roleCode: TaskHubRoleCode;
+    isActive: boolean;
+    accessExists: boolean;
+  },
+): Promise<void> {
+  const request = transaction
+    .request()
+    .input("actorUserId", sql.Int, input.actorUserId)
+    .input("targetUserId", sql.Int, input.targetUserId)
+    .input("roleCode", sql.VarChar(20), input.roleCode)
+    .input("isActive", sql.Bit, input.isActive);
+
+  if (input.accessExists) {
+    await request.query(`
+      UPDATE dbo.TM_user_access
+      SET
+        role_code = @roleCode,
+        is_active = @isActive,
+        deactivated_by_user_id = CASE WHEN @isActive = 0 THEN @actorUserId ELSE NULL END,
+        deactivated_at_utc = CASE WHEN @isActive = 0 THEN SYSUTCDATETIME() ELSE NULL END,
+        updated_at_utc = SYSUTCDATETIME()
+      WHERE portal_user_id = @targetUserId;
+    `);
+    return;
+  }
+
+  await request.query(`
+    INSERT INTO dbo.TM_user_access (
+      portal_user_id,
+      role_code,
+      is_active,
+      granted_by_user_id,
+      deactivated_by_user_id,
+      deactivated_at_utc
+    )
+    VALUES (
+      @targetUserId,
+      @roleCode,
+      @isActive,
+      @actorUserId,
+      CASE WHEN @isActive = 0 THEN @actorUserId ELSE NULL END,
+      CASE WHEN @isActive = 0 THEN SYSUTCDATETIME() ELSE NULL END
+    );
+  `);
+}
+
+export const accessRepository = {
+  listAccessUsers,
+  findAccessUserById,
+  findPortalUserForUpdate,
+  findCurrentAccessForUpdate,
+  countActiveAdminsForUpdate,
+  saveAccess,
+  ensureUserFoundationInTransaction,
+};

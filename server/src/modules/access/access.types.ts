@@ -1,0 +1,35 @@
+import type { TaskHubRoleCode } from "../auth/auth.types.js";
+
+export interface AccessUser {
+  userId: number;
+  userCode: string;
+  userName: string;
+  email: string | null;
+  portalIsActive: boolean;
+  roleCode: TaskHubRoleCode | null;
+  accessIsActive: boolean;
+}
+
+export interface AccessUserList {
+  items: AccessUser[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export interface AccessListQuery {
+  search?: string | undefined;
+  page: number;
+  pageSize: number;
+}
+
+export interface UpdateAccessInput {
+  userId: number;
+  roleCode: TaskHubRoleCode;
+  isActive: boolean;
+}
+
+export interface CurrentAccessRecord {
+  roleCode: TaskHubRoleCode;
+  isActive: boolean;
+}
