@@ -1,0 +1,16 @@
+import type { EmailPreferenceEvent } from "./email-settings.types.js";
+
+export const EMAIL_VERIFICATION_CODE_TTL_MINUTES = 10;
+export const EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS = 60;
+export const EMAIL_VERIFICATION_MAX_ATTEMPTS = 5;
+export const EMAIL_VERIFICATION_MAX_SENDS_PER_HOUR = 5;
+
+export const EMAIL_EVENT_DEFAULTS: Readonly<Record<EmailPreferenceEvent, boolean>> = {
+  TASK_OVERDUE: true,
+  TASK_DUE_TODAY: false,
+  HIGH_PRIORITY_TASK_DUE_TOMORROW: true,
+  CURRENT_CYCLE_ENDING_SOON: true,
+  CURRENT_CYCLE_PAST_END: true,
+  KPI_BELOW_TARGET: true,
+  KPI_MEASUREMENT_DUE: true,
+};
