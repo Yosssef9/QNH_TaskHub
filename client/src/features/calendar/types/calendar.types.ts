@@ -29,7 +29,7 @@ export interface CalendarTaskFilters {
   start: string
   end: string
   scope: CalendarScope
-  search: string
+  search?: string | undefined
   status?: TaskStatus | undefined
   priority?: TaskPriority | undefined
   listId?: number | undefined
@@ -41,4 +41,25 @@ export interface CalendarVisibleRange {
   start: string
   end: string
   currentDate: string
+}
+
+export interface CalendarSearchFilters {
+  query: string
+  scope: CalendarScope
+  status?: TaskStatus | undefined
+  priority?: TaskPriority | undefined
+  listId?: number | undefined
+  cycleId?: number | undefined
+  kpiInstanceId?: number | undefined
+}
+
+export interface CalendarSearchData {
+  items: CalendarTask[]
+  total: number
+}
+
+export interface CalendarSearchTarget {
+  taskId: number
+  calendarDate: string
+  requestId: number
 }

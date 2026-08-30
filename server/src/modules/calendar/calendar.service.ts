@@ -1,7 +1,12 @@
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
 import { mapCalendarTask } from "./calendar.mapper.js";
 import { calendarRepository } from "./calendar.repository.js";
-import type { CalendarTasksData, CalendarTasksQuery } from "./calendar.types.js";
+import type {
+  CalendarSearchData,
+  CalendarSearchQuery,
+  CalendarTasksData,
+  CalendarTasksQuery,
+} from "./calendar.types.js";
 
 function escapeLike(value: string): string {
   return value
@@ -10,6 +15,8 @@ function escapeLike(value: string): string {
     .replaceAll("_", "\\_")
     .replaceAll("[", "\\[");
 }
+
+const CALENDAR_SEARCH_LIMIT = 30;
 
 export const calendarService = {
   async listTasks(ownerUserId: number, query: CalendarTasksQuery): Promise<CalendarTasksData> {
@@ -23,5 +30,21 @@ export const calendarService = {
     );
 
     return { items: records.map(mapCalendarTask) };
+  },
+
+  async searchTasks(ownerUserId: number, query: CalendarSearchQuery): Promise<CalendarSearchData> {
+    const searchPattern = `%${escapeLike(query.q.trim())}%`;
+    const records = await calendarRepository.searchTasks(
+      ownerUserId,
+      query,
+      getCurrentDateInAppTimeZone(),
+      searchPattern,
+      CALENDAR_SEARCH_LIMIT,
+    );
+
+    return {
+      items: records.map(mapCalendarTask),
+      total: Number(records[0]?.totalCount ?? 0),
+    };
   },
 };

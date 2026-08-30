@@ -78,7 +78,7 @@ export const taskDetailsRepository = {
       .request()
       .input("ownerUserId", sql.Int, ownerUserId)
       .input("taskId", sql.BigInt, taskId)
-      .input("title", sql.NVarChar(250), title)
+      .input("title", sql.NVarChar(1000), title)
       .input("dueDate", sql.Date, dueDate)
       .query<IdRecord>(`INSERT dbo.TM_subtasks(task_id,owner_user_id,title,due_date,display_order)
         OUTPUT inserted.id SELECT @taskId,@ownerUserId,@title,@dueDate,ISNULL(MAX(display_order),0)+1
@@ -97,7 +97,7 @@ export const taskDetailsRepository = {
       .request()
       .input("ownerUserId", sql.Int, ownerUserId)
       .input("subtaskId", sql.BigInt, subtaskId)
-      .input("title", sql.NVarChar(250), title)
+      .input("title", sql.NVarChar(1000), title)
       .input("dueDate", sql.Date, dueDate).query(`UPDATE dbo.TM_subtasks
         SET title=@title,due_date=@dueDate,updated_at_utc=SYSUTCDATETIME()
         WHERE id=@subtaskId AND owner_user_id=@ownerUserId AND deleted_at_utc IS NULL;`);

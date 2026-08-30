@@ -76,7 +76,7 @@ export const kpiWorkRepository = {
 
   async create(tx: DatabaseTransaction, owner: number, instanceId: number, input: PersistedInput) {
     const result = await tx.request().input("owner", sql.Int, owner).input("instance", sql.BigInt, instanceId)
-      .input("title", sql.NVarChar(250), input.title).input("description", sql.NVarChar(sql.MAX), input.description ?? null)
+      .input("title", sql.NVarChar(1000), input.title).input("description", sql.NVarChar(sql.MAX), input.description ?? null)
       .input("priority", sql.VarChar(10), input.priority).input("start", sql.Date, input.startDate)
       .input("due", sql.Date, input.dueDate).input("reference", sql.Date, input.referenceDate)
       .query<{ id: number }>(`INSERT dbo.TM_tasks(owner_user_id,kpi_instance_id,title,description,priority,start_date,due_date,reference_date,display_order)

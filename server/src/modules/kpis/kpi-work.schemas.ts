@@ -26,7 +26,7 @@ export const kpiTaskListQuerySchema = z.object({
 });
 
 const kpiTaskFields = {
-  title: z.string().trim().min(1).max(250),
+  title: z.string().trim().min(1).max(1000),
   description: z.string().trim().max(4000).nullable().optional(),
   priority: z.enum(TASK_PRIORITIES).default("MEDIUM"),
   startDate: date.nullable().optional(),

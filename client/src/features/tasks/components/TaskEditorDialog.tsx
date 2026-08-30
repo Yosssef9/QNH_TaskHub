@@ -35,7 +35,7 @@ import { TaskPriorityIndicator } from './TaskSelectIndicators'
 
 const schema = z
   .object({
-    title: z.string().trim().min(1).max(250),
+    title: z.string().trim().min(1).max(1000),
     description: z.string().trim().max(4000).nullable().optional(),
     priority: z.enum(TASK_PRIORITIES),
     startDate: z.string().nullable().optional(),
@@ -103,7 +103,7 @@ export function TaskEditorDialog({
   const initialSelectableInstances =
     initialCycle?.instances.filter((item) => item.isActive && item.taskPolicy.allowsTasks) ?? []
   const autoInitialInstanceId =
-    initialSelectableInstances.length === 1 ? initialSelectableInstances[0]?.id ?? null : null
+    initialSelectableInstances.length === 1 ? (initialSelectableInstances[0]?.id ?? null) : null
   const requestedInitialInstanceId =
     fixedInstance?.id ?? task?.kpiInstanceId ?? initialKpiInstanceId ?? autoInitialInstanceId
   const initialInstance =
@@ -150,12 +150,8 @@ export function TaskEditorDialog({
           : (task?.dueDate ?? initialDateDefaults.dueDate),
       listId: task?.listId ?? listId ?? initialListId ?? null,
       referenceDate: task?.referenceDate ?? null,
-      cycleId:
-        fixedInstance?.cycleId ?? fixedCycle?.id ?? task?.cycleId ?? initialCycleId ?? null,
-      kpiInstanceId:
-        fixedInstance?.id ??
-        task?.kpiInstanceId ??
-        requestedInitialInstanceId,
+      cycleId: fixedInstance?.cycleId ?? fixedCycle?.id ?? task?.cycleId ?? initialCycleId ?? null,
+      kpiInstanceId: fixedInstance?.id ?? task?.kpiInstanceId ?? requestedInitialInstanceId,
     },
   })
 
@@ -173,9 +169,7 @@ export function TaskEditorDialog({
   const isKpiTask = Boolean(fixedInstance || fixedCycle || cycles)
   const showDateFields = !isKpiTask || Boolean(kpi)
   const dueDateErrorMessage =
-    errors.dueDate?.message === 'DATE_RANGE'
-      ? t('tasks.errors.dateRange')
-      : errors.dueDate?.message
+    errors.dueDate?.message === 'DATE_RANGE' ? t('tasks.errors.dateRange') : errors.dueDate?.message
   const useStoredDeadline =
     Boolean(autoDueDateMode && task) && referenceDate === (task?.referenceDate ?? null)
 
@@ -282,9 +276,7 @@ export function TaskEditorDialog({
   })
 
   const showEditableDueDate =
-    !kpi ||
-    kpi.taskPolicy.dueDateMode === 'OPTIONAL' ||
-    kpi.taskPolicy.dueDateMode === 'REQUIRED'
+    !kpi || kpi.taskPolicy.dueDateMode === 'OPTIONAL' || kpi.taskPolicy.dueDateMode === 'REQUIRED'
 
   return (
     <Dialog open={open} onOpenChange={(next) => !pending && onOpenChange(next)}>
@@ -307,7 +299,7 @@ export function TaskEditorDialog({
             <Input
               id="task-title"
               autoFocus
-              maxLength={250}
+              maxLength={1000}
               aria-invalid={Boolean(errors.title)}
               {...register('title')}
             />
@@ -348,7 +340,8 @@ export function TaskEditorDialog({
                             (item) => item.isActive && item.taskPolicy.allowsTasks,
                           ) ?? []
 
-                        const nextInstance = nextInstances.length === 1 ? nextInstances[0] ?? null : null
+                        const nextInstance =
+                          nextInstances.length === 1 ? (nextInstances[0] ?? null) : null
                         const defaults = nextInstance
                           ? calendarDateDefaults(nextInstance)
                           : { startDate: null, dueDate: null }
@@ -394,9 +387,8 @@ export function TaskEditorDialog({
                       value={field.value ? String(field.value) : ''}
                       onValueChange={(value) => {
                         const nextInstanceId = Number(value)
-                        const nextInstance = selectableInstances?.find(
-                          (item) => item.id === nextInstanceId,
-                        ) ?? null
+                        const nextInstance =
+                          selectableInstances?.find((item) => item.id === nextInstanceId) ?? null
                         const defaults = calendarDateDefaults(nextInstance)
 
                         field.onChange(nextInstanceId)

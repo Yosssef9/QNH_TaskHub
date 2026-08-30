@@ -84,4 +84,16 @@ describe('CalendarTaskEvent tooltip', () => {
     expect(screen.getByText('Board readiness')).toBeVisible()
     expect(screen.getByText(/Sep 3, 2026/)).toBeVisible()
   })
+
+  it('adds the temporary search-result highlight without replacing task semantics', () => {
+    const { container } = render(
+      <TooltipProvider delayDuration={0}>
+        <CalendarTaskEvent task={personalTask} monthGrid searchHighlighted />
+      </TooltipProvider>,
+    )
+
+    expect(container.querySelector('[data-calendar-search-highlight="true"]')).toBeInTheDocument()
+    expect(screen.getByText('Prepare monthly report')).toBeVisible()
+  })
+
 })

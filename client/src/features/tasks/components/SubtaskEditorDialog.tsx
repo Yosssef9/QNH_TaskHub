@@ -83,7 +83,7 @@ export function SubtaskEditorDialog({
             <Input
               id="subtask-title"
               autoFocus
-              maxLength={250}
+              maxLength={1000}
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               onKeyDown={(event) => event.key === 'Enter' && save()}
@@ -113,4 +113,3 @@ export function SubtaskEditorDialog({
     </Dialog>
   )
 }
-

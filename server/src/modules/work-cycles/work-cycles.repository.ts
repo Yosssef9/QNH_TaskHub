@@ -43,7 +43,8 @@ const instanceSelect = `instance.id, instance.kpi_id AS templateId, instance.cyc
 
 async function listInstances(owner: number, cycleId?: number): Promise<KpiInstanceRecord[]> {
   const pool = await getDatabasePool();
-  const result = await pool.request()
+  const result = await pool
+    .request()
     .input("owner", sql.Int, owner)
     .input("cycleId", sql.BigInt, cycleId ?? null)
     .query<KpiInstanceRecord>(`SELECT ${instanceSelect}
@@ -73,8 +74,11 @@ export const workCyclesRepository = {
 
   async find(owner: number, cycleId: number, today: string) {
     const pool = await getDatabasePool();
-    const result = await pool.request().input("owner", sql.Int, owner)
-      .input("cycleId", sql.BigInt, cycleId).input("today", sql.Date, today)
+    const result = await pool
+      .request()
+      .input("owner", sql.Int, owner)
+      .input("cycleId", sql.BigInt, cycleId)
+      .input("today", sql.Date, today)
       .query<WorkCycleRecord>(`SELECT TOP(1) ${cycleSelect} FROM dbo.TM_work_cycles cycle
         LEFT JOIN dbo.TM_user_settings settings ON settings.portal_user_id=cycle.owner_user_id
         ${cycleWorkApply}
@@ -84,7 +88,9 @@ export const workCyclesRepository = {
 
   async findInstance(owner: number, instanceId: number) {
     const pool = await getDatabasePool();
-    const result = await pool.request().input("owner", sql.Int, owner)
+    const result = await pool
+      .request()
+      .input("owner", sql.Int, owner)
       .input("instanceId", sql.BigInt, instanceId)
       .query<KpiInstanceRecord>(`SELECT TOP(1) ${instanceSelect}
         FROM dbo.TM_kpi_instances instance
@@ -96,12 +102,17 @@ export const workCyclesRepository = {
   },
 
   async createCycle(tx: DatabaseTransaction, owner: number, input: CreateCycleBody) {
-    const result = await tx.request().input("owner", sql.Int, owner)
-      .input("title", sql.NVarChar(180), input.title)
+    const result = await tx
+      .request()
+      .input("owner", sql.Int, owner)
+      .input("title", sql.NVarChar(1000), input.title)
       .input("description", sql.NVarChar(1500), input.description ?? null)
-      .input("icon", sql.VarChar(50), input.iconKey).input("color", sql.VarChar(7), input.color)
-      .input("start", sql.Date, input.startDate ?? null).input("end", sql.Date, input.endDate ?? null)
-      .query<{ id: number }>(`INSERT dbo.TM_work_cycles(owner_user_id,title,description,icon_key,color,start_date,end_date,display_order)
+      .input("icon", sql.VarChar(50), input.iconKey)
+      .input("color", sql.VarChar(7), input.color)
+      .input("start", sql.Date, input.startDate ?? null)
+      .input("end", sql.Date, input.endDate ?? null).query<{
+      id: number;
+    }>(`INSERT dbo.TM_work_cycles(owner_user_id,title,description,icon_key,color,start_date,end_date,display_order)
         OUTPUT inserted.id
         SELECT @owner,@title,@description,@icon,@color,@start,@end,ISNULL(MAX(display_order),0)+1
         FROM dbo.TM_work_cycles WHERE owner_user_id=@owner AND archived_at_utc IS NULL;`);
@@ -110,9 +121,11 @@ export const workCyclesRepository = {
 
   async addInstances(tx: DatabaseTransaction, owner: number, cycleId: number, kpiIds: number[]) {
     const json = JSON.stringify(kpiIds);
-    const result = await tx.request().input("owner", sql.Int, owner)
-      .input("cycleId", sql.BigInt, cycleId).input("json", sql.NVarChar(sql.MAX), json)
-      .query(`INSERT dbo.TM_kpi_instances(
+    const result = await tx
+      .request()
+      .input("owner", sql.Int, owner)
+      .input("cycleId", sql.BigInt, cycleId)
+      .input("json", sql.NVarChar(sql.MAX), json).query(`INSERT dbo.TM_kpi_instances(
           owner_user_id,cycle_id,kpi_id,name_snapshot,description_snapshot,icon_key_snapshot,
           color_snapshot,calculation_method_snapshot,period_type_snapshot,measurement_unit_snapshot,
           target_value_snapshot,target_direction_snapshot,deadline_source_snapshot,
@@ -135,21 +148,30 @@ export const workCyclesRepository = {
 
   async cycleIsOpen(owner: number, cycleId: number, tx?: DatabaseTransaction) {
     const request = tx ? tx.request() : (await getDatabasePool()).request();
-    const result = await request.input("owner", sql.Int, owner).input("cycleId", sql.BigInt, cycleId)
-      .query<{ id: number }>(`SELECT TOP(1) id FROM dbo.TM_work_cycles ${tx ? "WITH(UPDLOCK,HOLDLOCK)" : ""}
+    const result = await request
+      .input("owner", sql.Int, owner)
+      .input("cycleId", sql.BigInt, cycleId).query<{
+      id: number;
+    }>(`SELECT TOP(1) id FROM dbo.TM_work_cycles ${tx ? "WITH(UPDLOCK,HOLDLOCK)" : ""}
         WHERE id=@cycleId AND owner_user_id=@owner AND closed_at_utc IS NULL AND archived_at_utc IS NULL;`);
     return Boolean(result.recordset[0]);
   },
 
   async update(owner: number, cycleId: number, input: UpdateCycleBody) {
     const pool = await getDatabasePool();
-    const result = await pool.request().input("owner", sql.Int, owner).input("cycleId", sql.BigInt, cycleId)
-      .input("title", sql.NVarChar(180), input.title ?? null)
+    const result = await pool
+      .request()
+      .input("owner", sql.Int, owner)
+      .input("cycleId", sql.BigInt, cycleId)
+      .input("title", sql.NVarChar(1000), input.title ?? null)
       .input("description", sql.NVarChar(1500), input.description ?? null)
       .input("hasDescription", sql.Bit, input.description !== undefined)
-      .input("icon", sql.VarChar(50), input.iconKey ?? null).input("color", sql.VarChar(7), input.color ?? null)
-      .input("start", sql.Date, input.startDate ?? null).input("hasStart", sql.Bit, input.startDate !== undefined)
-      .input("end", sql.Date, input.endDate ?? null).input("hasEnd", sql.Bit, input.endDate !== undefined)
+      .input("icon", sql.VarChar(50), input.iconKey ?? null)
+      .input("color", sql.VarChar(7), input.color ?? null)
+      .input("start", sql.Date, input.startDate ?? null)
+      .input("hasStart", sql.Bit, input.startDate !== undefined)
+      .input("end", sql.Date, input.endDate ?? null)
+      .input("hasEnd", sql.Bit, input.endDate !== undefined)
       .query(`UPDATE dbo.TM_work_cycles SET title=COALESCE(@title,title),
         description=CASE WHEN @hasDescription=1 THEN @description ELSE description END,
         icon_key=COALESCE(@icon,icon_key),color=COALESCE(@color,color),
@@ -161,7 +183,10 @@ export const workCyclesRepository = {
 
   async setClosed(owner: number, cycleId: number, closed: boolean) {
     const pool = await getDatabasePool();
-    const result = await pool.request().input("owner", sql.Int, owner).input("cycleId", sql.BigInt, cycleId)
+    const result = await pool
+      .request()
+      .input("owner", sql.Int, owner)
+      .input("cycleId", sql.BigInt, cycleId)
       .query(`UPDATE dbo.TM_work_cycles SET closed_at_utc=${closed ? "COALESCE(closed_at_utc,SYSUTCDATETIME())" : "NULL"},updated_at_utc=SYSUTCDATETIME()
         WHERE id=@cycleId AND owner_user_id=@owner AND archived_at_utc IS NULL;`);
     return result.rowsAffected[0] === 1;
@@ -169,19 +194,21 @@ export const workCyclesRepository = {
 
   async archive(owner: number, cycleId: number) {
     const pool = await getDatabasePool();
-    const result = await pool.request().input("owner", sql.Int, owner).input("cycleId", sql.BigInt, cycleId)
+    const result = await pool
+      .request()
+      .input("owner", sql.Int, owner)
+      .input("cycleId", sql.BigInt, cycleId)
       .query(`UPDATE dbo.TM_work_cycles SET archived_at_utc=SYSUTCDATETIME(),updated_at_utc=SYSUTCDATETIME()
         WHERE id=@cycleId AND owner_user_id=@owner AND closed_at_utc IS NOT NULL AND archived_at_utc IS NULL;`);
     return result.rowsAffected[0] === 1;
   },
 
-
   async setCurrent(owner: number, cycleId: number) {
     const pool = await getDatabasePool();
-    const result = await pool.request()
+    const result = await pool
+      .request()
       .input("owner", sql.Int, owner)
-      .input("cycleId", sql.BigInt, cycleId)
-      .query(`UPDATE settings
+      .input("cycleId", sql.BigInt, cycleId).query(`UPDATE settings
         SET current_work_cycle_id=@cycleId,updated_at_utc=SYSUTCDATETIME()
         FROM dbo.TM_user_settings settings
         WHERE settings.portal_user_id=@owner
@@ -197,8 +224,9 @@ export const workCyclesRepository = {
 
   async reconcileCurrent(owner: number) {
     const pool = await getDatabasePool();
-    const result = await pool.request().input("owner", sql.Int, owner)
-      .query<{ currentCycleId: number | null }>(`
+    const result = await pool.request().input("owner", sql.Int, owner).query<{
+      currentCycleId: number | null;
+    }>(`
         DECLARE @current BIGINT;
         DECLARE @openCount BIGINT;
         DECLARE @onlyCycle BIGINT;
@@ -246,8 +274,12 @@ export const workCyclesRepository = {
 
   async removeEmptyInstance(owner: number, cycleId: number, instanceId: number) {
     const pool = await getDatabasePool();
-    const result = await pool.request().input("owner", sql.Int, owner).input("cycleId", sql.BigInt, cycleId)
-      .input("instanceId", sql.BigInt, instanceId).query(`DELETE instance FROM dbo.TM_kpi_instances instance
+    const result = await pool
+      .request()
+      .input("owner", sql.Int, owner)
+      .input("cycleId", sql.BigInt, cycleId)
+      .input("instanceId", sql.BigInt, instanceId)
+      .query(`DELETE instance FROM dbo.TM_kpi_instances instance
         INNER JOIN dbo.TM_work_cycles cycle ON cycle.id=instance.cycle_id AND cycle.owner_user_id=instance.owner_user_id
         WHERE instance.id=@instanceId AND instance.cycle_id=@cycleId AND instance.owner_user_id=@owner
           AND cycle.closed_at_utc IS NULL AND cycle.archived_at_utc IS NULL
@@ -268,8 +300,12 @@ export const workCyclesRepository = {
   async reorderInstances(owner: number, cycleId: number, ids: number[]) {
     const pool = await getDatabasePool();
     const json = JSON.stringify(ids.map((id, index) => ({ id, order: index + 1 })));
-    await pool.request().input("owner", sql.Int, owner).input("cycleId", sql.BigInt, cycleId)
-      .input("json", sql.NVarChar(sql.MAX), json).query(`UPDATE instance SET display_order=ordered.[order],updated_at_utc=SYSUTCDATETIME()
+    await pool
+      .request()
+      .input("owner", sql.Int, owner)
+      .input("cycleId", sql.BigInt, cycleId)
+      .input("json", sql.NVarChar(sql.MAX), json)
+      .query(`UPDATE instance SET display_order=ordered.[order],updated_at_utc=SYSUTCDATETIME()
         FROM dbo.TM_kpi_instances instance INNER JOIN OPENJSON(@json) WITH(id BIGINT '$.id',[order] INT '$.order') ordered ON ordered.id=instance.id
         INNER JOIN dbo.TM_work_cycles cycle ON cycle.id=instance.cycle_id AND cycle.owner_user_id=instance.owner_user_id
         WHERE instance.owner_user_id=@owner AND instance.cycle_id=@cycleId AND cycle.closed_at_utc IS NULL AND cycle.archived_at_utc IS NULL;`);

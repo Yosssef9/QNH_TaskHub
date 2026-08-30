@@ -16,12 +16,12 @@ const sqlServerGuidSchema = z
 
 export const attachmentIdParamsSchema = z.object({ attachmentId: sqlServerGuidSchema });
 export const createSubtaskBodySchema = z.object({
-  title: z.string().trim().min(1).max(250),
+  title: z.string().trim().min(1).max(1000),
   dueDate: dateOnlySchema.optional(),
 });
 export const updateSubtaskBodySchema = z
   .object({
-    title: z.string().trim().min(1).max(250).optional(),
+    title: z.string().trim().min(1).max(1000).optional(),
     dueDate: dateOnlySchema.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, "A subtask change is required.");

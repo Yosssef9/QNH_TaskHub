@@ -58,7 +58,7 @@ export const taskListQuerySchema = z.object({
 
 export const createTaskBodySchema = z
   .object({
-    title: z.string().trim().min(1).max(250),
+    title: z.string().trim().min(1).max(1000),
     description: z.string().trim().max(4000).nullable().optional(),
     priority: z.enum(TASK_PRIORITIES).default("MEDIUM"),
     startDate: dateOnlySchema.nullable().optional(),
@@ -68,7 +68,7 @@ export const createTaskBodySchema = z
 
 export const updateTaskBodySchema = z
   .object({
-    title: z.string().trim().min(1).max(250).optional(),
+    title: z.string().trim().min(1).max(1000).optional(),
     description: z.string().trim().max(4000).nullable().optional(),
     priority: z.enum(TASK_PRIORITIES).optional(),
     startDate: dateOnlySchema.nullable().optional(),

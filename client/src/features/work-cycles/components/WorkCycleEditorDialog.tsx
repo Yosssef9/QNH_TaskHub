@@ -123,7 +123,7 @@ export function WorkCycleEditorDialog({
             <span>{t('workCycles.titleLabel')}</span>
             <Input
               autoFocus
-              maxLength={180}
+              maxLength={1000}
               value={values.title}
               onChange={(event) => patch('title', event.target.value)}
             />

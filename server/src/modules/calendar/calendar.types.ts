@@ -18,6 +18,17 @@ export interface CalendarTasksQuery {
   kpiInstanceId?: number | undefined;
 }
 
+
+export interface CalendarSearchQuery {
+  q: string;
+  scope: CalendarScope;
+  status?: TaskStatus | undefined;
+  priority?: TaskPriority | undefined;
+  listId?: number | undefined;
+  cycleId?: number | undefined;
+  kpiInstanceId?: number | undefined;
+}
+
 export interface CalendarTaskRecord {
   id: number | string;
   title: string;
@@ -36,6 +47,10 @@ export interface CalendarTaskRecord {
   kpiInstanceId: number | string | null;
   kpiTemplateId: number | string | null;
   kpiName: string | null;
+}
+
+export interface CalendarSearchTaskRecord extends CalendarTaskRecord {
+  totalCount: number | string;
 }
 
 export interface CalendarTask {
@@ -60,4 +75,9 @@ export interface CalendarTask {
 
 export interface CalendarTasksData {
   items: CalendarTask[];
+}
+
+export interface CalendarSearchData {
+  items: CalendarTask[];
+  total: number;
 }

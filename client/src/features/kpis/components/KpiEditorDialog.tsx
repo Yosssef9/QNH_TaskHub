@@ -196,7 +196,7 @@ export function KpiEditorDialog({
                 <Input
                   autoFocus
                   value={values.name}
-                  maxLength={150}
+                  maxLength={1000}
                   onChange={(e) => patch('name', e.target.value)}
                 />
               </Field>
@@ -288,10 +288,7 @@ export function KpiEditorDialog({
                           options={KPI_DEADLINE_DIRECTIONS}
                           label={(value) => t(`kpis.deadlines.${value}`)}
                           onChange={(value) =>
-                            patch(
-                              'deadlineDirection',
-                              value as SaveKpiInput['deadlineDirection'],
-                            )
+                            patch('deadlineDirection', value as SaveKpiInput['deadlineDirection'])
                           }
                         />
                       </Field>
@@ -454,4 +451,3 @@ function AppSelect({
     </Select>
   )
 }
-

@@ -75,3 +75,34 @@ export const calendarTasksQuerySchema = z
   });
 
 export type CalendarTasksQueryInput = z.infer<typeof calendarTasksQuerySchema>;
+
+
+export const calendarSearchQuerySchema = z
+  .object({
+    q: z.string().trim().min(2).max(100),
+    scope: z.enum(CALENDAR_SCOPES),
+    status: z.enum(TASK_STATUSES).optional(),
+    priority: z.enum(TASK_PRIORITIES).optional(),
+    listId: z.coerce.number().int().positive().optional(),
+    cycleId: z.coerce.number().int().positive().optional(),
+    kpiInstanceId: z.coerce.number().int().positive().optional(),
+  })
+  .superRefine((input, context) => {
+    if (input.scope === "PERSONAL" && (input.cycleId !== undefined || input.kpiInstanceId !== undefined)) {
+      context.addIssue({
+        code: "custom",
+        path: [input.cycleId !== undefined ? "cycleId" : "kpiInstanceId"],
+        message: "KPI filters are not valid for the personal calendar.",
+      });
+    }
+
+    if (input.scope === "KPI" && input.listId !== undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["listId"],
+        message: "List filters are not valid for the KPI calendar.",
+      });
+    }
+  });
+
+export type CalendarSearchQueryInput = z.infer<typeof calendarSearchQuerySchema>;

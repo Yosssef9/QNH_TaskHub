@@ -3,7 +3,6 @@ import type { LucideIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { SearchInput } from '@/components/shared/SearchInput'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -18,7 +17,8 @@ import { useWorkCycles } from '@/features/work-cycles/hooks/use-work-cycles'
 import type { WorkCycle } from '@/features/work-cycles/types/work-cycle.types'
 import { cn } from '@/lib/cn'
 
-import type { CalendarScope } from '../types/calendar.types'
+import type { CalendarScope, CalendarTask } from '../types/calendar.types'
+import { CalendarSearch } from './CalendarSearch'
 
 const ALL = 'ALL'
 
@@ -98,9 +98,10 @@ function WorkCycleSelectIndicator({
 interface Props {
   value: CalendarFilterState
   onChange: (next: CalendarFilterState) => void
+  onOpenSearchResult: (task: CalendarTask) => void
 }
 
-export function CalendarFilters({ onChange, value }: Props) {
+export function CalendarFilters({ onChange, onOpenSearchResult, value }: Props) {
   const { t } = useTranslation()
   const listsQuery = useLists()
   const cyclesQuery = useWorkCycles()
@@ -211,11 +212,16 @@ export function CalendarFilters({ onChange, value }: Props) {
         </div>
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(15rem,1.5fr)_repeat(3,minmax(10rem,1fr))]">
-          <SearchInput
+          <CalendarSearch
             value={value.search}
+            scope={value.scope}
+            status={value.status}
+            priority={value.priority}
+            listId={value.listId}
+            cycleId={value.cycleId}
+            kpiInstanceId={value.kpiInstanceId}
             onChange={(search) => onChange({ ...value, search })}
-            placeholder={t('calendar.searchPlaceholder')}
-            ariaLabel={t('calendar.searchLabel')}
+            onOpenTask={onOpenSearchResult}
           />
 
           <Select

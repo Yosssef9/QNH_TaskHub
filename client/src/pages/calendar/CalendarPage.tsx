@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 
@@ -13,6 +13,8 @@ import { TaskCalendar } from '@/features/calendar/components/TaskCalendar'
 import { useCalendarTasks } from '@/features/calendar/hooks/use-calendar-tasks'
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import type {
+  CalendarSearchTarget,
+  CalendarTask,
   CalendarTaskFilters,
   CalendarViewMode,
   CalendarVisibleRange,
@@ -28,19 +30,31 @@ export function CalendarPage() {
   const [range, setRange] = useState<CalendarVisibleRange | null>(null)
   const [viewMode, setViewMode] = useState<CalendarViewMode>('MONTH')
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [dayPanelOpen, setDayPanelOpen] = useState(false)
   const [detailsTaskId, setDetailsTaskId] = useState<number | null>(null)
+  const [searchTarget, setSearchTarget] = useState<CalendarSearchTarget | null>(null)
   const [editorOpen, setEditorOpen] = useState(false)
   const [showAdjacentDatesOverride, setShowAdjacentDatesOverride] = useState<boolean | null>(null)
   const [filters, setFilters] = useState<CalendarFilterState>({
     scope: 'PERSONAL',
     search: '',
   })
+  const changeFilters = useCallback(
+    (nextFilters: CalendarFilterState) => {
+      if (nextFilters.search !== filters.search) {
+        setSearchTarget(null)
+      }
 
+      setFilters(nextFilters)
+    },
+    [filters.search],
+  )
   const currentUserQuery = useCurrentUser()
   const updatePreferencesMutation = useUpdatePreferences()
   const listsQuery = useLists()
   const cyclesQuery = useWorkCycles()
-  const savedShowAdjacentDates = currentUserQuery.data?.preferences.calendarShowAdjacentDates ?? true
+  const savedShowAdjacentDates =
+    currentUserQuery.data?.preferences.calendarShowAdjacentDates ?? true
   const showAdjacentDates = showAdjacentDatesOverride ?? savedShowAdjacentDates
 
   useEffect(() => {
@@ -53,7 +67,6 @@ export function CalendarPage() {
       start: range.start,
       end: range.end,
       scope: filters.scope,
-      search: filters.search,
       status: filters.status,
       priority: filters.priority,
       listId: filters.scope === 'PERSONAL' ? filters.listId : undefined,
@@ -64,6 +77,22 @@ export function CalendarPage() {
 
   const tasksQuery = useCalendarTasks(queryFilters)
   const tasks = tasksQuery.data ?? []
+
+  useEffect(() => {
+    if (!searchTarget) return
+
+    const detailsTimer = window.setTimeout(() => {
+      setDetailsTaskId(searchTarget.taskId)
+    }, 850)
+    const highlightTimer = window.setTimeout(() => {
+      setSearchTarget((current) => (current?.requestId === searchTarget.requestId ? null : current))
+    }, 2500)
+
+    return () => {
+      window.clearTimeout(detailsTimer)
+      window.clearTimeout(highlightTimer)
+    }
+  }, [searchTarget])
   const selectedDateTasks = selectedDate
     ? tasks.filter((task) => task.calendarDate === selectedDate)
     : []
@@ -135,9 +164,28 @@ export function CalendarPage() {
     )
   }
 
+  function selectDate(date: string) {
+    setSearchTarget(null)
+    setSelectedDate(date)
+    setDayPanelOpen(true)
+  }
+
   function openTask(taskId: number) {
+    setSearchTarget(null)
+    setDayPanelOpen(false)
     setSelectedDate(null)
     setDetailsTaskId(taskId)
+  }
+
+  function openSearchResult(task: CalendarTask) {
+    setEditorOpen(false)
+    setDayPanelOpen(false)
+    setSelectedDate(task.calendarDate)
+    setSearchTarget({
+      taskId: task.id,
+      calendarDate: task.calendarDate,
+      requestId: Date.now(),
+    })
   }
 
   return (
@@ -148,7 +196,11 @@ export function CalendarPage() {
         description={t('calendar.description')}
       />
 
-      <CalendarFilters value={filters} onChange={setFilters} />
+      <CalendarFilters
+        value={filters}
+        onChange={changeFilters}
+        onOpenSearchResult={openSearchResult}
+      />
 
       {tasksQuery.isError ? (
         <ErrorState
@@ -165,22 +217,24 @@ export function CalendarPage() {
         showEmpty={tasksQuery.isSuccess && tasks.length === 0}
         viewMode={viewMode}
         selectedDate={selectedDate}
+        searchTarget={searchTarget}
         showAdjacentDates={showAdjacentDates}
         displayPreferencePending={updatePreferencesMutation.isPending}
         onViewModeChange={setViewMode}
         onShowAdjacentDatesChange={changeAdjacentDateDisplay}
         onRangeChange={setRange}
-        onSelectDate={setSelectedDate}
+        onSelectDate={selectDate}
         onOpenTask={openTask}
       />
 
       <CalendarDayPanel
-        date={selectedDate}
+        date={dayPanelOpen ? selectedDate : null}
         tasks={selectedDateTasks}
         scope={filters.scope}
         canCreate={canCreate}
         createUnavailableReason={createUnavailableReason}
         onOpenChange={(open) => {
+          setDayPanelOpen(open)
           if (!open) setSelectedDate(null)
         }}
         onOpenTask={openTask}

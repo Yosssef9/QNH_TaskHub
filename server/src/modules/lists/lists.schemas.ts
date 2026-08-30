@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { LIST_COLORS, LIST_ICON_KEYS } from "./lists.constants.js";
 
-const listNameSchema = z.string().trim().min(1).max(120);
+const listNameSchema = z.string().trim().min(1).max(1000);
 
 export const listParamsSchema = z.object({
   listId: z.coerce.number().int().positive(),

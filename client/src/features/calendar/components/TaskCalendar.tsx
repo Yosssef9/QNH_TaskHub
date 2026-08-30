@@ -17,6 +17,7 @@ import { cn } from '@/lib/cn'
 import { APP_TIME_ZONE } from '@/lib/date-time'
 
 import type {
+  CalendarSearchTarget,
   CalendarTask,
   CalendarViewMode,
   CalendarVisibleRange,
@@ -30,6 +31,7 @@ interface Props {
   showEmpty: boolean
   viewMode: CalendarViewMode
   selectedDate: string | null
+  searchTarget: CalendarSearchTarget | null
   showAdjacentDates: boolean
   displayPreferencePending: boolean
   onViewModeChange: (viewMode: CalendarViewMode) => void
@@ -67,6 +69,7 @@ export function TaskCalendar({
   onSelectDate,
   onViewModeChange,
   selectedDate,
+  searchTarget,
   showAdjacentDates,
   displayPreferencePending,
   showEmpty,
@@ -137,6 +140,25 @@ export function TaskCalendar({
     const targetView = viewMode === 'MONTH' ? 'dayGridMonth' : 'listMonth'
     if (calendarApi.view.type !== targetView) calendarApi.changeView(targetView)
   }, [viewMode])
+
+  useEffect(() => {
+    if (!searchTarget) return
+    calendarRef.current?.getApi().gotoDate(searchTarget.calendarDate)
+  }, [searchTarget])
+
+  useEffect(() => {
+    if (!searchTarget || !tasks.some((task) => task.id === searchTarget.taskId)) return
+
+    const frame = window.requestAnimationFrame(() => {
+      const element = document.querySelector<HTMLElement>(
+        `[data-calendar-task-id="${searchTarget.taskId}"]`,
+      )
+      element?.scrollIntoView({ block: 'center', behavior: 'auto' })
+      element?.focus({ preventScroll: true })
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [searchTarget, tasks])
 
   const currentStart = calendarRef.current?.getApi().view.currentStart
   const currentTitle = monthFormatter.format(currentStart ?? new Date())
@@ -221,7 +243,10 @@ export function TaskCalendar({
               state.isToday && selectedDate === cellDate &&
                 'bg-primary/[0.15] ring-primary/50 ring-2 ring-inset hover:bg-primary/[0.17]',
               !state.isToday && selectedDate === cellDate &&
-                'bg-primary/[0.08] ring-primary/30 ring-1 ring-inset hover:bg-primary/[0.1]',
+                (isWeekend
+                  ? 'bg-muted/35 ring-primary/30 ring-1 ring-inset hover:bg-muted/45'
+                  : 'bg-primary/[0.08] ring-primary/30 ring-1 ring-inset hover:bg-primary/[0.1]'),
+              searchTarget?.calendarDate === cellDate && 'ring-primary/65 ring-2 ring-inset',
             )
           }}
           eventClass={(info) =>
@@ -230,6 +255,9 @@ export function TaskCalendar({
               info.view.type !== 'listMonth' && 'p-0 leading-none',
             )
           }
+          eventDidMount={(info) => {
+            info.el.dataset.calendarTaskId = info.event.id
+          }}
           listItemEventClass="cursor-pointer border-border/70 px-3 py-2.5 hover:bg-muted/30 focus-visible:bg-muted/30 sm:px-4"
           listItemEventBeforeClass="hidden"
           listItemEventTimeClass="hidden"
@@ -282,6 +310,9 @@ export function TaskCalendar({
             <CalendarTaskEvent
               task={info.event.extendedProps.task as CalendarTask}
               monthGrid={info.view.type === 'dayGridMonth'}
+              searchHighlighted={
+                searchTarget?.taskId === Number(info.event.id)
+              }
             />
           )}
           dateClick={(info) => {

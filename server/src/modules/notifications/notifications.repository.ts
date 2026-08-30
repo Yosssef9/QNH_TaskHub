@@ -76,7 +76,8 @@ export const notificationsRepository = {
 
   async listUnprocessedEmailCandidates(limit: number): Promise<NotificationEmailCandidate[]> {
     const pool = await getDatabasePool();
-    const result = await pool.request().input("limit", sql.Int, limit).query<NotificationEmailCandidate>(`
+    const result = await pool.request().input("limit", sql.Int, limit)
+      .query<NotificationEmailCandidate>(`
       SELECT TOP (@limit)
         id,
         owner_user_id AS ownerUserId,
@@ -115,8 +116,7 @@ export const notificationsRepository = {
     const result = await pool
       .request()
       .input("owner", sql.Int, owner)
-      .input("taskId", sql.BigInt, taskId)
-      .query<TaskEmailState>(`
+      .input("taskId", sql.BigInt, taskId).query<TaskEmailState>(`
         SELECT TOP (1)
           task.status,
           task.priority,
@@ -146,8 +146,7 @@ export const notificationsRepository = {
       .request()
       .input("owner", sql.Int, owner)
       .input("today", sql.Date, today)
-      .input("tomorrow", sql.Date, tomorrow)
-      .query(`
+      .input("tomorrow", sql.Date, tomorrow).query(`
         MERGE dbo.TM_notifications WITH (HOLDLOCK) AS target
         USING (
           SELECT
@@ -323,15 +322,14 @@ export const notificationsRepository = {
       .input("owner", sql.Int, owner)
       .input("type", sql.VarChar(40), input.type)
       .input("dedupe", sql.VarChar(220), input.dedupeKey)
-      .input("subject", sql.NVarChar(250), input.subjectTitle)
-      .input("context", sql.NVarChar(500), input.contextTitle)
+      .input("subject", sql.NVarChar(1000), input.subjectTitle)
+      .input("context", sql.NVarChar(1000), input.contextTitle)
       .input("cycleId", sql.BigInt, input.cycleId)
       .input("instanceId", sql.BigInt, input.kpiInstanceId)
       .input("eventDate", sql.Date, input.eventDate)
       .input("actual", sql.Decimal(19, 4), input.actualValue)
       .input("targetValue", sql.Decimal(19, 4), input.targetValue)
-      .input("unit", sql.VarChar(10), input.measurementUnit)
-      .query(`
+      .input("unit", sql.VarChar(10), input.measurementUnit).query(`
         MERGE dbo.TM_notifications WITH (HOLDLOCK) AS target
         USING (SELECT @owner AS ownerUserId, @dedupe AS dedupeKey) AS source
           ON target.owner_user_id=source.ownerUserId AND target.dedupe_key=source.dedupeKey
@@ -370,8 +368,7 @@ export const notificationsRepository = {
     const result = await pool
       .request()
       .input("owner", sql.Int, owner)
-      .input("limit", sql.Int, limit)
-      .query<NotificationRecord>(`
+      .input("limit", sql.Int, limit).query<NotificationRecord>(`
         SELECT TOP (@limit)
           id,
           notification_type AS notificationType,
@@ -399,10 +396,9 @@ export const notificationsRepository = {
 
   async unreadCount(owner: number): Promise<number> {
     const pool = await getDatabasePool();
-    const result = await pool
-      .request()
-      .input("owner", sql.Int, owner)
-      .query<{ total: number | string }>(`
+    const result = await pool.request().input("owner", sql.Int, owner).query<{
+      total: number | string;
+    }>(`
         SELECT COUNT_BIG(*) AS total
         FROM dbo.TM_notifications
         WHERE owner_user_id=@owner AND read_at_utc IS NULL;
@@ -415,8 +411,7 @@ export const notificationsRepository = {
     const result = await pool
       .request()
       .input("owner", sql.Int, owner)
-      .input("notificationId", sql.BigInt, notificationId)
-      .query(`
+      .input("notificationId", sql.BigInt, notificationId).query(`
         UPDATE dbo.TM_notifications
         SET read_at_utc=COALESCE(read_at_utc,SYSUTCDATETIME())
         WHERE id=@notificationId AND owner_user_id=@owner;
@@ -426,10 +421,7 @@ export const notificationsRepository = {
 
   async markAllRead(owner: number): Promise<number> {
     const pool = await getDatabasePool();
-    const result = await pool
-      .request()
-      .input("owner", sql.Int, owner)
-      .query(`
+    const result = await pool.request().input("owner", sql.Int, owner).query(`
         UPDATE dbo.TM_notifications
         SET read_at_utc=SYSUTCDATETIME()
         WHERE owner_user_id=@owner AND read_at_utc IS NULL;

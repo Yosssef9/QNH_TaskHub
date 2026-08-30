@@ -162,7 +162,8 @@ The numeric value may exceed 100%, while a visual progress fill may stop at 100%
 ## Calendar
 
 - TaskHub includes a top-level **Calendar / التقويم** view for the authenticated user's existing work. The Calendar is a projection of tasks, not a separate event or scheduling domain.
-- The Calendar provides **Month** and **Agenda** views with Today/previous/next navigation, Personal vs KPI scope, search, and the existing status/priority/list/Work Cycle/KPI filters needed to narrow the visible work.
+- The Calendar provides **Month** and **Agenda** views with Today/previous/next navigation, Personal vs KPI scope, and the existing status/priority/list/Work Cycle/KPI filters needed to narrow the visible work.
+- Calendar search is a dedicated owner-scoped finder across **all dated Calendar tasks**, not only the visible month. It searches task title/description plus the relevant List, KPI, and Work Cycle names, respects the active Personal/KPI scope and filters, waits for at least two characters with a short debounce, and returns a bounded set of upcoming-first then recent-past results. Clicking a result navigates the existing Calendar to that date, temporarily highlights the destination day/task, and opens the existing Task Details workspace; normal Calendar rendering remains range-bounded.
 - A task appears once on its due date when one exists; otherwise it appears on its start date. Tasks with neither date do not appear on the Calendar.
 - Personal calendar results include only normal-list tasks. KPI calendar results include only KPI-instance tasks. These domains remain separate and all queries are owner-scoped from the authenticated Portal user.
 - Calendar task rendering reuses the existing TaskHub status, priority, overdue, light/dark, and RTL/LTR visual system. Clicking a calendar task opens the existing Task Details workspace.
@@ -173,7 +174,7 @@ The numeric value may exceed 100%, while a visual progress fill may stop at 100%
 - Calendar interactions remain keyboard- and screen-reader-usable: visible day numbers are explicit focusable controls with localized date/task-count labels, rendered events are interactive/focusable, loading state is announced, and the selected day is exposed without relying on color alone.
 - Calendar quick-create preselects the clicked date according to the existing task/KPI date policy: normal tasks and KPI tasks with editable due dates receive the clicked date as the initial due date; KPI tasks whose policy has no due date use it as the initial start date; reference-date KPIs keep their automatic deadline policy and do not receive a forged direct due date.
 - Personal quick-create may preselect the active list filter, while KPI quick-create may preselect the active open Work Cycle/KPI filter. The existing editor remains authoritative and users can change permitted context before save.
-- The Calendar fetches only the visible date range through a dedicated read endpoint. Calendar does not add a separate task CRUD API or calendar-event database table. Existing task creation/update/detail APIs remain authoritative.
+- Normal Calendar rendering fetches only the visible date range through a dedicated read endpoint; the separate Calendar-wide search endpoint is bounded by its result limit rather than by the visible month. Calendar does not add a separate task CRUD API or calendar-event database table. Existing task creation/update/detail APIs remain authoritative.
 - Drag-to-reschedule, recurring events, hourly scheduling, resource calendars, and external calendar synchronization remain outside the approved Calendar scope.
 
 ## Tasks and subtasks

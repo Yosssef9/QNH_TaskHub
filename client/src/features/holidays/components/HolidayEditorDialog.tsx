@@ -47,7 +47,7 @@ export function HolidayEditorDialog({
             <Input
               dir="rtl"
               value={nameAr}
-              maxLength={150}
+              maxLength={1000}
               onChange={(event) => setNameAr(event.target.value)}
             />
           </label>
@@ -56,7 +56,7 @@ export function HolidayEditorDialog({
             <Input
               dir="ltr"
               value={nameEn}
-              maxLength={150}
+              maxLength={1000}
               onChange={(event) => setNameEn(event.target.value)}
             />
           </label>

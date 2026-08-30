@@ -1,5 +1,6 @@
 import { AlertTriangle, BriefcaseBusiness, CalendarDays, Gauge, ListTodo } from 'lucide-react'
 import { useMemo } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -20,6 +21,7 @@ import type { CalendarTask } from '../types/calendar.types'
 interface Props {
   task: CalendarTask
   monthGrid?: boolean
+  searchHighlighted?: boolean
 }
 
 function taskSurfaceClass(task: CalendarTask): string {
@@ -37,6 +39,27 @@ function taskSurfaceClass(task: CalendarTask): string {
     case 'TODO':
       return 'border-border/80 border-s-muted-foreground/40 bg-muted/35 hover:bg-muted/60'
   }
+}
+
+
+function SearchResultHighlight({ visible }: { visible: boolean }) {
+  const shouldReduceMotion = useReducedMotion()
+
+  return (
+    <AnimatePresence>
+      {visible ? (
+        <motion.span
+          data-calendar-search-highlight="true"
+          aria-hidden="true"
+          initial={shouldReduceMotion ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: shouldReduceMotion ? 0 : 0.18 }}
+          className="pointer-events-none absolute inset-0 z-20 rounded-md bg-primary/[0.08] shadow-sm ring-2 ring-primary"
+        />
+      ) : null}
+    </AnimatePresence>
+  )
 }
 
 function CalendarTaskTooltip({ task }: { task: CalendarTask }) {
@@ -113,7 +136,11 @@ function CalendarTaskTooltip({ task }: { task: CalendarTask }) {
   )
 }
 
-export function CalendarTaskEvent({ monthGrid = false, task }: Props) {
+export function CalendarTaskEvent({
+  monthGrid = false,
+  searchHighlighted = false,
+  task,
+}: Props) {
   const status = taskStatusPresentation[task.status]
   const priority = taskPriorityPresentation[task.priority]
   const StatusIcon = task.isOverdue ? AlertTriangle : status.icon
@@ -121,7 +148,8 @@ export function CalendarTaskEvent({ monthGrid = false, task }: Props) {
 
   if (monthGrid) {
     return (
-      <div className="w-full min-w-0">
+      <div className="relative w-full min-w-0">
+        <SearchResultHighlight visible={searchHighlighted} />
         <span
           className="flex min-h-4 items-center justify-center gap-1 sm:hidden"
           aria-hidden="true"
@@ -168,9 +196,11 @@ export function CalendarTaskEvent({ monthGrid = false, task }: Props) {
   }
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div className="flex min-w-0 items-center gap-2 py-0.5">
+    <div className="relative min-w-0">
+      <SearchResultHighlight visible={searchHighlighted} />
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex min-w-0 items-center gap-2 py-0.5">
           <span className={cn('grid size-6 shrink-0 place-items-center rounded-full', statusTone)}>
             <StatusIcon aria-hidden="true" className="size-3.5" />
           </span>
@@ -181,9 +211,10 @@ export function CalendarTaskEvent({ monthGrid = false, task }: Props) {
             aria-hidden="true"
             className={cn('size-2 shrink-0 rounded-full', priority.dot)}
           />
-        </div>
-      </TooltipTrigger>
-      <CalendarTaskTooltip task={task} />
-    </Tooltip>
+          </div>
+        </TooltipTrigger>
+        <CalendarTaskTooltip task={task} />
+      </Tooltip>
+    </div>
   )
 }

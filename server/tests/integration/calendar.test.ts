@@ -84,4 +84,50 @@ describe("calendar endpoints", () => {
     expect(response.body.error.code).toBe("VALIDATION_ERROR");
     expect(listTasks).not.toHaveBeenCalled();
   });
+
+  it("searches dated Calendar tasks across all months with authenticated ownership", async () => {
+    const searchTasks = vi.spyOn(calendarService, "searchTasks").mockResolvedValue({
+      items: [],
+      total: 0,
+    });
+
+    const response = await request(app)
+      .get(
+        "/api/calendar/search?q=report&scope=PERSONAL&priority=HIGH&listId=3&ownerUserId=999",
+      )
+      .set("Authorization", `Bearer ${token()}`);
+
+    expect(response.status).toBe(200);
+    expect(searchTasks).toHaveBeenCalledWith(7, {
+      q: "report",
+      scope: "PERSONAL",
+      priority: "HIGH",
+      listId: 3,
+    });
+  });
+
+  it("requires at least two characters for Calendar-wide search", async () => {
+    const searchTasks = vi.spyOn(calendarService, "searchTasks");
+
+    const response = await request(app)
+      .get("/api/calendar/search?q=r&scope=PERSONAL")
+      .set("Authorization", `Bearer ${token()}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+    expect(searchTasks).not.toHaveBeenCalled();
+  });
+
+  it("rejects incompatible scope filters in Calendar-wide search", async () => {
+    const searchTasks = vi.spyOn(calendarService, "searchTasks");
+
+    const response = await request(app)
+      .get("/api/calendar/search?q=report&scope=KPI&listId=3")
+      .set("Authorization", `Bearer ${token()}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+    expect(searchTasks).not.toHaveBeenCalled();
+  });
+
 });

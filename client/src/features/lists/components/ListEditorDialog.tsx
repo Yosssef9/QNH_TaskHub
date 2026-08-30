@@ -19,7 +19,7 @@ import type { PersonalList, SaveListInput } from '../types/list.types'
 import { listIcons } from './list-icons'
 
 const listFormSchema = z.object({
-  name: z.string().trim().min(1).max(120),
+  name: z.string().trim().min(1).max(1000),
   iconKey: z.enum(LIST_ICON_KEYS),
   color: z.enum(LIST_COLORS),
 })
@@ -121,7 +121,7 @@ export function ListEditorDialog({ list, onOpenChange, open }: ListEditorDialogP
             <Input
               id="list-name"
               autoFocus
-              maxLength={120}
+              maxLength={1000}
               aria-invalid={Boolean(errors.name)}
               placeholder={t('lists.namePlaceholder')}
               {...register('name')}
