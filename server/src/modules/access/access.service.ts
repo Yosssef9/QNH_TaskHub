@@ -68,13 +68,20 @@ export const accessService: AccessService = {
         activeAdminCount,
       });
 
+      const contractsEnabled = input.contractsEnabled ?? currentAccess?.contractsEnabled ?? false;
+
       await accessRepository.saveAccess(transaction, {
         actorUserId,
         targetUserId: input.userId,
         roleCode: input.roleCode,
         isActive: input.isActive,
         accessExists: currentAccess !== null,
+        contractsEnabled,
       });
+
+      if (input.isActive && contractsEnabled) {
+        await accessRepository.ensureContractSettingsInTransaction(transaction, input.userId);
+      }
 
       if (input.isActive) {
         await accessRepository.ensureUserFoundationInTransaction(transaction, input.userId);
@@ -94,3 +101,4 @@ export const accessService: AccessService = {
     return mapAccessUser(updatedUser);
   },
 };
+

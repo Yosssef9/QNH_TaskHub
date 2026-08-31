@@ -14,7 +14,7 @@ const authProfile: AuthMeData = {
     userName: "TaskHub Test User",
     email: "test@qnhospital.com",
   },
-  access: { roleCode: "USER" },
+  access: { roleCode: "USER", contractsEnabled: false },
   preferences: {
     languageCode: "AR",
     theme: "SYSTEM",
@@ -78,3 +78,4 @@ describe("GET /api/auth/me", () => {
     expect(response.body.data.access.roleCode).toBe("USER");
   });
 });
+

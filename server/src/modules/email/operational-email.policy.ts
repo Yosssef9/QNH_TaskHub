@@ -16,6 +16,8 @@ export function notificationTypeForTemplate(
     case "CURRENT_CYCLE_PAST_END":
     case "KPI_BELOW_TARGET":
     case "KPI_MEASUREMENT_DUE":
+    case "CONTRACT_EXPIRATION_REMINDER":
+    case "CONTRACT_NOTICE_DEADLINE_REMINDER":
       return templateKey;
     case "TEST":
     case "VERIFY_ALTERNATE_EMAIL":
@@ -23,4 +25,10 @@ export function notificationTypeForTemplate(
     default:
       return null;
   }
+}
+
+export function isContractNotificationType(
+  type: NotificationType,
+): type is "CONTRACT_EXPIRATION_REMINDER" | "CONTRACT_NOTICE_DEADLINE_REMINDER" {
+  return type === "CONTRACT_EXPIRATION_REMINDER" || type === "CONTRACT_NOTICE_DEADLINE_REMINDER";
 }

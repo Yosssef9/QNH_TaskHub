@@ -10,6 +10,7 @@ export interface NotificationRecord {
   listId: number | string | null;
   cycleId: number | string | null;
   kpiInstanceId: number | string | null;
+  contractId: number | string | null;
   eventDate: Date | null;
   actualValue: number | null;
   targetValue: number | null;
@@ -74,9 +75,9 @@ export const notificationsRepository = {
     return result.recordset.map((row) => Number(row.ownerUserId));
   },
 
-  async listUnprocessedEmailCandidates(limit: number): Promise<NotificationEmailCandidate[]> {
+  async listUnprocessedEmailCandidates(limit: number, today: string): Promise<NotificationEmailCandidate[]> {
     const pool = await getDatabasePool();
-    const result = await pool.request().input("limit", sql.Int, limit)
+    const result = await pool.request().input("limit", sql.Int, limit).input("today", sql.Date, today)
       .query<NotificationEmailCandidate>(`
       SELECT TOP (@limit)
         id,
@@ -89,15 +90,43 @@ export const notificationsRepository = {
         list_id AS listId,
         cycle_id AS cycleId,
         kpi_instance_id AS kpiInstanceId,
+        contract_id AS contractId,
         event_date AS eventDate,
         actual_value AS actualValue,
         target_value AS targetValue,
         measurement_unit AS measurementUnit,
         read_at_utc AS readAtUtc,
         created_at_utc AS createdAtUtc
-      FROM dbo.TM_notifications WITH (READPAST)
-      WHERE email_processed_at_utc IS NULL
-      ORDER BY id;
+      FROM dbo.TM_notifications AS notification WITH (READPAST)
+      WHERE notification.email_processed_at_utc IS NULL
+        AND (
+          notification.notification_type NOT IN ('CONTRACT_EXPIRATION_REMINDER', 'CONTRACT_NOTICE_DEADLINE_REMINDER')
+          OR (
+            notification.event_date >= @today
+            AND EXISTS (
+              SELECT 1
+              FROM dbo.TM_contract_user_settings AS contract_settings
+              INNER JOIN dbo.TM_user_access AS access
+                ON access.portal_user_id = contract_settings.owner_user_id
+              INNER JOIN dbo.TM_user_settings AS user_settings
+                ON user_settings.portal_user_id = contract_settings.owner_user_id
+              WHERE contract_settings.owner_user_id = notification.owner_user_id
+                AND access.is_active = 1
+                AND access.contracts_enabled = 1
+                AND user_settings.email_notifications_enabled = 1
+                AND (
+                  (notification.notification_type = 'CONTRACT_EXPIRATION_REMINDER'
+                    AND contract_settings.expiration_email_enabled = 1
+                    AND @today >= DATEADD(DAY, -contract_settings.expiration_reminder_lead_days, notification.event_date))
+                  OR
+                  (notification.notification_type = 'CONTRACT_NOTICE_DEADLINE_REMINDER'
+                    AND contract_settings.notice_email_enabled = 1
+                    AND @today >= DATEADD(DAY, -contract_settings.notice_reminder_lead_days, notification.event_date))
+                )
+            )
+          )
+        )
+      ORDER BY notification.id;
     `);
     return result.recordset.map((row) => ({ ...row, ownerUserId: Number(row.ownerUserId) }));
   },
@@ -315,6 +344,72 @@ export const notificationsRepository = {
       `);
   },
 
+  async syncContractNotifications(owner: number, today: string): Promise<void> {
+    const pool = await getDatabasePool();
+    await pool.request().input("owner", sql.Int, owner).input("today", sql.Date, today).query(`
+      MERGE dbo.TM_notifications WITH (HOLDLOCK) AS target
+      USING (
+        SELECT
+          CAST('CONTRACT_EXPIRATION_REMINDER' AS VARCHAR(40)) AS notificationType,
+          CONVERT(VARCHAR(220), CONCAT('CONTRACT_EXPIRATION_REMINDER:', contract.id, ':', CONVERT(VARCHAR(10), contract.end_date, 23))) AS dedupeKey,
+          contract.title AS subjectTitle,
+          supplier.name AS contextTitle,
+          contract.id AS contractId,
+          contract.end_date AS eventDate
+        FROM dbo.TM_contracts AS contract
+        INNER JOIN dbo.TM_contract_suppliers AS supplier
+          ON supplier.id = contract.supplier_id AND supplier.owner_user_id = contract.owner_user_id
+        INNER JOIN dbo.TM_contract_user_settings AS settings
+          ON settings.owner_user_id = contract.owner_user_id
+        INNER JOIN dbo.TM_user_access AS access
+          ON access.portal_user_id = contract.owner_user_id
+        WHERE contract.owner_user_id = @owner
+          AND access.is_active = 1
+          AND access.contracts_enabled = 1
+          AND contract.is_active = 1
+          AND contract.end_date IS NOT NULL
+          AND @today BETWEEN DATEADD(DAY, -settings.expiration_reminder_lead_days, contract.end_date) AND contract.end_date
+
+        UNION ALL
+
+        SELECT
+          CAST('CONTRACT_NOTICE_DEADLINE_REMINDER' AS VARCHAR(40)),
+          CONVERT(VARCHAR(220), CONCAT('CONTRACT_NOTICE_DEADLINE_REMINDER:', contract.id, ':', CONVERT(VARCHAR(10), DATEADD(DAY, -contract.notice_period_days, contract.end_date), 23))),
+          contract.title,
+          supplier.name,
+          contract.id,
+          DATEADD(DAY, -contract.notice_period_days, contract.end_date)
+        FROM dbo.TM_contracts AS contract
+        INNER JOIN dbo.TM_contract_suppliers AS supplier
+          ON supplier.id = contract.supplier_id AND supplier.owner_user_id = contract.owner_user_id
+        INNER JOIN dbo.TM_contract_user_settings AS settings
+          ON settings.owner_user_id = contract.owner_user_id
+        INNER JOIN dbo.TM_user_access AS access
+          ON access.portal_user_id = contract.owner_user_id
+        WHERE contract.owner_user_id = @owner
+          AND access.is_active = 1
+          AND access.contracts_enabled = 1
+          AND contract.is_active = 1
+          AND contract.is_auto_renewal = 1
+          AND contract.end_date IS NOT NULL
+          AND contract.notice_period_days IS NOT NULL
+          AND @today BETWEEN
+              DATEADD(DAY, -settings.notice_reminder_lead_days, DATEADD(DAY, -contract.notice_period_days, contract.end_date))
+              AND DATEADD(DAY, -contract.notice_period_days, contract.end_date)
+      ) AS source
+        ON target.owner_user_id = @owner AND target.dedupe_key = source.dedupeKey
+      WHEN NOT MATCHED THEN
+        INSERT (
+          owner_user_id, notification_type, dedupe_key, subject_title, context_title,
+          contract_id, event_date, actual_value, target_value, measurement_unit
+        )
+        VALUES (
+          @owner, source.notificationType, source.dedupeKey, source.subjectTitle, source.contextTitle,
+          source.contractId, source.eventDate, NULL, NULL, NULL
+        );
+    `);
+  },
+
   async ensureKpiNotification(owner: number, input: KpiNotificationInput): Promise<void> {
     const pool = await getDatabasePool();
     await pool
@@ -378,6 +473,7 @@ export const notificationsRepository = {
           list_id AS listId,
           cycle_id AS cycleId,
           kpi_instance_id AS kpiInstanceId,
+          contract_id AS contractId,
           event_date AS eventDate,
           actual_value AS actualValue,
           target_value AS targetValue,
@@ -429,3 +525,4 @@ export const notificationsRepository = {
     return result.rowsAffected[0] ?? 0;
   },
 };
+

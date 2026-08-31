@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { NOTIFICATION_TYPES } from "../notifications/notifications.types.js";
+import { EMAIL_PREFERENCE_EVENTS } from "./email-settings.types.js";
 
 export const updateEmailSettingsBodySchema = z
   .object({
@@ -9,11 +9,11 @@ export const updateEmailSettingsBodySchema = z
     preferences: z
       .array(
         z.object({
-          eventType: z.enum(NOTIFICATION_TYPES),
+          eventType: z.enum(EMAIL_PREFERENCE_EVENTS),
           enabled: z.boolean(),
         }),
       )
-      .max(NOTIFICATION_TYPES.length)
+      .max(EMAIL_PREFERENCE_EVENTS.length)
       .optional(),
   })
   .refine(
@@ -37,3 +37,4 @@ export type RequestAlternateVerificationBody = z.infer<
   typeof requestAlternateVerificationBodySchema
 >;
 export type VerifyAlternateEmailBody = z.infer<typeof verifyAlternateEmailBodySchema>;
+

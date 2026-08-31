@@ -4,6 +4,8 @@ import {
   CalendarClock,
   CheckCheck,
   Clock3,
+  FileClock,
+  FileWarning,
   Gauge,
   Loader2,
 } from 'lucide-react'
@@ -31,6 +33,8 @@ const notificationIcons: Record<NotificationType, LucideIcon> = {
   CURRENT_CYCLE_PAST_END: AlertTriangle,
   KPI_BELOW_TARGET: Gauge,
   KPI_MEASUREMENT_DUE: Gauge,
+  CONTRACT_EXPIRATION_REMINDER: FileWarning,
+  CONTRACT_NOTICE_DEADLINE_REMINDER: FileClock,
 }
 
 const notificationTones: Record<NotificationType, string> = {
@@ -41,6 +45,8 @@ const notificationTones: Record<NotificationType, string> = {
   CURRENT_CYCLE_PAST_END: 'bg-destructive/10 text-destructive',
   KPI_BELOW_TARGET: 'bg-destructive/10 text-destructive',
   KPI_MEASUREMENT_DUE: 'bg-primary/10 text-primary',
+  CONTRACT_EXPIRATION_REMINDER: 'bg-warning/10 text-warning-foreground',
+  CONTRACT_NOTICE_DEADLINE_REMINDER: 'bg-warning/10 text-warning-foreground',
 }
 
 function formatDate(value: string | null, locale: string): string | null {
@@ -261,6 +267,22 @@ function NotificationDetail({
 }) {
   const { t } = useTranslation()
 
+  if (item.type === 'CONTRACT_EXPIRATION_REMINDER' && eventDate) {
+    return (
+      <span className="text-muted-foreground mt-1 block text-xs">
+        {t('notifications.contractEndDate', { date: eventDate })}
+      </span>
+    )
+  }
+
+  if (item.type === 'CONTRACT_NOTICE_DEADLINE_REMINDER' && eventDate) {
+    return (
+      <span className="text-muted-foreground mt-1 block text-xs">
+        {t('notifications.contractNoticeDeadline', { date: eventDate })}
+      </span>
+    )
+  }
+
   if (item.type === 'KPI_BELOW_TARGET') {
     return (
       <span className="text-muted-foreground mt-1 block text-xs">
@@ -290,3 +312,4 @@ function NotificationDetail({
 
   return null
 }
+

@@ -13,6 +13,7 @@ export interface PortalUserRecord {
 export interface AccessProfileRecord {
   roleCode: string;
   isActive: boolean;
+  contractsEnabled: boolean;
   languageCode: string | null;
   theme: string | null;
   sidebarCollapsed: boolean | null;
@@ -50,6 +51,7 @@ export async function findAccessProfile(userId: number): Promise<AccessProfileRe
       SELECT
         access.role_code AS roleCode,
         access.is_active AS isActive,
+        CAST(access.contracts_enabled AS BIT) AS contractsEnabled,
         settings.language_code AS languageCode,
         settings.theme,
         settings.sidebar_collapsed AS sidebarCollapsed,
@@ -127,3 +129,4 @@ export const authRepository: AuthRepository = {
   findAccessProfile,
   ensureUserFoundation,
 };
+

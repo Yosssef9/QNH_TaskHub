@@ -19,7 +19,7 @@ describe("calendar endpoints", () => {
     vi.restoreAllMocks();
     vi.spyOn(authService, "resolveCurrentUser").mockResolvedValue({
       user: { userId: 7, userCode: "USER0007", userName: "User", email: null },
-      access: { roleCode: "USER" },
+      access: { roleCode: "USER", contractsEnabled: false },
       preferences: {
         languageCode: "AR",
         theme: "SYSTEM",
@@ -131,3 +131,4 @@ describe("calendar endpoints", () => {
   });
 
 });
+

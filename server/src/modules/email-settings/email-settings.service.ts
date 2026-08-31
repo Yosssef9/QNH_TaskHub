@@ -4,7 +4,6 @@ import { env } from "../../config/env.js";
 import { logger } from "../../config/logger.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import { emailService } from "../email/email.service.js";
-import { NOTIFICATION_TYPES } from "../notifications/notifications.types.js";
 import {
   EMAIL_EVENT_DEFAULTS,
   EMAIL_VERIFICATION_CODE_TTL_MINUTES,
@@ -17,8 +16,10 @@ import {
   type EmailSettingsRecord,
 } from "./email-settings.repository.js";
 import type { UpdateEmailSettingsBody } from "./email-settings.schemas.js";
+import { EMAIL_PREFERENCE_EVENTS } from "./email-settings.types.js";
 import type {
   EmailSettingsData,
+  EmailPreferenceEvent,
   OperationalEmailDelivery,
   PendingEmailVerification,
   ResolvedEmailRecipient,
@@ -125,7 +126,7 @@ async function buildSettings(ownerUserId: number): Promise<EmailSettingsData> {
     activeEmailSource: record.activeEmailSource,
     activeEmail,
     canEnableEmail: activeEmail !== null,
-    preferences: NOTIFICATION_TYPES.map((eventType) => ({
+    preferences: EMAIL_PREFERENCE_EVENTS.map((eventType) => ({
       eventType,
       enabled: stored.get(eventType) ?? EMAIL_EVENT_DEFAULTS[eventType],
     })),
@@ -271,9 +272,23 @@ async function resolveActiveRecipient(
   };
 }
 
+async function resolveBaseOperationalDelivery(
+  ownerUserId: number,
+): Promise<OperationalEmailDelivery | null> {
+  if (!env.EMAIL_ENABLED) return null;
+  const record = await getRequiredRecord(ownerUserId);
+  if (!record.notificationsEnabled) return null;
+  const email = getActiveEmail(record);
+  if (!email) return null;
+  return {
+    recipient: { email, name: record.userName, source: record.activeEmailSource },
+    language: record.languageCode === "EN" ? "en" : "ar",
+  };
+}
+
 async function resolveOperationalDelivery(
   ownerUserId: number,
-  eventType: (typeof NOTIFICATION_TYPES)[number],
+  eventType: EmailPreferenceEvent,
 ): Promise<OperationalEmailDelivery | null> {
   if (!env.EMAIL_ENABLED) return null;
 
@@ -418,6 +433,7 @@ export const emailSettingsService = {
   },
 
   resolveActiveRecipient,
+  resolveBaseOperationalDelivery,
   resolveOperationalDelivery,
 
   async sendTest(ownerUserId: number, language: "ar" | "en"): Promise<{ recipient: string }> {
@@ -453,3 +469,4 @@ export const emailSettingsService = {
     return { recipient: maskEmail(recipient.email) };
   },
 };
+

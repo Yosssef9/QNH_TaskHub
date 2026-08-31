@@ -2,10 +2,15 @@ import { createBrowserRouter } from 'react-router'
 
 import App from '@/App'
 import { RequireAuth } from '@/features/auth/components/RequireAuth'
+import { RequireContractsAccess } from '@/features/contracts/components/RequireContractsAccess'
 import { AdminAccessRoute } from '@/pages/admin/AdminAccessRoute'
 import { AdminHolidaysRoute } from '@/pages/admin/AdminHolidaysRoute'
 import { CalendarPage } from '@/pages/calendar/CalendarPage'
 import { HomePage } from '@/pages/home/HomePage'
+import { ContractsPage } from '@/pages/contracts/ContractsPage'
+import { ContractDetailsPage } from '@/pages/contracts/ContractDetailsPage'
+import { SuppliersPage } from '@/pages/contracts/SuppliersPage'
+import { SupplierDetailsPage } from '@/pages/contracts/SupplierDetailsPage'
 import { KpisPage } from '@/pages/kpis/KpisPage'
 import { loadKpiTasksPage } from '@/pages/kpi-tasks/kpi-tasks.loader'
 import { KpiTasksPage } from '@/pages/kpi-tasks/KpiTasksPage'
@@ -35,6 +40,38 @@ export const router = createBrowserRouter([
       { path: 'kpis', element: <KpisPage /> },
       { path: 'kpis/:kpiId', element: <KpisPage /> },
       { path: 'kpi-tasks', loader: loadKpiTasksPage, element: <KpiTasksPage /> },
+      {
+        path: 'contracts',
+        element: (
+          <RequireContractsAccess>
+            <ContractsPage />
+          </RequireContractsAccess>
+        ),
+      },
+      {
+        path: 'contracts/suppliers',
+        element: (
+          <RequireContractsAccess>
+            <SuppliersPage />
+          </RequireContractsAccess>
+        ),
+      },
+      {
+        path: 'contracts/suppliers/:supplierId',
+        element: (
+          <RequireContractsAccess>
+            <SupplierDetailsPage />
+          </RequireContractsAccess>
+        ),
+      },
+      {
+        path: 'contracts/:contractId',
+        element: (
+          <RequireContractsAccess>
+            <ContractDetailsPage />
+          </RequireContractsAccess>
+        ),
+      },
       { path: 'settings', element: <SettingsPage /> },
       {
         path: 'admin/access',
@@ -46,3 +83,4 @@ export const router = createBrowserRouter([
     ],
   },
 ])
+

@@ -7,6 +7,8 @@ import type {
 } from "../email.types.js";
 import { normalizeAbsoluteUrl } from "./email-template.helpers.js";
 import { renderCycleEndingSoonEmail } from "./cycle-ending-soon-email.js";
+import { renderContractExpirationReminderEmail } from "./contract-expiration-reminder-email.js";
+import { renderContractNoticeDeadlineReminderEmail } from "./contract-notice-deadline-reminder-email.js";
 import { renderCyclePastEndEmail } from "./cycle-past-end-email.js";
 import { renderHighPriorityTaskDueTomorrowEmail } from "./high-priority-task-due-tomorrow-email.js";
 import { renderKpiBelowTargetEmail } from "./kpi-below-target-email.js";
@@ -51,5 +53,10 @@ export function renderEmailTemplate(
       return renderKpiBelowTargetEmail(payload, language, context);
     case "KPI_MEASUREMENT_DUE":
       return renderKpiMeasurementDueEmail(payload, language, context);
+    case "CONTRACT_EXPIRATION_REMINDER":
+      return renderContractExpirationReminderEmail(payload, language, context);
+    case "CONTRACT_NOTICE_DEADLINE_REMINDER":
+      return renderContractNoticeDeadlineReminderEmail(payload, language, context);
   }
 }
+

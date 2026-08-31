@@ -36,7 +36,8 @@ export async function listAccessUsers(query: AccessListQuery): Promise<AccessUse
         portal.email,
         CAST(portal.IS_ACTIVE AS BIT) AS portalIsActive,
         access.role_code AS roleCode,
-        access.is_active AS accessIsActive
+        access.is_active AS accessIsActive,
+        CAST(COALESCE(access.contracts_enabled, 0) AS BIT) AS contractsEnabled
       FROM dbo.users AS portal
       LEFT JOIN dbo.TM_user_access AS access
         ON access.portal_user_id = portal.USER_ID
@@ -79,7 +80,8 @@ export async function findAccessUserById(userId: number): Promise<AccessUserReco
         portal.email,
         CAST(portal.IS_ACTIVE AS BIT) AS portalIsActive,
         access.role_code AS roleCode,
-        access.is_active AS accessIsActive
+        access.is_active AS accessIsActive,
+        CAST(COALESCE(access.contracts_enabled, 0) AS BIT) AS contractsEnabled
       FROM dbo.users AS portal
       LEFT JOIN dbo.TM_user_access AS access
         ON access.portal_user_id = portal.USER_ID
@@ -116,7 +118,8 @@ export async function findCurrentAccessForUpdate(
     .query<CurrentAccessRecord>(`
       SELECT
         role_code AS roleCode,
-        is_active AS isActive
+        is_active AS isActive,
+        CAST(contracts_enabled AS BIT) AS contractsEnabled
       FROM dbo.TM_user_access WITH (UPDLOCK, HOLDLOCK)
       WHERE portal_user_id = @userId;
     `);
@@ -145,6 +148,7 @@ export async function saveAccess(
     roleCode: TaskHubRoleCode;
     isActive: boolean;
     accessExists: boolean;
+    contractsEnabled: boolean;
   },
 ): Promise<void> {
   const request = transaction
@@ -152,7 +156,8 @@ export async function saveAccess(
     .input("actorUserId", sql.Int, input.actorUserId)
     .input("targetUserId", sql.Int, input.targetUserId)
     .input("roleCode", sql.VarChar(20), input.roleCode)
-    .input("isActive", sql.Bit, input.isActive);
+    .input("isActive", sql.Bit, input.isActive)
+    .input("contractsEnabled", sql.Bit, input.contractsEnabled);
 
   if (input.accessExists) {
     await request.query(`
@@ -160,6 +165,7 @@ export async function saveAccess(
       SET
         role_code = @roleCode,
         is_active = @isActive,
+        contracts_enabled = @contractsEnabled,
         deactivated_by_user_id = CASE WHEN @isActive = 0 THEN @actorUserId ELSE NULL END,
         deactivated_at_utc = CASE WHEN @isActive = 0 THEN SYSUTCDATETIME() ELSE NULL END,
         updated_at_utc = SYSUTCDATETIME()
@@ -173,6 +179,7 @@ export async function saveAccess(
       portal_user_id,
       role_code,
       is_active,
+      contracts_enabled,
       granted_by_user_id,
       deactivated_by_user_id,
       deactivated_at_utc
@@ -181,10 +188,28 @@ export async function saveAccess(
       @targetUserId,
       @roleCode,
       @isActive,
+      @contractsEnabled,
       @actorUserId,
       CASE WHEN @isActive = 0 THEN @actorUserId ELSE NULL END,
       CASE WHEN @isActive = 0 THEN SYSUTCDATETIME() ELSE NULL END
     );
+  `);
+}
+
+export async function ensureContractSettingsInTransaction(
+  transaction: DatabaseTransaction,
+  userId: number,
+): Promise<void> {
+  await transaction.request().input("userId", sql.Int, userId).query(`
+    IF OBJECT_ID(N'dbo.TM_contract_user_settings', N'U') IS NOT NULL
+       AND NOT EXISTS (
+         SELECT 1
+         FROM dbo.TM_contract_user_settings WITH (UPDLOCK, HOLDLOCK)
+         WHERE owner_user_id = @userId
+       )
+    BEGIN
+      INSERT INTO dbo.TM_contract_user_settings (owner_user_id) VALUES (@userId);
+    END;
   `);
 }
 
@@ -196,4 +221,6 @@ export const accessRepository = {
   countActiveAdminsForUpdate,
   saveAccess,
   ensureUserFoundationInTransaction,
+  ensureContractSettingsInTransaction,
 };
+

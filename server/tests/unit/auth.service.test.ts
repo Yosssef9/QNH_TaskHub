@@ -19,6 +19,7 @@ const portalUser: PortalUserRecord = {
 const accessProfile: AccessProfileRecord = {
   roleCode: "USER",
   isActive: true,
+  contractsEnabled: false,
   languageCode: "AR",
   theme: "SYSTEM",
   sidebarCollapsed: false,
@@ -100,3 +101,4 @@ describe("auth service", () => {
     expect(result.access.roleCode).toBe("USER");
   });
 });
+

@@ -6,7 +6,7 @@ describe("last administrator policy", () => {
   it("prevents deactivating the final active administrator", () => {
     expect(() =>
       assertLastAdminIsPreserved({
-        currentAccess: { roleCode: "ADMIN", isActive: true },
+        currentAccess: { roleCode: "ADMIN", isActive: true, contractsEnabled: false },
         nextRoleIsAdmin: true,
         nextIsActive: false,
         activeAdminCount: 1,
@@ -17,7 +17,7 @@ describe("last administrator policy", () => {
   it("allows changing an administrator when another active administrator remains", () => {
     expect(() =>
       assertLastAdminIsPreserved({
-        currentAccess: { roleCode: "ADMIN", isActive: true },
+        currentAccess: { roleCode: "ADMIN", isActive: true, contractsEnabled: false },
         nextRoleIsAdmin: false,
         nextIsActive: true,
         activeAdminCount: 2,
@@ -28,7 +28,7 @@ describe("last administrator policy", () => {
   it("does not affect normal user access changes", () => {
     expect(() =>
       assertLastAdminIsPreserved({
-        currentAccess: { roleCode: "USER", isActive: true },
+        currentAccess: { roleCode: "USER", isActive: true, contractsEnabled: false },
         nextRoleIsAdmin: false,
         nextIsActive: false,
         activeAdminCount: 1,
@@ -36,3 +36,4 @@ describe("last administrator policy", () => {
     ).not.toThrow();
   });
 });
+

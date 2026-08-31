@@ -9,7 +9,7 @@ const authenticatedUserResponse = {
       userName: 'مستخدم تجريبي',
       email: 'test@qnhospital.com',
     },
-    access: { roleCode: 'ADMIN' },
+    access: { roleCode: 'ADMIN', contractsEnabled: false },
     preferences: {
       languageCode: 'AR',
       theme: 'SYSTEM',
@@ -229,6 +229,7 @@ test('allows an administrator to grant TaskHub access with a role', async ({ pag
               portalIsActive: true,
               roleCode: null,
               accessIsActive: false,
+              contractsEnabled: false,
             },
           ],
           page: 1,
@@ -252,6 +253,7 @@ test('allows an administrator to grant TaskHub access with a role', async ({ pag
             portalIsActive: true,
             roleCode: 'ADMIN',
             accessIsActive: true,
+            contractsEnabled: false,
           },
         },
       },
@@ -266,6 +268,7 @@ test('allows an administrator to grant TaskHub access with a role', async ({ pag
   await page.getByRole('option', { name: 'مسؤول النظام' }).click()
   await page.getByRole('button', { name: 'حفظ' }).click()
 
-  await expect.poll(() => savedInput).toEqual({ roleCode: 'ADMIN', isActive: true })
+  await expect.poll(() => savedInput).toEqual({ roleCode: 'ADMIN', isActive: true, contractsEnabled: false })
   await expect(page.getByText('تم حفظ إعدادات الوصول.')).toBeVisible()
 })
+

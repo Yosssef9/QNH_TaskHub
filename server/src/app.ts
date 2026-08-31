@@ -10,6 +10,7 @@ import { accessRouter } from "./modules/access/access.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { calendarRouter } from "./modules/calendar/calendar.routes.js";
 import { dashboardRouter } from "./modules/dashboard/dashboard.routes.js";
+import { contractsRouter } from "./modules/contracts/contracts.routes.js";
 import { emailSettingsRouter } from "./modules/email-settings/email-settings.routes.js";
 import { listsRouter } from "./modules/lists/lists.routes.js";
 import { holidaysRouter } from "./modules/holidays/holidays.routes.js";
@@ -58,6 +59,7 @@ export function createApp(): express.Express {
 
   app.use("/api/auth", authRouter);
   app.use("/api/dashboard", dashboardRouter);
+  app.use("/api/contracts", contractsRouter);
   app.use("/api/calendar", calendarRouter);
   app.use("/api/search", searchRouter);
   app.use("/api/notifications", notificationsRouter);
@@ -81,3 +83,4 @@ export function createApp(): express.Express {
 }
 
 export const app = createApp();
+

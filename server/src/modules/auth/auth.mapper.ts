@@ -63,6 +63,7 @@ export function mapAuthMeData(
     },
     access: {
       roleCode: toRoleCode(access.roleCode),
+      contractsEnabled: access.contractsEnabled,
     },
     preferences: {
       languageCode: toLanguageCode(access.languageCode),
@@ -73,3 +74,4 @@ export function mapAuthMeData(
     },
   };
 }
+

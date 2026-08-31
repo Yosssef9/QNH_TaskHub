@@ -11,6 +11,7 @@ export type ThemePreference = 'LIGHT' | 'DARK' | 'SYSTEM'
 
 export interface TaskHubAccess {
   roleCode: TaskHubRoleCode
+  contractsEnabled: boolean
 }
 
 export interface UserPreferences {
@@ -26,3 +27,4 @@ export interface AuthMeData {
   access: TaskHubAccess
   preferences: UserPreferences
 }
+

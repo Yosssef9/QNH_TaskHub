@@ -2,7 +2,6 @@ import os from "node:os";
 
 import { env } from "../../config/env.js";
 import { logger } from "../../config/logger.js";
-import { emailSettingsService } from "../email-settings/email-settings.service.js";
 import { emailRepository } from "./email.repository.js";
 import { getEmailTransport } from "./email-transport.factory.js";
 import { operationalEmailService } from "./operational-email.service.js";
@@ -40,6 +39,8 @@ function asTemplateKey(value: string): EmailTemplateKey {
     case "CURRENT_CYCLE_PAST_END":
     case "KPI_BELOW_TARGET":
     case "KPI_MEASUREMENT_DUE":
+    case "CONTRACT_EXPIRATION_REMINDER":
+    case "CONTRACT_NOTICE_DEADLINE_REMINDER":
       return value;
     default:
       throw new Error(`Unsupported email template key: ${value}`);
@@ -85,15 +86,17 @@ export async function processEmailOutboxOnce(workerId: string): Promise<number> 
         );
       }
 
+      const payload = parsePayload(row.templatePayloadJson);
       let recipientEmail = row.recipientEmail;
       let recipientName = row.recipientName;
       let language = asLanguage(row.languageCode);
       const operationalEvent = notificationTypeForTemplate(templateKey);
 
       if (operationalEvent && row.ownerUserId !== null) {
-        const delivery = await emailSettingsService.resolveOperationalDelivery(
+        const delivery = await operationalEmailService.resolveSendTimeDelivery(
           row.ownerUserId,
           operationalEvent,
+          payload,
         );
         if (!delivery) {
           await emailRepository.markCanceled(
@@ -120,11 +123,7 @@ export async function processEmailOutboxOnce(workerId: string): Promise<number> 
         );
       }
 
-      const document = renderEmailTemplate(
-        templateKey,
-        parsePayload(row.templatePayloadJson),
-        language,
-      );
+      const document = renderEmailTemplate(templateKey, payload, language);
       const sendResult = await transport.send({
         to: recipientEmail,
         ...(recipientName ? { toName: recipientName } : {}),
@@ -207,3 +206,4 @@ export function startEmailWorker(): EmailWorkerHandle {
     },
   };
 }
+

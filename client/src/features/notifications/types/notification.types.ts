@@ -6,6 +6,8 @@ export const NOTIFICATION_TYPES = [
   'CURRENT_CYCLE_PAST_END',
   'KPI_BELOW_TARGET',
   'KPI_MEASUREMENT_DUE',
+  'CONTRACT_EXPIRATION_REMINDER',
+  'CONTRACT_NOTICE_DEADLINE_REMINDER',
 ] as const
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number]
@@ -28,3 +30,4 @@ export interface NotificationListData {
   items: NotificationItem[]
   unreadCount: number
 }
+

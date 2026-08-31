@@ -46,7 +46,7 @@ describe("email settings endpoints", () => {
         userName: "User",
         email: "user@qnhospital.com",
       },
-      access: { roleCode: "USER" },
+      access: { roleCode: "USER", contractsEnabled: false },
       preferences: {
         languageCode: "AR",
         theme: "SYSTEM",
@@ -120,3 +120,4 @@ describe("email settings endpoints", () => {
     expect(verify).toHaveBeenCalledWith(7, "483271");
   });
 });
+

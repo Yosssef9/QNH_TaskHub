@@ -4,9 +4,9 @@
 
 ## 1. Mission
 
-**QNH TaskHub** is an Arabic-first private task and KPI application for QNH Portal users.
+**QNH TaskHub** is an Arabic-first private productivity application for QNH Portal users.
 
-The MVP lets each user organize personal work in a permanent **My Tasks** list, create additional personal lists, and create independently configured KPIs with their own KPI tasks. This private personal-productivity model is the only active product direction. Do not infer requirements from superseded planning material or expand the product into a Jira/Asana-style platform unless explicitly requested.
+The core product lets each user organize personal work in a permanent **My Tasks** list, create additional personal lists, and create independently configured KPIs with their own KPI tasks. TaskHub also includes an optional, private **Contracts** domain for users whose TaskHub access explicitly enables it. Contracts remain separate from Tasks/KPIs and must never weaken the existing private personal-work model. Do not infer requirements from superseded planning material or expand the product into a Jira/Asana-style platform unless explicitly requested.
 
 Detailed product behavior is maintained in [`docs/product-requirements.md`](docs/product-requirements.md).
 
@@ -28,9 +28,9 @@ Detailed product behavior is maintained in [`docs/product-requirements.md`](docs
 
 ## 3. Product invariants
 
-- Every user's lists, tasks, subtasks, attachments, KPIs, and measurements are private to that user.
+- Every user's lists, tasks, subtasks, attachments, KPIs, measurements, Contracts, Contract Suppliers, Contract settings, and Contract history are private to that user.
 - An `ADMIN` does not automatically gain access to another user's private work.
-- The only MVP application role codes are `USER` and `ADMIN`.
+- The only application role codes are `USER` and `ADMIN`; Contracts access is a separate optional module flag, not a new role or granular permission system.
 - Every user has one permanent default **My Tasks** list and may create additional personal lists with a name, icon, and color.
 - A normal task belongs to exactly one normal list.
 - KPI work is separate from normal lists. A KPI is a reusable private template; a KPI task belongs to exactly one KPI instance inside exactly one private Work Cycle and does not appear in My Tasks or a custom list.
@@ -75,7 +75,25 @@ Role codes are technical identifiers. Display labels may be localized and must n
 
 All private-resource queries and mutations must enforce `owner_user_id = authenticated Portal USER_ID` on the backend. This applies to direct detail endpoints, lists, search, counts, KPI results, attachments, and future exports. Frontend guards are UX only.
 
-## 6. Normal lists and tasks
+
+## 6. Contracts domain
+
+Contracts are an optional, first-class private domain that is independent from Tasks, Lists, KPIs, Work Cycles, and Calendar items.
+
+- A user sees the Contracts navigation and APIs only when their existing TaskHub access has `contracts_enabled = 1`. Disabling the module removes access but preserves all Contract data.
+- `ADMIN` never implies access to another user's Contracts. All Contract and Supplier queries remain backend owner-scoped.
+- The Phase 1A navigation is an expandable **Contracts** section with **My Contracts** and **Suppliers**.
+- Suppliers are private first-class entities. Supplier Name is required; CR/tax/contact/address/notes are optional. Archived Suppliers remain visible on existing Contracts but cannot be newly assigned.
+- Contract Number is optional text; Contract Title and Start Date are required. End Date may be omitted for open-ended Contracts, but automatic renewal requires an End Date, Renewal Term, and Notice Period.
+- Automatic Renewal is a yes/no contractual attribute. TaskHub must not automatically mutate End Date or decide that a legal renewal occurred.
+- Notice Deadline is derived from End Date minus Notice Period. Duration, Days Remaining, and date-tracking state (`UPCOMING`, `ACTIVE`, `EXPIRING_SOON`, `EXPIRED`) are also derived, not editable status fields.
+- `expiring_soon_days` is a private per-user Contract setting (default 90) and affects derived tracking only. Phase 1C adds independent reminder lead days for End Date and automatic-renewal Notice Deadline events plus optional email copies.
+- Contract value distinguishes `FIXED` from `VARIABLE`. Payment Frequency and Payment Timing are separate; `IN_ADVANCE` means payment in advance, not a frequency.
+- Contract edits use explicit Save, a review/confirmation diff, optimistic `ROWVERSION` concurrency, and one immutable audit event in the same SQL transaction. Archived Contracts are read-only until restored.
+- Phase 1B adds private Contract Files: PDF/JPG/JPEG/PNG only, up to 10 active files per Contract and 10 MB per file, protected server-managed storage, owner-authorized preview/download/remove, file-count hints in My Contracts, a Files tab in Contract Details, and immutable `ATTACHMENT_ADDED` / `ATTACHMENT_REMOVED` history events. Archived Contracts remain read-only for file mutations.
+- Phase 1C adds owner-scoped Contract expiration and automatic-renewal Notice Deadline reminders. Reminder generation is date-based and deduplicated; if the configured lead date has passed but the actual End Date/Notice Deadline is still future, TaskHub creates the reminder on the next scan. In-app reminders remain independent from email. Optional Contract email copies reuse the existing TaskHub outbox/worker, active verified destination, bilingual templates, send-time revalidation, and cancellation rules. Contract reminder settings are personal and Contract access must still be enabled.
+
+## 7. Normal lists and tasks
 
 - **My Tasks** is the permanent default list, not an aggregate view of KPI work.
 - Users may create, rename, order, recolor, and choose icons for custom lists.
@@ -99,7 +117,7 @@ Task priorities:
 
 `OVERDUE` is calculated when an unfinished, non-cancelled task has passed its due date; it is not stored as a workflow status.
 
-## 7. KPIs
+## 8. KPIs
 
 A KPI is a reusable private template. Operational KPI tasks and results belong to one KPI instance inside one Work Cycle.
 
@@ -137,7 +155,7 @@ The KPI setup UI must show a localized plain-language calculation preview and a 
 
 Template changes affect future instances only and must never silently rewrite existing instance snapshots. Work Cycles may be open, closed, or archived. Closed Cycles are read-only across tasks, subtasks, attachments, and measurements; owners may explicitly reopen them.
 
-## 8. Business days and time
+## 9. Business days and time
 
 - QNH operates in `Asia/Riyadh`.
 - Saudi business days are Sunday through Thursday.
@@ -146,7 +164,7 @@ Template changes affect future instances only and must never silently rewrite ex
 - On-time KPIs may calculate a deadline a configured number of business days `BEFORE` or `AFTER` a task's reference date.
 - Centralize date parsing, formatting, deadline, and overdue behavior and test boundary cases.
 
-## 9. Attachments
+## 10. Attachments
 
 - Tasks and subtasks may have attachments.
 - Store attachment metadata in SQL Server and file contents in protected server-managed storage.
@@ -156,7 +174,7 @@ Template changes affect future instances only and must never silently rewrite ex
 - Allow at most 10 attachments per task or subtask and at most 10 MB per file.
 - Allow PDF, Office documents, common image formats, and plain-text files. Reject executables, scripts, and unsafe content; enforce the canonical allowlist in backend configuration.
 
-## 10. In-app notifications
+## 11. In-app notifications
 
 - In-app notifications are private and owner-scoped like the work they reference.
 - Notification generation must not trust client-supplied ownership or entity IDs.
@@ -165,7 +183,7 @@ Template changes affect future instances only and must never silently rewrite ex
 - The notification bell uses periodic TanStack Query refresh; do not add WebSockets unless a later collaboration requirement justifies them.
 - Email delivery is a separate later phase.
 
-## 11. Activity and deletion
+## 12. Activity and deletion
 
 - Keep a lightweight task activity history for creation, status, date, completion, reopen, cancellation, deletion, and restoration events.
 - Use soft deletion for tasks, subtasks, and attachments.
@@ -173,7 +191,7 @@ Template changes affect future instances only and must never silently rewrite ex
 - The permanent My Tasks list cannot be archived or deleted.
 - Finalized KPI periods preserve their calculated result and target snapshot.
 
-## 12. UI and UX
+## 13. UI and UX
 
 - Arabic is the preferred/default language and uses full RTL layout.
 - English is supported with LTR layout.
@@ -192,7 +210,7 @@ Template changes affect future instances only and must never silently rewrite ex
 - Calendar search is separate from normal visible-range event loading: it searches all owner-scoped tasks that have a Calendar date, respects Personal/KPI scope plus current filters, and may match title, description, List, KPI, or Work Cycle context. Keep it bounded and debounced, and navigate/highlight the existing Calendar/task rather than creating a second details workflow.
 - Use Framer Motion as the standard animation layer for component enter/exit, layout, expand/collapse, and other UI transitions. Do not build new animations with handwritten CSS keyframes or Tailwind animation/transition utilities. Keep motion subtle, fast, accessible, and consistent; respect reduced-motion preferences and centralize reusable motion variants.
 
-## 13. Email delivery
+## 14. Email delivery
 
 Email delivery is implemented in three controlled phases. Phase 1 established transport, outbox, worker, retry/idempotency, and the shared QNH TaskHub email design system. Phase 2 added private per-user destinations, verification, and event preferences. Phase 3 connects operational task, Work Cycle, and KPI events to that delivery system.
 
@@ -213,7 +231,7 @@ Current direction:
 
 Phase 3 is active: operational notifications created after migration 011 are considered for email exactly once. Existing notification history is backfilled as already processed to prevent a historical email burst. Event-specific subjects, preheaders, content, metrics, and deep-link CTAs reuse the shared branded shell. Pending operational outbox rows may be marked `CANCELED` if the user disables email, disables that event, or no longer has a valid destination before delivery.
 
-## 14. Current technology direction
+## 15. Current technology direction
 
 Frontend:
 
@@ -239,7 +257,7 @@ Tooling:
 
 Do not introduce PostgreSQL or Prisma while the application targets the existing QNH SQL Server and Portal environment.
 
-## 15. Architecture rules
+## 16. Architecture rules
 
 Build a modular monolith. Do not add microservices, Redis, WebSockets, queues, CQRS, event sourcing, GraphQL, or similar infrastructure without a demonstrated requirement.
 
@@ -259,7 +277,7 @@ No SQL in controllers or frontend code. Centralize ownership policy and KPI calc
 
 Use TanStack Query for server state and React state for local UI state. Do not add Redux or Zustand without a concrete need.
 
-## 16. Budget System reuse policy
+## 17. Budget System reuse policy
 
 Reuse or adapt proven infrastructure patterns from QNH Budget System:
 
@@ -272,7 +290,7 @@ Reuse or adapt proven infrastructure patterns from QNH Budget System:
 
 Do not carry over Budget workspaces, financial years, category scopes, page locks, notification workers, or business modules. Reuse architecture patterns, not unrelated behavior.
 
-## 17. Security invariants
+## 18. Security invariants
 
 - Validate the Portal JWT server-side.
 - Resolve active TaskHub access and role server-side.
@@ -285,7 +303,7 @@ Do not carry over Budget workspaces, financial years, category scopes, page lock
 
 A feature that works in the UI but can be bypassed through the API is incomplete.
 
-## 18. Testing priorities
+## 19. Testing priorities
 
 Prioritize business, calculation, and security tests:
 
@@ -302,7 +320,7 @@ Prioritize business, calculation, and security tests:
 - Attachment endpoints enforce ownership.
 - Backend rejects forged owner IDs even if frontend controls are bypassed.
 
-## 19. Explicitly outside the current MVP
+## 20. Explicitly outside the current MVP
 
 - Multi-user task assignment, sharing, or collaboration
 - Organizational hierarchy or shared work containers
@@ -317,7 +335,7 @@ Prioritize business, calculation, and security tests:
 - SMS, push, WhatsApp, or Teams notifications
 - AI features and advanced report exports
 
-## 20. Decision rule and source of truth
+## 21. Decision rule and source of truth
 
 Optimize for:
 
@@ -339,3 +357,5 @@ Use this source order:
 6. General framework conventions
 
 If documentation and implementation conflict on privacy, security, ownership, or KPI behavior, identify the mismatch instead of silently guessing.
+
+

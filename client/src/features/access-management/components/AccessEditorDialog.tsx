@@ -43,10 +43,11 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
   const updateAccess = useUpdateAccess()
   const [roleCode, setRoleCode] = useState<TaskHubRoleCode>(user.roleCode ?? 'USER')
   const [isActive, setIsActive] = useState(user.roleCode ? user.accessIsActive : true)
+  const [contractsEnabled, setContractsEnabled] = useState(user.contractsEnabled)
 
   function save() {
     updateAccess.mutate(
-      { userId: user.userId, roleCode, isActive },
+      { userId: user.userId, roleCode, isActive, contractsEnabled },
       {
         onSuccess: () => {
           toast.success(t('access.saved'))
@@ -119,6 +120,20 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
               onCheckedChange={setIsActive}
             />
           </div>
+
+          <div className="bg-muted/60 flex items-center justify-between gap-4 rounded-lg border p-4">
+            <div>
+              <p className="text-sm font-medium">{t('access.contractsModule')}</p>
+              <p className="text-muted-foreground mt-1 text-xs leading-5">
+                {t('access.contractsModuleDescription')}
+              </p>
+            </div>
+            <Switch
+              checked={contractsEnabled}
+              aria-label={t('access.contractsModule')}
+              onCheckedChange={setContractsEnabled}
+            />
+          </div>
         </div>
 
         <div className="mt-7 flex justify-end gap-2">
@@ -136,3 +151,4 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
     </Dialog>
   )
 }
+

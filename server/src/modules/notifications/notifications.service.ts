@@ -31,6 +31,7 @@ export function notificationHref(record: NotificationRecord): string {
   const listId = optionalId(record.listId);
   const cycleId = optionalId(record.cycleId);
   const instanceId = optionalId(record.kpiInstanceId);
+  const contractId = optionalId(record.contractId);
 
   if (
     record.notificationType === "TASK_OVERDUE" ||
@@ -43,6 +44,13 @@ export function notificationHref(record: NotificationRecord): string {
       return `/work-cycles/${cycleId}/kpis/${instanceId}?taskId=${taskId}`;
     }
     return "/kpi-tasks";
+  }
+
+  if (
+    record.notificationType === "CONTRACT_EXPIRATION_REMINDER" ||
+    record.notificationType === "CONTRACT_NOTICE_DEADLINE_REMINDER"
+  ) {
+    return contractId === null ? "/contracts" : `/contracts/${contractId}`;
   }
 
   if (
@@ -132,6 +140,7 @@ async function syncKpiNotifications(owner: number, today: string): Promise<void>
 async function synchronize(owner: number): Promise<void> {
   const today = getCurrentDateInAppTimeZone();
   await notificationsRepository.syncTimeBased(owner, today, addDays(today, 1));
+  await notificationsRepository.syncContractNotifications(owner, today);
   await syncKpiNotifications(owner, today);
 }
 
@@ -165,3 +174,4 @@ export const notificationsService = {
     return notificationsRepository.markAllRead(owner);
   },
 };
+

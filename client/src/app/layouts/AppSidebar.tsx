@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { navigationItems } from '@/config/navigation'
 import { cn } from '@/lib/cn'
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
+import { ContractsSidebarSection } from '@/features/contracts/components/ContractsSidebarSection'
 import { ListsSidebarSection } from '@/features/lists/components/ListsSidebarSection'
 import { KpiEditorDialog } from '@/features/kpis/components/KpiEditorDialog'
 import { KpisSidebarSection } from '@/features/kpis/components/KpisSidebarSection'
@@ -27,19 +28,23 @@ export function AppSidebar({ collapsed = false, onNavigate }: AppSidebarProps) {
   const isRtl = i18n.dir() === 'rtl'
   const { data } = useCurrentUser()
   const location = useLocation()
-  const [openSection, setOpenSection] = useState<'lists' | 'workCycles' | 'kpis' | null>(() =>
-    location.pathname.startsWith('/work-cycles') || location.pathname.startsWith('/kpi-tasks')
-      ? 'workCycles'
-      : location.pathname.startsWith('/kpis')
-        ? 'kpis'
-        : 'lists',
+  const [openSection, setOpenSection] = useState<'lists' | 'workCycles' | 'kpis' | 'contracts' | null>(() =>
+    location.pathname.startsWith('/contracts')
+      ? 'contracts'
+      : location.pathname.startsWith('/work-cycles') || location.pathname.startsWith('/kpi-tasks')
+        ? 'workCycles'
+        : location.pathname.startsWith('/kpis')
+          ? 'kpis'
+          : 'lists',
   )
   const [createKpiOpen, setCreateKpiOpen] = useState(false)
   const [createCycleOpen, setCreateCycleOpen] = useState(false)
   const kpisQuery = useKpis()
 
   useEffect(() => {
-    if (location.pathname.startsWith('/work-cycles') || location.pathname.startsWith('/kpi-tasks')) {
+    if (location.pathname.startsWith('/contracts')) {
+      setOpenSection('contracts')
+    } else if (location.pathname.startsWith('/work-cycles') || location.pathname.startsWith('/kpi-tasks')) {
       setOpenSection('workCycles')
     } else if (location.pathname.startsWith('/kpis')) {
       setOpenSection('kpis')
@@ -202,6 +207,16 @@ export function AppSidebar({ collapsed = false, onNavigate }: AppSidebarProps) {
           onCreate={() => setCreateKpiOpen(true)}
           onNavigate={onNavigate}
         />
+        {data?.access.contractsEnabled ? (
+          <ContractsSidebarSection
+            collapsed={collapsed}
+            expanded={openSection === 'contracts'}
+            onToggle={() =>
+              setOpenSection((current) => (current === 'contracts' ? null : 'contracts'))
+            }
+            onNavigate={onNavigate}
+          />
+        ) : null}
       </nav>
 
       <div className="border-sidebar-border shrink-0 border-t p-3">
@@ -218,3 +233,4 @@ export function AppSidebar({ collapsed = false, onNavigate }: AppSidebarProps) {
     </div>
   )
 }
+

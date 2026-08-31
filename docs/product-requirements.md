@@ -159,6 +159,47 @@ Example: actual 95% and target 90% produces 105.6% target achievement.
 
 The numeric value may exceed 100%, while a visual progress fill may stop at 100%. When division is undefined, especially around zero-valued lower-is-better targets, show met/not met instead of a misleading percentage.
 
+
+## Contracts
+
+Contracts are an optional private domain. An administrator can enable or disable the Contracts module independently of the existing `USER` / `ADMIN` role. Removing module access preserves the user's Contract data. `ADMIN` does not grant cross-user Contract visibility.
+
+Phase 1A includes:
+
+- expandable Contracts navigation with **My Contracts** and **Suppliers**;
+- private owner-scoped Suppliers with required Name and optional commercial registration, tax/VAT, primary contact, address, and notes;
+- Supplier list/detail/create/edit/archive/restore plus contextual quick-create from Contract editing;
+- private owner-scoped Contracts with optional text Contract Number, required Title/Start Date/Supplier, optional End Date for open-ended agreements, and archive/restore;
+- automatic-renewal tracking with required End Date, Renewal Term, and Notice Period when enabled;
+- derived Notice Deadline (`End Date - Notice Period`), Duration, Days Remaining, and date-tracking state;
+- `FIXED` versus `VARIABLE` Contract value semantics;
+- separate payment frequency (`ONE_TIME`, `MONTHLY`, `QUARTERLY`, `SEMI_ANNUAL`, `ANNUAL`) and payment timing (`IN_ADVANCE`, `IN_ARREARS`);
+- a per-user Expiring Soon threshold, default 90 days;
+- server-side search/filter/sort/pagination;
+- explicit edit mode with manual Save, review-confirmation diff, unsaved-change protection, and SQL Server `ROWVERSION` stale-edit protection;
+- immutable Contract history for create/update/archive/restore, committed atomically with Contract changes.
+
+Phase 1B adds Contract Files:
+- protected owner-scoped PDF/JPG/JPEG/PNG uploads, up to 10 active files per Contract and 10 MB per file;
+- server-generated storage keys under protected Contract attachment storage, with extension and file-signature validation;
+- Files tab with upload, drag/drop, preview, download, and remove actions;
+- optional primary Contract file selection during Contract creation, uploaded only after the Contract record is created;
+- compact file-count hints in My Contracts that deep-link to the Contract Files tab;
+- immutable `ATTACHMENT_ADDED` and `ATTACHMENT_REMOVED` Contract-history events;
+- archived Contracts remain readable/downloadable but cannot add or remove files until restored.
+
+Phase 1C adds Contract reminders:
+- two private date-driven events: Contract End Date and automatic-renewal Notice Deadline;
+- independent personal lead days (default 30 days before End Date and 14 days before Notice Deadline) plus optional email-copy toggles;
+- in-app notifications remain independent from email delivery and deep-link directly to the private Contract;
+- if the preferred reminder date already passed but the real End Date/Notice Deadline is still future, create the reminder once on the next synchronization;
+- dedupe by Contract plus the actual event date so changing lead days does not create duplicate reminders, while a genuinely changed End Date/Notice Deadline creates a new event cycle;
+- archived Contracts and users without active Contracts access do not produce new Contract reminders;
+- email copies reuse the existing TaskHub email master switch, active verified destination, branded bilingual templates, outbox/worker, retries, and send-time revalidation; stale queued messages are canceled when the Contract date/state/access or email permission no longer matches;
+- Settings uses one sticky Email/Contracts navigation surface; Contract reminder settings live with Contract tracking rather than duplicating them in the generic email event list.
+
+Contracts never create fake Tasks/KPIs and are not included in global search.
+
 ## Calendar
 
 - TaskHub includes a top-level **Calendar / التقويم** view for the authenticated user's existing work. The Calendar is a projection of tasks, not a separate event or scheduling domain.
@@ -291,3 +332,5 @@ User-authored email templates are not planned. Users customize delivery preferen
 - The initial schema includes lightweight activity history.
 - Email delivery/outbox tables are introduced by migration 009; per-user email destination, preference, and verification state is introduced by migration 010; operational email processing/cancellation state is introduced by migration 011.
 - SQL migration scripts must never be executed without separate explicit approval.
+
+

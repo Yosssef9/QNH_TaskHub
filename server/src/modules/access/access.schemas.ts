@@ -13,8 +13,10 @@ export const accessUserParamsSchema = z.object({
 export const updateAccessBodySchema = z.object({
   roleCode: z.enum(["USER", "ADMIN"]),
   isActive: z.boolean(),
+  contractsEnabled: z.boolean().optional(),
 });
 
 export type AccessListQueryInput = z.infer<typeof accessListQuerySchema>;
 export type AccessUserParams = z.infer<typeof accessUserParamsSchema>;
 export type UpdateAccessBody = z.infer<typeof updateAccessBodySchema>;
+

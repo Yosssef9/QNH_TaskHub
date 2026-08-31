@@ -1,7 +1,10 @@
 import { logger } from "../../config/logger.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
+import { findAccessUserById } from "../access/access.repository.js";
+import { contractsService } from "../contracts/contracts.service.js";
 import { dashboardService } from "../dashboard/dashboard.service.js";
 import { emailSettingsService } from "../email-settings/email-settings.service.js";
+import type { EmailPreferenceEvent, OperationalEmailDelivery } from "../email-settings/email-settings.types.js";
 import { getKpiPeriodBounds } from "../kpis/kpi-period.js";
 import { kpiWorkService } from "../kpis/kpi-work.service.js";
 import {
@@ -12,9 +15,10 @@ import {
   notificationsRepository,
   type NotificationEmailCandidate,
 } from "../notifications/notifications.repository.js";
+import type { NotificationType } from "../notifications/notifications.types.js";
 import { workCyclesService } from "../work-cycles/work-cycles.service.js";
 import { emailService } from "./email.service.js";
-import { templateKeyForNotification } from "./operational-email.policy.js";
+import { isContractNotificationType, templateKeyForNotification } from "./operational-email.policy.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const EMAIL_CANDIDATE_BATCH_SIZE = 200;
@@ -35,6 +39,26 @@ function id(value: number | string | null): number | null {
   return value == null ? null : Number(value);
 }
 
+function dateOnly(value: Date | null): string | null {
+  return value?.toISOString().slice(0, 10) ?? null;
+}
+
+function asEmailPreferenceEvent(type: NotificationType): EmailPreferenceEvent | null {
+  switch (type) {
+    case "TASK_OVERDUE":
+    case "TASK_DUE_TODAY":
+    case "HIGH_PRIORITY_TASK_DUE_TOMORROW":
+    case "CURRENT_CYCLE_ENDING_SOON":
+    case "CURRENT_CYCLE_PAST_END":
+    case "KPI_BELOW_TARGET":
+    case "KPI_MEASUREMENT_DUE":
+      return type;
+    case "CONTRACT_EXPIRATION_REMINDER":
+    case "CONTRACT_NOTICE_DEADLINE_REMINDER":
+      return null;
+  }
+}
+
 async function taskPayload(
   candidate: NotificationEmailCandidate,
   today: string,
@@ -47,7 +71,7 @@ async function taskPayload(
   if (task.listId !== null && task.listArchivedAtUtc) return null;
   if (task.kpiInstanceId !== null && (task.cycleClosedAtUtc || task.cycleArchivedAtUtc)) return null;
 
-  const dueDate = task.dueDate?.toISOString().slice(0, 10) ?? null;
+  const dueDate = dateOnly(task.dueDate);
   if (!dueDate) return null;
 
   if (candidate.notificationType === "TASK_OVERDUE" && !(dueDate < today)) return null;
@@ -148,6 +172,57 @@ async function kpiPayload(
   };
 }
 
+async function contractPayload(
+  candidate: NotificationEmailCandidate,
+  today: string,
+): Promise<Record<string, unknown> | null> {
+  const contractId = id(candidate.contractId);
+  const eventDate = dateOnly(candidate.eventDate);
+  if (contractId === null || !eventDate) return null;
+
+  const [contract, settings] = await Promise.all([
+    contractsService.getContract(candidate.ownerUserId, contractId),
+    contractsService.getSettings(candidate.ownerUserId),
+  ]);
+  if (!contract.isActive) return null;
+
+  if (candidate.notificationType === "CONTRACT_EXPIRATION_REMINDER") {
+    if (!contract.endDate || contract.endDate !== eventDate) return null;
+    const targetDate = addDays(contract.endDate, -settings.expirationReminderLeadDays);
+    if (today < targetDate || today > contract.endDate) return null;
+    return {
+      contractId,
+      contractTitle: contract.title,
+      contractNumber: contract.contractNumber,
+      supplierName: contract.supplierName,
+      endDate: contract.endDate,
+      daysRemaining: Math.max(0, daysBetween(today, contract.endDate)),
+      href: `/contracts/${contractId}`,
+    };
+  }
+
+  if (
+    !contract.isAutoRenewal ||
+    !contract.endDate ||
+    !contract.noticePeriodDays ||
+    !contract.noticeDeadline ||
+    contract.noticeDeadline !== eventDate
+  ) return null;
+  const targetDate = addDays(contract.noticeDeadline, -settings.noticeReminderLeadDays);
+  if (today < targetDate || today > contract.noticeDeadline) return null;
+  return {
+    contractId,
+    contractTitle: contract.title,
+    contractNumber: contract.contractNumber,
+    supplierName: contract.supplierName,
+    endDate: contract.endDate,
+    noticePeriodDays: contract.noticePeriodDays,
+    noticeDeadline: contract.noticeDeadline,
+    daysRemaining: Math.max(0, daysBetween(today, contract.noticeDeadline)),
+    href: `/contracts/${contractId}`,
+  };
+}
+
 async function buildPayload(
   candidate: NotificationEmailCandidate,
   today: string,
@@ -164,8 +239,55 @@ async function buildPayload(
     case "KPI_BELOW_TARGET":
     case "KPI_MEASUREMENT_DUE":
       return kpiPayload(candidate, today);
+    case "CONTRACT_EXPIRATION_REMINDER":
+    case "CONTRACT_NOTICE_DEADLINE_REMINDER":
+      return contractPayload(candidate, today);
   }
-  return null;
+}
+
+async function resolveDelivery(
+  ownerUserId: number,
+  type: NotificationType,
+): Promise<OperationalEmailDelivery | null> {
+  if (isContractNotificationType(type)) {
+    const access = await findAccessUserById(ownerUserId);
+    if (!access?.portalIsActive || !access.accessIsActive || !access.contractsEnabled) return null;
+    const settings = await contractsService.getSettings(ownerUserId);
+    const enabled = type === "CONTRACT_EXPIRATION_REMINDER"
+      ? settings.expirationEmailEnabled
+      : settings.noticeEmailEnabled;
+    if (!enabled) return null;
+    return emailSettingsService.resolveBaseOperationalDelivery(ownerUserId);
+  }
+
+  const event = asEmailPreferenceEvent(type);
+  return event ? emailSettingsService.resolveOperationalDelivery(ownerUserId, event) : null;
+}
+
+async function validateContractPayloadAtSend(
+  ownerUserId: number,
+  type: "CONTRACT_EXPIRATION_REMINDER" | "CONTRACT_NOTICE_DEADLINE_REMINDER",
+  payload: Record<string, unknown>,
+): Promise<boolean> {
+  const contractId = Number(payload.contractId);
+  if (!Number.isSafeInteger(contractId) || contractId <= 0) return false;
+  const today = getCurrentDateInAppTimeZone();
+  const contract = await contractsService.getContract(ownerUserId, contractId);
+  const settings = await contractsService.getSettings(ownerUserId);
+  if (!contract.isActive) return false;
+
+  if (type === "CONTRACT_EXPIRATION_REMINDER") {
+    if (!settings.expirationEmailEnabled || !contract.endDate || payload.endDate !== contract.endDate) return false;
+    return today >= addDays(contract.endDate, -settings.expirationReminderLeadDays) && today <= contract.endDate;
+  }
+
+  if (
+    !settings.noticeEmailEnabled ||
+    !contract.isAutoRenewal ||
+    !contract.noticeDeadline ||
+    payload.noticeDeadline !== contract.noticeDeadline
+  ) return false;
+  return today >= addDays(contract.noticeDeadline, -settings.noticeReminderLeadDays) && today <= contract.noticeDeadline;
 }
 
 async function synchronizeNotificationsForActiveUsers(): Promise<void> {
@@ -180,13 +302,12 @@ async function synchronizeNotificationsForActiveUsers(): Promise<void> {
 }
 
 async function processCandidate(candidate: NotificationEmailCandidate, today: string, tomorrow: string): Promise<void> {
-  const delivery = await emailSettingsService.resolveOperationalDelivery(
-    candidate.ownerUserId,
-    candidate.notificationType,
-  );
+  const delivery = await resolveDelivery(candidate.ownerUserId, candidate.notificationType);
 
   if (!delivery) {
-    await notificationsRepository.markEmailProcessed(Number(candidate.id));
+    if (!isContractNotificationType(candidate.notificationType)) {
+      await notificationsRepository.markEmailProcessed(Number(candidate.id));
+    }
     return;
   }
 
@@ -210,6 +331,19 @@ async function processCandidate(candidate: NotificationEmailCandidate, today: st
 }
 
 export const operationalEmailService = {
+  async resolveSendTimeDelivery(
+    ownerUserId: number,
+    type: NotificationType,
+    payload: Record<string, unknown>,
+  ): Promise<OperationalEmailDelivery | null> {
+    const delivery = await resolveDelivery(ownerUserId, type);
+    if (!delivery) return null;
+    if (isContractNotificationType(type)) {
+      return (await validateContractPayloadAtSend(ownerUserId, type, payload)) ? delivery : null;
+    }
+    return delivery;
+  },
+
   async synchronize(): Promise<number> {
     const now = Date.now();
     if (now >= nextEventSynchronizationAt) {
@@ -219,7 +353,10 @@ export const operationalEmailService = {
 
     const today = getCurrentDateInAppTimeZone();
     const tomorrow = addDays(today, 1);
-    const candidates = await notificationsRepository.listUnprocessedEmailCandidates(EMAIL_CANDIDATE_BATCH_SIZE);
+    const candidates = await notificationsRepository.listUnprocessedEmailCandidates(
+      EMAIL_CANDIDATE_BATCH_SIZE,
+      today,
+    );
 
     let processed = 0;
     for (const candidate of candidates) {

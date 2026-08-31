@@ -10,6 +10,7 @@ export interface AccessUserRecord {
   portalIsActive: boolean;
   roleCode: string | null;
   accessIsActive: boolean | null;
+  contractsEnabled: boolean | null;
 }
 
 function toNullableRoleCode(value: string | null): TaskHubRoleCode | null {
@@ -33,5 +34,7 @@ export function mapAccessUser(record: AccessUserRecord): AccessUser {
     portalIsActive: record.portalIsActive,
     roleCode: toNullableRoleCode(record.roleCode),
     accessIsActive: record.accessIsActive ?? false,
+    contractsEnabled: record.contractsEnabled ?? false,
   };
 }
+
