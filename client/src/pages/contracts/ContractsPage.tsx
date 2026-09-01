@@ -358,8 +358,8 @@ export function ContractsPage() {
         </div>
       ) : null}
 
-      <Card className="overflow-hidden">
-        <div className="flex flex-col gap-3 border-b p-4 xl:flex-row xl:items-center">
+      <Card className="relative overflow-visible">
+        <div className="bg-card/95 sticky top-16 z-30 flex flex-col gap-3 rounded-t-xl border-b p-4 shadow-sm backdrop-blur-md xl:flex-row xl:items-center">
           <SearchInput
             value={search}
             onChange={(value) => {
@@ -782,9 +782,9 @@ export function ContractsPage() {
           />
         ) : (
           <>
-            <div className="hidden max-h-[68vh] overflow-auto md:block">
+            <div className="relative isolate hidden max-h-[calc(100vh-11rem)] overflow-auto overscroll-contain md:block">
               <table className="w-full min-w-[1020px] text-sm">
-                <thead className="sticky top-0 z-10 shadow-[0_1px_0_hsl(var(--border))]">
+                <thead className="[&_th]:sticky [&_th]:top-0 [&_th]:z-20">
                   <tr>
                     <SortableHeader
                       tone="soft-primary"
@@ -1038,7 +1038,7 @@ function NoticeDeadlineCell({
 
 function TableHeader({ children }: { children: ReactNode }) {
   return (
-    <th className="border-primary/15 bg-primary/[0.065] border-b px-4 py-3.5 text-start text-[11px] font-semibold tracking-wide text-foreground/75">
+    <th className="border-primary/20 bg-primary/[0.09] border-b-2 px-4 py-4 text-start text-xs font-semibold text-foreground/80">
       {children}
     </th>
   )
