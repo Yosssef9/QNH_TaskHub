@@ -35,7 +35,7 @@ export function SortableHeader<TColumn extends string>({
       aria-sort={ariaSort}
       className={cn(
         'border-b px-4 py-3 text-start',
-        primaryTone && 'border-primary/20 bg-primary/[0.09] border-b-2 py-4',
+        primaryTone && 'border-primary/20 bg-accent border-b-2 py-4',
         className,
       )}
       {...props}
@@ -45,7 +45,7 @@ export function SortableHeader<TColumn extends string>({
         className={cn(
           'focus-visible:ring-ring inline-flex w-full items-center justify-between gap-2 rounded-md outline-none focus-visible:ring-2',
           primaryTone
-            ? 'text-foreground/80 hover:bg-primary/10 hover:text-primary px-1.5 py-1 text-xs font-semibold'
+            ? 'text-accent-foreground hover:bg-primary/10 hover:text-primary px-1.5 py-1 text-xs font-semibold'
             : 'hover:text-foreground text-muted-foreground text-xs font-semibold uppercase tracking-wide',
           active && primaryTone && 'text-primary',
         )}

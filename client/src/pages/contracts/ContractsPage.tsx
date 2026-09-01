@@ -359,7 +359,7 @@ export function ContractsPage() {
       ) : null}
 
       <Card className="relative overflow-visible">
-        <div className="bg-card/95 sticky top-16 z-30 flex flex-col gap-3 rounded-t-xl border-b p-4 shadow-sm backdrop-blur-md xl:flex-row xl:items-center">
+        <div className="bg-card sticky top-16 z-30 flex flex-col gap-3 rounded-t-xl border-b p-4 shadow-sm xl:flex-row xl:items-center">
           <SearchInput
             value={search}
             onChange={(value) => {
@@ -1038,7 +1038,7 @@ function NoticeDeadlineCell({
 
 function TableHeader({ children }: { children: ReactNode }) {
   return (
-    <th className="border-primary/20 bg-primary/[0.09] border-b-2 px-4 py-4 text-start text-xs font-semibold text-foreground/80">
+    <th className="border-primary/20 bg-accent border-b-2 px-4 py-4 text-start text-xs font-semibold text-accent-foreground">
       {children}
     </th>
   )
