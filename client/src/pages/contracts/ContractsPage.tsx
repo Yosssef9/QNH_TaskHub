@@ -66,16 +66,16 @@ import type {
 } from '@/features/contracts/types/contracts.types'
 
 interface ContractFilterDraft {
-  status?: ContractTrackingState
-  supplierId?: number
-  autoRenewal?: boolean
-  valueType?: ContractValueType
-  paymentFrequency?: ContractPaymentFrequency
-  paymentTiming?: ContractPaymentTiming
-  startFrom?: string
-  startTo?: string
-  endFrom?: string
-  endTo?: string
+  status?: ContractTrackingState | undefined
+  supplierId?: number | undefined
+  autoRenewal?: boolean | undefined
+  valueType?: ContractValueType | undefined
+  paymentFrequency?: ContractPaymentFrequency | undefined
+  paymentTiming?: ContractPaymentTiming | undefined
+  startFrom?: string | undefined
+  startTo?: string | undefined
+  endFrom?: string | undefined
+  endTo?: string | undefined
 }
 
 const EMPTY_CONTRACT_FILTERS: ContractFilterDraft = {}
@@ -372,7 +372,7 @@ export function ContractsPage() {
           />
 
           <Button
-            variant={filtersOpen || activeFilterCount > 0 ? 'secondary' : 'outline'}
+            variant="outline"
             className={
               activeFilterCount > 0
                 ? 'border-primary/25 bg-primary/[0.08] text-primary hover:bg-primary/[0.12]'
