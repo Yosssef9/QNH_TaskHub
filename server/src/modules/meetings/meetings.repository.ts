@@ -1,4 +1,5 @@
 import { getDatabasePool, sql } from "../../database/sql.js";
+import type { DatabaseTransaction } from "../../database/types.js";
 import { rowVersionToBuffer } from "../../shared/utils/sql-row-version.js";
 import type { MeetingRoomRecord } from "./meetings.mapper.js";
 import type { SaveMeetingRoomInput, UpdateMeetingRoomInput } from "./meetings.types.js";
@@ -91,6 +92,7 @@ export const meetingsRepository = {
   },
 
   async updateRoom(
+    transaction: DatabaseTransaction,
     actorUserId: number,
     roomId: number,
     input: UpdateMeetingRoomInput,
@@ -98,8 +100,7 @@ export const meetingsRepository = {
     const rowVersion = rowVersionToBuffer(input.rowVersion);
     if (!rowVersion) return null;
 
-    const pool = await getDatabasePool();
-    const result = await pool
+    const result = await transaction
       .request()
       .input("roomId", sql.BigInt, roomId)
       .input("rowVersion", sql.VarBinary(8), rowVersion)

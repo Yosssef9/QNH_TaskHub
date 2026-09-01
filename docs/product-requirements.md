@@ -216,7 +216,7 @@ Phase 1 foundation:
 - `ADMIN` manages Meeting permission assignment and Meeting Room master data but does not automatically receive access to unrelated Meeting business content;
 - Meeting Rooms are active/inactive resources with bilingual names, location text, capacity, equipment notes, and SQL Server `ROWVERSION` stale-edit protection;
 - the Meetings schema introduces stable Meeting identity, scheduling revisions, attendees, and immutable Meeting activity as the foundation for later workflow phases;
-- no Phase 2 scheduling/conflict engine, request approval UI, Calendar integration, Meeting notifications, Templates, attachments, or Action Items is implemented by Phase 1 alone.
+- Phase 2 adds the server-side scheduling engine: Organizer/Coordinator availability checks, active-room validation, participant-capacity enforcement, overlap checks against only the current approved revision of scheduled Meetings, transaction-scoped per-room locking, and atomic activation of a pending revision. Pending requests/revisions do not reserve rooms. Request approval UI, Calendar integration, Meeting notifications, Templates, attachments, and Action Items remain later phases.
 
 The detailed Meetings product and security rules are maintained in the dedicated Meetings source-of-truth document used with implementation work.
 

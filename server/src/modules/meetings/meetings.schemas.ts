@@ -33,3 +33,25 @@ export const updateMeetingRoomBodySchema = z.object({
 export type MeetingRoomParams = z.infer<typeof meetingRoomParamsSchema>;
 export type CreateMeetingRoomBody = z.infer<typeof createMeetingRoomBodySchema>;
 export type UpdateMeetingRoomBody = z.infer<typeof updateMeetingRoomBodySchema>;
+
+
+const utcDateTimeSchema = z.string().datetime({ offset: true });
+
+export const meetingAvailabilityBodySchema = z
+  .object({
+    roomId: z.coerce.number().int().positive(),
+    startAtUtc: utcDateTimeSchema,
+    endAtUtc: utcDateTimeSchema,
+    participantCount: z.coerce.number().int().min(1).max(10000),
+  })
+  .superRefine((value, ctx) => {
+    if (new Date(value.endAtUtc).getTime() <= new Date(value.startAtUtc).getTime()) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["endAtUtc"],
+        message: "Meeting end time must be after its start time.",
+      });
+    }
+  });
+
+export type MeetingAvailabilityBody = z.infer<typeof meetingAvailabilityBodySchema>;

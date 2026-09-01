@@ -5,10 +5,13 @@ import { getValidatedRequestPart } from "../../shared/http/validated-request.js"
 import type { ApiSuccessResponse } from "../../shared/types/result.js";
 import type {
   CreateMeetingRoomBody,
+  MeetingAvailabilityBody,
   MeetingRoomParams,
   UpdateMeetingRoomBody,
 } from "./meetings.schemas.js";
+import { meetingSchedulingService } from "./meeting-scheduling.service.js";
 import { meetingsService } from "./meetings.service.js";
+import type { MeetingAvailability } from "./meeting-scheduling.types.js";
 import type { MeetingRoom } from "./meetings.types.js";
 
 function actorUserId(req: Request): number {
@@ -63,6 +66,18 @@ export const updateMeetingRoom: RequestHandler = async (req, res) => {
   const body: ApiSuccessResponse<{ room: MeetingRoom }> = {
     success: true,
     data: { room },
+  };
+
+  res.status(200).json(body);
+};
+
+
+export const checkMeetingAvailability: RequestHandler = async (req, res) => {
+  const input = getValidatedRequestPart<MeetingAvailabilityBody>(req, "body");
+  const availability = await meetingSchedulingService.getAvailability(input);
+  const body: ApiSuccessResponse<{ availability: MeetingAvailability }> = {
+    success: true,
+    data: { availability },
   };
 
   res.status(200).json(body);

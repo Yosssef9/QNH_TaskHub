@@ -1,4 +1,6 @@
+import { withTransaction } from "../../database/transaction.js";
 import { AppError } from "../../shared/errors/app-error.js";
+import { meetingSchedulingRepository } from "./meeting-scheduling.repository.js";
 import { mapMeetingRoom } from "./meetings.mapper.js";
 import { meetingsRepository } from "./meetings.repository.js";
 import type {
@@ -65,24 +67,58 @@ export const meetingsService = {
     input: UpdateMeetingRoomInput,
   ): Promise<MeetingRoom> {
     const record = await translateRoomWrite(() =>
-      meetingsRepository.updateRoom(actorUserId, roomId, input),
+      withTransaction(async (transaction) => {
+        const lockResult = await meetingSchedulingRepository.acquireRoomLock(transaction, roomId);
+        if (lockResult < 0) {
+          throw new AppError({
+            statusCode: 409,
+            code: "MEETING_ROOM_SCHEDULE_BUSY",
+            message: "This Meeting Room is being scheduled by another operation. Try again.",
+          });
+        }
+
+        const current = await meetingSchedulingRepository.findRoomForScheduling(
+          transaction,
+          roomId,
+        );
+        if (!current) {
+          throw new AppError({
+            statusCode: 404,
+            code: "MEETING_ROOM_NOT_FOUND",
+            message: "Meeting Room was not found.",
+          });
+        }
+
+        const maximumParticipantCount =
+          await meetingSchedulingRepository.maximumFutureScheduledParticipantCount(
+            transaction,
+            roomId,
+          );
+        if (input.capacity < maximumParticipantCount) {
+          throw new AppError({
+            statusCode: 409,
+            code: "MEETING_ROOM_CAPACITY_IN_USE",
+            message: "Room capacity cannot be reduced below an existing scheduled Meeting.",
+            details: { maximumParticipantCount },
+          });
+        }
+
+        const updated = await meetingsRepository.updateRoom(
+          transaction,
+          actorUserId,
+          roomId,
+          input,
+        );
+        if (updated) return updated;
+
+        throw new AppError({
+          statusCode: 409,
+          code: "MEETING_ROOM_STALE",
+          message: "Meeting Room changed after it was loaded. Reload and try again.",
+        });
+      }),
     );
 
-    if (record) return mapMeetingRoom(record);
-
-    const current = await meetingsRepository.findRoomById(roomId);
-    if (!current) {
-      throw new AppError({
-        statusCode: 404,
-        code: "MEETING_ROOM_NOT_FOUND",
-        message: "Meeting Room was not found.",
-      });
-    }
-
-    throw new AppError({
-      statusCode: 409,
-      code: "MEETING_ROOM_STALE",
-      message: "Meeting Room changed after it was loaded. Reload and try again.",
-    });
+    return mapMeetingRoom(record);
   },
 };

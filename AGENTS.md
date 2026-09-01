@@ -103,7 +103,7 @@ Meetings is TaskHub's first intentionally shared multi-user domain.
 - `ADMIN` manages Meeting permission assignment and Meeting Room setup but does not automatically receive unrelated Meeting business content.
 - Meeting authorization is relationship-aware and must not be implemented by weakening existing `owner_user_id` rules.
 - Meeting Rooms are deactivated rather than physically deleted and use `ROWVERSION` for stale-edit protection.
-- The Phase 1 schema establishes Meetings, scheduling revisions, attendees, rooms, permissions, and immutable activity only. Scheduling conflict/capacity transactions belong to Phase 2.
+- Phase 1 establishes Meetings, scheduling revisions, attendees, rooms, permissions, and immutable activity. Phase 2 adds the authoritative room scheduling engine: active-room checks, capacity enforcement, current-reservation overlap checks, per-room transaction application locks, advisory availability, and atomic pending-revision activation. Pending revisions still do not reserve rooms.
 - Reuse TaskHub's existing modular-monolith, auth/access, validation, SQL Server, localization, and shared UI patterns.
 
 ## 8. Normal lists and tasks
