@@ -111,7 +111,7 @@ export const meetingSchedulingRepository = {
   async hasActiveMeetingPermission(
     transaction: DatabaseTransaction,
     userId: number,
-    permissionCode: "MEETING_COORDINATE",
+    permissionCode: "MEETING_ORGANIZE" | "MEETING_COORDINATE",
   ): Promise<boolean> {
     const result = await transaction
       .request()
@@ -395,3 +395,4 @@ export const meetingSchedulingRepository = {
       `);
   },
 };
+

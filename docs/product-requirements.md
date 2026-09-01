@@ -217,6 +217,7 @@ Phase 1 foundation:
 - Meeting Rooms are active/inactive resources with bilingual names, location text, capacity, equipment notes, and SQL Server `ROWVERSION` stale-edit protection;
 - the Meetings schema introduces stable Meeting identity, scheduling revisions, attendees, and immutable Meeting activity as the foundation for later workflow phases;
 - Phase 2 adds the server-side scheduling engine: Organizer/Coordinator availability checks, active-room validation, participant-capacity enforcement, overlap checks against only the current approved revision of scheduled Meetings, transaction-scoped per-room locking, and atomic activation of a pending revision. Pending requests/revisions do not reserve rooms. Request approval UI, Calendar integration, Meeting notifications, Templates, attachments, and Action Items remain later phases.
+- Phase 3 connects the scheduling engine to the core Meeting workflow: Organizers submit `PENDING_APPROVAL` requests, Coordinators share a pending queue, may adjust only room/date/time/scheduling notes before decision, approve/reject with stale-row protection, and may create Meetings directly without self-approval. Attendees are selected only from active TaskHub users; the Organizer is an implicit participant. Normal users receive only Meetings they attend, Organizer/attendee relationships receive full Meeting details, and unrelated scheduling occupancy is server-masked to Busy + Organizer + room/time for Organizers/Coordinators. Important request, scheduling-change, approval, rejection, and direct-create actions write immutable Meeting activity. Calendar rendering, Meeting notifications/email/reminders, Templates, attachments, rescheduling/cancellation, and Action Items remain later phases.
 
 The detailed Meetings product and security rules are maintained in the dedicated Meetings source-of-truth document used with implementation work.
 
@@ -353,3 +354,4 @@ User-authored email templates are not planned. Users customize delivery preferen
 - Email delivery/outbox tables are introduced by migration 009; per-user email destination, preference, and verification state is introduced by migration 010; operational email processing/cancellation state is introduced by migration 011.
 - SQL migration scripts must never be executed without separate explicit approval.
 - Meetings Phase 1 schema is introduced by migration 018; applying it is a separate manual database step.
+

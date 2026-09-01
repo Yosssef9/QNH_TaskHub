@@ -11,3 +11,25 @@ export function hasMeetingPermission(
 
   return access.meetingOrganizeEnabled === true || access.meetingCoordinateEnabled === true;
 }
+
+
+
+export type MeetingScheduleVisibility = "FULL" | "BUSY" | "NONE";
+
+export function meetingScheduleVisibility(
+  access: TaskHubAccess,
+  relationship: { isOrganizer: boolean; isAttendee: boolean },
+): MeetingScheduleVisibility {
+  if (relationship.isOrganizer || relationship.isAttendee) {
+    return "FULL";
+  }
+
+  if (
+    access.meetingOrganizeEnabled === true ||
+    access.meetingCoordinateEnabled === true
+  ) {
+    return "BUSY";
+  }
+
+  return "NONE";
+}

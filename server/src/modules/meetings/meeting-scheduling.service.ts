@@ -138,6 +138,7 @@ async function commitPendingRevisionInTransaction(
   actorUserId: number,
   meetingId: number,
   revisionId: number,
+  expectedRevisionRowVersion?: string,
 ): Promise<ScheduledRevisionResult> {
   await assertCoordinatorPermission(transaction, actorUserId);
 
@@ -154,6 +155,12 @@ async function commitPendingRevisionInTransaction(
     });
   }
   if (beforeLock.revisionStatus !== "PENDING") throw staleSchedule();
+  if (
+    expectedRevisionRowVersion !== undefined &&
+    beforeLock.revisionRowVersion !== expectedRevisionRowVersion
+  ) {
+    throw staleSchedule();
+  }
   if (!["PENDING_APPROVAL", "SCHEDULED"].includes(beforeLock.meetingStatus)) {
     throw staleSchedule();
   }
@@ -211,7 +218,7 @@ async function commitPendingRevisionInTransaction(
     transaction,
     meetingId,
     actorUserId,
-    afterLock.revisionType === "RESCHEDULE" ? "RESCHEDULE_APPROVED" : "SCHEDULED",
+    afterLock.revisionType === "RESCHEDULE" ? "RESCHEDULE_APPROVED" : "APPROVED",
     {
       revisionId,
       roomId: afterLock.roomId,
@@ -284,9 +291,16 @@ export const meetingSchedulingService = {
     actorUserId: number,
     meetingId: number,
     revisionId: number,
+    expectedRevisionRowVersion?: string,
   ): Promise<ScheduledRevisionResult> {
     return withTransaction((transaction) =>
-      commitPendingRevisionInTransaction(transaction, actorUserId, meetingId, revisionId),
+      commitPendingRevisionInTransaction(
+        transaction,
+        actorUserId,
+        meetingId,
+        revisionId,
+        expectedRevisionRowVersion,
+      ),
     );
   },
 
@@ -295,7 +309,15 @@ export const meetingSchedulingService = {
     actorUserId: number,
     meetingId: number,
     revisionId: number,
+    expectedRevisionRowVersion?: string,
   ): Promise<ScheduledRevisionResult> {
-    return commitPendingRevisionInTransaction(transaction, actorUserId, meetingId, revisionId);
+    return commitPendingRevisionInTransaction(
+      transaction,
+      actorUserId,
+      meetingId,
+      revisionId,
+      expectedRevisionRowVersion,
+    );
   },
 };
+
