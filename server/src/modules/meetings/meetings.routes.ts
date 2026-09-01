@@ -5,22 +5,39 @@ import { requireRole } from "../../middleware/requireRole.middleware.js";
 import { resolveTaskHubAccess } from "../../middleware/resolveTaskHubAccess.middleware.js";
 import { validateRequest } from "../../middleware/validate.middleware.js";
 import { verifyPortalJwt } from "../../middleware/verifyPortalJwt.middleware.js";
+import { uploadSingleMeetingAttachment } from "./meeting-attachment-upload.middleware.js";
 import {
   approveMeetingRequest,
+  approveMeetingReschedule,
+  archiveMeetingTemplate,
+  cancelMeeting,
   checkMeetingAvailability,
   createDirectMeeting,
   createMeetingRequest,
   createMeetingRoom,
+  createMeetingTemplate,
+  downloadMeetingAttachment,
+  getMeetingDetail,
   listActiveMeetingRooms,
   listAdminMeetingRooms,
   listCoordinatorMeetingQueue,
+  listCoordinatorReschedules,
+  listMeetingAttachments,
   listMeetingSchedule,
+  listMeetingTemplates,
   listMyMeetingRequests,
   listMyMeetings,
+  previewMeetingAttachment,
   rejectMeetingRequest,
+  rejectMeetingReschedule,
+  removeMeetingAttachment,
+  requestMeetingReschedule,
   searchMeetingParticipants,
   updateCoordinatorMeetingSchedule,
+  updateCoordinatorReschedule,
   updateMeetingRoom,
+  updateMeetingTemplate,
+  uploadMeetingAttachment,
 } from "./meetings.controller.js";
 import {
   createMeetingBodySchema,
@@ -32,6 +49,19 @@ import {
   updateMeetingScheduleBodySchema,
 } from "./meeting-workflow.schemas.js";
 import {
+  archiveMeetingTemplateBodySchema,
+  cancelMeetingBodySchema,
+  createMeetingRescheduleBodySchema,
+  createMeetingTemplateBodySchema,
+  decideMeetingRescheduleBodySchema,
+  meetingAttachmentParamsSchema,
+  meetingTemplateParamsSchema,
+  meetingWorkspaceParamsSchema,
+  rejectMeetingRescheduleBodySchema,
+  updateMeetingRescheduleBodySchema,
+  updateMeetingTemplateBodySchema,
+} from "./meeting-workspace.schemas.js";
+import {
   createMeetingRoomBodySchema,
   meetingAvailabilityBodySchema,
   meetingRoomParamsSchema,
@@ -42,6 +72,7 @@ export const meetingsRouter: ExpressRouter = Router();
 export const meetingRoomsAdminRouter: ExpressRouter = Router();
 
 meetingsRouter.use(verifyPortalJwt, resolveTaskHubAccess);
+
 meetingsRouter.get("/rooms", listActiveMeetingRooms);
 meetingsRouter.get("/mine", listMyMeetings);
 meetingsRouter.get(
@@ -61,6 +92,7 @@ meetingsRouter.post(
   validateRequest({ body: meetingAvailabilityBodySchema }),
   checkMeetingAvailability,
 );
+
 meetingsRouter.get(
   "/requests/mine",
   requireMeetingPermission("MEETING_ORGANIZE"),
@@ -78,6 +110,37 @@ meetingsRouter.post(
   validateRequest({ body: createMeetingBodySchema }),
   createDirectMeeting,
 );
+
+meetingsRouter.get(
+  "/templates",
+  requireMeetingPermission("MEETING_ORGANIZE"),
+  listMeetingTemplates,
+);
+meetingsRouter.post(
+  "/templates",
+  requireMeetingPermission("MEETING_ORGANIZE"),
+  validateRequest({ body: createMeetingTemplateBodySchema }),
+  createMeetingTemplate,
+);
+meetingsRouter.put(
+  "/templates/:templateId",
+  requireMeetingPermission("MEETING_ORGANIZE"),
+  validateRequest({
+    params: meetingTemplateParamsSchema,
+    body: updateMeetingTemplateBodySchema,
+  }),
+  updateMeetingTemplate,
+);
+meetingsRouter.post(
+  "/templates/:templateId/archive",
+  requireMeetingPermission("MEETING_ORGANIZE"),
+  validateRequest({
+    params: meetingTemplateParamsSchema,
+    body: archiveMeetingTemplateBodySchema,
+  }),
+  archiveMeetingTemplate,
+);
+
 meetingsRouter.get(
   "/coordinator/queue",
   requireMeetingPermission("MEETING_COORDINATE"),
@@ -109,6 +172,88 @@ meetingsRouter.post(
     body: rejectMeetingRequestBodySchema,
   }),
   rejectMeetingRequest,
+);
+meetingsRouter.get(
+  "/coordinator/reschedules",
+  requireMeetingPermission("MEETING_COORDINATE"),
+  listCoordinatorReschedules,
+);
+meetingsRouter.patch(
+  "/coordinator/reschedules/:meetingId",
+  requireMeetingPermission("MEETING_COORDINATE"),
+  validateRequest({
+    params: meetingWorkspaceParamsSchema,
+    body: updateMeetingRescheduleBodySchema,
+  }),
+  updateCoordinatorReschedule,
+);
+meetingsRouter.post(
+  "/coordinator/reschedules/:meetingId/approve",
+  requireMeetingPermission("MEETING_COORDINATE"),
+  validateRequest({
+    params: meetingWorkspaceParamsSchema,
+    body: decideMeetingRescheduleBodySchema,
+  }),
+  approveMeetingReschedule,
+);
+meetingsRouter.post(
+  "/coordinator/reschedules/:meetingId/reject",
+  requireMeetingPermission("MEETING_COORDINATE"),
+  validateRequest({
+    params: meetingWorkspaceParamsSchema,
+    body: rejectMeetingRescheduleBodySchema,
+  }),
+  rejectMeetingReschedule,
+);
+
+meetingsRouter.get(
+  "/attachments/:attachmentId/preview",
+  validateRequest({ params: meetingAttachmentParamsSchema }),
+  previewMeetingAttachment,
+);
+meetingsRouter.get(
+  "/attachments/:attachmentId/download",
+  validateRequest({ params: meetingAttachmentParamsSchema }),
+  downloadMeetingAttachment,
+);
+meetingsRouter.delete(
+  "/attachments/:attachmentId",
+  validateRequest({ params: meetingAttachmentParamsSchema }),
+  removeMeetingAttachment,
+);
+
+meetingsRouter.get(
+  "/:meetingId",
+  validateRequest({ params: meetingWorkspaceParamsSchema }),
+  getMeetingDetail,
+);
+meetingsRouter.post(
+  "/:meetingId/reschedule",
+  requireMeetingPermission("MEETING_ORGANIZE"),
+  validateRequest({
+    params: meetingWorkspaceParamsSchema,
+    body: createMeetingRescheduleBodySchema,
+  }),
+  requestMeetingReschedule,
+);
+meetingsRouter.post(
+  "/:meetingId/cancel",
+  validateRequest({
+    params: meetingWorkspaceParamsSchema,
+    body: cancelMeetingBodySchema,
+  }),
+  cancelMeeting,
+);
+meetingsRouter.get(
+  "/:meetingId/attachments",
+  validateRequest({ params: meetingWorkspaceParamsSchema }),
+  listMeetingAttachments,
+);
+meetingsRouter.post(
+  "/:meetingId/attachments",
+  validateRequest({ params: meetingWorkspaceParamsSchema }),
+  uploadSingleMeetingAttachment,
+  uploadMeetingAttachment,
 );
 
 meetingRoomsAdminRouter.use(verifyPortalJwt, resolveTaskHubAccess, requireRole("ADMIN"));

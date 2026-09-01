@@ -120,3 +120,120 @@ export interface MeetingScheduleBusyEntry extends MeetingScheduleSharedEntry {
 }
 
 export type MeetingScheduleEntry = MeetingScheduleFullEntry | MeetingScheduleBusyEntry
+
+
+export type MeetingRevisionType = 'INITIAL' | 'RESCHEDULE'
+export type MeetingRevisionStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
+
+export interface MeetingRevisionDetail {
+  id: number
+  revisionNumber: number
+  revisionType: MeetingRevisionType
+  revisionStatus: MeetingRevisionStatus
+  room: MeetingRoom
+  startAtUtc: string
+  endAtUtc: string
+  schedulingNotes: string | null
+  requestedBy: MeetingParticipant
+  approvedBy: MeetingParticipant | null
+  rejectedBy: MeetingParticipant | null
+  createdAtUtc: string
+  decidedAtUtc: string | null
+  rowVersion: string
+}
+
+export interface MeetingActivityItem {
+  id: number
+  activityType: string
+  actor: MeetingParticipant
+  changes: Record<string, unknown> | null
+  createdAtUtc: string
+}
+
+export interface MeetingDetail {
+  meeting: MeetingSummary
+  revisions: MeetingRevisionDetail[]
+  activity: MeetingActivityItem[]
+  pendingReschedule: MeetingRevisionDetail | null
+  permissions: {
+    canCancel: boolean
+    canReschedule: boolean
+    canManageAttachments: boolean
+    canSaveAsTemplate: boolean
+  }
+}
+
+export interface MeetingRescheduleQueueItem {
+  meeting: MeetingSummary
+  requestedRevision: MeetingRevisionDetail
+}
+
+export interface RequestMeetingRescheduleInput {
+  meetingId: number
+  meetingRowVersion: string
+  roomId: number
+  startAtUtc: string
+  endAtUtc: string
+}
+
+export interface UpdateMeetingRescheduleInput {
+  meetingId: number
+  revisionId: number
+  revisionRowVersion: string
+  roomId: number
+  startAtUtc: string
+  endAtUtc: string
+  schedulingNotes: string | null
+}
+
+export interface DecideMeetingRescheduleInput {
+  meetingId: number
+  revisionId: number
+  revisionRowVersion: string
+}
+
+export interface RejectMeetingRescheduleInput extends DecideMeetingRescheduleInput {
+  reason: string | null
+}
+
+export interface CancelMeetingInput {
+  meetingId: number
+  meetingRowVersion: string
+  reason: string | null
+}
+
+export interface MeetingAttachment {
+  id: string
+  meetingId: number
+  originalFileName: string
+  mimeType: string
+  fileExtension: string
+  sizeBytes: number
+  uploadedBy: MeetingParticipant
+  createdAtUtc: string
+}
+
+export interface MeetingTemplate {
+  id: number
+  name: string
+  title: string
+  description: string | null
+  durationMinutes: number
+  defaultRoom: MeetingRoom | null
+  attendees: MeetingParticipant[]
+  rowVersion: string
+}
+
+export interface SaveMeetingTemplateInput {
+  name: string
+  title: string
+  description: string | null
+  durationMinutes: number
+  defaultRoomId: number | null
+  attendeeUserIds: number[]
+}
+
+export interface UpdateMeetingTemplateInput extends SaveMeetingTemplateInput {
+  templateId: number
+  rowVersion: string
+}

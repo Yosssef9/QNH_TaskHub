@@ -25,16 +25,26 @@ import {
   useMeetingAvailability,
   useMeetingParticipants,
 } from '../hooks/use-meetings'
-import type { MeetingAvailabilityInput, MeetingParticipant } from '../types/meeting.types'
+import type { MeetingAvailabilityInput, MeetingParticipant, MeetingTemplate } from '../types/meeting.types'
 
 interface MeetingEditorDialogProps {
   open: boolean
   mode: 'REQUEST' | 'DIRECT'
+  template?: MeetingTemplate | null
   onOpenChange: (open: boolean) => void
 }
 
 function todayInRiyadh(): string {
   return formatRiyadhDateInput(new Date())
+}
+
+
+function addMinutes(time: string, minutes: number): string {
+  const [hoursText, minutesText] = time.split(':')
+  const hours = Number(hoursText ?? 0)
+  const currentMinutes = Number(minutesText ?? 0)
+  const total = Math.min(23 * 60 + 59, hours * 60 + currentMinutes + minutes)
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
 }
 
 function participantOption(participant: MeetingParticipant): SearchableSelectOption {
@@ -70,24 +80,26 @@ function buildAvailabilityInput(input: {
   }
 }
 
-export function MeetingEditorDialog({ open, mode, onOpenChange }: MeetingEditorDialogProps) {
+export function MeetingEditorDialog({ open, mode, template = null, onOpenChange }: MeetingEditorDialogProps) {
   const { i18n, t } = useTranslation()
   const currentUser = useCurrentUser()
   const rooms = useActiveMeetingRooms()
   const createRequest = useCreateMeetingRequest()
   const createDirect = useCreateDirectMeeting()
 
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
+  const [title, setTitle] = useState(template?.title ?? '')
+  const [description, setDescription] = useState(template?.description ?? '')
   const [date, setDate] = useState(todayInRiyadh)
   const [startTime, setStartTime] = useState('09:00')
-  const [endTime, setEndTime] = useState('10:00')
-  const [roomId, setRoomId] = useState<number | null>(null)
-  const [attendeeUserIds, setAttendeeUserIds] = useState<number[]>([])
+  const [endTime, setEndTime] = useState(() => addMinutes('09:00', template?.durationMinutes ?? 60))
+  const [roomId, setRoomId] = useState<number | null>(template?.defaultRoom?.isActive ? template.defaultRoom.id : null)
+  const [attendeeUserIds, setAttendeeUserIds] = useState<number[]>(() =>
+    template?.attendees.map((attendee) => attendee.userId) ?? [],
+  )
   const [participantSearch, setParticipantSearch] = useState('')
   const [selectedParticipantOptions, setSelectedParticipantOptions] = useState<
     SearchableSelectOption[]
-  >([])
+  >(() => template?.attendees.map(participantOption) ?? [])
 
   const participantQuery = useMeetingParticipants(participantSearch, open)
   const currentUserId = currentUser.data?.user.userId
@@ -328,3 +340,4 @@ export function MeetingEditorDialog({ open, mode, onOpenChange }: MeetingEditorD
     </Dialog>
   )
 }
+

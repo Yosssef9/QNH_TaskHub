@@ -1,4 +1,4 @@
-import { CalendarClock, DoorOpen, Pencil, UsersRound } from 'lucide-react'
+import { CalendarClock, DoorOpen, ExternalLink, Pencil, UsersRound } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Badge } from '@/components/ui/badge'
@@ -13,6 +13,7 @@ interface MeetingSummaryCardProps {
   coordinatorActions?: boolean
   approving?: boolean
   rejecting?: boolean
+  onOpen?: () => void
   onEditSchedule?: () => void
   onApprove?: () => void
   onReject?: () => void
@@ -30,6 +31,7 @@ export function MeetingSummaryCard({
   coordinatorActions = false,
   approving = false,
   rejecting = false,
+  onOpen,
   onEditSchedule,
   onApprove,
   onReject,
@@ -97,8 +99,15 @@ export function MeetingSummaryCard({
         </div>
       ) : null}
 
-      {coordinatorActions ? (
+      {onOpen || coordinatorActions ? (
         <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
+          {onOpen ? (
+            <Button variant="ghost" size="sm" onClick={onOpen}>
+              <ExternalLink aria-hidden="true" className="size-4" />
+              {t('meetings.workspace.openDetails')}
+            </Button>
+          ) : null}
+          {coordinatorActions ? (<>
           <Button variant="outline" size="sm" onClick={onEditSchedule}>
             <Pencil aria-hidden="true" className="size-4" />
             {t('meetings.editSchedule')}
@@ -109,8 +118,10 @@ export function MeetingSummaryCard({
           <Button size="sm" disabled={approving || rejecting} onClick={onApprove}>
             {t('meetings.approve')}
           </Button>
+          </>) : null}
         </div>
       ) : null}
     </Card>
   )
 }
+

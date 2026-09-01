@@ -2,6 +2,7 @@ import { CalendarDays, DoorOpen, Plus, ShieldCheck, UsersRound } from 'lucide-re
 import { useState, type ReactNode } from 'react'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { EmptyState } from '@/components/shared/EmptyState'
@@ -14,17 +15,25 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { CoordinatorMeetingScheduleDialog } from '@/features/meetings/components/CoordinatorMeetingScheduleDialog'
+import { CoordinatorRescheduleDialog } from '@/features/meetings/components/CoordinatorRescheduleDialog'
 import { MeetingEditorDialog } from '@/features/meetings/components/MeetingEditorDialog'
 import { MeetingSummaryCard } from '@/features/meetings/components/MeetingSummaryCard'
+import { MeetingRescheduleQueueCard } from '@/features/meetings/components/MeetingRescheduleQueueCard'
+import { MeetingTemplateEditorDialog } from '@/features/meetings/components/MeetingTemplateEditorDialog'
 import { useActiveMeetingRooms } from '@/features/meetings/hooks/use-meeting-rooms'
 import {
   useApproveMeetingRequest,
+  useApproveMeetingReschedule,
+  useArchiveMeetingTemplate,
   useCoordinatorMeetingQueue,
+  useCoordinatorReschedules,
   useMyMeetingRequests,
+  useMeetingTemplates,
   useMyMeetings,
   useRejectMeetingRequest,
+  useRejectMeetingReschedule,
 } from '@/features/meetings/hooks/use-meetings'
-import type { MeetingSummary } from '@/features/meetings/types/meeting.types'
+import type { MeetingRescheduleQueueItem, MeetingSummary, MeetingTemplate } from '@/features/meetings/types/meeting.types'
 import { toApiClientError } from '@/lib/api-error'
 
 function SectionState({
@@ -61,6 +70,7 @@ function SectionState({
 
 export function MeetingsPage() {
   const { i18n, t } = useTranslation()
+  const navigate = useNavigate()
   const currentUser = useCurrentUser()
   const rooms = useActiveMeetingRooms()
   const access = currentUser.data?.access
@@ -70,14 +80,26 @@ export function MeetingsPage() {
   const myMeetings = useMyMeetings()
   const myRequests = useMyMeetingRequests(canOrganize)
   const coordinatorQueue = useCoordinatorMeetingQueue(canCoordinate)
+  const coordinatorReschedules = useCoordinatorReschedules(canCoordinate)
+  const templates = useMeetingTemplates(canOrganize)
   const approveRequest = useApproveMeetingRequest()
   const rejectRequest = useRejectMeetingRequest()
+  const approveReschedule = useApproveMeetingReschedule()
+  const rejectReschedule = useRejectMeetingReschedule()
+  const archiveTemplate = useArchiveMeetingTemplate()
 
   const [createOpen, setCreateOpen] = useState(false)
   const [editingSchedule, setEditingSchedule] = useState<MeetingSummary | null>(null)
   const [approvingMeeting, setApprovingMeeting] = useState<MeetingSummary | null>(null)
   const [rejectingMeeting, setRejectingMeeting] = useState<MeetingSummary | null>(null)
   const [rejectionReason, setRejectionReason] = useState('')
+  const [templateEditor, setTemplateEditor] = useState<MeetingTemplate | 'NEW' | null>(null)
+  const [templateForMeeting, setTemplateForMeeting] = useState<MeetingTemplate | null>(null)
+  const [archiveTarget, setArchiveTarget] = useState<MeetingTemplate | null>(null)
+  const [editingReschedule, setEditingReschedule] = useState<MeetingRescheduleQueueItem | null>(null)
+  const [approvingReschedule, setApprovingReschedule] = useState<MeetingRescheduleQueueItem | null>(null)
+  const [rejectingReschedule, setRejectingReschedule] = useState<MeetingRescheduleQueueItem | null>(null)
+  const [rescheduleRejectReason, setRescheduleRejectReason] = useState('')
 
   async function approve() {
     if (!approvingMeeting) return
@@ -121,6 +143,52 @@ export function MeetingsPage() {
     }
   }
 
+  async function approvePendingReschedule() {
+    if (!approvingReschedule) return
+    try {
+      await approveReschedule.mutateAsync({
+        meetingId: approvingReschedule.meeting.id,
+        revisionId: approvingReschedule.requestedRevision.id,
+        revisionRowVersion: approvingReschedule.requestedRevision.rowVersion,
+      })
+      toast.success(t('meetings.workspace.rescheduleApproved'))
+      setApprovingReschedule(null)
+    } catch (error) {
+      const apiError = toApiClientError(error)
+      toast.error(t(`meetings.errors.${apiError.code}`, { defaultValue: t('meetings.workspace.rescheduleApproveError') }))
+    }
+  }
+
+  async function rejectPendingReschedule() {
+    if (!rejectingReschedule) return
+    try {
+      await rejectReschedule.mutateAsync({
+        meetingId: rejectingReschedule.meeting.id,
+        revisionId: rejectingReschedule.requestedRevision.id,
+        revisionRowVersion: rejectingReschedule.requestedRevision.rowVersion,
+        reason: rescheduleRejectReason.trim() || null,
+      })
+      toast.success(t('meetings.workspace.rescheduleRejected'))
+      setRejectingReschedule(null)
+      setRescheduleRejectReason('')
+    } catch (error) {
+      const apiError = toApiClientError(error)
+      toast.error(t(`meetings.errors.${apiError.code}`, { defaultValue: t('meetings.workspace.rescheduleRejectError') }))
+    }
+  }
+
+  async function archivePersonalTemplate() {
+    if (!archiveTarget) return
+    try {
+      await archiveTemplate.mutateAsync({ templateId: archiveTarget.id, rowVersion: archiveTarget.rowVersion })
+      toast.success(t('meetings.templates.archived'))
+      setArchiveTarget(null)
+    } catch (error) {
+      const apiError = toApiClientError(error)
+      toast.error(t(`meetings.errors.${apiError.code}`, { defaultValue: t('meetings.templates.archiveError') }))
+    }
+  }
+
   return (
     <div className="space-y-7">
       <PageHeader
@@ -154,7 +222,7 @@ export function MeetingsPage() {
             onRetry={() => void myMeetings.refetch()}
           >
             {(myMeetings.data ?? []).map((meeting) => (
-              <MeetingSummaryCard key={meeting.id} meeting={meeting} />
+              <MeetingSummaryCard key={meeting.id} meeting={meeting} onOpen={() => navigate(`/meetings/${meeting.id}`)} />
             ))}
           </SectionState>
         </section>
@@ -249,7 +317,7 @@ export function MeetingsPage() {
             onRetry={() => void myRequests.refetch()}
           >
             {(myRequests.data ?? []).map((meeting) => (
-              <MeetingSummaryCard key={meeting.id} meeting={meeting} />
+              <MeetingSummaryCard key={meeting.id} meeting={meeting} onOpen={() => navigate(`/meetings/${meeting.id}`)} />
             ))}
           </SectionState>
         </section>
@@ -275,6 +343,7 @@ export function MeetingsPage() {
               <MeetingSummaryCard
                 key={meeting.id}
                 meeting={meeting}
+                onOpen={() => navigate(`/meetings/${meeting.id}`)}
                 coordinatorActions
                 approving={approveRequest.isPending && approvingMeeting?.id === meeting.id}
                 rejecting={rejectRequest.isPending && rejectingMeeting?.id === meeting.id}
@@ -290,12 +359,65 @@ export function MeetingsPage() {
         </section>
       ) : null}
 
+
+      {canOrganize ? (
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">{t('meetings.templates.title')}</h2>
+              <p className="text-muted-foreground mt-1 text-sm">{t('meetings.templates.description')}</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setTemplateEditor('NEW')}>{t('meetings.templates.create')}</Button>
+          </div>
+          <SectionState pending={templates.isPending} error={templates.isError} empty={(templates.data?.length ?? 0) === 0} emptyTitle={t('meetings.templates.emptyTitle')} emptyDescription={t('meetings.templates.emptyDescription')} onRetry={() => void templates.refetch()}>
+            {(templates.data ?? []).map((template) => (
+              <Card key={template.id} className="p-4">
+                <h3 className="font-semibold">{template.name}</h3>
+                <p className="text-muted-foreground mt-1 text-sm">{template.title}</p>
+                <p className="text-muted-foreground mt-2 text-xs">{t('meetings.templates.durationValue', { count: template.durationMinutes })} · {t('meetings.participantCount', { count: 1 + template.attendees.length })}</p>
+                <div className="mt-4 flex flex-wrap justify-end gap-2 border-t pt-3">
+                  <Button variant="ghost" size="sm" onClick={() => setTemplateForMeeting(template)}>{t('meetings.templates.use')}</Button>
+                  <Button variant="outline" size="sm" onClick={() => setTemplateEditor(template)}>{t('common.edit')}</Button>
+                  <Button variant="outline" size="sm" onClick={() => setArchiveTarget(template)}>{t('meetings.templates.archive')}</Button>
+                </div>
+              </Card>
+            ))}
+          </SectionState>
+        </section>
+      ) : null}
+
+      {canCoordinate ? (
+        <section className="space-y-3">
+          <div>
+            <h2 className="text-lg font-semibold">{t('meetings.workspace.rescheduleQueue')}</h2>
+            <p className="text-muted-foreground mt-1 text-sm">{t('meetings.workspace.rescheduleQueueDescription')}</p>
+          </div>
+          <SectionState pending={coordinatorReschedules.isPending} error={coordinatorReschedules.isError} empty={(coordinatorReschedules.data?.length ?? 0) === 0} emptyTitle={t('meetings.workspace.noReschedules')} emptyDescription={t('meetings.workspace.noReschedulesDescription')} onRetry={() => void coordinatorReschedules.refetch()}>
+            {(coordinatorReschedules.data ?? []).map((item) => (
+              <MeetingRescheduleQueueCard key={item.meeting.id} item={item} onOpen={() => navigate(`/meetings/${item.meeting.id}`)} onEdit={() => setEditingReschedule(item)} onApprove={() => setApprovingReschedule(item)} onReject={() => { setRejectingReschedule(item); setRescheduleRejectReason('') }} />
+            ))}
+          </SectionState>
+        </section>
+      ) : null}
+
       {createOpen ? (
         <MeetingEditorDialog
           open
           mode={canCoordinate ? 'DIRECT' : 'REQUEST'}
           onOpenChange={setCreateOpen}
         />
+      ) : null}
+
+      {templateForMeeting ? (
+        <MeetingEditorDialog key={`template-${templateForMeeting.id}`} open mode={canCoordinate ? 'DIRECT' : 'REQUEST'} template={templateForMeeting} onOpenChange={(open) => { if (!open) setTemplateForMeeting(null) }} />
+      ) : null}
+
+      {templateEditor ? (
+        <MeetingTemplateEditorDialog key={templateEditor === 'NEW' ? 'new-template' : templateEditor.id} open template={templateEditor === 'NEW' ? null : templateEditor} onOpenChange={(open) => { if (!open) setTemplateEditor(null) }} />
+      ) : null}
+
+      {editingReschedule ? (
+        <CoordinatorRescheduleDialog item={editingReschedule} open onOpenChange={(open) => { if (!open) setEditingReschedule(null) }} />
       ) : null}
 
       {editingSchedule ? (
@@ -341,6 +463,15 @@ export function MeetingsPage() {
           onChange={(event) => setRejectionReason(event.target.value)}
         />
       </ConfirmModal>
+
+      <ConfirmModal open={approvingReschedule !== null} title={t('meetings.workspace.approveRescheduleTitle')} message={t('meetings.workspace.approveRescheduleDescription')} confirmText={t('meetings.approve')} cancelText={t('common.cancel')} loading={approveReschedule.isPending} onConfirm={() => void approvePendingReschedule()} onCancel={() => setApprovingReschedule(null)} />
+
+      <ConfirmModal open={rejectingReschedule !== null} title={t('meetings.workspace.rejectRescheduleTitle')} message={t('meetings.workspace.rejectRescheduleDescription')} confirmText={t('meetings.reject')} cancelText={t('common.cancel')} danger loading={rejectReschedule.isPending} onConfirm={() => void rejectPendingReschedule()} onCancel={() => { setRejectingReschedule(null); setRescheduleRejectReason('') }}>
+        <TextareaField label={t('meetings.rejectionReason')} value={rescheduleRejectReason} maxLength={1000} onChange={(event) => setRescheduleRejectReason(event.target.value)} />
+      </ConfirmModal>
+
+      <ConfirmModal open={archiveTarget !== null} title={t('meetings.templates.archiveTitle')} message={t('meetings.templates.archiveDescription', { name: archiveTarget?.name ?? '' })} confirmText={t('meetings.templates.archive')} cancelText={t('common.cancel')} loading={archiveTemplate.isPending} onConfirm={() => void archivePersonalTemplate()} onCancel={() => setArchiveTarget(null)} />
     </div>
   )
 }
+

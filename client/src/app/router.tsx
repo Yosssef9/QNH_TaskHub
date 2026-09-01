@@ -16,6 +16,7 @@ import { KpisPage } from '@/pages/kpis/KpisPage'
 import { loadKpiTasksPage } from '@/pages/kpi-tasks/kpi-tasks.loader'
 import { KpiTasksPage } from '@/pages/kpi-tasks/KpiTasksPage'
 import { ListPage } from '@/pages/lists/ListPage'
+import { MeetingDetailsPage } from '@/pages/meetings/MeetingDetailsPage'
 import { MeetingsPage } from '@/pages/meetings/MeetingsPage'
 import { SettingsPage } from '@/pages/settings/SettingsPage'
 import { ForbiddenPage } from '@/pages/system/ForbiddenPage'
@@ -36,6 +37,7 @@ export const router = createBrowserRouter([
       { index: true, element: <HomePage /> },
       { path: 'calendar', element: <CalendarPage /> },
       { path: 'meetings', element: <MeetingsPage /> },
+      { path: 'meetings/:meetingId', element: <MeetingDetailsPage /> },
       { path: 'lists/:listId', element: <ListPage /> },
       { path: 'work-cycles', element: <WorkCyclesPage /> },
       { path: 'work-cycles/:cycleId', element: <WorkCyclePage /> },
@@ -87,3 +89,4 @@ export const router = createBrowserRouter([
     ],
   },
 ])
+

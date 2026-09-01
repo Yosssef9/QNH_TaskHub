@@ -29,6 +29,26 @@ import { meetingSchedulingService } from "./meeting-scheduling.service.js";
 import { meetingsService } from "./meetings.service.js";
 import type { MeetingAvailability } from "./meeting-scheduling.types.js";
 import type { MeetingRoom } from "./meetings.types.js";
+import type {
+  ArchiveMeetingTemplateBody,
+  CancelMeetingBody,
+  CreateMeetingRescheduleBody,
+  CreateMeetingTemplateBody,
+  DecideMeetingRescheduleBody,
+  MeetingAttachmentParams,
+  MeetingTemplateParams,
+  MeetingWorkspaceParams,
+  RejectMeetingRescheduleBody,
+  UpdateMeetingRescheduleBody,
+  UpdateMeetingTemplateBody,
+} from "./meeting-workspace.schemas.js";
+import { meetingWorkspaceService } from "./meeting-workspace.service.js";
+import type {
+  MeetingAttachment,
+  MeetingDetail,
+  MeetingRescheduleQueueItem,
+  MeetingTemplate,
+} from "./meeting-workspace.types.js";
 
 function actorUserId(req: Request): number {
   const value = req.authContext?.user.userId;
@@ -224,3 +244,186 @@ export const listMeetingSchedule: RequestHandler = async (req, res) => {
   };
   res.status(200).json(body);
 };
+
+export const getMeetingDetail: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
+  const meeting = await meetingWorkspaceService.getDetail(
+    actorUserId(req),
+    currentAccess(req),
+    params.meetingId,
+  );
+  const body: ApiSuccessResponse<{ meeting: MeetingDetail }> = { success: true, data: { meeting } };
+  res.status(200).json(body);
+};
+
+export const requestMeetingReschedule: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
+  const input = getValidatedRequestPart<CreateMeetingRescheduleBody>(req, "body");
+  const meeting = await meetingWorkspaceService.requestReschedule(
+    actorUserId(req),
+    currentAccess(req),
+    params.meetingId,
+    input,
+  );
+  const body: ApiSuccessResponse<{ meeting: MeetingDetail }> = { success: true, data: { meeting } };
+  res.status(201).json(body);
+};
+
+export const listCoordinatorReschedules: RequestHandler = async (_req, res) => {
+  const items = await meetingWorkspaceService.listPendingReschedules();
+  const body: ApiSuccessResponse<{ items: MeetingRescheduleQueueItem[] }> = {
+    success: true,
+    data: { items },
+  };
+  res.status(200).json(body);
+};
+
+export const updateCoordinatorReschedule: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
+  const input = getValidatedRequestPart<UpdateMeetingRescheduleBody>(req, "body");
+  const item = await meetingWorkspaceService.updateCoordinatorReschedule(
+    actorUserId(req),
+    params.meetingId,
+    input,
+  );
+  const body: ApiSuccessResponse<{ item: MeetingRescheduleQueueItem }> = {
+    success: true,
+    data: { item },
+  };
+  res.status(200).json(body);
+};
+
+export const approveMeetingReschedule: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
+  const input = getValidatedRequestPart<DecideMeetingRescheduleBody>(req, "body");
+  await meetingWorkspaceService.approveReschedule(actorUserId(req), params.meetingId, input);
+  res.status(200).json({ success: true, data: { meetingId: params.meetingId } });
+};
+
+export const rejectMeetingReschedule: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
+  const input = getValidatedRequestPart<RejectMeetingRescheduleBody>(req, "body");
+  await meetingWorkspaceService.rejectReschedule(actorUserId(req), params.meetingId, input);
+  res.status(200).json({ success: true, data: { meetingId: params.meetingId } });
+};
+
+export const cancelMeeting: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
+  const input = getValidatedRequestPart<CancelMeetingBody>(req, "body");
+  const meeting = await meetingWorkspaceService.cancelMeeting(
+    actorUserId(req),
+    currentAccess(req),
+    params.meetingId,
+    input,
+  );
+  const body: ApiSuccessResponse<{ meeting: MeetingDetail }> = { success: true, data: { meeting } };
+  res.status(200).json(body);
+};
+
+export const listMeetingAttachments: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
+  const items = await meetingWorkspaceService.listAttachments(
+    actorUserId(req),
+    currentAccess(req),
+    params.meetingId,
+  );
+  const body: ApiSuccessResponse<{ items: MeetingAttachment[] }> = { success: true, data: { items } };
+  res.status(200).json(body);
+};
+
+export const uploadMeetingAttachment: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
+  if (!req.file) {
+    throw new AppError({
+      statusCode: 400,
+      code: "MEETING_ATTACHMENT_REQUIRED",
+      message: "Choose a Meeting attachment to upload.",
+    });
+  }
+  const attachment = await meetingWorkspaceService.uploadAttachment(
+    actorUserId(req),
+    params.meetingId,
+    req.file,
+  );
+  const body: ApiSuccessResponse<{ attachment: MeetingAttachment }> = {
+    success: true,
+    data: { attachment },
+  };
+  res.status(201).json(body);
+};
+
+export const previewMeetingAttachment: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingAttachmentParams>(req, "params");
+  const { attachment, buffer } = await meetingWorkspaceService.readAttachment(
+    actorUserId(req),
+    currentAccess(req),
+    params.attachmentId,
+  );
+  res.setHeader("Content-Type", attachment.mimeType);
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(attachment.originalFileName)}`);
+  res.send(buffer);
+};
+
+export const downloadMeetingAttachment: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingAttachmentParams>(req, "params");
+  const { attachment, buffer } = await meetingWorkspaceService.readAttachment(
+    actorUserId(req),
+    currentAccess(req),
+    params.attachmentId,
+  );
+  res.setHeader("Content-Type", attachment.mimeType);
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(attachment.originalFileName)}`);
+  res.send(buffer);
+};
+
+export const removeMeetingAttachment: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingAttachmentParams>(req, "params");
+  await meetingWorkspaceService.removeAttachment(actorUserId(req), params.attachmentId);
+  res.status(200).json({ success: true, data: { attachmentId: params.attachmentId } });
+};
+
+export const listMeetingTemplates: RequestHandler = async (req, res) => {
+  const templates = await meetingWorkspaceService.listTemplates(actorUserId(req));
+  const body: ApiSuccessResponse<{ templates: MeetingTemplate[] }> = {
+    success: true,
+    data: { templates },
+  };
+  res.status(200).json(body);
+};
+
+export const createMeetingTemplate: RequestHandler = async (req, res) => {
+  const input = getValidatedRequestPart<CreateMeetingTemplateBody>(req, "body");
+  const template = await meetingWorkspaceService.createTemplate(actorUserId(req), input);
+  const body: ApiSuccessResponse<{ template: MeetingTemplate }> = {
+    success: true,
+    data: { template },
+  };
+  res.status(201).json(body);
+};
+
+export const updateMeetingTemplate: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingTemplateParams>(req, "params");
+  const input = getValidatedRequestPart<UpdateMeetingTemplateBody>(req, "body");
+  const template = await meetingWorkspaceService.updateTemplate(
+    actorUserId(req),
+    params.templateId,
+    input,
+  );
+  const body: ApiSuccessResponse<{ template: MeetingTemplate }> = {
+    success: true,
+    data: { template },
+  };
+  res.status(200).json(body);
+};
+
+export const archiveMeetingTemplate: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingTemplateParams>(req, "params");
+  const input = getValidatedRequestPart<ArchiveMeetingTemplateBody>(req, "body");
+  await meetingWorkspaceService.archiveTemplate(actorUserId(req), params.templateId, input.rowVersion);
+  res.status(200).json({ success: true, data: { templateId: params.templateId } });
+};
+

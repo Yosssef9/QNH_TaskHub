@@ -2,15 +2,29 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import {
   approveMeetingRequest,
+  approveMeetingReschedule,
+  archiveMeetingTemplate,
+  cancelMeeting,
   checkMeetingAvailability,
   createDirectMeeting,
   createMeetingRequest,
+  createMeetingTemplate,
   getCoordinatorMeetingQueue,
+  getCoordinatorReschedules,
+  getMeetingAttachments,
+  getMeetingDetail,
+  getMeetingTemplates,
   getMyMeetingRequests,
   getMyMeetings,
   rejectMeetingRequest,
+  rejectMeetingReschedule,
+  removeMeetingAttachment,
+  requestMeetingReschedule,
   searchMeetingParticipants,
+  updateMeetingReschedule,
+  updateMeetingTemplate,
   updatePendingMeetingSchedule,
+  uploadMeetingAttachment,
 } from '../api/meetings.api'
 import type { MeetingAvailabilityInput } from '../types/meeting.types'
 
@@ -88,4 +102,101 @@ export function useApproveMeetingRequest() {
 
 export function useRejectMeetingRequest() {
   return useMeetingMutation(rejectMeetingRequest)
+}
+
+
+
+export function useMeetingDetail(meetingId: number | null) {
+  return useQuery({
+    queryKey: [...meetingsQueryKey, 'detail', meetingId],
+    queryFn: () => getMeetingDetail(meetingId as number),
+    enabled: meetingId !== null,
+  })
+}
+
+export function useCoordinatorReschedules(enabled: boolean) {
+  return useQuery({
+    queryKey: [...meetingsQueryKey, 'coordinator', 'reschedules'],
+    queryFn: getCoordinatorReschedules,
+    enabled,
+  })
+}
+
+export function useMeetingAttachments(meetingId: number | null) {
+  return useQuery({
+    queryKey: [...meetingsQueryKey, 'attachments', meetingId],
+    queryFn: () => getMeetingAttachments(meetingId as number),
+    enabled: meetingId !== null,
+  })
+}
+
+export function useMeetingTemplates(enabled: boolean) {
+  return useQuery({
+    queryKey: [...meetingsQueryKey, 'templates'],
+    queryFn: getMeetingTemplates,
+    enabled,
+  })
+}
+
+export function useRequestMeetingReschedule() {
+  return useMeetingMutation(requestMeetingReschedule)
+}
+
+export function useUpdateMeetingReschedule() {
+  return useMeetingMutation(updateMeetingReschedule)
+}
+
+export function useApproveMeetingReschedule() {
+  return useMeetingMutation(approveMeetingReschedule)
+}
+
+export function useRejectMeetingReschedule() {
+  return useMeetingMutation(rejectMeetingReschedule)
+}
+
+export function useCancelMeeting() {
+  return useMeetingMutation(cancelMeeting)
+}
+
+export function useUploadMeetingAttachment() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      meetingId,
+      file,
+      onProgress,
+    }: {
+      meetingId: number
+      file: File
+      onProgress?: (percentage: number) => void
+    }) => uploadMeetingAttachment(meetingId, file, onProgress),
+    onSuccess: (_attachment, input) => {
+      void client.invalidateQueries({ queryKey: [...meetingsQueryKey, 'attachments', input.meetingId] })
+      void client.invalidateQueries({ queryKey: [...meetingsQueryKey, 'detail', input.meetingId] })
+    },
+  })
+}
+
+export function useRemoveMeetingAttachment() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ meetingId, attachmentId }: { meetingId: number; attachmentId: string }) =>
+      removeMeetingAttachment(attachmentId),
+    onSuccess: (_result, input) => {
+      void client.invalidateQueries({ queryKey: [...meetingsQueryKey, 'attachments', input.meetingId] })
+      void client.invalidateQueries({ queryKey: [...meetingsQueryKey, 'detail', input.meetingId] })
+    },
+  })
+}
+
+export function useCreateMeetingTemplate() {
+  return useMeetingMutation(createMeetingTemplate)
+}
+
+export function useUpdateMeetingTemplate() {
+  return useMeetingMutation(updateMeetingTemplate)
+}
+
+export function useArchiveMeetingTemplate() {
+  return useMeetingMutation(archiveMeetingTemplate)
 }
