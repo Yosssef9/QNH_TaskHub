@@ -13,6 +13,7 @@ import {
   getCoordinatorReschedules,
   getMeetingAttachments,
   getMeetingDetail,
+  getMeetingSchedule,
   getMeetingTemplates,
   getMyMeetingRequests,
   getMyMeetings,
@@ -104,7 +105,21 @@ export function useRejectMeetingRequest() {
   return useMeetingMutation(rejectMeetingRequest)
 }
 
-
+export function useMeetingSchedule(
+  input: { fromAtUtc: string; toAtUtc: string; roomId?: number } | null,
+) {
+  return useQuery({
+    queryKey: input
+      ? [...meetingsQueryKey, 'schedule', input]
+      : [...meetingsQueryKey, 'schedule', 'idle'],
+    queryFn: () =>
+      getMeetingSchedule(
+        input as { fromAtUtc: string; toAtUtc: string; roomId?: number },
+      ),
+    enabled: input !== null,
+    staleTime: 30_000,
+  })
+}
 
 export function useMeetingDetail(meetingId: number | null) {
   return useQuery({
@@ -200,3 +215,4 @@ export function useUpdateMeetingTemplate() {
 export function useArchiveMeetingTemplate() {
   return useMeetingMutation(archiveMeetingTemplate)
 }
+

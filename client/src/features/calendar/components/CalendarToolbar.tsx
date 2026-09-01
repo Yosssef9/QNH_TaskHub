@@ -1,4 +1,11 @@
-import { CalendarDays, ChevronLeft, ChevronRight, List } from 'lucide-react'
+import {
+  CalendarDays,
+  CalendarRange,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  List,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
@@ -10,6 +17,7 @@ import type { CalendarViewMode } from '../types/calendar.types'
 interface Props {
   title: string
   viewMode: CalendarViewMode
+  meetingsEnabled: boolean
   onViewModeChange: (viewMode: CalendarViewMode) => void
   onPrevious: () => void
   onToday: () => void
@@ -26,6 +34,7 @@ export function CalendarToolbar({
   onViewModeChange,
   title,
   viewMode,
+  meetingsEnabled,
   showAdjacentDates,
   displayPreferencePending,
   onShowAdjacentDatesChange,
@@ -34,6 +43,18 @@ export function CalendarToolbar({
   const isRtl = i18n.dir() === 'rtl'
   const PreviousIcon = isRtl ? ChevronRight : ChevronLeft
   const NextIcon = isRtl ? ChevronLeft : ChevronRight
+
+  const views: Array<{
+    value: CalendarViewMode
+    icon: typeof CalendarDays
+    label: string
+    visible: boolean
+  }> = [
+    { value: 'MONTH', icon: CalendarDays, label: t('calendar.monthView'), visible: true },
+    { value: 'WEEK', icon: CalendarRange, label: t('calendar.weekView'), visible: meetingsEnabled },
+    { value: 'DAY', icon: Clock3, label: t('calendar.dayView'), visible: meetingsEnabled },
+    { value: 'AGENDA', icon: List, label: t('calendar.agendaView'), visible: true },
+  ]
 
   return (
     <div className="space-y-3 border-b px-3 py-3 sm:px-5 sm:py-4 lg:flex lg:items-center lg:justify-between lg:gap-4 lg:space-y-0">
@@ -46,7 +67,7 @@ export function CalendarToolbar({
             variant="outline"
             size="icon"
             className="size-9"
-            aria-label={t('calendar.previousMonth')}
+            aria-label={t('calendar.previousPeriod')}
             onClick={onPrevious}
           >
             <PreviousIcon aria-hidden="true" className="size-4" />
@@ -58,7 +79,7 @@ export function CalendarToolbar({
             variant="outline"
             size="icon"
             className="size-9"
-            aria-label={t('calendar.nextMonth')}
+            aria-label={t('calendar.nextPeriod')}
             onClick={onNext}
           >
             <NextIcon aria-hidden="true" className="size-4" />
@@ -85,39 +106,35 @@ export function CalendarToolbar({
         ) : null}
 
         <div
-          className="bg-muted/60 grid grid-cols-2 gap-1 rounded-xl p-1 sm:w-fit"
+          className={cn(
+            'bg-muted/60 grid gap-1 rounded-xl p-1 sm:w-fit',
+            meetingsEnabled ? 'grid-cols-4' : 'grid-cols-2',
+          )}
           aria-label={t('calendar.viewModeLabel')}
         >
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            aria-pressed={viewMode === 'MONTH'}
-            className={cn(
-              'justify-center',
-              viewMode === 'MONTH' &&
-                'bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary',
-            )}
-            onClick={() => onViewModeChange('MONTH')}
-          >
-            <CalendarDays aria-hidden="true" className="size-4" />
-            {t('calendar.monthView')}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            aria-pressed={viewMode === 'AGENDA'}
-            className={cn(
-              'justify-center',
-              viewMode === 'AGENDA' &&
-                'bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary',
-            )}
-            onClick={() => onViewModeChange('AGENDA')}
-          >
-            <List aria-hidden="true" className="size-4" />
-            {t('calendar.agendaView')}
-          </Button>
+          {views
+            .filter((view) => view.visible)
+            .map((view) => {
+              const Icon = view.icon
+              return (
+                <Button
+                  key={view.value}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-pressed={viewMode === view.value}
+                  className={cn(
+                    'justify-center px-2.5',
+                    viewMode === view.value &&
+                      'bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary',
+                  )}
+                  onClick={() => onViewModeChange(view.value)}
+                >
+                  <Icon aria-hidden="true" className="size-4" />
+                  <span className="hidden md:inline">{view.label}</span>
+                </Button>
+              )
+            })}
         </div>
       </div>
     </div>

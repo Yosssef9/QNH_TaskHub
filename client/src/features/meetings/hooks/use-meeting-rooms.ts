@@ -9,10 +9,11 @@ import {
 export const activeMeetingRoomsQueryKey = ['meetings', 'rooms', 'active'] as const
 export const adminMeetingRoomsQueryKey = ['admin', 'meeting-rooms'] as const
 
-export function useActiveMeetingRooms() {
+export function useActiveMeetingRooms(enabled = true) {
   return useQuery({
     queryKey: activeMeetingRoomsQueryKey,
     queryFn: getActiveMeetingRooms,
+    enabled,
   })
 }
 
@@ -34,3 +35,4 @@ export function useSaveMeetingRoom() {
     },
   })
 }
+

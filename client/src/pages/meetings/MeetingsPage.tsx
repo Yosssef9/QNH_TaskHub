@@ -2,7 +2,7 @@ import { CalendarDays, DoorOpen, Plus, ShieldCheck, UsersRound } from 'lucide-re
 import { useState, type ReactNode } from 'react'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { EmptyState } from '@/components/shared/EmptyState'

@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
+import { useNavigate } from 'react-router'
 
 import { ErrorState } from '@/components/shared/ErrorState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { CalendarDayPanel } from '@/features/calendar/components/CalendarDayPanel'
 import {
   CalendarFilters,
+  selectedTaskScopes,
   type CalendarFilterState,
 } from '@/features/calendar/components/CalendarFilters'
 import { TaskCalendar } from '@/features/calendar/components/TaskCalendar'
@@ -20,13 +22,16 @@ import type {
   CalendarVisibleRange,
 } from '@/features/calendar/types/calendar.types'
 import { useLists } from '@/features/lists/hooks/use-lists'
+import { useMeetingSchedule } from '@/features/meetings/hooks/use-meetings'
 import { useUpdatePreferences } from '@/features/preferences/hooks/use-update-preferences'
 import { TaskDetailsDrawer } from '@/features/tasks/components/TaskDetailsDrawer'
 import { TaskEditorDialog } from '@/features/tasks/components/TaskEditorDialog'
 import { useWorkCycles } from '@/features/work-cycles/hooks/use-work-cycles'
+import { riyadhLocalDateTimeToUtcIso } from '@/lib/date-time'
 
 export function CalendarPage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [range, setRange] = useState<CalendarVisibleRange | null>(null)
   const [viewMode, setViewMode] = useState<CalendarViewMode>('MONTH')
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
@@ -36,9 +41,14 @@ export function CalendarPage() {
   const [editorOpen, setEditorOpen] = useState(false)
   const [showAdjacentDatesOverride, setShowAdjacentDatesOverride] = useState<boolean | null>(null)
   const [filters, setFilters] = useState<CalendarFilterState>({
-    scope: 'PERSONAL',
+    sources: {
+      personal: true,
+      kpi: false,
+      meetings: false,
+    },
     search: '',
   })
+
   const changeFilters = useCallback(
     (nextFilters: CalendarFilterState) => {
       if (nextFilters.search !== filters.search) {
@@ -49,6 +59,7 @@ export function CalendarPage() {
     },
     [filters.search],
   )
+
   const currentUserQuery = useCurrentUser()
   const updatePreferencesMutation = useUpdatePreferences()
   const listsQuery = useLists()
@@ -61,22 +72,49 @@ export function CalendarPage() {
     setShowAdjacentDatesOverride(null)
   }, [savedShowAdjacentDates])
 
-  const queryFilters = useMemo<CalendarTaskFilters | null>(() => {
-    if (!range) return null
+  const personalQueryFilters = useMemo<CalendarTaskFilters | null>(() => {
+    if (!range || !filters.sources.personal) return null
     return {
       start: range.start,
       end: range.end,
-      scope: filters.scope,
+      scope: 'PERSONAL',
       status: filters.status,
       priority: filters.priority,
-      listId: filters.scope === 'PERSONAL' ? filters.listId : undefined,
-      cycleId: filters.scope === 'KPI' ? filters.cycleId : undefined,
-      kpiInstanceId: filters.scope === 'KPI' ? filters.kpiInstanceId : undefined,
+      listId: filters.listId,
     }
   }, [filters, range])
 
-  const tasksQuery = useCalendarTasks(queryFilters)
-  const tasks = tasksQuery.data ?? []
+  const kpiQueryFilters = useMemo<CalendarTaskFilters | null>(() => {
+    if (!range || !filters.sources.kpi) return null
+    return {
+      start: range.start,
+      end: range.end,
+      scope: 'KPI',
+      status: filters.status,
+      priority: filters.priority,
+      cycleId: filters.cycleId,
+      kpiInstanceId: filters.kpiInstanceId,
+    }
+  }, [filters, range])
+
+  const meetingScheduleInput = useMemo(() => {
+    if (!range || !filters.sources.meetings) return null
+    return {
+      fromAtUtc: riyadhLocalDateTimeToUtcIso(range.start, '00:00'),
+      toAtUtc: riyadhLocalDateTimeToUtcIso(range.end, '00:00'),
+      ...(filters.roomId === undefined ? {} : { roomId: filters.roomId }),
+    }
+  }, [filters.roomId, filters.sources.meetings, range])
+
+  const personalTasksQuery = useCalendarTasks(personalQueryFilters)
+  const kpiTasksQuery = useCalendarTasks(kpiQueryFilters)
+  const meetingsQuery = useMeetingSchedule(meetingScheduleInput)
+
+  const tasks = useMemo(
+    () => [...(personalTasksQuery.data ?? []), ...(kpiTasksQuery.data ?? [])],
+    [kpiTasksQuery.data, personalTasksQuery.data],
+  )
+  const meetings = meetingsQuery.data ?? []
 
   useEffect(() => {
     if (!searchTarget) return
@@ -85,7 +123,9 @@ export function CalendarPage() {
       setDetailsTaskId(searchTarget.taskId)
     }, 850)
     const highlightTimer = window.setTimeout(() => {
-      setSearchTarget((current) => (current?.requestId === searchTarget.requestId ? null : current))
+      setSearchTarget((current) =>
+        current?.requestId === searchTarget.requestId ? null : current,
+      )
     }, 2500)
 
     return () => {
@@ -93,6 +133,7 @@ export function CalendarPage() {
       window.clearTimeout(highlightTimer)
     }
   }, [searchTarget])
+
   const selectedDateTasks = selectedDate
     ? tasks.filter((task) => task.calendarDate === selectedDate)
     : []
@@ -132,22 +173,28 @@ export function CalendarPage() {
             instance.taskPolicy.allowsTasks,
         )
 
+  const taskScopes = selectedTaskScopes(filters)
+  const createScope = taskScopes.length === 1 ? taskScopes[0] : null
   const canCreate =
-    filters.scope === 'PERSONAL'
+    createScope === 'PERSONAL'
       ? !listsQuery.isPending && !listsQuery.isError && lists.length > 0
-      : !cyclesQuery.isPending && !cyclesQuery.isError && openCycles.length > 0
+      : createScope === 'KPI'
+        ? !cyclesQuery.isPending && !cyclesQuery.isError && openCycles.length > 0
+        : false
   const createUnavailableReason =
-    filters.scope === 'PERSONAL'
-      ? listsQuery.isError
-        ? t('calendar.createListsUnavailable')
-        : lists.length === 0 && !listsQuery.isPending
-          ? t('calendar.createListRequired')
-          : undefined
-      : cyclesQuery.isError
-        ? t('calendar.createCyclesUnavailable')
-        : openCycles.length === 0 && !cyclesQuery.isPending
-          ? t('calendar.createOpenCycleRequired')
-          : undefined
+    taskScopes.length !== 1
+      ? t('calendar.createSingleTaskSourceRequired')
+      : createScope === 'PERSONAL'
+        ? listsQuery.isError
+          ? t('calendar.createListsUnavailable')
+          : lists.length === 0 && !listsQuery.isPending
+            ? t('calendar.createListRequired')
+            : undefined
+        : cyclesQuery.isError
+          ? t('calendar.createCyclesUnavailable')
+          : openCycles.length === 0 && !cyclesQuery.isPending
+            ? t('calendar.createOpenCycleRequired')
+            : undefined
 
   function changeAdjacentDateDisplay(nextValue: boolean) {
     if (nextValue === showAdjacentDates) return
@@ -188,6 +235,24 @@ export function CalendarPage() {
     })
   }
 
+  function refetchTaskQueries() {
+    if (filters.sources.personal) void personalTasksQuery.refetch()
+    if (filters.sources.kpi) void kpiTasksQuery.refetch()
+  }
+
+  const taskLoadError =
+    (filters.sources.personal && personalTasksQuery.isError) ||
+    (filters.sources.kpi && kpiTasksQuery.isError)
+  const meetingLoadError = filters.sources.meetings && meetingsQuery.isError
+  const isFetching =
+    (filters.sources.personal && personalTasksQuery.isFetching) ||
+    (filters.sources.kpi && kpiTasksQuery.isFetching) ||
+    (filters.sources.meetings && meetingsQuery.isFetching)
+  const enabledQueriesSucceeded =
+    (!filters.sources.personal || personalTasksQuery.isSuccess) &&
+    (!filters.sources.kpi || kpiTasksQuery.isSuccess) &&
+    (!filters.sources.meetings || meetingsQuery.isSuccess)
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -202,35 +267,46 @@ export function CalendarPage() {
         onOpenSearchResult={openSearchResult}
       />
 
-      {tasksQuery.isError ? (
+      {taskLoadError || meetingLoadError ? (
         <ErrorState
           className="min-h-44"
           title={t('calendar.loadErrorTitle')}
           description={t('calendar.loadErrorDescription')}
-          onRetry={() => void tasksQuery.refetch()}
+          onRetry={() => {
+            if (filters.sources.personal) void personalTasksQuery.refetch()
+            if (filters.sources.kpi) void kpiTasksQuery.refetch()
+            if (filters.sources.meetings) void meetingsQuery.refetch()
+          }}
         />
       ) : null}
 
       <TaskCalendar
         tasks={tasks}
-        isFetching={tasksQuery.isFetching}
-        showEmpty={tasksQuery.isSuccess && tasks.length === 0}
+        meetings={meetings}
+        meetingsEnabled={filters.sources.meetings}
+        isFetching={Boolean(isFetching)}
+        showEmpty={enabledQueriesSucceeded && tasks.length === 0 && meetings.length === 0}
         viewMode={viewMode}
         selectedDate={selectedDate}
         searchTarget={searchTarget}
         showAdjacentDates={showAdjacentDates}
         displayPreferencePending={updatePreferencesMutation.isPending}
-        onViewModeChange={setViewMode}
+        onViewModeChange={(next) => {
+          setDayPanelOpen(false)
+          if (next !== 'MONTH') setSelectedDate(null)
+          setViewMode(next)
+        }}
         onShowAdjacentDatesChange={changeAdjacentDateDisplay}
         onRangeChange={setRange}
         onSelectDate={selectDate}
         onOpenTask={openTask}
+        onOpenMeeting={(meetingId) => navigate(`/meetings/${meetingId}`)}
       />
 
       <CalendarDayPanel
         date={dayPanelOpen ? selectedDate : null}
         tasks={selectedDateTasks}
-        scope={filters.scope}
+        scope={createScope ?? 'PERSONAL'}
         canCreate={canCreate}
         createUnavailableReason={createUnavailableReason}
         onOpenChange={(open) => {
@@ -241,8 +317,8 @@ export function CalendarPage() {
         onCreateTask={() => setEditorOpen(true)}
       />
 
-      {editorOpen && selectedDate ? (
-        filters.scope === 'PERSONAL' ? (
+      {editorOpen && selectedDate && createScope ? (
+        createScope === 'PERSONAL' ? (
           lists.length > 0 ? (
             <TaskEditorDialog
               key={`calendar-personal-${selectedDate}-${filters.listId ?? 'default'}`}
@@ -252,7 +328,7 @@ export function CalendarPage() {
               initialListId={filters.listId ?? defaultList?.id ?? null}
               initialCalendarDate={selectedDate}
               allowListSelectionOnCreate
-              onSaved={() => void tasksQuery.refetch()}
+              onSaved={refetchTaskQueries}
             />
           ) : null
         ) : openCycles.length > 0 ? (
@@ -264,7 +340,7 @@ export function CalendarPage() {
             initialCycleId={fallbackInitialCycle?.id ?? null}
             initialKpiInstanceId={filteredInitialInstance?.id ?? null}
             initialCalendarDate={selectedDate}
-            onSaved={() => void tasksQuery.refetch()}
+            onSaved={refetchTaskQueries}
           />
         ) : null
       ) : null}

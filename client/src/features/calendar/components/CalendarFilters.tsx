@@ -1,4 +1,12 @@
-import { BriefcaseBusiness, Gauge, ListFilter, ListTodo, RotateCcw } from 'lucide-react'
+import {
+  BriefcaseBusiness,
+  CalendarClock,
+  Gauge,
+  ListFilter,
+  ListTodo,
+  MapPin,
+  RotateCcw,
+} from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -10,6 +18,8 @@ import { appIcons } from '@/config/app-icons'
 import { KpiSelectIndicator } from '@/features/kpis/components/KpiSelectIndicator'
 import { ListSelectIndicator } from '@/features/lists/components/ListSelectIndicator'
 import { useLists } from '@/features/lists/hooks/use-lists'
+import { useActiveMeetingRooms } from '@/features/meetings/hooks/use-meeting-rooms'
+import type { MeetingRoom } from '@/features/meetings/types/meeting.types'
 import { TaskPriorityIndicator } from '@/features/tasks/components/TaskSelectIndicators'
 import { TaskStatusIndicator } from '@/features/tasks/components/TaskStatusIndicator'
 import type { TaskPriority, TaskStatus } from '@/features/tasks/types/task.types'
@@ -17,19 +27,32 @@ import { useWorkCycles } from '@/features/work-cycles/hooks/use-work-cycles'
 import type { WorkCycle } from '@/features/work-cycles/types/work-cycle.types'
 import { cn } from '@/lib/cn'
 
-import type { CalendarScope, CalendarTask } from '../types/calendar.types'
+import type {
+  CalendarScope,
+  CalendarSource,
+  CalendarSourceSelection,
+  CalendarTask,
+} from '../types/calendar.types'
 import { CalendarSearch } from './CalendarSearch'
 
 const ALL = 'ALL'
 
 export interface CalendarFilterState {
-  scope: CalendarScope
+  sources: CalendarSourceSelection
   search: string
   status?: TaskStatus | undefined
   priority?: TaskPriority | undefined
   listId?: number | undefined
   cycleId?: number | undefined
   kpiInstanceId?: number | undefined
+  roomId?: number | undefined
+}
+
+export function selectedTaskScopes(value: CalendarFilterState): CalendarScope[] {
+  const scopes: CalendarScope[] = []
+  if (value.sources.personal) scopes.push('PERSONAL')
+  if (value.sources.kpi) scopes.push('KPI')
+  return scopes
 }
 
 export function countActiveCalendarFilters(
@@ -37,15 +60,17 @@ export function countActiveCalendarFilters(
   currentCycleId?: number,
 ): number {
   const cycleFilterIsActive =
-    value.scope === 'KPI' &&
+    value.sources.kpi &&
     (currentCycleId === undefined ? value.cycleId !== undefined : value.cycleId !== currentCycleId)
 
   return [
     value.search.trim().length > 0,
     value.status !== undefined,
     value.priority !== undefined,
-    value.scope === 'PERSONAL' ? value.listId !== undefined : cycleFilterIsActive,
-    value.scope === 'KPI' && value.kpiInstanceId !== undefined,
+    value.sources.personal && value.listId !== undefined,
+    cycleFilterIsActive,
+    value.sources.kpi && value.kpiInstanceId !== undefined,
+    value.sources.meetings && value.roomId !== undefined,
   ].filter(Boolean).length
 }
 
@@ -54,9 +79,9 @@ export function clearCalendarFilters(
   currentCycleId?: number,
 ): CalendarFilterState {
   return {
-    scope: value.scope,
+    sources: value.sources,
     search: '',
-    ...(value.scope === 'KPI' && currentCycleId !== undefined ? { cycleId: currentCycleId } : {}),
+    ...(value.sources.kpi && currentCycleId !== undefined ? { cycleId: currentCycleId } : {}),
   }
 }
 
@@ -95,6 +120,11 @@ function WorkCycleSelectIndicator({
   )
 }
 
+function roomLabel(room: MeetingRoom, arabic: boolean): string {
+  const name = arabic ? room.nameAr : room.nameEn
+  return room.code ? `${name} · ${room.code}` : name
+}
+
 interface Props {
   value: CalendarFilterState
   onChange: (next: CalendarFilterState) => void
@@ -102,10 +132,12 @@ interface Props {
 }
 
 export function CalendarFilters({ onChange, onOpenSearchResult, value }: Props) {
-  const { t } = useTranslation()
+  const { i18n, t } = useTranslation()
   const listsQuery = useLists()
   const cyclesQuery = useWorkCycles()
+  const roomsQuery = useActiveMeetingRooms(value.sources.meetings)
   const initializedKpiScope = useRef(false)
+  const isArabic = i18n.language.toLowerCase().startsWith('ar')
 
   const cycles = useMemo(
     () => (cyclesQuery.data ?? []).filter((cycle) => cycle.archivedAtUtc === null),
@@ -119,9 +151,11 @@ export function CalendarFilters({ onChange, onOpenSearchResult, value }: Props) 
     : cycles.flatMap((cycle) => cycle.instances)
   const selectedInstance =
     availableInstances.find((instance) => instance.id === value.kpiInstanceId) ?? null
+  const selectedRoom = (roomsQuery.data ?? []).find((room) => room.id === value.roomId) ?? null
+  const taskScopes = selectedTaskScopes(value)
 
   useEffect(() => {
-    if (value.scope !== 'KPI') {
+    if (!value.sources.kpi) {
       initializedKpiScope.current = false
       return
     }
@@ -131,11 +165,27 @@ export function CalendarFilters({ onChange, onOpenSearchResult, value }: Props) 
     if (currentCycle && value.cycleId === undefined) {
       onChange({ ...value, cycleId: currentCycle.id, kpiInstanceId: undefined })
     }
-  }, [cycles, cyclesQuery.isError, cyclesQuery.isPending, onChange, value])
+  }, [cycles, cyclesQuery.isError, cyclesQuery.isPending, currentCycle, onChange, value])
 
-  function setScope(scope: CalendarScope) {
-    if (scope === value.scope) return
-    onChange({ ...value, scope })
+  function toggleSource(source: CalendarSource) {
+    const field =
+      source === 'PERSONAL' ? 'personal' : source === 'KPI' ? 'kpi' : 'meetings'
+    const enabledCount = Object.values(value.sources).filter(Boolean).length
+    if (value.sources[field] && enabledCount === 1) return
+
+    const nextSources = { ...value.sources, [field]: !value.sources[field] }
+    const hasTaskSource = nextSources.personal || nextSources.kpi
+
+    onChange({
+      ...value,
+      sources: nextSources,
+      ...(!nextSources.personal ? { listId: undefined } : {}),
+      ...(!nextSources.kpi ? { cycleId: undefined, kpiInstanceId: undefined } : {}),
+      ...(!nextSources.meetings ? { roomId: undefined } : {}),
+      ...(!hasTaskSource
+        ? { search: '', status: undefined, priority: undefined }
+        : {}),
+    })
   }
 
   const activeFilterCount = countActiveCalendarFilters(value, currentCycle?.id)
@@ -143,6 +193,8 @@ export function CalendarFilters({ onChange, onOpenSearchResult, value }: Props) 
   function clearFilters() {
     onChange(clearCalendarFilters(value, currentCycle?.id))
   }
+
+  const taskFiltersEnabled = taskScopes.length > 0
 
   return (
     <Card>
@@ -178,110 +230,141 @@ export function CalendarFilters({ onChange, onOpenSearchResult, value }: Props) 
         </div>
 
         <div
-          className="bg-muted/60 grid grid-cols-2 gap-1 rounded-xl p-1"
-          aria-label={t('calendar.scopeLabel')}
+          className="bg-muted/60 grid grid-cols-1 gap-1 rounded-xl p-1 sm:grid-cols-3"
+          aria-label={t('calendar.sourceLabel')}
         >
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-pressed={value.scope === 'PERSONAL'}
-            className={cn(
-              'justify-center',
-              value.scope === 'PERSONAL' &&
-                'bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary',
-            )}
-            onClick={() => setScope('PERSONAL')}
-          >
-            <ListTodo aria-hidden="true" className="size-4" />
-            {t('calendar.personalTasks')}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-pressed={value.scope === 'KPI'}
-            className={cn(
-              'justify-center',
-              value.scope === 'KPI' &&
-                'bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary',
-            )}
-            onClick={() => setScope('KPI')}
-          >
-            <Gauge aria-hidden="true" className="size-4" />
-            {t('calendar.kpiTasks')}
-          </Button>
+          <SourceButton
+            active={value.sources.personal}
+            icon={ListTodo}
+            label={t('calendar.personalTasks')}
+            onClick={() => toggleSource('PERSONAL')}
+          />
+          <SourceButton
+            active={value.sources.kpi}
+            icon={Gauge}
+            label={t('calendar.kpiTasks')}
+            onClick={() => toggleSource('KPI')}
+          />
+          <SourceButton
+            active={value.sources.meetings}
+            icon={CalendarClock}
+            label={t('calendar.meetings')}
+            onClick={() => toggleSource('MEETINGS')}
+          />
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(15rem,1.5fr)_repeat(3,minmax(10rem,1fr))]">
-          <CalendarSearch
-            value={value.search}
-            scope={value.scope}
-            status={value.status}
-            priority={value.priority}
-            listId={value.listId}
-            cycleId={value.cycleId}
-            kpiInstanceId={value.kpiInstanceId}
-            onChange={(search) => onChange({ ...value, search })}
-            onOpenTask={onOpenSearchResult}
-          />
+        {(taskFiltersEnabled || value.sources.meetings) && (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {taskFiltersEnabled ? (
+              <>
+                <CalendarSearch
+                  value={value.search}
+                  scopes={taskScopes}
+                  status={value.status}
+                  priority={value.priority}
+                  listId={value.listId}
+                  cycleId={value.cycleId}
+                  kpiInstanceId={value.kpiInstanceId}
+                  onChange={(search) => onChange({ ...value, search })}
+                  onOpenTask={onOpenSearchResult}
+                />
 
-          <Select
-            value={value.status ?? ALL}
-            onValueChange={(next) =>
-              onChange({ ...value, status: next === ALL ? undefined : (next as TaskStatus) })
-            }
-          >
-            <SelectTrigger aria-label={t('calendar.statusFilter')}>
-              <SelectValue>
-                <TaskStatusIndicator status={value.status ?? 'ALL'} pill />
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>
-                <TaskStatusIndicator status="ALL" />
-              </SelectItem>
-              <SelectItem value="TODO">
-                <TaskStatusIndicator status="TODO" />
-              </SelectItem>
-              <SelectItem value="IN_PROGRESS">
-                <TaskStatusIndicator status="IN_PROGRESS" />
-              </SelectItem>
-              <SelectItem value="DONE">
-                <TaskStatusIndicator status="DONE" />
-              </SelectItem>
-              <SelectItem value="CANCELLED">
-                <TaskStatusIndicator status="CANCELLED" />
-              </SelectItem>
-            </SelectContent>
-          </Select>
+                <Select
+                  value={value.status ?? ALL}
+                  onValueChange={(next) =>
+                    onChange({ ...value, status: next === ALL ? undefined : (next as TaskStatus) })
+                  }
+                >
+                  <SelectTrigger aria-label={t('calendar.statusFilter')}>
+                    <SelectValue>
+                      <TaskStatusIndicator status={value.status ?? 'ALL'} pill />
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL}>
+                      <TaskStatusIndicator status="ALL" />
+                    </SelectItem>
+                    <SelectItem value="TODO">
+                      <TaskStatusIndicator status="TODO" />
+                    </SelectItem>
+                    <SelectItem value="IN_PROGRESS">
+                      <TaskStatusIndicator status="IN_PROGRESS" />
+                    </SelectItem>
+                    <SelectItem value="DONE">
+                      <TaskStatusIndicator status="DONE" />
+                    </SelectItem>
+                    <SelectItem value="CANCELLED">
+                      <TaskStatusIndicator status="CANCELLED" />
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
 
-          <Select
-            value={value.priority ?? ALL}
-            onValueChange={(next) =>
-              onChange({ ...value, priority: next === ALL ? undefined : (next as TaskPriority) })
-            }
-          >
-            <SelectTrigger aria-label={t('calendar.priorityFilter')}>
-              <SelectValue>
-                <TaskPriorityIndicator priority={value.priority ?? 'ALL'} pill />
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>
-                <TaskPriorityIndicator priority="ALL" />
-              </SelectItem>
-              <SelectItem value="LOW">
-                <TaskPriorityIndicator priority="LOW" />
-              </SelectItem>
-              <SelectItem value="MEDIUM">
-                <TaskPriorityIndicator priority="MEDIUM" />
-              </SelectItem>
-              <SelectItem value="HIGH">
-                <TaskPriorityIndicator priority="HIGH" />
-              </SelectItem>
-            </SelectContent>
-          </Select>
+                <Select
+                  value={value.priority ?? ALL}
+                  onValueChange={(next) =>
+                    onChange({ ...value, priority: next === ALL ? undefined : (next as TaskPriority) })
+                  }
+                >
+                  <SelectTrigger aria-label={t('calendar.priorityFilter')}>
+                    <SelectValue>
+                      <TaskPriorityIndicator priority={value.priority ?? 'ALL'} pill />
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL}>
+                      <TaskPriorityIndicator priority="ALL" />
+                    </SelectItem>
+                    <SelectItem value="LOW">
+                      <TaskPriorityIndicator priority="LOW" />
+                    </SelectItem>
+                    <SelectItem value="MEDIUM">
+                      <TaskPriorityIndicator priority="MEDIUM" />
+                    </SelectItem>
+                    <SelectItem value="HIGH">
+                      <TaskPriorityIndicator priority="HIGH" />
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </>
+            ) : null}
 
-          {value.scope === 'PERSONAL' ? (
+            {value.sources.meetings ? (
+              <Select
+                value={value.roomId ? String(value.roomId) : ALL}
+                disabled={roomsQuery.isPending || roomsQuery.isError}
+                onValueChange={(next) =>
+                  onChange({ ...value, roomId: next === ALL ? undefined : Number(next) })
+                }
+              >
+                <SelectTrigger aria-label={t('calendar.roomFilter')}>
+                  <SelectValue>
+                    {selectedRoom ? (
+                      <NeutralFilterIndicator
+                        icon={MapPin}
+                        label={roomLabel(selectedRoom, isArabic)}
+                      />
+                    ) : (
+                      <NeutralFilterIndicator icon={MapPin} label={t('calendar.allMeetingRooms')} />
+                    )}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>
+                    <NeutralFilterIndicator icon={MapPin} label={t('calendar.allMeetingRooms')} />
+                  </SelectItem>
+                  {(roomsQuery.data ?? []).map((room) => (
+                    <SelectItem key={room.id} value={String(room.id)}>
+                      <NeutralFilterIndicator icon={MapPin} label={roomLabel(room, isArabic)} />
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
+          </div>
+        )}
+
+        {value.sources.personal ? (
+          <div className="grid gap-3 md:grid-cols-2">
             <Select
               value={value.listId ? String(value.listId) : ALL}
               onValueChange={(next) =>
@@ -308,7 +391,11 @@ export function CalendarFilters({ onChange, onOpenSearchResult, value }: Props) 
                 ))}
               </SelectContent>
             </Select>
-          ) : (
+          </div>
+        ) : null}
+
+        {value.sources.kpi ? (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             <Select
               value={value.cycleId ? String(value.cycleId) : ALL}
               onValueChange={(next) =>
@@ -327,46 +414,39 @@ export function CalendarFilters({ onChange, onOpenSearchResult, value }: Props) 
                       currentLabel={t('calendar.currentCycle')}
                     />
                   ) : (
-                    <NeutralFilterIndicator
-                      icon={BriefcaseBusiness}
-                      label={t('calendar.allCycles')}
-                    />
+                    <NeutralFilterIndicator icon={BriefcaseBusiness} label={t('calendar.allCycles')} />
                   )}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL}>
-                  <NeutralFilterIndicator
-                    icon={BriefcaseBusiness}
-                    label={t('calendar.allCycles')}
-                  />
+                  <NeutralFilterIndicator icon={BriefcaseBusiness} label={t('calendar.allCycles')} />
                 </SelectItem>
                 {cycles.map((cycle) => (
                   <SelectItem key={cycle.id} value={String(cycle.id)}>
-                    <WorkCycleSelectIndicator
-                      cycle={cycle}
-                      currentLabel={t('calendar.currentCycle')}
-                    />
+                    <WorkCycleSelectIndicator cycle={cycle} currentLabel={t('calendar.currentCycle')} />
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          )}
-        </div>
 
-        {value.scope === 'KPI' ? (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(15rem,1.5fr)_repeat(3,minmax(10rem,1fr))]">
-            <div className="hidden xl:block" />
             <Select
               value={value.kpiInstanceId ? String(value.kpiInstanceId) : ALL}
               onValueChange={(next) =>
-                onChange({ ...value, kpiInstanceId: next === ALL ? undefined : Number(next) })
+                onChange({
+                  ...value,
+                  kpiInstanceId: next === ALL ? undefined : Number(next),
+                })
               }
             >
-              <SelectTrigger aria-label={t('calendar.kpiFilter')} className="xl:col-span-2">
+              <SelectTrigger aria-label={t('calendar.kpiFilter')}>
                 <SelectValue>
                   {selectedInstance ? (
-                    <KpiSelectIndicator kpi={selectedInstance} />
+                    <KpiSelectIndicator
+                      name={selectedInstance.name}
+                      iconKey={selectedInstance.iconKey}
+                      color={selectedInstance.color}
+                    />
                   ) : (
                     <NeutralFilterIndicator icon={Gauge} label={t('calendar.allKpis')} />
                   )}
@@ -379,8 +459,12 @@ export function CalendarFilters({ onChange, onOpenSearchResult, value }: Props) 
                 {availableInstances.map((instance) => (
                   <SelectItem key={instance.id} value={String(instance.id)}>
                     <span className="flex min-w-0 items-center gap-2">
-                      <KpiSelectIndicator kpi={instance} />
-                      {!selectedCycle ? (
+                      <KpiSelectIndicator
+                        name={instance.name}
+                        iconKey={instance.iconKey}
+                        color={instance.color}
+                      />
+                      {!selectedCycle && instance.cycleTitle ? (
                         <span className="text-muted-foreground shrink-0 text-xs">
                           · {instance.cycleTitle}
                         </span>
@@ -394,10 +478,39 @@ export function CalendarFilters({ onChange, onOpenSearchResult, value }: Props) 
           </div>
         ) : null}
 
-        {(listsQuery.isError || cyclesQuery.isError) && (
+        {(listsQuery.isError || cyclesQuery.isError || (value.sources.meetings && roomsQuery.isError)) && (
           <p className="text-destructive text-xs">{t('calendar.filterLoadError')}</p>
         )}
       </CardContent>
     </Card>
+  )
+}
+
+function SourceButton({
+  active,
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  active: boolean
+  icon: LucideIcon
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      aria-pressed={active}
+      className={cn(
+        'justify-center',
+        active && 'bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary',
+      )}
+      onClick={onClick}
+    >
+      <Icon aria-hidden="true" className="size-4" />
+      {label}
+    </Button>
   )
 }

@@ -2,15 +2,17 @@ import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/react/daygrid'
 import interactionPlugin from '@fullcalendar/react/interaction'
 import listPlugin from '@fullcalendar/react/list'
+import timeGridPlugin from '@fullcalendar/react/timegrid'
 import classicThemePlugin from '@fullcalendar/react/themes/classic'
 import '@fullcalendar/react/skeleton.css'
 import '@fullcalendar/react/themes/classic/theme.css'
 import '@fullcalendar/react/themes/classic/palette.css'
 import '../calendar-theme.css'
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Card } from '@/components/ui/card'
+import type { MeetingScheduleEntry } from '@/features/meetings/types/meeting.types'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { useTheme } from '@/hooks/use-theme'
 import { cn } from '@/lib/cn'
@@ -22,11 +24,18 @@ import type {
   CalendarViewMode,
   CalendarVisibleRange,
 } from '../types/calendar.types'
+import { CalendarMeetingEvent } from './CalendarMeetingEvent'
 import { CalendarTaskEvent } from './CalendarTaskEvent'
 import { CalendarToolbar } from './CalendarToolbar'
 
+const CALENDAR_SLOT_MIN_TIME = '06:00:00'
+const CALENDAR_SLOT_MAX_TIME = '22:00:00'
+const CALENDAR_SLOT_DURATION = '00:30:00'
+
 interface Props {
   tasks: CalendarTask[]
+  meetings: MeetingScheduleEntry[]
+  meetingsEnabled: boolean
   isFetching: boolean
   showEmpty: boolean
   viewMode: CalendarViewMode
@@ -38,6 +47,7 @@ interface Props {
   onRangeChange: (range: CalendarVisibleRange) => void
   onSelectDate: (date: string) => void
   onOpenTask: (taskId: number) => void
+  onOpenMeeting: (meetingId: number) => void
   onShowAdjacentDatesChange: (showAdjacentDates: boolean) => void
 }
 
@@ -62,8 +72,22 @@ function isWeekendInAppTimeZone(value: Date): boolean {
   return day === 5 || day === 6
 }
 
+function meetingEventId(meeting: MeetingScheduleEntry): string {
+  if (meeting.visibility === 'FULL') return `meeting-${meeting.meetingId}`
+  return [
+    'busy',
+    meeting.room.id,
+    meeting.organizer.userId,
+    meeting.startAtUtc,
+    meeting.endAtUtc,
+  ].join('-')
+}
+
 export function TaskCalendar({
   isFetching,
+  meetings,
+  meetingsEnabled,
+  onOpenMeeting,
   onOpenTask,
   onRangeChange,
   onSelectDate,
@@ -82,12 +106,29 @@ export function TaskCalendar({
   const isCompactMonth = useMediaQuery('(max-width: 639px)')
   const calendarRef = useRef<FullCalendar | null>(null)
   const isRtl = i18n.dir() === 'rtl'
+  const [currentTitle, setCurrentTitle] = useState(() =>
+    new Intl.DateTimeFormat(i18n.language, {
+      month: 'long',
+      year: 'numeric',
+      timeZone: APP_TIME_ZONE,
+    }).format(new Date()),
+  )
   const numberFormatter = useMemo(
     () => new Intl.NumberFormat(i18n.language, { useGrouping: false }),
     [i18n.language],
   )
   const weekdayFormatter = useMemo(
     () => new Intl.DateTimeFormat(i18n.language, { weekday: 'short', timeZone: APP_TIME_ZONE }),
+    [i18n.language],
+  )
+  const timeGridDayHeaderFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(i18n.language, {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        timeZone: APP_TIME_ZONE,
+      }),
     [i18n.language],
   )
   const monthFormatter = useMemo(
@@ -110,25 +151,49 @@ export function TaskCalendar({
       }),
     [i18n.language],
   )
+  const shortDateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(i18n.language, {
+        month: 'short',
+        day: 'numeric',
+        timeZone: APP_TIME_ZONE,
+      }),
+    [i18n.language],
+  )
 
   const events = useMemo(
-    () =>
-      tasks.map((task) => ({
-        id: String(task.id),
+    () => [
+      ...tasks.map((task) => ({
+        id: `task-${task.id}`,
         title: task.title,
         start: task.calendarDate,
         allDay: true,
-        extendedProps: { task },
+        extendedProps: { kind: 'TASK' as const, task },
       })),
-    [tasks],
+      ...meetings.map((meeting) => ({
+        id: meetingEventId(meeting),
+        title: meeting.visibility === 'BUSY' ? t('calendar.meetingBusy') : meeting.title,
+        start: meeting.startAtUtc,
+        end: meeting.endAtUtc,
+        allDay: false,
+        interactive: meeting.visibility === 'FULL',
+        extendedProps: { kind: 'MEETING' as const, meeting },
+      })),
+    ],
+    [meetings, t, tasks],
   )
-  const taskCountByDate = useMemo(() => {
+
+  const itemCountByDate = useMemo(() => {
     const counts = new Map<string, number>()
     for (const task of tasks) {
       counts.set(task.calendarDate, (counts.get(task.calendarDate) ?? 0) + 1)
     }
+    for (const meeting of meetings) {
+      const meetingDate = dateOnlyInTimeZone(new Date(meeting.startAtUtc))
+      counts.set(meetingDate, (counts.get(meetingDate) ?? 0) + 1)
+    }
     return counts
-  }, [tasks])
+  }, [meetings, tasks])
 
   function api() {
     return calendarRef.current?.getApi()
@@ -137,9 +202,25 @@ export function TaskCalendar({
   useEffect(() => {
     const calendarApi = api()
     if (!calendarApi) return
-    const targetView = viewMode === 'MONTH' ? 'dayGridMonth' : 'listMonth'
+
+    const effectiveViewMode =
+      !meetingsEnabled && (viewMode === 'WEEK' || viewMode === 'DAY') ? 'MONTH' : viewMode
+    if (effectiveViewMode !== viewMode) {
+      onViewModeChange(effectiveViewMode)
+      return
+    }
+
+    const targetView =
+      effectiveViewMode === 'MONTH'
+        ? 'dayGridMonth'
+        : effectiveViewMode === 'WEEK'
+          ? 'timeGridWeek'
+          : effectiveViewMode === 'DAY'
+            ? 'timeGridDay'
+            : 'listMonth'
+
     if (calendarApi.view.type !== targetView) calendarApi.changeView(targetView)
-  }, [viewMode])
+  }, [meetingsEnabled, onViewModeChange, viewMode])
 
   useEffect(() => {
     if (!searchTarget) return
@@ -160,14 +241,30 @@ export function TaskCalendar({
     return () => window.cancelAnimationFrame(frame)
   }, [searchTarget, tasks])
 
-  const currentStart = calendarRef.current?.getApi().view.currentStart
-  const currentTitle = monthFormatter.format(currentStart ?? new Date())
+  function formatViewTitle(type: string, start: Date, end: Date): string {
+    if (type === 'timeGridDay') return dayLabelFormatter.format(start)
+    if (type === 'timeGridWeek') {
+      const inclusiveEnd = new Date(end.getTime() - 1)
+      return `${shortDateFormatter.format(start)} – ${shortDateFormatter.format(inclusiveEnd)}`
+    }
+    return monthFormatter.format(start)
+  }
+
+  function openDate(date: string) {
+    if (meetingsEnabled) {
+      api()?.changeView('timeGridDay', date)
+      onViewModeChange('DAY')
+      return
+    }
+    onSelectDate(date)
+  }
 
   return (
     <Card className="relative overflow-hidden" aria-busy={isFetching}>
       <CalendarToolbar
         title={currentTitle}
         viewMode={viewMode}
+        meetingsEnabled={meetingsEnabled}
         onViewModeChange={onViewModeChange}
         showAdjacentDates={showAdjacentDates}
         displayPreferencePending={displayPreferencePending}
@@ -179,13 +276,10 @@ export function TaskCalendar({
 
       <div
         aria-hidden="true"
-        className={cn(
-          'h-0.5',
-          isFetching ? 'bg-primary' : 'bg-transparent',
-        )}
+        className={cn('h-0.5', isFetching ? 'bg-primary' : 'bg-transparent')}
       />
       <span className="sr-only" role="status" aria-live="polite">
-        {isFetching ? t('calendar.loadingTasks') : ''}
+        {isFetching ? t('calendar.loadingItems') : ''}
       </span>
 
       {showEmpty && viewMode === 'MONTH' ? (
@@ -197,7 +291,13 @@ export function TaskCalendar({
       <div className="p-2 sm:p-4 lg:p-5">
         <FullCalendar
           ref={calendarRef}
-          plugins={[dayGridPlugin, listPlugin, interactionPlugin, classicThemePlugin]}
+          plugins={[
+            dayGridPlugin,
+            timeGridPlugin,
+            listPlugin,
+            interactionPlugin,
+            classicThemePlugin,
+          ]}
           initialView="dayGridMonth"
           colorScheme={resolvedTheme}
           headerToolbar={false}
@@ -212,6 +312,27 @@ export function TaskCalendar({
           dayMaxEvents={isCompactMonth ? 2 : 3}
           eventInteractive
           events={events}
+          allDaySlot
+          allDayHeaderContent={() => t('calendar.allDay')}
+          slotDuration={CALENDAR_SLOT_DURATION}
+          slotHeaderInterval={CALENDAR_SLOT_DURATION}
+          slotMinTime={CALENDAR_SLOT_MIN_TIME}
+          slotMaxTime={CALENDAR_SLOT_MAX_TIME}
+          scrollTime={CALENDAR_SLOT_MIN_TIME}
+          nowIndicator
+          slotEventOverlap={false}
+          eventTimeFormat={{
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+            meridiem: false,
+          }}
+          slotHeaderFormat={{
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+            meridiem: false,
+          }}
           className="taskhub-calendar text-foreground"
           viewClass="overflow-hidden rounded-xl border border-border/80 bg-card"
           dayHeaderClass={(state) =>
@@ -233,41 +354,63 @@ export function TaskCalendar({
               'bg-card align-top min-h-16 sm:min-h-24 xl:min-h-28',
               !state.isOther || showAdjacentDates ? 'cursor-pointer' : 'cursor-default',
               isWeekend && !state.isOther && 'bg-muted/[0.18]',
-              state.isOther && showAdjacentDates &&
+              state.isOther &&
+                showAdjacentDates &&
                 'bg-muted/20 text-muted-foreground hover:bg-muted/35',
               state.isOther && !showAdjacentDates && 'bg-muted/[0.08] text-muted-foreground',
-              !state.isOther && !state.isToday && selectedDate !== cellDate &&
+              !state.isOther &&
+                !state.isToday &&
+                selectedDate !== cellDate &&
                 (isWeekend ? 'hover:bg-muted/35' : 'hover:bg-primary/[0.035]'),
-              state.isToday && selectedDate !== cellDate &&
+              state.isToday &&
+                selectedDate !== cellDate &&
                 'bg-primary/[0.11] ring-primary/35 ring-1 ring-inset hover:bg-primary/[0.14]',
-              state.isToday && selectedDate === cellDate &&
+              state.isToday &&
+                selectedDate === cellDate &&
                 'bg-primary/[0.15] ring-primary/50 ring-2 ring-inset hover:bg-primary/[0.17]',
-              !state.isToday && selectedDate === cellDate &&
+              !state.isToday &&
+                selectedDate === cellDate &&
                 (isWeekend
                   ? 'bg-muted/35 ring-primary/30 ring-1 ring-inset hover:bg-muted/45'
                   : 'bg-primary/[0.08] ring-primary/30 ring-1 ring-inset hover:bg-primary/[0.1]'),
               searchTarget?.calendarDate === cellDate && 'ring-primary/65 ring-2 ring-inset',
             )
           }}
-          eventClass={(info) =>
-            cn(
-              'taskhub-calendar-event cursor-pointer border-0 bg-transparent shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+          eventClass={(info) => {
+            const props = info.event.extendedProps as {
+              kind?: 'TASK' | 'MEETING'
+              meeting?: MeetingScheduleEntry
+            }
+            const busy = props.kind === 'MEETING' && props.meeting?.visibility === 'BUSY'
+            return cn(
+              'taskhub-calendar-event border-0 bg-transparent shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
               info.view.type !== 'listMonth' && 'p-0 leading-none',
+              busy ? 'cursor-default' : 'cursor-pointer',
             )
-          }
+          }}
           eventDidMount={(info) => {
-            info.el.dataset.calendarTaskId = info.event.id
+            const props = info.event.extendedProps as {
+              kind?: 'TASK' | 'MEETING'
+              task?: CalendarTask
+            }
+            if (props.kind === 'TASK' && props.task) {
+              info.el.dataset.calendarTaskId = String(props.task.id)
+            }
           }}
           listItemEventClass="cursor-pointer border-border/70 px-3 py-2.5 hover:bg-muted/30 focus-visible:bg-muted/30 sm:px-4"
           listItemEventBeforeClass="hidden"
           listItemEventTimeClass="hidden"
           listDayHeaderClass="bg-muted/55 border-border"
           moreLinkClass="text-primary text-[11px] font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm sm:text-xs"
-          moreLinkHint={(count) => t('calendar.moreTasksHint', { count })}
-          dayHeaderContent={(info) => weekdayFormatter.format(info.date)}
+          moreLinkHint={(count) => t('calendar.moreItemsHint', { count })}
+          dayHeaderContent={(info) =>
+            viewMode === 'WEEK' || viewMode === 'DAY'
+              ? timeGridDayHeaderFormatter.format(info.date)
+              : weekdayFormatter.format(info.date)
+          }
           dayCellTopContent={(info) => {
             const cellDate = dateOnlyInTimeZone(info.date)
-            const taskCount = taskCountByDate.get(cellDate) ?? 0
+            const itemCount = itemCountByDate.get(cellDate) ?? 0
             const dateLabel = dayLabelFormatter.format(info.date)
 
             return (
@@ -280,11 +423,11 @@ export function TaskCalendar({
                   info.isOther && !info.isToday && 'text-muted-foreground',
                   selectedDate === cellDate && !info.isToday && 'bg-primary/12 text-primary',
                 )}
-                aria-label={t('calendar.openDateLabel', { date: dateLabel, count: taskCount })}
+                aria-label={t('calendar.openDateItemsLabel', { date: dateLabel, count: itemCount })}
                 aria-pressed={selectedDate === cellDate}
                 onClick={(event) => {
                   event.stopPropagation()
-                  onSelectDate(cellDate)
+                  openDate(cellDate)
                 }}
               >
                 {numberFormatter.format(info.date.getDate())}
@@ -304,34 +447,69 @@ export function TaskCalendar({
           moreLinkContent={(info) =>
             info.isNarrow
               ? `+${numberFormatter.format(info.num)}`
-              : t('calendar.moreTasks', { count: info.num })
+              : t('calendar.moreItems', { count: info.num })
           }
-          eventContent={(info) => (
-            <CalendarTaskEvent
-              task={info.event.extendedProps.task as CalendarTask}
-              monthGrid={info.view.type === 'dayGridMonth'}
-              searchHighlighted={
-                searchTarget?.taskId === Number(info.event.id)
-              }
-            />
-          )}
+          eventContent={(info) => {
+            const props = info.event.extendedProps as {
+              kind?: 'TASK' | 'MEETING'
+              task?: CalendarTask
+              meeting?: MeetingScheduleEntry
+            }
+
+            if (props.kind === 'MEETING' && props.meeting) {
+              return (
+                <CalendarMeetingEvent
+                  meeting={props.meeting}
+                  monthGrid={info.view.type === 'dayGridMonth'}
+                  timeText={info.timeText}
+                />
+              )
+            }
+
+            if (props.kind === 'TASK' && props.task) {
+              return (
+                <CalendarTaskEvent
+                  task={props.task}
+                  monthGrid={info.view.type === 'dayGridMonth'}
+                  searchHighlighted={searchTarget?.taskId === props.task.id}
+                />
+              )
+            }
+
+            return null
+          }}
           dateClick={(info) => {
-            if (!info.allDay) return
+            if (info.view.type !== 'dayGridMonth' || !info.allDay) return
             const clickedDate = info.dateStr.slice(0, 10)
             const currentMonth = dateOnlyInTimeZone(info.view.currentStart).slice(0, 7)
             if (!showAdjacentDates && clickedDate.slice(0, 7) !== currentMonth) return
-            onSelectDate(clickedDate)
+            openDate(clickedDate)
           }}
           moreLinkClick={(info) => {
             info.jsEvent.preventDefault()
-            onSelectDate(dateOnlyInTimeZone(info.date))
+            openDate(dateOnlyInTimeZone(info.date))
           }}
           eventClick={(info) => {
             info.jsEvent.preventDefault()
-            const taskId = Number(info.event.id)
-            if (Number.isSafeInteger(taskId) && taskId > 0) onOpenTask(taskId)
+            const props = info.event.extendedProps as {
+              kind?: 'TASK' | 'MEETING'
+              task?: CalendarTask
+              meeting?: MeetingScheduleEntry
+            }
+            if (props.kind === 'TASK' && props.task) {
+              onOpenTask(props.task.id)
+              return
+            }
+            if (
+              props.kind === 'MEETING' &&
+              props.meeting?.visibility === 'FULL' &&
+              props.meeting.meetingId
+            ) {
+              onOpenMeeting(props.meeting.meetingId)
+            }
           }}
           datesSet={(info) => {
+            setCurrentTitle(formatViewTitle(info.view.type, info.start, info.end))
             onRangeChange({
               start: dateOnlyInTimeZone(info.start),
               end: dateOnlyInTimeZone(info.end),

@@ -22,7 +22,7 @@ const MIN_SEARCH_LENGTH = 2
 
 interface Props {
   value: string
-  scope: CalendarScope
+  scopes: CalendarScope[]
   status?: CalendarSearchFilters['status']
   priority?: CalendarSearchFilters['priority']
   listId?: number | undefined
@@ -57,7 +57,7 @@ export function CalendarSearch({
   onChange,
   onOpenTask,
   priority,
-  scope,
+  scopes,
   status,
   value,
 }: Props) {
@@ -79,16 +79,17 @@ export function CalendarSearch({
 
   const queryFilters = useMemo<CalendarSearchFilters | null>(() => {
     if (debouncedQuery.length < MIN_SEARCH_LENGTH) return null
+    if (scopes.length === 0) return null
     return {
       query: debouncedQuery,
-      scope,
+      scopes,
       status,
       priority,
-      listId: scope === 'PERSONAL' ? listId : undefined,
-      cycleId: scope === 'KPI' ? cycleId : undefined,
-      kpiInstanceId: scope === 'KPI' ? kpiInstanceId : undefined,
+      listId: scopes.includes('PERSONAL') ? listId : undefined,
+      cycleId: scopes.includes('KPI') ? cycleId : undefined,
+      kpiInstanceId: scopes.includes('KPI') ? kpiInstanceId : undefined,
     }
-  }, [cycleId, debouncedQuery, kpiInstanceId, listId, priority, scope, status])
+  }, [cycleId, debouncedQuery, kpiInstanceId, listId, priority, scopes, status])
 
   const searchQuery = useCalendarSearch(queryFilters)
   const items = searchQuery.data?.items ?? []
@@ -341,3 +342,4 @@ function CalendarSearchResultItem({
     </CommandItem>
   )
 }
+

@@ -2,7 +2,7 @@ import { ArrowLeft, CalendarClock, DoorOpen, FileClock, Save, UsersRound } from 
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router'
 
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { ErrorState } from '@/components/shared/ErrorState'

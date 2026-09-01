@@ -36,3 +36,39 @@
     margin-block: 0;
   }
 }
+
+
+.taskhub-calendar .fc-timegrid-slot {
+  min-height: 2.35rem;
+}
+
+.taskhub-calendar .fc-timegrid-axis,
+.taskhub-calendar .fc-timegrid-slot-label {
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.taskhub-calendar .fc-timegrid-now-indicator-line {
+  border-color: var(--destructive);
+}
+
+.taskhub-calendar .fc-timegrid-now-indicator-arrow {
+  border-inline-start-color: var(--destructive);
+  border-inline-end-color: var(--destructive);
+}
+
+.taskhub-calendar .fc-timegrid-event {
+  min-height: 1.75rem;
+}
+
+@media (max-width: 639px) {
+  .taskhub-calendar .fc-timegrid-slot {
+    min-height: 2.7rem;
+  }
+
+  .taskhub-calendar .fc-timegrid-axis,
+  .taskhub-calendar .fc-timegrid-slot-label {
+    font-size: 0.65rem;
+  }
+}
