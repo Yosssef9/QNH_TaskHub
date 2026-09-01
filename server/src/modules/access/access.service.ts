@@ -69,6 +69,10 @@ export const accessService: AccessService = {
       });
 
       const contractsEnabled = input.contractsEnabled ?? currentAccess?.contractsEnabled ?? false;
+      const meetingOrganizeEnabled =
+        input.meetingOrganizeEnabled ?? currentAccess?.meetingOrganizeEnabled ?? false;
+      const meetingCoordinateEnabled =
+        input.meetingCoordinateEnabled ?? currentAccess?.meetingCoordinateEnabled ?? false;
 
       await accessRepository.saveAccess(transaction, {
         actorUserId,
@@ -77,6 +81,13 @@ export const accessService: AccessService = {
         isActive: input.isActive,
         accessExists: currentAccess !== null,
         contractsEnabled,
+      });
+
+      await accessRepository.saveMeetingPermissions(transaction, {
+        actorUserId,
+        targetUserId: input.userId,
+        meetingOrganizeEnabled,
+        meetingCoordinateEnabled,
       });
 
       if (input.isActive && contractsEnabled) {
@@ -101,4 +112,3 @@ export const accessService: AccessService = {
     return mapAccessUser(updatedUser);
   },
 };
-

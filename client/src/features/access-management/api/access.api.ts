@@ -19,9 +19,14 @@ export async function getAccessUsers(query: AccessListQuery): Promise<AccessUser
 export async function updateAccessUser(input: UpdateAccessInput): Promise<AccessUser> {
   const response = await apiClient.put<ApiSuccessResponse<{ user: AccessUser }>>(
     `/admin/access/users/${input.userId}`,
-    { roleCode: input.roleCode, isActive: input.isActive, contractsEnabled: input.contractsEnabled },
+    {
+      roleCode: input.roleCode,
+      isActive: input.isActive,
+      contractsEnabled: input.contractsEnabled,
+      meetingOrganizeEnabled: input.meetingOrganizeEnabled,
+      meetingCoordinateEnabled: input.meetingCoordinateEnabled,
+    },
   )
 
   return response.data.data.user
 }
-

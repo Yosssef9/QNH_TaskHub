@@ -64,6 +64,8 @@ export function mapAuthMeData(
     access: {
       roleCode: toRoleCode(access.roleCode),
       contractsEnabled: access.contractsEnabled,
+      meetingOrganizeEnabled: access.meetingOrganizeEnabled ?? false,
+      meetingCoordinateEnabled: access.meetingCoordinateEnabled ?? false,
     },
     preferences: {
       languageCode: toLanguageCode(access.languageCode),
@@ -74,4 +76,3 @@ export function mapAuthMeData(
     },
   };
 }
-

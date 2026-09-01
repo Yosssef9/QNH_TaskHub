@@ -9,6 +9,8 @@ export interface AccessUser {
   roleCode: TaskHubRoleCode | null
   accessIsActive: boolean
   contractsEnabled: boolean
+  meetingOrganizeEnabled?: boolean
+  meetingCoordinateEnabled?: boolean
 }
 
 export interface AccessUserList {
@@ -29,5 +31,6 @@ export interface UpdateAccessInput {
   roleCode: TaskHubRoleCode
   isActive: boolean
   contractsEnabled: boolean
+  meetingOrganizeEnabled: boolean
+  meetingCoordinateEnabled: boolean
 }
-

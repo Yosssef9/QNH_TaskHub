@@ -1,12 +1,12 @@
 # QNH TaskHub — Current Product Requirements
 
-> Status: planning baseline. Last aligned: 2026-08-25.
+> Status: planning baseline. Last aligned: 2026-09-01.
 
 ## Product summary
 
-QNH TaskHub is an Arabic-first private productivity application authenticated through QNH Portal. Each user manages normal to-do lists and a separate set of personal KPIs. Users cannot see or manage one another's work.
+QNH TaskHub is an Arabic-first productivity application authenticated through QNH Portal. Normal Tasks, Lists, KPIs, Work Cycles, and Contracts remain private owner-scoped domains. The Meetings module is the deliberate shared-domain exception and uses relationship-aware authorization for Organizers, Coordinators, attendees, room scheduling, and later Meeting Action Items.
 
-This private personal-productivity model is the only active product direction. Superseded planning material must not be used to introduce multi-user or organizational workflows.
+The Meetings exception must not weaken the privacy model of existing owner-scoped domains. Superseded planning material must not be used to introduce unrelated multi-user or organizational workflows.
 
 The product should feel simple enough to use without documentation. The Arabic dashboard image supplied during planning is a style reference only.
 
@@ -17,7 +17,7 @@ The product should feel simple enough to use without documentation. The Arabic d
 - TaskHub stores no Portal password or password hash.
 - A user requires active TaskHub access.
 - TaskHub roles are `USER` and `ADMIN`.
-- Administrators manage application access and the official-holiday calendar.
+- Administrators manage application access, the official-holiday calendar, Meeting permissions, and Meeting Room setup.
 - Administrators do not automatically see users' private lists, tasks, attachments, KPIs, or results.
 
 ## Normal task lists
@@ -200,6 +200,26 @@ Phase 1C adds Contract reminders:
 
 Contracts never create fake Tasks/KPIs and are not included in global search.
 
+
+## Meetings
+
+Meetings is TaskHub's intentionally shared multi-user domain. It remains isolated from private normal Tasks/KPIs/Contracts.
+
+Phase 1 foundation:
+
+- the Meetings navigation/workspace is available to every active TaskHub user;
+- TaskHub application roles remain `USER` and `ADMIN`;
+- Meeting capabilities are separate, combinable permissions:
+  - `MEETING_ORGANIZE`;
+  - `MEETING_COORDINATE`;
+- `MEETING_COORDINATE` includes the effective ability to organize Meetings, while the two grants remain independently manageable;
+- `ADMIN` manages Meeting permission assignment and Meeting Room master data but does not automatically receive access to unrelated Meeting business content;
+- Meeting Rooms are active/inactive resources with bilingual names, location text, capacity, equipment notes, and SQL Server `ROWVERSION` stale-edit protection;
+- the Meetings schema introduces stable Meeting identity, scheduling revisions, attendees, and immutable Meeting activity as the foundation for later workflow phases;
+- no Phase 2 scheduling/conflict engine, request approval UI, Calendar integration, Meeting notifications, Templates, attachments, or Action Items is implemented by Phase 1 alone.
+
+The detailed Meetings product and security rules are maintained in the dedicated Meetings source-of-truth document used with implementation work.
+
 ## Calendar
 
 - TaskHub includes a top-level **Calendar / التقويم** view for the authenticated user's existing work. The Calendar is a projection of tasks, not a separate event or scheduling domain.
@@ -325,12 +345,11 @@ User-authored email templates are not planned. Users customize delivery preferen
 - Multi-user assignment, sharing, or organizational workflows
 - Moving normal tasks into KPIs or KPI tasks into lists
 - Arbitrary KPI formula builder
-- Advanced collaboration, workflows, and analytics
+- Advanced collaboration, workflows, and analytics outside the explicitly approved Meetings domain
 
 ## Database phase decisions
 
 - The initial schema includes lightweight activity history.
 - Email delivery/outbox tables are introduced by migration 009; per-user email destination, preference, and verification state is introduced by migration 010; operational email processing/cancellation state is introduced by migration 011.
 - SQL migration scripts must never be executed without separate explicit approval.
-
-
+- Meetings Phase 1 schema is introduced by migration 018; applying it is a separate manual database step.

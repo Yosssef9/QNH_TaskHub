@@ -77,9 +77,11 @@ export const arTranslation = {
     main: 'التنقل الرئيسي',
     home: 'الرئيسية',
     calendar: 'التقويم',
+    meetings: 'الاجتماعات',
     kpiTasks: 'مهام المؤشرات',
     accessManagement: 'إدارة الوصول',
     holidays: 'العطلات الرسمية',
+    meetingRooms: 'قاعات الاجتماعات',
     settings: 'الإعدادات',
     expandSidebar: 'توسيع القائمة الجانبية',
     collapseSidebar: 'طي القائمة الجانبية',
@@ -501,7 +503,7 @@ export const arTranslation = {
   access: {
     eyebrow: 'الإدارة',
     title: 'إدارة الوصول',
-    description: 'امنح أو أوقف صلاحية دخول منصة المهام وحدد دور كل مستخدم داخل النظام.',
+    description: 'امنح أو أوقف صلاحية دخول منصة المهام وحدد دور المستخدم وصلاحيات الموديولات.',
     usersTitle: 'مستخدمو البوابة',
     usersDescription: 'تبقى هوية البوابة وصلاحيات منصة المهام منفصلتين.',
     searchPlaceholder: 'ابحث بالاسم أو الرمز أو البريد الإلكتروني…',
@@ -523,6 +525,17 @@ export const arTranslation = {
     contractsModule: 'موديول العقود',
     contractsModuleDescription:
       'امنح هذا المستخدم مساحة عقود خاصة به. لا يغيّر ذلك دوره ولا يتيح له عقود أي مستخدم آخر.',
+    meetingPermissions: 'صلاحيات الاجتماعات',
+    meetingPermissionsDescription:
+      'صلاحيات الاجتماعات مستقلة عن دور USER / ADMIN في TaskHub ويمكن منح الصلاحيتين معاً.',
+    meetingOrganizer: 'منظم الاجتماعات',
+    meetingOrganizerShort: 'منظم',
+    meetingOrganizerDescription:
+      'يمكنه إنشاء طلبات الاجتماعات وإدارة الاجتماعات التي ينظمها في المراحل اللاحقة.',
+    meetingCoordinator: 'منسق الاجتماعات',
+    meetingCoordinatorShort: 'منسق',
+    meetingCoordinatorDescription:
+      'يمكنه تنسيق طلبات الاجتماعات وجدولة الاجتماعات مباشرة دون موافقة في المراحل اللاحقة.',
     saved: 'تم حفظ إعدادات الوصول.',
     saveError: 'تعذر حفظ إعدادات الوصول.',
     lastAdminError: 'يجب الإبقاء على مسؤول نشط واحد على الأقل في منصة المهام.',
@@ -857,6 +870,57 @@ export const arTranslation = {
         passed: 'مر التاريخ',
         notApplicable: 'غير منطبق',
       },
+    },
+  },
+  meetings: {
+    eyebrow: 'الاجتماعات',
+    title: 'الاجتماعات',
+    description:
+      'اعرض مساحة الاجتماعات مع الحفاظ على صلاحيات المشاركين والمنظمين والمنسقين بشكل مستقل وآمن.',
+    emptyTitle: 'لا توجد اجتماعات بعد',
+    emptyDescription:
+      'ستظهر هنا الاجتماعات التي تحضرها أو تنظمها عند بدء استخدام سير عمل الجدولة.',
+    accessTitle: 'صلاحياتك للاجتماعات',
+    accessDescription:
+      'صلاحيات الاجتماعات مستقلة عن دورك الأساسي في TaskHub ولا تغيّر وصولك إلى المهام أو مؤشرات الأداء.',
+    organizer: 'منظم الاجتماعات',
+    coordinator: 'منسق الاجتماعات',
+    participant: 'مشارك في الاجتماعات',
+    availableRooms: 'قاعات الاجتماعات النشطة',
+    noActiveRooms: 'لا توجد قاعات اجتماعات نشطة مهيأة حالياً.',
+    capacityValue: '{{count}} مقعد',
+  },
+  meetingRooms: {
+    eyebrow: 'الإدارة',
+    title: 'قاعات الاجتماعات',
+    description:
+      'إعداد قاعات اجتماعات المستشفى وسعتها وحالة إتاحتها للاستخدام في الاجتماعات.',
+    create: 'إضافة قاعة اجتماع',
+    createTitle: 'إضافة قاعة اجتماع',
+    editTitle: 'تعديل قاعة الاجتماع',
+    formDescription:
+      'حافظ على بيانات القاعة دقيقة حتى يتمكن نظام الجدولة لاحقاً من تطبيق السعة والإتاحة بشكل صحيح.',
+    code: 'كود القاعة',
+    codePlaceholder: 'كود داخلي اختياري',
+    nameAr: 'الاسم بالعربية',
+    nameEn: 'الاسم بالإنجليزية',
+    location: 'الموقع',
+    locationPlaceholder: 'المبنى أو الدور أو الموقع',
+    capacity: 'السعة',
+    capacityValue: '{{count}} مقعد',
+    equipmentNotes: 'التجهيزات / الملاحظات',
+    equipmentNotesPlaceholder: 'جهاز عرض أو شاشة أو اجتماع مرئي أو أي ملاحظات أخرى',
+    active: 'نشطة',
+    inactive: 'غير نشطة',
+    activeDescription:
+      'تبقى القاعات غير النشطة محفوظة في السجل التاريخي ولا يمكن اختيارها لاجتماعات جديدة.',
+    emptyTitle: 'لا توجد قاعات اجتماعات مهيأة',
+    emptyDescription: 'أضف قاعات اجتماعات المستشفى التي سيستخدمها المنظمون والمنسقون.',
+    saved: 'تم حفظ قاعة الاجتماع.',
+    errors: {
+      duplicateCode: 'توجد قاعة اجتماع أخرى تستخدم هذا الكود.',
+      stale: 'تم تعديل قاعة الاجتماع بعد فتحها. أعد التحميل ثم حاول مرة أخرى.',
+      save: 'تعذر حفظ قاعة الاجتماع.',
     },
   },
   holidays: {
@@ -1325,7 +1389,3 @@ export const arTranslation = {
     backHome: 'العودة إلى الرئيسية',
   },
 } as const
-
-
-
-

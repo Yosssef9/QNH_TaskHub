@@ -44,10 +44,23 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
   const [roleCode, setRoleCode] = useState<TaskHubRoleCode>(user.roleCode ?? 'USER')
   const [isActive, setIsActive] = useState(user.roleCode ? user.accessIsActive : true)
   const [contractsEnabled, setContractsEnabled] = useState(user.contractsEnabled)
+  const [meetingOrganizeEnabled, setMeetingOrganizeEnabled] = useState(
+    user.meetingOrganizeEnabled ?? false,
+  )
+  const [meetingCoordinateEnabled, setMeetingCoordinateEnabled] = useState(
+    user.meetingCoordinateEnabled ?? false,
+  )
 
   function save() {
     updateAccess.mutate(
-      { userId: user.userId, roleCode, isActive, contractsEnabled },
+      {
+        userId: user.userId,
+        roleCode,
+        isActive,
+        contractsEnabled,
+        meetingOrganizeEnabled,
+        meetingCoordinateEnabled,
+      },
       {
         onSuccess: () => {
           toast.success(t('access.saved'))
@@ -134,6 +147,43 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
               onCheckedChange={setContractsEnabled}
             />
           </div>
+
+          <div className="space-y-3 rounded-lg border p-4">
+            <div>
+              <p className="text-sm font-medium">{t('access.meetingPermissions')}</p>
+              <p className="text-muted-foreground mt-1 text-xs leading-5">
+                {t('access.meetingPermissionsDescription')}
+              </p>
+            </div>
+
+            <div className="bg-muted/60 flex items-center justify-between gap-4 rounded-lg border p-3">
+              <div>
+                <p className="text-sm font-medium">{t('access.meetingOrganizer')}</p>
+                <p className="text-muted-foreground mt-1 text-xs leading-5">
+                  {t('access.meetingOrganizerDescription')}
+                </p>
+              </div>
+              <Switch
+                checked={meetingOrganizeEnabled}
+                aria-label={t('access.meetingOrganizer')}
+                onCheckedChange={setMeetingOrganizeEnabled}
+              />
+            </div>
+
+            <div className="bg-muted/60 flex items-center justify-between gap-4 rounded-lg border p-3">
+              <div>
+                <p className="text-sm font-medium">{t('access.meetingCoordinator')}</p>
+                <p className="text-muted-foreground mt-1 text-xs leading-5">
+                  {t('access.meetingCoordinatorDescription')}
+                </p>
+              </div>
+              <Switch
+                checked={meetingCoordinateEnabled}
+                aria-label={t('access.meetingCoordinator')}
+                onCheckedChange={setMeetingCoordinateEnabled}
+              />
+            </div>
+          </div>
         </div>
 
         <div className="mt-7 flex justify-end gap-2">
@@ -151,4 +201,3 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
     </Dialog>
   )
 }
-

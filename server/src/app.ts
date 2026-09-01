@@ -22,6 +22,10 @@ import { preferencesRouter } from "./modules/preferences/preferences.routes.js";
 import { searchRouter } from "./modules/search/search.routes.js";
 import { notificationsRouter } from "./modules/notifications/notifications.routes.js";
 import {
+  meetingRoomsAdminRouter,
+  meetingsRouter,
+} from "./modules/meetings/meetings.routes.js";
+import {
   attachmentsRouter,
   subtasksRouter,
   taskDetailsRouter,
@@ -63,6 +67,7 @@ export function createApp(): express.Express {
   app.use("/api/calendar", calendarRouter);
   app.use("/api/search", searchRouter);
   app.use("/api/notifications", notificationsRouter);
+  app.use("/api/meetings", meetingsRouter);
   app.use("/api/email-settings", emailSettingsRouter);
   app.use("/api/lists", listTasksRouter, listsRouter);
   app.use("/api/kpis", kpisRouter);
@@ -74,6 +79,7 @@ export function createApp(): express.Express {
   app.use("/api/attachments", attachmentsRouter);
   app.use("/api/admin/access", accessRouter);
   app.use("/api/admin/holidays", holidaysRouter);
+  app.use("/api/admin/meeting-rooms", meetingRoomsAdminRouter);
   app.use("/api/users", preferencesRouter);
 
   app.use(notFoundMiddleware);
@@ -83,4 +89,3 @@ export function createApp(): express.Express {
 }
 
 export const app = createApp();
-

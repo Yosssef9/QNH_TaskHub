@@ -11,6 +11,8 @@ export interface AccessUserRecord {
   roleCode: string | null;
   accessIsActive: boolean | null;
   contractsEnabled: boolean | null;
+  meetingOrganizeEnabled?: boolean | null;
+  meetingCoordinateEnabled?: boolean | null;
 }
 
 function toNullableRoleCode(value: string | null): TaskHubRoleCode | null {
@@ -35,6 +37,7 @@ export function mapAccessUser(record: AccessUserRecord): AccessUser {
     roleCode: toNullableRoleCode(record.roleCode),
     accessIsActive: record.accessIsActive ?? false,
     contractsEnabled: record.contractsEnabled ?? false,
+    meetingOrganizeEnabled: record.meetingOrganizeEnabled ?? false,
+    meetingCoordinateEnabled: record.meetingCoordinateEnabled ?? false,
   };
 }
-

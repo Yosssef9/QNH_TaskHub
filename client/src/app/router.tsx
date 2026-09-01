@@ -5,6 +5,7 @@ import { RequireAuth } from '@/features/auth/components/RequireAuth'
 import { RequireContractsAccess } from '@/features/contracts/components/RequireContractsAccess'
 import { AdminAccessRoute } from '@/pages/admin/AdminAccessRoute'
 import { AdminHolidaysRoute } from '@/pages/admin/AdminHolidaysRoute'
+import { AdminMeetingRoomsRoute } from '@/pages/admin/AdminMeetingRoomsRoute'
 import { CalendarPage } from '@/pages/calendar/CalendarPage'
 import { HomePage } from '@/pages/home/HomePage'
 import { ContractsPage } from '@/pages/contracts/ContractsPage'
@@ -15,6 +16,7 @@ import { KpisPage } from '@/pages/kpis/KpisPage'
 import { loadKpiTasksPage } from '@/pages/kpi-tasks/kpi-tasks.loader'
 import { KpiTasksPage } from '@/pages/kpi-tasks/KpiTasksPage'
 import { ListPage } from '@/pages/lists/ListPage'
+import { MeetingsPage } from '@/pages/meetings/MeetingsPage'
 import { SettingsPage } from '@/pages/settings/SettingsPage'
 import { ForbiddenPage } from '@/pages/system/ForbiddenPage'
 import { NotFoundPage } from '@/pages/system/NotFoundPage'
@@ -33,6 +35,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <HomePage /> },
       { path: 'calendar', element: <CalendarPage /> },
+      { path: 'meetings', element: <MeetingsPage /> },
       { path: 'lists/:listId', element: <ListPage /> },
       { path: 'work-cycles', element: <WorkCyclesPage /> },
       { path: 'work-cycles/:cycleId', element: <WorkCyclePage /> },
@@ -78,9 +81,9 @@ export const router = createBrowserRouter([
         element: <AdminAccessRoute />,
       },
       { path: 'admin/holidays', element: <AdminHolidaysRoute /> },
+      { path: 'admin/meeting-rooms', element: <AdminMeetingRoomsRoute /> },
       { path: 'forbidden', element: <ForbiddenPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],
   },
 ])
-

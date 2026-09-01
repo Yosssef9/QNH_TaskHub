@@ -30,7 +30,7 @@ export function AccessUsersTable({ onEdit, users }: AccessUsersTableProps) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-3xl text-sm">
+      <table className="w-full min-w-4xl text-sm">
         <thead className="bg-muted/60 text-muted-foreground">
           <tr>
             <th scope="col" className="px-5 py-3 text-start font-medium">
@@ -41,6 +41,9 @@ export function AccessUsersTable({ onEdit, users }: AccessUsersTableProps) {
             </th>
             <th scope="col" className="px-5 py-3 text-start font-medium">
               {t('access.role')}
+            </th>
+            <th scope="col" className="px-5 py-3 text-start font-medium">
+              {t('access.meetingPermissions')}
             </th>
             <th scope="col" className="px-5 py-3 text-start font-medium">
               {t('access.status')}
@@ -76,6 +79,19 @@ export function AccessUsersTable({ onEdit, users }: AccessUsersTableProps) {
                 ) : (
                   <span className="text-muted-foreground">{t('access.notAssigned')}</span>
                 )}
+              </td>
+              <td className="px-5 py-4">
+                <div className="flex flex-wrap gap-1.5">
+                  {user.meetingOrganizeEnabled ? (
+                    <Badge variant="secondary">{t('access.meetingOrganizerShort')}</Badge>
+                  ) : null}
+                  {user.meetingCoordinateEnabled ? (
+                    <Badge variant="secondary">{t('access.meetingCoordinatorShort')}</Badge>
+                  ) : null}
+                  {!user.meetingOrganizeEnabled && !user.meetingCoordinateEnabled ? (
+                    <span className="text-muted-foreground">{t('common.none')}</span>
+                  ) : null}
+                </div>
               </td>
               <td className="px-5 py-4">
                 <Badge variant={user.accessIsActive ? 'success' : 'secondary'}>

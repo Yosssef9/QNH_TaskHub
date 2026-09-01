@@ -77,9 +77,11 @@ export const enTranslation = {
     main: 'Main navigation',
     home: 'Home',
     calendar: 'Calendar',
+    meetings: 'Meetings',
     kpiTasks: 'KPI tasks',
     accessManagement: 'Access management',
     holidays: 'Official holidays',
+    meetingRooms: 'Meeting rooms',
     settings: 'Settings',
     expandSidebar: 'Expand sidebar',
     collapseSidebar: 'Collapse sidebar',
@@ -507,7 +509,7 @@ export const enTranslation = {
   access: {
     eyebrow: 'Administration',
     title: 'Access management',
-    description: 'Grant or deactivate TaskHub access and choose each user’s application role.',
+    description: 'Grant or deactivate TaskHub access, choose the application role, and manage module permissions.',
     usersTitle: 'Portal users',
     usersDescription: 'Portal identity and TaskHub authorization remain separate.',
     searchPlaceholder: 'Search by name, code, or email…',
@@ -529,6 +531,17 @@ export const enTranslation = {
     contractsModule: 'Contracts module',
     contractsModuleDescription:
       'Give this user a private Contracts workspace. This does not change their role or expose anyone else’s contracts.',
+    meetingPermissions: 'Meeting permissions',
+    meetingPermissionsDescription:
+      'Meeting permissions are separate from the TaskHub USER / ADMIN role and may be combined.',
+    meetingOrganizer: 'Meeting Organizer',
+    meetingOrganizerShort: 'Organizer',
+    meetingOrganizerDescription:
+      'Can create Meeting requests and, in later phases, manage Meetings they organize.',
+    meetingCoordinator: 'Meeting Coordinator',
+    meetingCoordinatorShort: 'Coordinator',
+    meetingCoordinatorDescription:
+      'Can coordinate Meeting requests and later schedule Meetings directly without approval.',
     saved: 'Access settings saved.',
     saveError: 'Access settings could not be saved.',
     lastAdminError: 'At least one active TaskHub administrator is required.',
@@ -863,6 +876,57 @@ export const enTranslation = {
         passed: 'Date passed',
         notApplicable: 'N/A',
       },
+    },
+  },
+  meetings: {
+    eyebrow: 'Meetings',
+    title: 'Meetings',
+    description:
+      'View the Meetings workspace. Scheduled Meetings and requests will use controlled participant and scheduling access.',
+    emptyTitle: 'No meetings yet',
+    emptyDescription:
+      'Meetings you attend or organize will appear here as the scheduling workflow is used.',
+    accessTitle: 'Your Meeting access',
+    accessDescription:
+      'Meeting permissions are separate from your normal TaskHub role and do not change access to Tasks or KPIs.',
+    organizer: 'Meeting Organizer',
+    coordinator: 'Meeting Coordinator',
+    participant: 'Meeting participant',
+    availableRooms: 'Active Meeting Rooms',
+    noActiveRooms: 'No active Meeting Rooms are configured yet.',
+    capacityValue: '{{count}} seats',
+  },
+  meetingRooms: {
+    eyebrow: 'Administration',
+    title: 'Meeting rooms',
+    description:
+      'Configure the hospital rooms that can be used for Meetings, including capacity and availability status.',
+    create: 'Add Meeting Room',
+    createTitle: 'Add Meeting Room',
+    editTitle: 'Edit Meeting Room',
+    formDescription:
+      'Keep room details accurate so later scheduling can enforce capacity and room availability.',
+    code: 'Room code',
+    codePlaceholder: 'Optional internal code',
+    nameAr: 'Arabic name',
+    nameEn: 'English name',
+    location: 'Location',
+    locationPlaceholder: 'Building, floor, or location',
+    capacity: 'Capacity',
+    capacityValue: '{{count}} seats',
+    equipmentNotes: 'Equipment / notes',
+    equipmentNotesPlaceholder: 'Projector, display, video conference, or other notes',
+    active: 'Active',
+    inactive: 'Inactive',
+    activeDescription:
+      'Inactive rooms remain in historical records but cannot be selected for new Meetings.',
+    emptyTitle: 'No Meeting Rooms configured',
+    emptyDescription: 'Add the hospital Meeting Rooms that Coordinators and Organizers can use.',
+    saved: 'Meeting Room saved.',
+    errors: {
+      duplicateCode: 'Another Meeting Room already uses this code.',
+      stale: 'This Meeting Room changed after you opened it. Reload and try again.',
+      save: 'The Meeting Room could not be saved.',
     },
   },
   holidays: {
@@ -1326,7 +1390,3 @@ export const enTranslation = {
     backHome: 'Back to home',
   },
 } as const
-
-
-
-
