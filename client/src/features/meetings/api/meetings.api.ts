@@ -3,8 +3,10 @@ import type { ApiSuccessResponse } from '@/types/api.types'
 
 import type {
   CancelMeetingInput,
+  CancelMeetingRescheduleRequestInput,
   DecideMeetingRequestInput,
   DecideMeetingRescheduleInput,
+  DirectCoordinatorRescheduleInput,
   MeetingAttachment,
   MeetingAvailability,
   MeetingAvailabilityInput,
@@ -21,7 +23,9 @@ import type {
   SaveMeetingInput,
   SaveMeetingRoomInput,
   SaveMeetingTemplateInput,
+  UpdateMeetingAgendaInput,
   UpdateMeetingRescheduleInput,
+  UpdateOrganizerRescheduleInput,
   UpdateMeetingRoomInput,
   UpdateMeetingTemplateInput,
   UpdatePendingMeetingScheduleInput,
@@ -125,6 +129,17 @@ export async function updatePendingMeetingSchedule(
   return response.data.data.meeting
 }
 
+export async function adjustAndApproveMeetingRequest(
+  input: UpdatePendingMeetingScheduleInput,
+): Promise<MeetingSummary> {
+  const { meetingId, ...body } = input
+  const response = await apiClient.post<ApiSuccessResponse<{ meeting: MeetingSummary }>>(
+    `/meetings/coordinator/requests/${meetingId}/adjust-and-approve`,
+    body,
+  )
+  return response.data.data.meeting
+}
+
 export async function approveMeetingRequest(
   input: DecideMeetingRequestInput,
 ): Promise<MeetingSummary> {
@@ -168,12 +183,54 @@ export async function getMeetingDetail(meetingId: number): Promise<MeetingDetail
   return response.data.data.meeting
 }
 
+export async function updateMeetingAgenda(input: UpdateMeetingAgendaInput): Promise<MeetingDetail> {
+  const { meetingId, ...body } = input
+  const response = await apiClient.put<ApiSuccessResponse<{ meeting: MeetingDetail }>>(
+    `/meetings/${meetingId}/agenda`,
+    body,
+  )
+  return response.data.data.meeting
+}
+
 export async function requestMeetingReschedule(
   input: RequestMeetingRescheduleInput,
 ): Promise<MeetingDetail> {
   const { meetingId, ...body } = input
   const response = await apiClient.post<ApiSuccessResponse<{ meeting: MeetingDetail }>>(
     `/meetings/${meetingId}/reschedule`,
+    body,
+  )
+  return response.data.data.meeting
+}
+
+export async function updateOrganizerRequestedSchedule(
+  input: UpdatePendingMeetingScheduleInput,
+): Promise<MeetingSummary> {
+  const { meetingId, ...body } = input
+  const response = await apiClient.patch<ApiSuccessResponse<{ meeting: MeetingSummary }>>(
+    `/meetings/requests/${meetingId}/schedule`,
+    body,
+  )
+  return response.data.data.meeting
+}
+
+export async function editMeetingRescheduleRequest(
+  input: UpdateOrganizerRescheduleInput,
+): Promise<MeetingDetail> {
+  const { meetingId, ...body } = input
+  const response = await apiClient.patch<ApiSuccessResponse<{ meeting: MeetingDetail }>>(
+    `/meetings/${meetingId}/reschedule`,
+    body,
+  )
+  return response.data.data.meeting
+}
+
+export async function cancelMeetingRescheduleRequest(
+  input: CancelMeetingRescheduleRequestInput,
+): Promise<MeetingDetail> {
+  const { meetingId, ...body } = input
+  const response = await apiClient.post<ApiSuccessResponse<{ meeting: MeetingDetail }>>(
+    `/meetings/${meetingId}/reschedule/cancel`,
     body,
   )
   return response.data.data.meeting
@@ -195,6 +252,24 @@ export async function updateMeetingReschedule(
     body,
   )
   return response.data.data.item
+}
+
+export async function adjustAndApproveMeetingReschedule(
+  input: UpdateMeetingRescheduleInput,
+): Promise<void> {
+  const { meetingId, ...body } = input
+  await apiClient.post(`/meetings/coordinator/reschedules/${meetingId}/adjust-and-approve`, body)
+}
+
+export async function directCoordinatorReschedule(
+  input: DirectCoordinatorRescheduleInput,
+): Promise<MeetingDetail> {
+  const { meetingId, ...body } = input
+  const response = await apiClient.post<ApiSuccessResponse<{ meeting: MeetingDetail }>>(
+    `/meetings/coordinator/meetings/${meetingId}/reschedule`,
+    body,
+  )
+  return response.data.data.meeting
 }
 
 export async function approveMeetingReschedule(input: DecideMeetingRescheduleInput): Promise<void> {

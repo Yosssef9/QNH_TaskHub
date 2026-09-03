@@ -26,28 +26,28 @@ describe("Meetings policy", () => {
     expect(hasMeetingPermission(access, "MEETING_COORDINATE")).toBe(false);
   });
 
-  it("returns full schedule visibility only for the Organizer or attendee", () => {
+  it("returns full schedule visibility for the Organizer, attendee, or Coordinator", () => {
     expect(
       meetingScheduleVisibility(baseAccess, { isOrganizer: false, isAttendee: true }),
     ).toBe("FULL");
     expect(
       meetingScheduleVisibility(baseAccess, { isOrganizer: true, isAttendee: false }),
     ).toBe("FULL");
-  });
-
-  it("masks unrelated scheduled Meetings for scheduling users", () => {
-    expect(
-      meetingScheduleVisibility(
-        { ...baseAccess, meetingOrganizeEnabled: true },
-        { isOrganizer: false, isAttendee: false },
-      ),
-    ).toBe("BUSY");
     expect(
       meetingScheduleVisibility(
         { ...baseAccess, meetingCoordinateEnabled: true },
         { isOrganizer: false, isAttendee: false },
       ),
-    ).toBe("BUSY");
+    ).toBe("FULL");
+  });
+
+  it("returns title-and-creator preview visibility for unrelated scheduled Meetings to Organizers", () => {
+    expect(
+      meetingScheduleVisibility(
+        { ...baseAccess, meetingOrganizeEnabled: true },
+        { isOrganizer: false, isAttendee: false },
+      ),
+    ).toBe("PREVIEW");
   });
 
   it("hides unrelated scheduled Meetings from ordinary users and ADMIN-only users", () => {
@@ -62,3 +62,4 @@ describe("Meetings policy", () => {
     ).toBe("NONE");
   });
 });
+

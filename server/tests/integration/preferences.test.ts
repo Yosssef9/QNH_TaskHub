@@ -24,6 +24,8 @@ describe("PATCH /api/users/me/preferences", () => {
         theme: "SYSTEM",
         sidebarCollapsed: false,
         calendarShowAdjacentDates: false,
+        meetingStartReminderEnabled: true,
+        timeFormat: "12H",
         timezone: "Asia/Riyadh",
       },
     });
@@ -35,6 +37,8 @@ describe("PATCH /api/users/me/preferences", () => {
       theme: "DARK",
       sidebarCollapsed: true,
       calendarShowAdjacentDates: true,
+      meetingStartReminderEnabled: true,
+      timeFormat: "12H",
       timezone: "Asia/Riyadh",
     });
 
@@ -46,6 +50,8 @@ describe("PATCH /api/users/me/preferences", () => {
         theme: "DARK",
         sidebarCollapsed: true,
         calendarShowAdjacentDates: true,
+        meetingStartReminderEnabled: true,
+        timeFormat: "12H",
       });
 
     expect(response.status).toBe(200);
@@ -54,6 +60,8 @@ describe("PATCH /api/users/me/preferences", () => {
       theme: "DARK",
       sidebarCollapsed: true,
       calendarShowAdjacentDates: true,
+      meetingStartReminderEnabled: true,
+      timeFormat: "12H",
     });
   });
 
@@ -69,4 +77,6 @@ describe("PATCH /api/users/me/preferences", () => {
     expect(update).not.toHaveBeenCalled();
   });
 });
+
+
 

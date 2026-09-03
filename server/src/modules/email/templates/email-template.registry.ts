@@ -13,6 +13,7 @@ import { renderCyclePastEndEmail } from "./cycle-past-end-email.js";
 import { renderHighPriorityTaskDueTomorrowEmail } from "./high-priority-task-due-tomorrow-email.js";
 import { renderKpiBelowTargetEmail } from "./kpi-below-target-email.js";
 import { renderKpiMeasurementDueEmail } from "./kpi-measurement-due-email.js";
+import { renderMeetingLifecycleEmail } from "./meeting-lifecycle-email.js";
 import { renderTaskDueTodayEmail } from "./task-due-today-email.js";
 import { renderTaskOverdueEmail } from "./task-overdue-email.js";
 import { renderTestEmail } from "./test-email.js";
@@ -57,6 +58,16 @@ export function renderEmailTemplate(
       return renderContractExpirationReminderEmail(payload, language, context);
     case "CONTRACT_NOTICE_DEADLINE_REMINDER":
       return renderContractNoticeDeadlineReminderEmail(payload, language, context);
+    case "MEETING_REQUEST_SUBMITTED":
+    case "MEETING_REQUEST_UPDATED":
+    case "MEETING_APPROVED":
+    case "MEETING_REJECTED":
+    case "MEETING_INVITED":
+    case "MEETING_RESCHEDULED":
+    case "MEETING_RESCHEDULE_REQUEST_CANCELLED":
+    case "MEETING_CANCELLED":
+      return renderMeetingLifecycleEmail(templateKey, payload, language, context);
   }
 }
+
 

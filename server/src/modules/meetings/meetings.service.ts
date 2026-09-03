@@ -47,7 +47,13 @@ export const meetingsService = {
 
   async createRoom(actorUserId: number, input: SaveMeetingRoomInput): Promise<MeetingRoom> {
     const record = await translateRoomWrite(() =>
-      meetingsRepository.createRoom(actorUserId, input),
+      withTransaction(async (transaction) => {
+        const colorKey = await meetingsRepository.resolveRoomColorKey(
+          transaction,
+          input.colorKey,
+        );
+        return meetingsRepository.createRoom(transaction, actorUserId, input, colorKey);
+      }),
     );
 
     if (!record) {
@@ -103,11 +109,18 @@ export const meetingsService = {
           });
         }
 
+        const colorKey = await meetingsRepository.resolveRoomColorKey(
+          transaction,
+          input.colorKey,
+          roomId,
+        );
+
         const updated = await meetingsRepository.updateRoom(
           transaction,
           actorUserId,
           roomId,
           input,
+          colorKey,
         );
         if (updated) return updated;
 
@@ -122,3 +135,4 @@ export const meetingsService = {
     return mapMeetingRoom(record);
   },
 };
+

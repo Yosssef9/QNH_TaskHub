@@ -1,4 +1,4 @@
-import { Building2, CalendarDays, CalendarRange, Handshake, House, Settings, ShieldCheck } from 'lucide-react'
+import { Building2, CalendarDays, CalendarRange, House, Settings, ShieldCheck } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { TaskHubRoleCode } from '@/features/auth/types/auth.types'
 
@@ -28,12 +28,6 @@ export const navigationItems: readonly NavigationItem[] = [
     to: '/calendar',
     labelKey: 'navigation.calendar',
     icon: CalendarRange,
-    end: true,
-  },
-  {
-    to: '/meetings',
-    labelKey: 'navigation.meetings',
-    icon: Handshake,
     end: true,
   },
   {

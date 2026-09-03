@@ -54,6 +54,8 @@ describe("Work Cycle endpoints", () => {
         theme: "SYSTEM",
         sidebarCollapsed: false,
         calendarShowAdjacentDates: false,
+        meetingStartReminderEnabled: true,
+        timeFormat: "12H",
         timezone: "Asia/Riyadh",
       },
     });
@@ -108,4 +110,6 @@ describe("Work Cycle endpoints", () => {
     expect(remove).toHaveBeenCalledWith(7, 9, 31);
   });
 });
+
+
 

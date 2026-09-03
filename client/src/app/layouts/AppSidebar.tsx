@@ -12,6 +12,7 @@ import { ContractsSidebarSection } from '@/features/contracts/components/Contrac
 import { ListsSidebarSection } from '@/features/lists/components/ListsSidebarSection'
 import { KpiEditorDialog } from '@/features/kpis/components/KpiEditorDialog'
 import { KpisSidebarSection } from '@/features/kpis/components/KpisSidebarSection'
+import { MeetingsSidebarSection } from '@/features/meetings/components/MeetingsSidebarSection'
 import { useKpis } from '@/features/kpis/hooks/use-kpis'
 import { WorkCycleEditorDialog } from '@/features/work-cycles/components/WorkCycleEditorDialog'
 import { WorkCyclesSidebarSection } from '@/features/work-cycles/components/WorkCyclesSidebarSection'
@@ -28,23 +29,33 @@ export function AppSidebar({ collapsed = false, onNavigate }: AppSidebarProps) {
   const isRtl = i18n.dir() === 'rtl'
   const { data } = useCurrentUser()
   const location = useLocation()
-  const [openSection, setOpenSection] = useState<'lists' | 'workCycles' | 'kpis' | 'contracts' | null>(() =>
-    location.pathname.startsWith('/contracts')
-      ? 'contracts'
-      : location.pathname.startsWith('/work-cycles') || location.pathname.startsWith('/kpi-tasks')
-        ? 'workCycles'
-        : location.pathname.startsWith('/kpis')
-          ? 'kpis'
-          : 'lists',
+  const [openSection, setOpenSection] = useState<
+    'lists' | 'meetings' | 'workCycles' | 'kpis' | 'contracts' | null
+  >(() =>
+    location.pathname.startsWith('/meetings')
+      ? 'meetings'
+      : location.pathname.startsWith('/contracts')
+        ? 'contracts'
+        : location.pathname.startsWith('/work-cycles') ||
+            location.pathname.startsWith('/kpi-tasks')
+          ? 'workCycles'
+          : location.pathname.startsWith('/kpis')
+            ? 'kpis'
+            : 'lists',
   )
   const [createKpiOpen, setCreateKpiOpen] = useState(false)
   const [createCycleOpen, setCreateCycleOpen] = useState(false)
   const kpisQuery = useKpis()
 
   useEffect(() => {
-    if (location.pathname.startsWith('/contracts')) {
+    if (location.pathname.startsWith('/meetings')) {
+      setOpenSection('meetings')
+    } else if (location.pathname.startsWith('/contracts')) {
       setOpenSection('contracts')
-    } else if (location.pathname.startsWith('/work-cycles') || location.pathname.startsWith('/kpi-tasks')) {
+    } else if (
+      location.pathname.startsWith('/work-cycles') ||
+      location.pathname.startsWith('/kpi-tasks')
+    ) {
       setOpenSection('workCycles')
     } else if (location.pathname.startsWith('/kpis')) {
       setOpenSection('kpis')
@@ -191,6 +202,16 @@ export function AppSidebar({ collapsed = false, onNavigate }: AppSidebarProps) {
           onToggle={() => setOpenSection((current) => (current === 'lists' ? null : 'lists'))}
           onNavigate={onNavigate}
         />
+        <MeetingsSidebarSection
+          collapsed={collapsed}
+          expanded={openSection === 'meetings'}
+          organizerEnabled={data?.access.meetingOrganizeEnabled === true}
+          coordinatorEnabled={data?.access.meetingCoordinateEnabled === true}
+          onToggle={() =>
+            setOpenSection((current) => (current === 'meetings' ? null : 'meetings'))
+          }
+          onNavigate={onNavigate}
+        />
         <WorkCyclesSidebarSection
           collapsed={collapsed}
           expanded={openSection === 'workCycles'}
@@ -233,4 +254,3 @@ export function AppSidebar({ collapsed = false, onNavigate }: AppSidebarProps) {
     </div>
   )
 }
-

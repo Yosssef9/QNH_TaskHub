@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { MEETING_ROOM_COLOR_KEYS } from "./meetings.types.js";
+
 const nullableTrimmed = (max: number) =>
   z
     .string()
@@ -14,6 +16,7 @@ const roomFields = {
   nameAr: z.string().trim().min(1).max(150),
   nameEn: z.string().trim().min(1).max(150),
   locationText: nullableTrimmed(300),
+  colorKey: z.enum(MEETING_ROOM_COLOR_KEYS).nullable().optional(),
   capacity: z.coerce.number().int().min(1).max(10000),
   equipmentNotes: nullableTrimmed(1000),
   isActive: z.boolean().default(true),
@@ -55,3 +58,4 @@ export const meetingAvailabilityBodySchema = z
   });
 
 export type MeetingAvailabilityBody = z.infer<typeof meetingAvailabilityBodySchema>;
+

@@ -5,6 +5,8 @@ import { mapMeetingRoom, type MeetingRoomRecord } from "./meetings.mapper.js";
 import type {
   CancelMeetingInput,
   MeetingActivityItem,
+  MeetingAgendaItem,
+  MeetingAgendaItemInput,
   MeetingAttachment,
   MeetingRevisionDetail,
   MeetingTemplate,
@@ -64,6 +66,17 @@ interface ActivityRecord {
   actorUserId: number | string;
   actorUserCode: string;
   actorUserName: string;
+}
+
+interface AgendaItemRecord {
+  id: number | string;
+  topic: string;
+  plannedDurationMinutes: number | string | null;
+  sortOrder: number | string;
+  presenterUserId: number | string | null;
+  presenterUserCode: string | null;
+  presenterUserName: string | null;
+  rowVersion: unknown;
 }
 
 export interface MeetingAttachmentRecord {
@@ -149,6 +162,7 @@ function mapRevision(record: RevisionRecord): MeetingRevisionDetail | null {
     nameAr: record.nameAr ?? "",
     nameEn: record.nameEn ?? "",
     locationText: record.locationText ?? null,
+    colorKey: record.colorKey,
     capacity: Number(record.capacity ?? 0),
     equipmentNotes: record.equipmentNotes ?? null,
     isActive: Boolean(record.isActive),
@@ -251,6 +265,7 @@ const templateFields = `
   room.name_ar AS nameAr,
   room.name_en AS nameEn,
   room.location_text AS locationText,
+  room.color_key AS colorKey,
   room.capacity,
   room.equipment_notes AS equipmentNotes,
   CAST(room.is_active AS BIT) AS isActive,
@@ -261,10 +276,9 @@ const templateFields = `
       portal.USER_CODE AS userCode,
       portal.USER_NAME AS userName
     FROM dbo.TM_meeting_template_attendees AS attendee
-    INNER JOIN dbo.TM_user_access AS active_access
-      ON active_access.portal_user_id = attendee.attendee_user_id
-     AND active_access.is_active = 1
-    INNER JOIN dbo.users AS portal ON portal.USER_ID = attendee.attendee_user_id
+    INNER JOIN dbo.users AS portal
+      ON portal.USER_ID = attendee.attendee_user_id
+     AND portal.IS_ACTIVE = 1
     WHERE attendee.template_id = template.id
       AND attendee.owner_user_id = template.owner_user_id
     ORDER BY portal.USER_NAME, portal.USER_ID
@@ -330,6 +344,7 @@ export const meetingWorkspaceRepository = {
         room.name_ar AS nameAr,
         room.name_en AS nameEn,
         room.location_text AS locationText,
+        room.color_key AS colorKey,
         room.capacity,
         room.equipment_notes AS equipmentNotes,
         CAST(room.is_active AS BIT) AS isActive,
@@ -358,6 +373,128 @@ export const meetingWorkspaceRepository = {
       ORDER BY revision.revision_number DESC, revision.id DESC;
     `);
     return result.recordset.map(mapRevision).filter((item): item is MeetingRevisionDetail => item !== null);
+  },
+
+  async listMeetingAttendeeIds(
+    transaction: DatabaseTransaction,
+    meetingId: number,
+  ): Promise<number[]> {
+    const result = await transaction
+      .request()
+      .input("meetingId", sql.BigInt, meetingId)
+      .query<{ attendeeUserId: number | string }>(`
+        SELECT attendee_user_id AS attendeeUserId
+        FROM dbo.TM_meeting_attendees
+        WHERE meeting_id = @meetingId;
+      `);
+    return result.recordset.map((record) => Number(record.attendeeUserId));
+  },
+
+  async replaceAgendaItems(
+    transaction: DatabaseTransaction,
+    input: {
+      meetingId: number;
+      actorUserId: number;
+      expectedMeetingRowVersion: string;
+      agendaItems: readonly MeetingAgendaItemInput[];
+    },
+  ): Promise<boolean> {
+    const touched = await transaction
+      .request()
+      .input("meetingId", sql.BigInt, input.meetingId)
+      .input("meetingRowVersion", sql.VarBinary(8), rowVersionToBuffer(input.expectedMeetingRowVersion))
+      .query<{ affected: number }>(`
+        UPDATE dbo.TM_meetings
+        SET updated_at_utc = SYSUTCDATETIME()
+        WHERE id = @meetingId
+          AND row_version = @meetingRowVersion;
+
+        SELECT @@ROWCOUNT AS affected;
+      `);
+
+    if (Number(touched.recordset[0]?.affected ?? 0) !== 1) return false;
+
+    await transaction
+      .request()
+      .input("meetingId", sql.BigInt, input.meetingId)
+      .query(`DELETE FROM dbo.TM_meeting_agenda_items WHERE meeting_id = @meetingId;`);
+
+    for (const [index, item] of input.agendaItems.entries()) {
+      await transaction
+        .request()
+        .input("meetingId", sql.BigInt, input.meetingId)
+        .input("sortOrder", sql.Int, index + 1)
+        .input("topic", sql.NVarChar(500), item.topic)
+        .input("presenterUserId", sql.Int, item.presenterUserId)
+        .input("plannedDurationMinutes", sql.Int, item.plannedDurationMinutes)
+        .input("actorUserId", sql.Int, input.actorUserId)
+        .query(`
+          INSERT INTO dbo.TM_meeting_agenda_items (
+            meeting_id,
+            sort_order,
+            topic,
+            presenter_user_id,
+            planned_duration_minutes,
+            created_by_user_id,
+            updated_at_utc
+          ) VALUES (
+            @meetingId,
+            @sortOrder,
+            @topic,
+            @presenterUserId,
+            @plannedDurationMinutes,
+            @actorUserId,
+            SYSUTCDATETIME()
+          );
+        `);
+    }
+
+    return true;
+  },
+
+  async listAgendaItems(meetingId: number): Promise<MeetingAgendaItem[]> {
+    const pool = await getDatabasePool();
+    const result = await pool
+      .request()
+      .input("meetingId", sql.BigInt, meetingId)
+      .query<AgendaItemRecord>(`
+        SELECT
+          agenda.id,
+          agenda.topic,
+          agenda.planned_duration_minutes AS plannedDurationMinutes,
+          agenda.sort_order AS sortOrder,
+          presenter.USER_ID AS presenterUserId,
+          presenter.USER_CODE AS presenterUserCode,
+          presenter.USER_NAME AS presenterUserName,
+          agenda.row_version AS rowVersion
+        FROM dbo.TM_meeting_agenda_items AS agenda
+        LEFT JOIN dbo.users AS presenter ON presenter.USER_ID = agenda.presenter_user_id
+        WHERE agenda.meeting_id = @meetingId
+        ORDER BY agenda.sort_order, agenda.id;
+      `);
+
+    return result.recordset.flatMap((record): MeetingAgendaItem[] => {
+      const rowVersion = normalizeSqlRowVersion(record.rowVersion);
+      if (!rowVersion) return [];
+
+      return [
+        {
+          id: Number(record.id),
+          topic: record.topic,
+          presenter: optionalParticipant(
+            record.presenterUserId,
+            record.presenterUserCode,
+            record.presenterUserName,
+          ),
+          plannedDurationMinutes:
+            record.plannedDurationMinutes === null
+              ? null
+              : Number(record.plannedDurationMinutes),
+          sortOrder: Number(record.sortOrder),
+          rowVersion,
+        },
+      ];
+    });
   },
 
   async listActivity(meetingId: number): Promise<MeetingActivityItem[]> {
@@ -419,7 +556,7 @@ export const meetingWorkspaceRepository = {
     transaction: DatabaseTransaction,
     meetingId: number,
     actorUserId: number,
-    input: { roomId: number; startAtUtc: Date; endAtUtc: Date },
+    input: { roomId: number; startAtUtc: Date; endAtUtc: Date; schedulingNotes?: string | null },
   ): Promise<{ revisionId: number; rowVersion: string } | null> {
     const result = await transaction
       .request()
@@ -428,6 +565,7 @@ export const meetingWorkspaceRepository = {
       .input("roomId", sql.BigInt, input.roomId)
       .input("startAtUtc", sql.DateTime2(3), input.startAtUtc)
       .input("endAtUtc", sql.DateTime2(3), input.endAtUtc)
+      .input("schedulingNotes", sql.NVarChar(1000), input.schedulingNotes ?? null)
       .query<RowVersionRecord>(`
         DECLARE @nextRevisionNumber INT;
         SELECT @nextRevisionNumber = ISNULL(MAX(revision_number), 0) + 1
@@ -442,6 +580,7 @@ export const meetingWorkspaceRepository = {
           room_id,
           start_at_utc,
           end_at_utc,
+          scheduling_notes,
           requested_by_user_id
         )
         OUTPUT inserted.id, inserted.row_version AS rowVersion
@@ -453,6 +592,7 @@ export const meetingWorkspaceRepository = {
           @roomId,
           @startAtUtc,
           @endAtUtc,
+          @schedulingNotes,
           @actorUserId
         );
       `);
@@ -474,6 +614,41 @@ export const meetingWorkspaceRepository = {
       ORDER BY m.id;
     `);
     return result.recordset.map((record) => Number(record.id));
+  },
+
+  async updatePendingRescheduleRequestedSchedule(
+    transaction: DatabaseTransaction,
+    meetingId: number,
+    input: {
+      revisionId: number;
+      revisionRowVersion: string;
+      roomId: number;
+      startAtUtc: string;
+      endAtUtc: string;
+    },
+  ): Promise<boolean> {
+    const rowVersion = rowVersionToBuffer(input.revisionRowVersion);
+    if (!rowVersion) return false;
+    const result = await transaction
+      .request()
+      .input("meetingId", sql.BigInt, meetingId)
+      .input("revisionId", sql.BigInt, input.revisionId)
+      .input("rowVersion", sql.VarBinary(8), rowVersion)
+      .input("roomId", sql.BigInt, input.roomId)
+      .input("startAtUtc", sql.DateTime2(3), new Date(input.startAtUtc))
+      .input("endAtUtc", sql.DateTime2(3), new Date(input.endAtUtc))
+      .query(`
+        UPDATE dbo.TM_meeting_revisions
+        SET room_id = @roomId,
+            start_at_utc = @startAtUtc,
+            end_at_utc = @endAtUtc
+        WHERE id = @revisionId
+          AND meeting_id = @meetingId
+          AND revision_type = 'RESCHEDULE'
+          AND revision_status = 'PENDING'
+          AND row_version = @rowVersion;
+      `);
+    return Number(result.rowsAffected[0] ?? 0) === 1;
   },
 
   async updatePendingRescheduleSchedule(
@@ -891,3 +1066,4 @@ export const meetingWorkspaceRepository = {
 export function mapMeetingAttachmentRecord(record: MeetingAttachmentRecord): MeetingAttachment {
   return mapAttachment(record);
 }
+

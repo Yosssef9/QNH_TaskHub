@@ -32,6 +32,8 @@ import type { MeetingRoom } from "./meetings.types.js";
 import type {
   ArchiveMeetingTemplateBody,
   CancelMeetingBody,
+  CancelMeetingRescheduleRequestBody,
+  CoordinatorDirectRescheduleBody,
   CreateMeetingRescheduleBody,
   CreateMeetingTemplateBody,
   DecideMeetingRescheduleBody,
@@ -39,7 +41,9 @@ import type {
   MeetingTemplateParams,
   MeetingWorkspaceParams,
   RejectMeetingRescheduleBody,
+  UpdateMeetingAgendaBody,
   UpdateMeetingRescheduleBody,
+  UpdateOrganizerRescheduleBody,
   UpdateMeetingTemplateBody,
 } from "./meeting-workspace.schemas.js";
 import { meetingWorkspaceService } from "./meeting-workspace.service.js";
@@ -199,6 +203,36 @@ export const updateCoordinatorMeetingSchedule: RequestHandler = async (req, res)
   res.status(200).json(body);
 };
 
+export const updateOrganizerPendingMeetingSchedule: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingRequestParams>(req, "params");
+  const input = getValidatedRequestPart<UpdateMeetingScheduleBody>(req, "body");
+  const meeting = await meetingWorkflowService.updateOrganizerPendingSchedule(
+    actorUserId(req),
+    params.meetingId,
+    input,
+  );
+  const body: ApiSuccessResponse<{ meeting: MeetingSummary }> = {
+    success: true,
+    data: { meeting },
+  };
+  res.status(200).json(body);
+};
+
+export const adjustAndApproveMeetingRequest: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingRequestParams>(req, "params");
+  const input = getValidatedRequestPart<UpdateMeetingScheduleBody>(req, "body");
+  const meeting = await meetingWorkflowService.adjustAndApproveRequest(
+    actorUserId(req),
+    params.meetingId,
+    input,
+  );
+  const body: ApiSuccessResponse<{ meeting: MeetingSummary }> = {
+    success: true,
+    data: { meeting },
+  };
+  res.status(200).json(body);
+};
+
 export const approveMeetingRequest: RequestHandler = async (req, res) => {
   const params = getValidatedRequestPart<MeetingRequestParams>(req, "params");
   const input = getValidatedRequestPart<DecideMeetingRequestBody>(req, "body");
@@ -256,6 +290,19 @@ export const getMeetingDetail: RequestHandler = async (req, res) => {
   res.status(200).json(body);
 };
 
+export const updateMeetingAgenda: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
+  const input = getValidatedRequestPart<UpdateMeetingAgendaBody>(req, "body");
+  const meeting = await meetingWorkspaceService.updateAgenda(
+    actorUserId(req),
+    currentAccess(req),
+    params.meetingId,
+    input,
+  );
+  const body: ApiSuccessResponse<{ meeting: MeetingDetail }> = { success: true, data: { meeting } };
+  res.status(200).json(body);
+};
+
 export const requestMeetingReschedule: RequestHandler = async (req, res) => {
   const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
   const input = getValidatedRequestPart<CreateMeetingRescheduleBody>(req, "body");
@@ -267,6 +314,32 @@ export const requestMeetingReschedule: RequestHandler = async (req, res) => {
   );
   const body: ApiSuccessResponse<{ meeting: MeetingDetail }> = { success: true, data: { meeting } };
   res.status(201).json(body);
+};
+
+export const updateOrganizerMeetingReschedule: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
+  const input = getValidatedRequestPart<UpdateOrganizerRescheduleBody>(req, "body");
+  const meeting = await meetingWorkspaceService.updateOrganizerReschedule(
+    actorUserId(req),
+    currentAccess(req),
+    params.meetingId,
+    input,
+  );
+  const body: ApiSuccessResponse<{ meeting: MeetingDetail }> = { success: true, data: { meeting } };
+  res.status(200).json(body);
+};
+
+export const cancelOrganizerMeetingReschedule: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
+  const input = getValidatedRequestPart<CancelMeetingRescheduleRequestBody>(req, "body");
+  const meeting = await meetingWorkspaceService.cancelOrganizerRescheduleRequest(
+    actorUserId(req),
+    currentAccess(req),
+    params.meetingId,
+    input,
+  );
+  const body: ApiSuccessResponse<{ meeting: MeetingDetail }> = { success: true, data: { meeting } };
+  res.status(200).json(body);
 };
 
 export const listCoordinatorReschedules: RequestHandler = async (_req, res) => {
@@ -290,6 +363,32 @@ export const updateCoordinatorReschedule: RequestHandler = async (req, res) => {
     success: true,
     data: { item },
   };
+  res.status(200).json(body);
+};
+
+export const adjustAndApproveMeetingReschedule: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
+  const input = getValidatedRequestPart<UpdateMeetingRescheduleBody>(req, "body");
+  const meeting = await meetingWorkspaceService.adjustAndApproveReschedule(
+    actorUserId(req),
+    currentAccess(req),
+    params.meetingId,
+    input,
+  );
+  const body: ApiSuccessResponse<{ meeting: MeetingDetail }> = { success: true, data: { meeting } };
+  res.status(200).json(body);
+};
+
+export const coordinatorDirectRescheduleMeeting: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
+  const input = getValidatedRequestPart<CoordinatorDirectRescheduleBody>(req, "body");
+  const meeting = await meetingWorkspaceService.coordinatorDirectReschedule(
+    actorUserId(req),
+    currentAccess(req),
+    params.meetingId,
+    input,
+  );
+  const body: ApiSuccessResponse<{ meeting: MeetingDetail }> = { success: true, data: { meeting } };
   res.status(200).json(body);
 };
 

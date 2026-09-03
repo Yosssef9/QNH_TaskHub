@@ -51,6 +51,8 @@ export function createAuthService(repository: AuthRepository): AuthService {
         access.theme === null ||
         access.sidebarCollapsed === null ||
         access.calendarShowAdjacentDates === null ||
+        access.meetingStartReminderEnabled === null ||
+        access.timeFormat === null ||
         access.timezone === null ||
         !access.hasDefaultList
       ) {
@@ -72,3 +74,4 @@ export function createAuthService(repository: AuthRepository): AuthService {
 }
 
 export const authService = createAuthService(authRepository);
+

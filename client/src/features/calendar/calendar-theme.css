@@ -72,3 +72,580 @@
     font-size: 0.65rem;
   }
 }
+
+/* Meeting calendar / Room Schedule --------------------------------------- */
+.taskhub-meeting-schedule {
+  --meeting-grid-hour: color-mix(in oklab, var(--border) 54%, transparent);
+  --meeting-grid-half-hour: color-mix(in oklab, var(--border) 16%, transparent);
+  --meeting-axis-width: 4.35rem;
+  background: var(--card);
+}
+
+/* A calm scheduling grid: 30-minute precision without spreadsheet-like boxing. */
+.taskhub-meeting-schedule .fc-timegrid-slot {
+  min-height: 2.45rem;
+  border-color: var(--meeting-grid-half-hour);
+}
+
+.taskhub-meeting-schedule .fc-timegrid-slot[data-time$=":00:00"] {
+  border-color: var(--meeting-grid-hour);
+}
+
+.taskhub-meeting-schedule .fc-timegrid-slot[data-time$=":30:00"] {
+  border-color: var(--meeting-grid-half-hour);
+}
+
+.taskhub-meeting-schedule .fc-timegrid-slot[data-time^="19:"],
+.taskhub-meeting-schedule .fc-timegrid-slot[data-time^="20:"] {
+  background: color-mix(in oklab, var(--muted) 10%, transparent);
+}
+
+.taskhub-meeting-schedule .fc-timegrid-axis,
+.taskhub-meeting-schedule .fc-timegrid-slot-label {
+  width: var(--meeting-axis-width);
+  min-width: var(--meeting-axis-width);
+  border-color: var(--meeting-grid-hour);
+  background: var(--card);
+}
+
+.taskhub-meeting-schedule .fc-timegrid-slot-label-cushion {
+  width: 100%;
+  padding-inline: 0.55rem;
+}
+
+.taskhub-meeting-schedule .meeting-time-axis-label {
+  display: inline-flex;
+  min-width: 3rem;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.18rem;
+  white-space: nowrap;
+  color: color-mix(in oklab, var(--foreground) 74%, var(--muted-foreground));
+  font-size: 0.72rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.taskhub-meeting-schedule .meeting-time-axis-label--24h {
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.taskhub-meeting-schedule .meeting-time-axis-period {
+  color: var(--muted-foreground);
+  font-size: 0.5rem;
+  font-weight: 750;
+}
+
+.taskhub-meeting-schedule .fc-timegrid-col {
+  background: var(--card);
+  border-color: color-mix(in oklab, var(--border) 42%, transparent);
+}
+
+.taskhub-meeting-schedule .fc-timegrid-col.fc-day-today {
+  background: color-mix(in oklab, var(--primary) 1.2%, var(--card));
+}
+
+/* Day headers follow the approved mockup: quiet weekday/date hierarchy. */
+.taskhub-meeting-schedule .meeting-schedule-day-header {
+  min-height: 3.45rem;
+  border-color: color-mix(in oklab, var(--border) 48%, transparent);
+}
+
+.taskhub-meeting-schedule .meeting-schedule-day-label {
+  line-height: 1.12;
+}
+
+.taskhub-meeting-schedule .meeting-schedule-weekday {
+  color: var(--foreground);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.taskhub-meeting-schedule .meeting-schedule-date {
+  color: var(--muted-foreground);
+  font-size: 0.71rem;
+  font-weight: 600;
+}
+
+.taskhub-meeting-schedule .meeting-schedule-today-badge {
+  margin-top: 0.16rem;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--primary) 12%, var(--card));
+  color: var(--primary);
+  padding: 0.1rem 0.34rem;
+  font-size: 0.48rem;
+  font-weight: 800;
+}
+
+.taskhub-meeting-schedule .meeting-schedule-today-header {
+  background: var(--card);
+  box-shadow: inset 0 -2px 0 color-mix(in oklab, var(--primary) 72%, transparent);
+}
+
+.taskhub-meeting-schedule .meeting-schedule-today-header .meeting-schedule-weekday,
+.taskhub-meeting-schedule .meeting-schedule-today-header .meeting-schedule-date {
+  color: var(--primary);
+}
+
+/* Current time is a quiet calendar coordinate, not an alert or foreground event. */
+.taskhub-meeting-schedule .meeting-schedule-now-native-line,
+.taskhub-meeting-schedule .meeting-schedule-now-native-dot {
+  display: none !important;
+}
+
+.taskhub-meeting-schedule .meeting-schedule-now-header {
+  width: auto;
+  height: auto;
+  border: 0;
+  overflow: visible;
+  background: transparent;
+  pointer-events: none;
+}
+
+.taskhub-meeting-schedule .meeting-schedule-now-axis-time {
+  display: inline-block;
+  white-space: nowrap;
+  color: var(--primary);
+  padding-inline: 0.12rem;
+  font-size: 0.58rem;
+  font-weight: 760;
+  line-height: 1;
+}
+
+.taskhub-meeting-schedule .meeting-schedule-now-background {
+  z-index: 0 !important;
+  border: 0 !important;
+  border-top: 1px solid color-mix(in oklab, var(--primary) 58%, transparent) !important;
+  background: transparent !important;
+  pointer-events: none !important;
+}
+
+.taskhub-meeting-schedule .meeting-schedule-now-background .fc-event-main {
+  display: none !important;
+}
+
+@media (max-width: 639px) {
+  .taskhub-meeting-schedule .meeting-schedule-now-axis-time {
+    font-size: 0.54rem;
+  }
+}
+
+/*
+ * FullCalendar v7 owns only TimeGrid geometry. Meeting cards own every visible
+ * surface. Use the supported column-event class hooks rather than legacy
+ * .fc-timegrid-event* selectors so the Classic theme cannot paint a universal
+ * blue shell around every Meeting.
+ *
+ * Padding on the positioned outer event creates real breathing room without
+ * changing FullCalendar's overlap calculations: two adjacent Meetings receive
+ * a 12px horizontal gutter, while consecutive Meetings receive an 8px
+ * vertical gutter.
+ */
+.taskhub-meeting-schedule .taskhub-meeting-column-event {
+  box-sizing: border-box;
+  min-height: 1.65rem;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding-block: 4px;
+  padding-inline: 6px;
+}
+
+.taskhub-meeting-schedule .taskhub-meeting-column-event-inner {
+  height: 100%;
+  min-height: 0;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: inherit;
+  box-shadow: none !important;
+}
+
+/* Preserve the existing Month card neutralization; V3 only changes TimeGrid. */
+.taskhub-meeting-schedule .fc-daygrid-event,
+.taskhub-meeting-schedule .fc-daygrid-event .fc-event-main {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
+}
+
+.taskhub-meeting-schedule .meeting-more-link,
+.taskhub-meeting-schedule .fc-more-link.meeting-more-link {
+  border: 1px solid color-mix(in oklab, var(--primary) 16%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--primary) 5%, var(--card));
+  padding: 0.16rem 0.46rem;
+  color: var(--primary);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+/*
+ * Week view is an overview, not a collision stress-test. FullCalendar keeps at
+ * most two concurrent Meeting columns visible; any additional events use this
+ * calm +N pill and open TaskHub's focused overflow list.
+ */
+.taskhub-meeting-schedule .meeting-week-more-link {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  padding: 2px 4px !important;
+  box-shadow: none !important;
+}
+
+.taskhub-meeting-schedule .meeting-week-more-link-inner {
+  display: inline-flex;
+  min-height: 1.35rem;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  border: 1px solid color-mix(in oklab, var(--primary) 22%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--primary) 7%, var(--card));
+  padding: 0.16rem 0.42rem;
+  color: var(--primary);
+  font-size: 0.58rem;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 1px 2px color-mix(in oklab, var(--foreground) 5%, transparent);
+}
+
+.taskhub-meeting-schedule .meeting-week-more-link:hover .meeting-week-more-link-inner,
+.taskhub-meeting-schedule .meeting-week-more-link:focus-visible .meeting-week-more-link-inner {
+  border-color: color-mix(in oklab, var(--primary) 36%, var(--border));
+  background: color-mix(in oklab, var(--primary) 11%, var(--card));
+}
+
+/* Week cards intentionally show only scan-critical information. */
+.meeting-week-card {
+  border-radius: 0.65rem;
+}
+
+.meeting-week-card .meeting-card-heading {
+  align-items: center;
+}
+
+.meeting-week-card .meeting-status-badge {
+  max-width: 5.75rem;
+}
+
+.meeting-week-card--compact .meeting-card-time {
+  line-height: 0.78rem;
+}
+
+/* Custom +N popover keeps hidden Meeting privacy rules and room identity. */
+.meeting-week-overflow-accent {
+  background: var(--meeting-room-accent);
+}
+
+.meeting-week-overflow-item {
+  border-color: color-mix(in oklab, var(--meeting-room-accent) 16%, var(--border));
+  background: color-mix(in oklab, var(--meeting-room-accent) 4%, var(--card));
+}
+
+.meeting-week-overflow-item:hover {
+  border-color: color-mix(in oklab, var(--meeting-room-accent) 30%, var(--border));
+  background: color-mix(in oklab, var(--meeting-room-accent) 7%, var(--card));
+}
+
+.dark .meeting-week-overflow-item {
+  border-color: color-mix(in oklab, var(--meeting-room-accent) 22%, var(--border));
+  background: color-mix(in oklab, var(--meeting-room-accent) 8%, var(--card));
+}
+
+.dark .meeting-week-overflow-item:hover {
+  background: color-mix(in oklab, var(--meeting-room-accent) 12%, var(--card));
+}
+
+/* Timed Meeting cards ----------------------------------------------------- */
+.meeting-time-card {
+  container-type: inline-size;
+  border-color: color-mix(in oklab, var(--meeting-room-accent) 28%, var(--border));
+  background: color-mix(in oklab, var(--meeting-room-accent) 8.5%, var(--card));
+  box-shadow: 0 1px 3px color-mix(in oklab, var(--foreground) 5%, transparent);
+}
+
+.meeting-time-card:hover {
+  border-color: color-mix(in oklab, var(--meeting-room-accent) 42%, var(--border));
+  background: color-mix(in oklab, var(--meeting-room-accent) 11%, var(--card));
+  box-shadow:
+    0 2px 5px color-mix(in oklab, var(--foreground) 6%, transparent),
+    0 8px 18px color-mix(in oklab, var(--foreground) 5%, transparent);
+}
+
+.dark .meeting-time-card {
+  border-color: color-mix(in oklab, var(--meeting-room-accent) 34%, var(--border));
+  background: color-mix(in oklab, var(--meeting-room-accent) 14%, var(--card));
+}
+
+.dark .meeting-time-card:hover {
+  background: color-mix(in oklab, var(--meeting-room-accent) 18%, var(--card));
+}
+
+.meeting-time-card:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--primary) 58%, transparent);
+  outline-offset: -2px;
+}
+
+.meeting-room-accent,
+.meeting-room-dot,
+.meeting-agenda-dot,
+.meeting-tooltip-accent {
+  background: var(--meeting-room-accent);
+}
+
+.meeting-room-accent {
+  inset-inline-start: 0;
+}
+
+.meeting-card-title {
+  color: var(--foreground);
+  letter-spacing: -0.012em;
+}
+
+.meeting-card-time {
+  color: color-mix(in oklab, var(--foreground) 88%, var(--muted-foreground));
+  letter-spacing: -0.018em;
+  white-space: nowrap;
+}
+
+.meeting-person-avatar {
+  border: 1px solid color-mix(in oklab, var(--meeting-room-accent) 18%, var(--border));
+  background: color-mix(in oklab, var(--meeting-room-accent) 13%, var(--card));
+  color: color-mix(in oklab, var(--foreground) 78%, var(--meeting-room-accent));
+}
+
+.meeting-status-badge {
+  display: inline-flex;
+  max-width: 8rem;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--warning) 20%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--warning) 9%, var(--card));
+  color: color-mix(in oklab, var(--warning) 65%, var(--foreground));
+  padding: 0.18rem 0.44rem;
+  font-size: 0.54rem;
+  font-weight: 760;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Explicit density compositions, then width-aware fallback for overlaps. */
+.meeting-time-card--compact {
+  background: color-mix(in oklab, var(--meeting-room-accent) 7%, var(--card));
+}
+
+.dark .meeting-time-card--compact {
+  background: color-mix(in oklab, var(--meeting-room-accent) 12%, var(--card));
+}
+
+.meeting-time-card--standard .meeting-card-details {
+  min-height: 2rem;
+}
+
+.meeting-time-card--expanded .meeting-card-details {
+  min-height: 2.25rem;
+}
+
+.meeting-time-card--day.meeting-time-card--expanded .meeting-card-title {
+  font-size: 0.92rem;
+  line-height: 1.18rem;
+}
+
+.meeting-time-card--day.meeting-time-card--expanded .meeting-card-time {
+  font-size: 0.78rem;
+}
+
+.meeting-time-card--day.meeting-time-card--expanded .meeting-card-room,
+.meeting-time-card--day.meeting-time-card--expanded .meeting-card-organizer,
+.meeting-time-card--day.meeting-time-card--expanded .meeting-card-participants {
+  font-size: 0.73rem;
+}
+
+@container (max-width: 150px) {
+  .meeting-time-card .meeting-card-status,
+  .meeting-time-card .meeting-card-room,
+  .meeting-time-card .meeting-card-footer {
+    display: none;
+  }
+
+  .meeting-time-card .meeting-card-heading {
+    display: block;
+  }
+
+  .meeting-time-card .meeting-card-title {
+    font-size: 0.66rem;
+    line-height: 0.86rem;
+  }
+
+  .meeting-time-card .meeting-card-time {
+    font-size: 0.58rem;
+  }
+}
+
+@container (min-width: 151px) and (max-width: 225px) {
+  .meeting-time-card .meeting-card-status,
+  .meeting-time-card .meeting-card-participants {
+    display: none;
+  }
+
+  .meeting-time-card .meeting-card-organizer span:last-child {
+    max-width: 6rem;
+  }
+}
+
+/* Month: compact rows, room identity dot only. */
+.meeting-month-pill {
+  border: 1px solid transparent;
+  background: color-mix(in oklab, var(--meeting-room-accent) 8%, var(--card));
+  color: var(--foreground);
+}
+
+.meeting-month-pill:hover {
+  border-color: color-mix(in oklab, var(--meeting-room-accent) 22%, var(--border));
+  background: color-mix(in oklab, var(--meeting-room-accent) 11%, var(--card));
+}
+
+.meeting-month-time {
+  color: color-mix(in oklab, var(--foreground) 72%, var(--muted-foreground));
+}
+
+/* Agenda: chronological itinerary instead of recycled TimeGrid rectangles. */
+.taskhub-meeting-schedule .fc-list {
+  border: 0;
+}
+
+.taskhub-meeting-schedule .fc-list-day-cushion {
+  border-block: 1px solid color-mix(in oklab, var(--border) 52%, transparent);
+  background: color-mix(in oklab, var(--muted) 22%, var(--card));
+  padding: 0.85rem 1rem;
+}
+
+.taskhub-meeting-schedule .fc-list-event,
+.taskhub-meeting-schedule .fc-list-event:hover td {
+  background: transparent;
+}
+
+.taskhub-meeting-schedule .fc-list-event td {
+  border: 0;
+  padding: 0.28rem 0.7rem;
+}
+
+.taskhub-meeting-schedule .fc-list-event-graphic,
+.taskhub-meeting-schedule .fc-list-event-time {
+  display: none;
+}
+
+.taskhub-meeting-schedule .fc-list-event-title {
+  padding: 0.32rem 0.7rem 0.72rem;
+}
+
+.meeting-agenda-card {
+  border-color: color-mix(
+    in oklab,
+    var(--border) 86%,
+    var(--meeting-room-accent) 14%
+  );
+  background: color-mix(in oklab, var(--meeting-room-accent) 7%, var(--card));
+  color: var(--foreground);
+  box-shadow: 0 2px 7px color-mix(in oklab, var(--foreground) 4%, transparent);
+}
+
+.meeting-agenda-card:hover {
+  border-color: color-mix(in oklab, var(--meeting-room-accent) 28%, var(--border));
+  background: color-mix(in oklab, var(--meeting-room-accent) 10%, var(--card));
+  box-shadow: 0 6px 18px color-mix(in oklab, var(--foreground) 6%, transparent);
+}
+
+.meeting-agenda-time {
+  width: 7.2rem;
+  color: color-mix(in oklab, var(--foreground) 82%, var(--muted-foreground));
+}
+
+.meeting-agenda-line {
+  background: color-mix(in oklab, var(--meeting-room-accent) 22%, var(--border));
+}
+
+/* Preview: one flat professional information surface, no nested dashboard boxes. */
+.meeting-calendar-tooltip {
+  border-color: color-mix(
+    in oklab,
+    var(--border) 82%,
+    var(--meeting-room-accent) 18%
+  );
+}
+
+.meeting-tooltip-schedule {
+  color: var(--foreground);
+}
+
+.meeting-tooltip-label {
+  color: var(--muted-foreground);
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+
+/* Month cells and overflow. */
+.taskhub-meeting-schedule .fc-daygrid-day-frame {
+  min-height: 7rem;
+}
+
+.taskhub-meeting-schedule .fc-daygrid-event-harness {
+  margin-block: 2px;
+}
+
+.taskhub-meeting-schedule .fc-more-link {
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--primary) 6%, transparent);
+  padding: 0.14rem 0.42rem;
+  text-decoration: none;
+}
+
+/* Privacy-only occupancy keeps room identity without exposing Meeting details. */
+.meeting-busy-card {
+  border-color: color-mix(in oklab, var(--meeting-room-accent) 22%, var(--border));
+  background-color: color-mix(in oklab, var(--meeting-room-accent) 6%, var(--card));
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0,
+    transparent 9px,
+    color-mix(in oklab, var(--muted-foreground) 5%, transparent) 9px,
+    color-mix(in oklab, var(--muted-foreground) 5%, transparent) 12px
+  );
+}
+
+@media (max-width: 639px) {
+  .taskhub-meeting-schedule {
+    --meeting-axis-width: 3.65rem;
+  }
+
+  .taskhub-meeting-schedule .fc-timegrid-slot {
+    min-height: 2.62rem;
+  }
+
+  .taskhub-meeting-schedule .meeting-time-axis-label {
+    min-width: 2.55rem;
+    font-size: 0.63rem;
+  }
+
+  .taskhub-meeting-schedule .meeting-schedule-day-header {
+    min-height: 3rem;
+  }
+
+  .taskhub-meeting-schedule .meeting-schedule-weekday,
+  .taskhub-meeting-schedule .meeting-schedule-date {
+    font-size: 0.61rem;
+  }
+
+  .meeting-agenda-time {
+    width: 6rem;
+  }
+}

@@ -1,6 +1,6 @@
 import { AppError } from "../../shared/errors/app-error.js";
 import { normalizeSqlRowVersion } from "../../shared/utils/sql-row-version.js";
-import type { MeetingRoom } from "./meetings.types.js";
+import type { MeetingRoom, MeetingRoomColorKey } from "./meetings.types.js";
 
 export interface MeetingRoomRecord {
   id: number | string;
@@ -8,6 +8,7 @@ export interface MeetingRoomRecord {
   nameAr: string;
   nameEn: string;
   locationText: string | null;
+  colorKey: MeetingRoomColorKey;
   capacity: number;
   equipmentNotes: string | null;
   isActive: boolean;
@@ -31,9 +32,11 @@ export function mapMeetingRoom(record: MeetingRoomRecord): MeetingRoom {
     nameAr: record.nameAr,
     nameEn: record.nameEn,
     locationText: record.locationText,
+    colorKey: record.colorKey,
     capacity: Number(record.capacity),
     equipmentNotes: record.equipmentNotes,
     isActive: Boolean(record.isActive),
     rowVersion,
   };
 }
+

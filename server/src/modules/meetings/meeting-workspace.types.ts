@@ -18,6 +18,26 @@ export interface MeetingRevisionDetail {
   rowVersion: string;
 }
 
+export interface MeetingAgendaItem {
+  id: number;
+  topic: string;
+  presenter: MeetingParticipant | null;
+  plannedDurationMinutes: number | null;
+  sortOrder: number;
+  rowVersion: string;
+}
+
+export interface MeetingAgendaItemInput {
+  topic: string;
+  presenterUserId: number | null;
+  plannedDurationMinutes: number | null;
+}
+
+export interface UpdateMeetingAgendaInput {
+  meetingRowVersion: string;
+  agendaItems: MeetingAgendaItemInput[];
+}
+
 export interface MeetingActivityItem {
   id: number;
   activityType: string;
@@ -29,12 +49,20 @@ export interface MeetingActivityItem {
 export interface MeetingDetailPermissions {
   canCancel: boolean;
   canReschedule: boolean;
+  canEditPendingSchedule: boolean;
+  canEditPendingReschedule: boolean;
+  canCancelPendingReschedule: boolean;
+  canDecidePendingRequest: boolean;
+  canCoordinatorReschedule: boolean;
+  canDecidePendingReschedule: boolean;
+  canManageAgenda: boolean;
   canManageAttachments: boolean;
   canSaveAsTemplate: boolean;
 }
 
 export interface MeetingDetail {
   meeting: MeetingSummary;
+  agendaItems: MeetingAgendaItem[];
   revisions: MeetingRevisionDetail[];
   activity: MeetingActivityItem[];
   pendingReschedule: MeetingRevisionDetail | null;
@@ -57,12 +85,32 @@ export interface UpdateMeetingRescheduleInput {
   schedulingNotes?: string | null;
 }
 
+export interface UpdateOrganizerRescheduleInput {
+  revisionId: number;
+  revisionRowVersion: string;
+  roomId: number;
+  startAtUtc: string;
+  endAtUtc: string;
+}
+
+export interface CoordinatorDirectRescheduleInput {
+  meetingRowVersion: string;
+  roomId: number;
+  startAtUtc: string;
+  endAtUtc: string;
+  schedulingNotes?: string | null;
+}
+
 export interface DecideMeetingRescheduleInput {
   revisionId: number;
   revisionRowVersion: string;
 }
 
 export interface RejectMeetingRescheduleInput extends DecideMeetingRescheduleInput {
+  reason?: string | null;
+}
+
+export interface CancelMeetingRescheduleRequestInput extends DecideMeetingRescheduleInput {
   reason?: string | null;
 }
 

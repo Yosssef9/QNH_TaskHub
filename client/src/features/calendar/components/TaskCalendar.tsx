@@ -8,15 +8,19 @@ import '@fullcalendar/react/skeleton.css'
 import '@fullcalendar/react/themes/classic/theme.css'
 import '@fullcalendar/react/themes/classic/palette.css'
 import '../calendar-theme.css'
+import { Clock3 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import toast from 'react-hot-toast'
 
 import { Card } from '@/components/ui/card'
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import type { MeetingScheduleEntry } from '@/features/meetings/types/meeting.types'
+import { useUpdatePreferences } from '@/features/preferences/hooks/use-update-preferences'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { useTheme } from '@/hooks/use-theme'
 import { cn } from '@/lib/cn'
-import { APP_TIME_ZONE } from '@/lib/date-time'
+import { APP_TIME_ZONE, formatCalendarAxisTime, formatTime } from '@/lib/date-time'
 
 import type {
   CalendarSearchTarget,
@@ -25,12 +29,24 @@ import type {
   CalendarVisibleRange,
 } from '../types/calendar.types'
 import { CalendarMeetingEvent } from './CalendarMeetingEvent'
+import {
+  MeetingWeekOverflowPopover,
+  type MeetingWeekOverflowState,
+} from './MeetingWeekOverflowPopover'
 import { CalendarTaskEvent } from './CalendarTaskEvent'
 import { CalendarToolbar } from './CalendarToolbar'
+import { resolveMeetingTimeGridSlotRange } from '../meeting-time-grid-range'
 
 const CALENDAR_SLOT_MIN_TIME = '06:00:00'
 const CALENDAR_SLOT_MAX_TIME = '22:00:00'
 const CALENDAR_SLOT_DURATION = '00:30:00'
+const MEETING_SCHEDULE_LABEL_INTERVAL = '01:00:00'
+
+export interface MeetingCalendarSlotSelection {
+  date: string
+  startTime: string
+  endTime: string
+}
 
 interface Props {
   tasks: CalendarTask[]
@@ -49,6 +65,8 @@ interface Props {
   onOpenTask: (taskId: number) => void
   onOpenMeeting: (meetingId: number) => void
   onShowAdjacentDatesChange: (showAdjacentDates: boolean) => void
+  meetingScheduleMode?: boolean
+  onSelectMeetingSlot?: (slot: MeetingCalendarSlotSelection) => void
 }
 
 function dateOnlyInTimeZone(value: Date): string {
@@ -83,6 +101,32 @@ function meetingEventId(meeting: MeetingScheduleEntry): string {
   ].join('-')
 }
 
+function timeOnlyInTimeZone(value: Date): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: APP_TIME_ZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(value)
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return `${values.hour}:${values.minute}`
+}
+
+function addMinutesToTime(value: string, minutes: number): string {
+  const [hours, mins] = value.split(':').map(Number)
+  const total = Math.min(23 * 60 + 59, (hours || 0) * 60 + (mins || 0) + minutes)
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
+function scheduleScrollTime(): string {
+  const now = new Date()
+  const current = timeOnlyInTimeZone(now)
+  const [hours, minutes] = current.split(':').map(Number)
+  const total = Math.max(7 * 60, Math.min(18 * 60, (hours || 0) * 60 + (minutes || 0) - 90))
+  const rounded = Math.floor(total / 30) * 30
+  return `${String(Math.floor(rounded / 60)).padStart(2, '0')}:${String(rounded % 60).padStart(2, '0')}:00`
+}
+
 export function TaskCalendar({
   isFetching,
   meetings,
@@ -100,9 +144,14 @@ export function TaskCalendar({
   tasks,
   viewMode,
   onShowAdjacentDatesChange,
+  meetingScheduleMode = false,
+  onSelectMeetingSlot,
 }: Props) {
   const { i18n, t } = useTranslation()
   const { resolvedTheme } = useTheme()
+  const currentUser = useCurrentUser()
+  const updatePreferencesMutation = useUpdatePreferences()
+  const timeFormat = currentUser.data?.preferences.timeFormat ?? '12H'
   const isCompactMonth = useMediaQuery('(max-width: 639px)')
   const calendarRef = useRef<FullCalendar | null>(null)
   const isRtl = i18n.dir() === 'rtl'
@@ -113,6 +162,8 @@ export function TaskCalendar({
       timeZone: APP_TIME_ZONE,
     }).format(new Date()),
   )
+  const [weekOverflow, setWeekOverflow] = useState<MeetingWeekOverflowState | null>(null)
+  const [timeGridVisibleRange, setTimeGridVisibleRange] = useState<{ start: string; end: string } | null>(null)
   const numberFormatter = useMemo(
     () => new Intl.NumberFormat(i18n.language, { useGrouping: false }),
     [i18n.language],
@@ -130,6 +181,45 @@ export function TaskCalendar({
         timeZone: APP_TIME_ZONE,
       }),
     [i18n.language],
+  )
+  const meetingWeekdayFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(i18n.language, {
+        weekday: 'long',
+        timeZone: APP_TIME_ZONE,
+      }),
+    [i18n.language],
+  )
+  const meetingHeaderDateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(i18n.language, {
+        day: 'numeric',
+        month: 'short',
+        timeZone: APP_TIME_ZONE,
+      }),
+    [i18n.language],
+  )
+  const meetingVisualMode = meetingsEnabled
+  const [calendarNow, setCalendarNow] = useState(() => {
+    const now = new Date()
+    now.setSeconds(0, 0)
+    return now
+  })
+
+  useEffect(() => {
+    const refreshNow = () => {
+      const now = new Date()
+      now.setSeconds(0, 0)
+      setCalendarNow(now)
+    }
+
+    const intervalId = window.setInterval(refreshNow, 60_000)
+    return () => window.clearInterval(intervalId)
+  }, [])
+
+  const nowTimeFormatter = useMemo(
+    () => (value: Date) => formatTime(value, i18n.language, timeFormat),
+    [i18n.language, timeFormat],
   )
   const monthFormatter = useMemo(
     () =>
@@ -179,8 +269,22 @@ export function TaskCalendar({
         interactive: meeting.visibility === 'FULL',
         extendedProps: { kind: 'MEETING' as const, meeting },
       })),
+      ...(meetingVisualMode && (viewMode === 'WEEK' || viewMode === 'DAY')
+        ? [
+            {
+              id: 'calendar-now-background',
+              start: calendarNow,
+              end: new Date(calendarNow.getTime() + 60_000),
+              allDay: false,
+              display: 'background' as const,
+              interactive: false,
+              classNames: ['meeting-schedule-now-background'],
+              extendedProps: { kind: 'NOW_MARKER' as const },
+            },
+          ]
+        : []),
     ],
-    [meetings, t, tasks],
+    [calendarNow, meetingVisualMode, meetings, t, tasks, viewMode],
   )
 
   const itemCountByDate = useMemo(() => {
@@ -194,6 +298,14 @@ export function TaskCalendar({
     }
     return counts
   }, [meetings, tasks])
+
+  const meetingTimeGridSlotRange = useMemo(
+    () => resolveMeetingTimeGridSlotRange(meetings, timeGridVisibleRange),
+    [meetings, timeGridVisibleRange],
+  )
+  const meetingScheduleScrollTime = meetingTimeGridSlotRange.expandedBeforeDefault
+    ? meetingTimeGridSlotRange.slotMinTime
+    : scheduleScrollTime()
 
   function api() {
     return calendarRef.current?.getApi()
@@ -269,6 +381,16 @@ export function TaskCalendar({
         showAdjacentDates={showAdjacentDates}
         displayPreferencePending={displayPreferencePending}
         onShowAdjacentDatesChange={onShowAdjacentDatesChange}
+        showTimeFormat
+        timeFormat={timeFormat}
+        timeFormatPending={updatePreferencesMutation.isPending}
+        onTimeFormatChange={(nextTimeFormat) => {
+          if (nextTimeFormat === timeFormat) return
+          updatePreferencesMutation.mutate(
+            { timeFormat: nextTimeFormat },
+            { onError: () => toast.error(t('calendar.timeFormatSaveError')) },
+          )
+        }}
         onPrevious={() => api()?.prev()}
         onToday={() => api()?.today()}
         onNext={() => api()?.next()}
@@ -310,40 +432,121 @@ export function TaskCalendar({
           showNonCurrentDates={showAdjacentDates}
           dayNarrowWidth={72}
           dayMaxEvents={isCompactMonth ? 2 : 3}
+          weekNumbers={meetingVisualMode && (viewMode === 'WEEK' || viewMode === 'DAY')}
+          weekNumberHeaderClass={meetingVisualMode ? 'meeting-time-axis-header' : undefined}
+          weekNumberHeaderInnerClass={meetingVisualMode ? 'w-full' : undefined}
+          weekNumberHeaderContent={
+            meetingVisualMode
+              ? (info) => (
+                  <span
+                    className="inline-flex w-full items-center justify-center gap-1 text-muted-foreground"
+                    title={t('calendar.timeAxisLabel')}
+                  >
+                    <Clock3 aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={1.8} />
+                    <span className={cn('text-[11px] font-semibold', info.isNarrow && 'sr-only')}>
+                      {t('calendar.timeAxisLabel')}
+                    </span>
+                  </span>
+                )
+              : undefined
+          }
+          eventMaxStack={
+            meetingVisualMode
+              ? viewMode === 'DAY'
+                ? 4
+                : viewMode === 'WEEK'
+                  ? 2
+                  : 3
+              : undefined
+          }
           eventInteractive
           events={events}
-          allDaySlot
+          allDaySlot={!meetingScheduleMode}
           allDayHeaderContent={() => t('calendar.allDay')}
           slotDuration={CALENDAR_SLOT_DURATION}
-          slotHeaderInterval={CALENDAR_SLOT_DURATION}
-          slotMinTime={CALENDAR_SLOT_MIN_TIME}
-          slotMaxTime={CALENDAR_SLOT_MAX_TIME}
-          scrollTime={CALENDAR_SLOT_MIN_TIME}
+          slotMinHeight={meetingVisualMode ? 39 : undefined}
+          eventMinHeight={meetingVisualMode ? 26 : undefined}
+          eventShortHeight={meetingVisualMode ? 44 : undefined}
+          slotHeaderInterval={meetingVisualMode ? MEETING_SCHEDULE_LABEL_INTERVAL : CALENDAR_SLOT_DURATION}
+          slotMinTime={meetingScheduleMode ? meetingTimeGridSlotRange.slotMinTime : CALENDAR_SLOT_MIN_TIME}
+          slotMaxTime={meetingScheduleMode ? meetingTimeGridSlotRange.slotMaxTime : CALENDAR_SLOT_MAX_TIME}
+          scrollTime={meetingScheduleMode ? meetingScheduleScrollTime : CALENDAR_SLOT_MIN_TIME}
           nowIndicator
+          nowIndicatorHeaderClass={meetingVisualMode ? 'meeting-schedule-now-header' : undefined}
+          nowIndicatorLineClass={meetingVisualMode ? 'meeting-schedule-now-native-line' : undefined}
+          nowIndicatorDotClass={meetingVisualMode ? 'meeting-schedule-now-native-dot' : undefined}
+          nowIndicatorHeaderContent={
+            meetingVisualMode
+              ? (info) => (
+                  <span
+                    dir="ltr"
+                    className="meeting-schedule-now-axis-time tabular-nums"
+                    aria-label={`${t('calendar.now')} ${nowTimeFormatter(info.date)}`}
+                  >
+                    {nowTimeFormatter(info.date)}
+                  </span>
+                )
+              : undefined
+          }
           slotEventOverlap={false}
           eventTimeFormat={{
-            hour: '2-digit',
+            hour: timeFormat === '24H' ? '2-digit' : 'numeric',
             minute: '2-digit',
-            hour12: false,
-            meridiem: false,
+            hour12: timeFormat === '12H',
+            meridiem: timeFormat === '12H' ? 'short' : false,
           }}
           slotHeaderFormat={{
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
-            meridiem: false,
+            hour: timeFormat === '24H' ? '2-digit' : 'numeric',
+            minute: timeFormat === '24H' ? '2-digit' : undefined,
+            hour12: timeFormat === '12H',
+            meridiem: timeFormat === '12H' ? 'short' : false,
           }}
-          className="taskhub-calendar text-foreground"
-          viewClass="overflow-hidden rounded-xl border border-border/80 bg-card"
+          slotHeaderContent={
+            meetingVisualMode
+              ? (info) => {
+                  const label = formatCalendarAxisTime(info.date, i18n.language, timeFormat)
+                  if (timeFormat === '24H') {
+                    return (
+                      <span dir="ltr" className="meeting-time-axis-label meeting-time-axis-label--24h">
+                        {label}
+                      </span>
+                    )
+                  }
+                  const parts = new Intl.DateTimeFormat(i18n.language, {
+                    hour: 'numeric',
+                    hour12: true,
+                    numberingSystem: 'latn',
+                    timeZone: APP_TIME_ZONE,
+                  }).formatToParts(info.date)
+                  const hour = parts.find((part) => part.type === 'hour')?.value ?? label
+                  const period = parts.find((part) => part.type === 'dayPeriod')?.value ?? ''
+                  return (
+                    <span className="meeting-time-axis-label">
+                      <span>{hour}</span>
+                      {period ? <span className="meeting-time-axis-period">{period}</span> : null}
+                    </span>
+                  )
+                }
+              : undefined
+          }
+          className={cn(
+            'taskhub-calendar text-foreground',
+            meetingVisualMode && 'taskhub-meeting-schedule',
+          )}
+          viewClass="overflow-hidden rounded-xl border border-border/60 bg-card"
           dayHeaderClass={(state) =>
             cn(
-              'border-primary/15 text-[11px] font-semibold sm:text-sm',
+              'border-border/70 text-[11px] font-semibold sm:text-sm',
+              meetingVisualMode && 'meeting-schedule-day-header',
+              state.isToday && 'meeting-schedule-today-header',
               isWeekendInAppTimeZone(state.date)
-                ? 'border-border/80 bg-muted/70 text-muted-foreground'
-                : 'bg-primary/[0.08] text-primary',
+                ? 'bg-muted/45 text-muted-foreground'
+                : meetingVisualMode
+                  ? 'bg-card text-foreground'
+                  : 'bg-primary/[0.08] text-primary',
             )
           }
-          dayHeaderInnerClass="py-2.5"
+          dayHeaderInnerClass="py-2"
           dayCellTopClass="taskhub-calendar-day-top"
           dayCellInnerClass="taskhub-calendar-day-inner"
           dayCellBottomClass="taskhub-calendar-day-bottom"
@@ -381,12 +584,25 @@ export function TaskCalendar({
               kind?: 'TASK' | 'MEETING'
               meeting?: MeetingScheduleEntry
             }
-            const busy = props.kind === 'MEETING' && props.meeting?.visibility === 'BUSY'
+            const meeting = props.kind === 'MEETING' ? props.meeting : undefined
+            const interactive = props.kind === 'TASK' || meeting?.visibility === 'FULL'
             return cn(
               'taskhub-calendar-event border-0 bg-transparent shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
               info.view.type !== 'listMonth' && 'p-0 leading-none',
-              busy ? 'cursor-default' : 'cursor-pointer',
+              interactive ? 'cursor-pointer' : 'cursor-default',
             )
+          }}
+          columnEventClass={(info) => {
+            const props = info.event.extendedProps as {
+              kind?: 'TASK' | 'MEETING'
+            }
+            return props.kind === 'MEETING' ? 'taskhub-meeting-column-event' : ''
+          }}
+          columnEventInnerClass={(info) => {
+            const props = info.event.extendedProps as {
+              kind?: 'TASK' | 'MEETING'
+            }
+            return props.kind === 'MEETING' ? 'taskhub-meeting-column-event-inner' : ''
           }}
           eventDidMount={(info) => {
             const props = info.event.extendedProps as {
@@ -401,13 +617,39 @@ export function TaskCalendar({
           listItemEventBeforeClass="hidden"
           listItemEventTimeClass="hidden"
           listDayHeaderClass="bg-muted/55 border-border"
-          moreLinkClass="text-primary text-[11px] font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm sm:text-xs"
-          moreLinkHint={(count) => t('calendar.moreItemsHint', { count })}
-          dayHeaderContent={(info) =>
-            viewMode === 'WEEK' || viewMode === 'DAY'
-              ? timeGridDayHeaderFormatter.format(info.date)
-              : weekdayFormatter.format(info.date)
+          moreLinkClass={cn(
+            'text-primary text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm sm:text-xs',
+            meetingVisualMode ? 'meeting-more-link' : 'hover:underline',
+          )}
+          columnMoreLinkClass={
+            meetingVisualMode && viewMode === 'WEEK' ? 'meeting-week-more-link' : undefined
           }
+          columnMoreLinkInnerClass={
+            meetingVisualMode && viewMode === 'WEEK' ? 'meeting-week-more-link-inner' : undefined
+          }
+          moreLinkHint={(count) => t('calendar.moreItemsHint', { count })}
+          dayHeaderContent={(info) => {
+            const label =
+              viewMode === 'WEEK' || viewMode === 'DAY'
+                ? timeGridDayHeaderFormatter.format(info.date)
+                : weekdayFormatter.format(info.date)
+
+            if (!meetingVisualMode || (viewMode !== 'WEEK' && viewMode !== 'DAY')) return label
+
+            return (
+              <span className="meeting-schedule-day-label inline-flex flex-col items-center gap-0.5 py-0.5">
+                <span className="meeting-schedule-weekday">
+                  {meetingWeekdayFormatter.format(info.date)}
+                </span>
+                <span className="meeting-schedule-date">
+                  {meetingHeaderDateFormatter.format(info.date)}
+                </span>
+                {info.isToday ? (
+                  <span className="meeting-schedule-today-badge">{t('calendar.today')}</span>
+                ) : null}
+              </span>
+            )
+          }}
           dayCellTopContent={(info) => {
             const cellDate = dateOnlyInTimeZone(info.date)
             const itemCount = itemCountByDate.get(cellDate) ?? 0
@@ -445,9 +687,11 @@ export function TaskCalendar({
           }
           noEventsContent={t('calendar.emptyAgenda')}
           moreLinkContent={(info) =>
-            info.isNarrow
-              ? `+${numberFormatter.format(info.num)}`
-              : t('calendar.moreItems', { count: info.num })
+            meetingVisualMode && viewMode === 'WEEK'
+              ? t('calendar.moreItems', { count: info.num })
+              : info.isNarrow
+                ? `+${numberFormatter.format(info.num)}`
+                : t('calendar.moreItems', { count: info.num })
           }
           eventContent={(info) => {
             const props = info.event.extendedProps as {
@@ -460,8 +704,9 @@ export function TaskCalendar({
               return (
                 <CalendarMeetingEvent
                   meeting={props.meeting}
-                  monthGrid={info.view.type === 'dayGridMonth'}
+                  viewType={info.view.type}
                   timeText={info.timeText}
+                  timeFormat={timeFormat}
                 />
               )
             }
@@ -479,6 +724,20 @@ export function TaskCalendar({
             return null
           }}
           dateClick={(info) => {
+            if (
+              meetingScheduleMode &&
+              onSelectMeetingSlot &&
+              (info.view.type === 'timeGridDay' || info.view.type === 'timeGridWeek') &&
+              !info.allDay
+            ) {
+              const startTime = timeOnlyInTimeZone(info.date)
+              onSelectMeetingSlot({
+                date: dateOnlyInTimeZone(info.date),
+                startTime,
+                endTime: addMinutesToTime(startTime, 60),
+              })
+              return
+            }
             if (info.view.type !== 'dayGridMonth' || !info.allDay) return
             const clickedDate = info.dateStr.slice(0, 10)
             const currentMonth = dateOnlyInTimeZone(info.view.currentStart).slice(0, 7)
@@ -487,6 +746,52 @@ export function TaskCalendar({
           }}
           moreLinkClick={(info) => {
             info.jsEvent.preventDefault()
+
+            if (meetingVisualMode && viewMode === 'WEEK') {
+              const hiddenMeetings = Array.from(
+                new Map(
+                  info.hiddenSegs
+                    .map((segment) => {
+                      const props = segment.event.extendedProps as {
+                        kind?: 'TASK' | 'MEETING'
+                        meeting?: MeetingScheduleEntry
+                      }
+                      return props.kind === 'MEETING' && props.meeting
+                        ? [segment.event.id, props.meeting] as const
+                        : null
+                    })
+                    .filter(
+                      (item): item is readonly [string, MeetingScheduleEntry] => item !== null,
+                    ),
+                ).values(),
+              ).sort(
+                (left, right) =>
+                  new Date(left.startAtUtc).getTime() - new Date(right.startAtUtc).getTime(),
+              )
+
+              const clickTarget =
+                info.jsEvent.currentTarget instanceof HTMLElement
+                  ? info.jsEvent.currentTarget
+                  : info.jsEvent.target instanceof HTMLElement
+                    ? info.jsEvent.target.closest<HTMLElement>('button, a, [role="button"]')
+                    : null
+
+              if (hiddenMeetings.length > 0 && clickTarget) {
+                const rect = clickTarget.getBoundingClientRect()
+                setWeekOverflow({
+                  anchor: {
+                    left: rect.left,
+                    top: rect.top,
+                    width: rect.width,
+                    height: rect.height,
+                  },
+                  date: dateOnlyInTimeZone(info.date),
+                  meetings: hiddenMeetings,
+                })
+                return
+              }
+            }
+
             openDate(dateOnlyInTimeZone(info.date))
           }}
           eventClick={(info) => {
@@ -509,15 +814,36 @@ export function TaskCalendar({
             }
           }}
           datesSet={(info) => {
+            setWeekOverflow(null)
             setCurrentTitle(formatViewTitle(info.view.type, info.start, info.end))
+
+            const rangeStart = dateOnlyInTimeZone(info.start)
+            const rangeEnd = dateOnlyInTimeZone(info.end)
+            const isTimeGrid = info.view.type === 'timeGridWeek' || info.view.type === 'timeGridDay'
+            setTimeGridVisibleRange((current) => {
+              const next = isTimeGrid ? { start: rangeStart, end: rangeEnd } : null
+              if (current === null && next === null) return current
+              if (current && next && current.start === next.start && current.end === next.end) return current
+              return next
+            })
+
             onRangeChange({
-              start: dateOnlyInTimeZone(info.start),
-              end: dateOnlyInTimeZone(info.end),
+              start: rangeStart,
+              end: rangeEnd,
               currentDate: dateOnlyInTimeZone(info.view.currentStart),
             })
           }}
         />
       </div>
+
+      <MeetingWeekOverflowPopover
+        state={weekOverflow}
+        timeFormat={timeFormat}
+        onClose={() => setWeekOverflow(null)}
+        onOpenDay={openDate}
+        onOpenMeeting={onOpenMeeting}
+      />
     </Card>
   )
 }
+

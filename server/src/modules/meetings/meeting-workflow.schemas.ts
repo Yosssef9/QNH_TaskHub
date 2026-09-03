@@ -29,6 +29,19 @@ function withValidSchedule<T extends z.ZodRawShape>(shape: T) {
   });
 }
 
+const meetingAgendaItemSchema = z.object({
+  topic: z.string().trim().min(1).max(500),
+  presenterUserId: z.coerce.number().int().positive().nullable().optional().transform((value) => value ?? null),
+  plannedDurationMinutes: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(1440)
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
+});
+
 const meetingContentFields = {
   title: z.string().trim().min(1).max(250),
   description: nullableTrimmed(10000),
@@ -36,6 +49,7 @@ const meetingContentFields = {
   startAtUtc: utcDateTimeSchema,
   endAtUtc: utcDateTimeSchema,
   attendeeUserIds: z.array(z.coerce.number().int().positive()).max(500).default([]),
+  agendaItems: z.array(meetingAgendaItemSchema).max(50).default([]),
 };
 
 export const meetingParticipantQuerySchema = z.object({

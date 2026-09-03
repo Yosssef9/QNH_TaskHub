@@ -54,6 +54,23 @@ export const updateMeetingRescheduleBodySchema = withValidSchedule({
   schedulingNotes: nullableTrimmed(1000),
 });
 
+
+export const updateOrganizerRescheduleBodySchema = withValidSchedule({
+  revisionId: z.coerce.number().int().positive(),
+  revisionRowVersion: rowVersionSchema,
+  roomId: z.coerce.number().int().positive(),
+  startAtUtc: utcDateTimeSchema,
+  endAtUtc: utcDateTimeSchema,
+});
+
+export const coordinatorDirectRescheduleBodySchema = withValidSchedule({
+  meetingRowVersion: rowVersionSchema,
+  roomId: z.coerce.number().int().positive(),
+  startAtUtc: utcDateTimeSchema,
+  endAtUtc: utcDateTimeSchema,
+  schedulingNotes: nullableTrimmed(1000),
+});
+
 export const decideMeetingRescheduleBodySchema = z.object({
   revisionId: z.coerce.number().int().positive(),
   revisionRowVersion: rowVersionSchema,
@@ -63,9 +80,24 @@ export const rejectMeetingRescheduleBodySchema = decideMeetingRescheduleBodySche
   reason: nullableTrimmed(1000),
 });
 
+export const cancelMeetingRescheduleRequestBodySchema = decideMeetingRescheduleBodySchema.extend({
+  reason: nullableTrimmed(1000),
+});
+
 export const cancelMeetingBodySchema = z.object({
   meetingRowVersion: rowVersionSchema,
   reason: nullableTrimmed(1000),
+});
+
+const meetingAgendaItemBodySchema = z.object({
+  topic: z.string().trim().min(1).max(500),
+  presenterUserId: z.coerce.number().int().positive().nullable().optional().transform((value) => value ?? null),
+  plannedDurationMinutes: z.coerce.number().int().min(1).max(1440).nullable().optional().transform((value) => value ?? null),
+});
+
+export const updateMeetingAgendaBodySchema = z.object({
+  meetingRowVersion: rowVersionSchema,
+  agendaItems: z.array(meetingAgendaItemBodySchema).max(50),
 });
 
 const meetingTemplateFields = {
@@ -89,9 +121,13 @@ export type MeetingAttachmentParams = z.infer<typeof meetingAttachmentParamsSche
 export type MeetingTemplateParams = z.infer<typeof meetingTemplateParamsSchema>;
 export type CreateMeetingRescheduleBody = z.infer<typeof createMeetingRescheduleBodySchema>;
 export type UpdateMeetingRescheduleBody = z.infer<typeof updateMeetingRescheduleBodySchema>;
+export type UpdateOrganizerRescheduleBody = z.infer<typeof updateOrganizerRescheduleBodySchema>;
+export type CoordinatorDirectRescheduleBody = z.infer<typeof coordinatorDirectRescheduleBodySchema>;
 export type DecideMeetingRescheduleBody = z.infer<typeof decideMeetingRescheduleBodySchema>;
 export type RejectMeetingRescheduleBody = z.infer<typeof rejectMeetingRescheduleBodySchema>;
+export type CancelMeetingRescheduleRequestBody = z.infer<typeof cancelMeetingRescheduleRequestBodySchema>;
 export type CancelMeetingBody = z.infer<typeof cancelMeetingBodySchema>;
+export type UpdateMeetingAgendaBody = z.infer<typeof updateMeetingAgendaBodySchema>;
 export type CreateMeetingTemplateBody = z.infer<typeof createMeetingTemplateBodySchema>;
 export type UpdateMeetingTemplateBody = z.infer<typeof updateMeetingTemplateBodySchema>;
 export type ArchiveMeetingTemplateBody = z.infer<typeof archiveMeetingTemplateBodySchema>;

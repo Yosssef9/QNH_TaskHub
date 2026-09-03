@@ -10,6 +10,7 @@ import { LoadingState } from '@/components/shared/LoadingState'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { formatDateTime } from '@/lib/date-time'
+import { useTimeFormatPreference } from '@/features/preferences/hooks/use-time-format'
 
 import {
   downloadContractAttachment,
@@ -28,6 +29,7 @@ function formatBytes(bytes: number): string {
 
 export function ContractFilesPanel({ contract }: { contract: Contract }) {
   const { i18n, t } = useTranslation()
+  const timeFormat = useTimeFormatPreference()
   const query = useContractAttachments(contract.id)
   const removeMutation = useRemoveContractAttachment()
   const [uploadOpen, setUploadOpen] = useState(false)
@@ -119,7 +121,7 @@ export function ContractFilesPanel({ contract }: { contract: Contract }) {
                       <p className="truncate font-semibold">{attachment.originalFileName}</p>
                       <p className="text-muted-foreground mt-1 text-xs">
                         {attachment.fileExtension.slice(1).toUpperCase()} · {formatBytes(attachment.sizeBytes)} ·{' '}
-                        {formatDateTime(attachment.createdAtUtc, i18n.language)}
+                        {formatDateTime(attachment.createdAtUtc, i18n.language, timeFormat)}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -181,3 +183,4 @@ export function ContractFilesPanel({ contract }: { contract: Contract }) {
     </>
   )
 }
+

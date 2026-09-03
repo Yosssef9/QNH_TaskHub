@@ -31,7 +31,8 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useWorkCycle } from '@/features/work-cycles/hooks/use-work-cycles'
 import { parseDateOnly } from '@/lib/date-only'
-import { APP_TIME_ZONE } from '@/lib/date-time'
+import { APP_TIME_ZONE, formatDateTime } from '@/lib/date-time'
+import { useTimeFormatPreference } from '@/features/preferences/hooks/use-time-format'
 import { cn } from '@/lib/cn'
 
 import { downloadAttachment } from '../api/tasks.api'
@@ -286,6 +287,7 @@ function SortableSubtaskRow({
 
 export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange }: Props) {
   const { t, i18n } = useTranslation()
+  const timeFormat = useTimeFormatPreference()
   const [subtaskEditorOpen, setSubtaskEditorOpen] = useState(false)
   const [subtaskEditorSession, setSubtaskEditorSession] = useState(0)
   const [editingSubtask, setEditingSubtask] = useState<Subtask | null>(null)
@@ -715,7 +717,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                                     })}
                                   </p>
                                   <time className="text-muted-foreground mt-1 block text-xs">
-                                    {new Date(item.createdAtUtc).toLocaleString(i18n.language)}
+                                    {formatDateTime(item.createdAtUtc, i18n.language, timeFormat)}
                                   </time>
                                 </motion.li>
                               ))}
@@ -777,3 +779,4 @@ function InfoRow({
     </div>
   )
 }
+

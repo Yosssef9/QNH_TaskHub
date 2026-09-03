@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { MeetingRoomEditorDialog } from '@/features/meetings/components/MeetingRoomEditorDialog'
 import { useAdminMeetingRooms } from '@/features/meetings/hooks/use-meeting-rooms'
+import { getMeetingRoomAccent } from '@/features/meetings/meeting-room-colors'
 import type { MeetingRoom } from '@/features/meetings/types/meeting.types'
 
 export function MeetingRoomsPage() {
@@ -81,6 +82,14 @@ export function MeetingRoomsPage() {
                       </p>
                       <div className="text-muted-foreground mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs">
                         {room.code ? <span>{room.code}</span> : null}
+                        <span className="inline-flex items-center gap-1.5">
+                          <span
+                            aria-hidden="true"
+                            className="size-2.5 rounded-full ring-1 ring-black/10 dark:ring-white/15"
+                            style={{ backgroundColor: getMeetingRoomAccent(room.colorKey) }}
+                          />
+                          {t(`meetingRooms.colors.${room.colorKey.toLowerCase()}`)}
+                        </span>
                         {room.locationText ? (
                           <span className="inline-flex items-center gap-1">
                             <MapPin aria-hidden="true" className="size-3.5" />
@@ -134,3 +143,4 @@ export function MeetingRoomsPage() {
     </div>
   )
 }
+

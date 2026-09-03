@@ -8,6 +8,7 @@ import type {
   MeetingSummary,
   UpdatePendingMeetingScheduleInput,
 } from "./meeting-workflow.types.js";
+import type { MeetingRoomColorKey } from "./meetings.types.js";
 
 interface CountRecord {
   total: number | string;
@@ -42,6 +43,7 @@ interface MeetingSummaryRecord {
   roomNameAr: string;
   roomNameEn: string;
   roomLocationText: string | null;
+  roomColorKey: MeetingRoomColorKey;
   roomCapacity: number | string;
   roomEquipmentNotes: string | null;
   roomIsActive: boolean | number;
@@ -51,7 +53,9 @@ interface MeetingSummaryRecord {
   schedulingNotes: string | null;
   participantCount: number | string;
   attendeesJson: string | null;
+  hasPendingReschedule: boolean | number;
   revisionId: number | string;
+  revisionCreatedAtUtc: Date;
   meetingRowVersion: unknown;
   revisionRowVersion: unknown;
 }
@@ -67,10 +71,15 @@ interface ScheduleRecord {
   roomNameAr: string;
   roomNameEn: string;
   roomLocationText: string | null;
+  roomColorKey: MeetingRoomColorKey;
   startAtUtc: Date;
   endAtUtc: Date;
   isOrganizer: boolean | number;
   isAttendee: boolean | number;
+  participantCount: number | string;
+  agendaTopicCount: number | string;
+  agendaPlannedMinutes: number | string;
+  hasPendingReschedule: boolean | number;
 }
 
 export interface MeetingScheduleRecord {
@@ -83,11 +92,16 @@ export interface MeetingScheduleRecord {
     nameAr: string;
     nameEn: string;
     locationText: string | null;
+    colorKey: MeetingRoomColorKey;
   };
   startAtUtc: Date;
   endAtUtc: Date;
   isOrganizer: boolean;
   isAttendee: boolean;
+  participantCount: number;
+  agendaTopicCount: number;
+  agendaPlannedMinutes: number;
+  hasPendingReschedule: boolean;
 }
 
 function participantListInputs(
@@ -158,6 +172,7 @@ function mapMeetingSummary(record: MeetingSummaryRecord): MeetingSummary | null 
       nameAr: record.roomNameAr,
       nameEn: record.roomNameEn,
       locationText: record.roomLocationText,
+      colorKey: record.roomColorKey,
       capacity: Number(record.roomCapacity),
       equipmentNotes: record.roomEquipmentNotes,
       isActive: Boolean(record.roomIsActive),
@@ -168,7 +183,9 @@ function mapMeetingSummary(record: MeetingSummaryRecord): MeetingSummary | null 
     schedulingNotes: record.schedulingNotes,
     participantCount: Number(record.participantCount),
     attendees: parseAttendees(record.attendeesJson),
+    hasPendingReschedule: Boolean(record.hasPendingReschedule),
     revisionId: Number(record.revisionId),
+    revisionCreatedAtUtc: record.revisionCreatedAtUtc.toISOString(),
     meetingRowVersion,
     revisionRowVersion,
   };
@@ -187,6 +204,7 @@ const meetingSummaryFields = `
   room.name_ar AS roomNameAr,
   room.name_en AS roomNameEn,
   room.location_text AS roomLocationText,
+  room.color_key AS roomColorKey,
   room.capacity AS roomCapacity,
   room.equipment_notes AS roomEquipmentNotes,
   CAST(room.is_active AS BIT) AS roomIsActive,
@@ -216,7 +234,20 @@ const meetingSummaryFields = `
     ORDER BY attendeeUser.USER_NAME, attendeeUser.USER_ID
     FOR JSON PATH
   ), N'[]') AS attendeesJson,
+  CAST(CASE
+    WHEN @pendingRescheduleViewerUserId IS NOT NULL
+      AND m.organizer_user_id = @pendingRescheduleViewerUserId
+      AND EXISTS (
+        SELECT 1
+        FROM dbo.TM_meeting_revisions AS pendingReschedule
+        WHERE pendingReschedule.meeting_id = m.id
+          AND pendingReschedule.revision_type = 'RESCHEDULE'
+          AND pendingReschedule.revision_status = 'PENDING'
+      )
+    THEN 1 ELSE 0
+  END AS BIT) AS hasPendingReschedule,
   selectedRevision.id AS revisionId,
+  selectedRevision.created_at_utc AS revisionCreatedAtUtc,
   m.row_version AS meetingRowVersion,
   selectedRevision.row_version AS revisionRowVersion
 `;
@@ -234,6 +265,7 @@ const meetingSummaryJoins = `
       revision.start_at_utc,
       revision.end_at_utc,
       revision.scheduling_notes,
+      revision.created_at_utc,
       revision.row_version
     FROM dbo.TM_meeting_revisions AS revision
     WHERE revision.meeting_id = m.id
@@ -249,10 +281,12 @@ const meetingSummaryJoins = `
 async function querySummaries(
   whereSql: string,
   bind: (request: ReturnType<DatabaseTransaction["request"]>) => void,
+  pendingRescheduleViewerUserId: number | null = null,
 ): Promise<MeetingSummary[]> {
   const pool = await getDatabasePool();
   const request = pool.request();
   bind(request);
+  request.input("pendingRescheduleViewerUserId", sql.Int, pendingRescheduleViewerUserId);
   const result = await request.query<MeetingSummaryRecord>(`
     SELECT ${meetingSummaryFields}
     FROM dbo.TM_meetings AS m
@@ -288,11 +322,8 @@ export const meetingWorkflowRepository = {
           portal.USER_ID AS userId,
           portal.USER_CODE AS userCode,
           portal.USER_NAME AS userName
-        FROM dbo.TM_user_access AS access
-        INNER JOIN dbo.users AS portal
-          ON portal.USER_ID = access.portal_user_id
-        WHERE access.is_active = 1
-          AND portal.IS_ACTIVE = 1
+        FROM dbo.users AS portal
+        WHERE portal.IS_ACTIVE = 1
           AND (
             @search IS NULL
             OR portal.USER_CODE LIKE N'%' + @search + N'%'
@@ -303,11 +334,8 @@ export const meetingWorkflowRepository = {
       `),
       baseRequest().query<CountRecord>(`
         SELECT COUNT_BIG(1) AS total
-        FROM dbo.TM_user_access AS access
-        INNER JOIN dbo.users AS portal
-          ON portal.USER_ID = access.portal_user_id
-        WHERE access.is_active = 1
-          AND portal.IS_ACTIVE = 1
+        FROM dbo.users AS portal
+        WHERE portal.IS_ACTIVE = 1
           AND (
             @search IS NULL
             OR portal.USER_CODE LIKE N'%' + @search + N'%'
@@ -322,7 +350,7 @@ export const meetingWorkflowRepository = {
     };
   },
 
-  async activeParticipantIds(
+  async activePortalParticipantIds(
     transaction: DatabaseTransaction,
     userIds: readonly number[],
   ): Promise<number[]> {
@@ -330,12 +358,9 @@ export const meetingWorkflowRepository = {
 
     const { placeholders, request } = participantListInputs(transaction, userIds);
     const result = await request.query<{ userId: number | string }>(`
-      SELECT access.portal_user_id AS userId
-      FROM dbo.TM_user_access AS access
-      INNER JOIN dbo.users AS portal
-        ON portal.USER_ID = access.portal_user_id
-      WHERE access.portal_user_id IN (${placeholders})
-        AND access.is_active = 1
+      SELECT portal.USER_ID AS userId
+      FROM dbo.users AS portal
+      WHERE portal.USER_ID IN (${placeholders})
         AND portal.IS_ACTIVE = 1;
     `);
 
@@ -448,6 +473,42 @@ export const meetingWorkflowRepository = {
     }
   },
 
+  async addAgendaItems(
+    transaction: DatabaseTransaction,
+    meetingId: number,
+    actorUserId: number,
+    agendaItems: CreateMeetingInput["agendaItems"],
+  ): Promise<void> {
+    for (const [index, item] of agendaItems.entries()) {
+      await transaction
+        .request()
+        .input("meetingId", sql.BigInt, meetingId)
+        .input("sortOrder", sql.Int, index + 1)
+        .input("topic", sql.NVarChar(500), item.topic)
+        .input("presenterUserId", sql.Int, item.presenterUserId ?? null)
+        .input("plannedDurationMinutes", sql.Int, item.plannedDurationMinutes ?? null)
+        .input("actorUserId", sql.Int, actorUserId)
+        .query(`
+          INSERT INTO dbo.TM_meeting_agenda_items (
+            meeting_id,
+            sort_order,
+            topic,
+            presenter_user_id,
+            planned_duration_minutes,
+            created_by_user_id
+          )
+          VALUES (
+            @meetingId,
+            @sortOrder,
+            @topic,
+            @presenterUserId,
+            @plannedDurationMinutes,
+            @actorUserId
+          );
+        `);
+    }
+  },
+
   async listMyMeetings(userId: number): Promise<MeetingSummary[]> {
     return querySummaries(
       `
@@ -465,6 +526,7 @@ export const meetingWorkflowRepository = {
       (request) => {
         request.input("userId", sql.Int, userId);
       },
+      userId,
     );
   },
 
@@ -501,6 +563,44 @@ export const meetingWorkflowRepository = {
       request.input("meetingId", sql.BigInt, meetingId);
     });
     return meetings[0] ?? null;
+  },
+
+  async updatePendingInitialRequestedSchedule(
+    transaction: DatabaseTransaction,
+    meetingId: number,
+    input: {
+      revisionId: number;
+      revisionRowVersion: string;
+      roomId: number;
+      startAtUtc: string;
+      endAtUtc: string;
+    },
+  ): Promise<boolean> {
+    const rowVersion = rowVersionToBuffer(input.revisionRowVersion);
+    if (!rowVersion) return false;
+
+    const result = await transaction
+      .request()
+      .input("meetingId", sql.BigInt, meetingId)
+      .input("revisionId", sql.BigInt, input.revisionId)
+      .input("rowVersion", sql.VarBinary(8), rowVersion)
+      .input("roomId", sql.BigInt, input.roomId)
+      .input("startAtUtc", sql.DateTime2(3), new Date(input.startAtUtc))
+      .input("endAtUtc", sql.DateTime2(3), new Date(input.endAtUtc))
+      .query(`
+        UPDATE dbo.TM_meeting_revisions
+        SET
+          room_id = @roomId,
+          start_at_utc = @startAtUtc,
+          end_at_utc = @endAtUtc
+        WHERE id = @revisionId
+          AND meeting_id = @meetingId
+          AND revision_type = 'INITIAL'
+          AND revision_status = 'PENDING'
+          AND row_version = @rowVersion;
+      `);
+
+    return Number(result.rowsAffected[0] ?? 0) === 1;
   },
 
   async updatePendingInitialSchedule(
@@ -618,6 +718,7 @@ export const meetingWorkflowRepository = {
           room.name_ar AS roomNameAr,
           room.name_en AS roomNameEn,
           room.location_text AS roomLocationText,
+          room.color_key AS roomColorKey,
           revision.start_at_utc AS startAtUtc,
           revision.end_at_utc AS endAtUtc,
           CAST(CASE WHEN m.organizer_user_id = @userId THEN 1 ELSE 0 END AS BIT) AS isOrganizer,
@@ -626,7 +727,33 @@ export const meetingWorkflowRepository = {
             FROM dbo.TM_meeting_attendees AS attendee
             WHERE attendee.meeting_id = m.id
               AND attendee.attendee_user_id = @userId
-          ) THEN 1 ELSE 0 END AS BIT) AS isAttendee
+          ) THEN 1 ELSE 0 END AS BIT) AS isAttendee,
+          CAST(
+            1 + (
+              SELECT COUNT_BIG(1)
+              FROM dbo.TM_meeting_attendees AS participantAttendee
+              WHERE participantAttendee.meeting_id = m.id
+                AND participantAttendee.attendee_user_id <> m.organizer_user_id
+            )
+            AS BIGINT
+          ) AS participantCount,
+          CAST((
+            SELECT COUNT_BIG(1)
+            FROM dbo.TM_meeting_agenda_items AS agendaItem
+            WHERE agendaItem.meeting_id = m.id
+          ) AS BIGINT) AS agendaTopicCount,
+          CAST(COALESCE((
+            SELECT SUM(COALESCE(agendaItem.planned_duration_minutes, 0))
+            FROM dbo.TM_meeting_agenda_items AS agendaItem
+            WHERE agendaItem.meeting_id = m.id
+          ), 0) AS BIGINT) AS agendaPlannedMinutes,
+          CAST(CASE WHEN EXISTS (
+            SELECT 1
+            FROM dbo.TM_meeting_revisions AS pendingReschedule
+            WHERE pendingReschedule.meeting_id = m.id
+              AND pendingReschedule.revision_type = 'RESCHEDULE'
+              AND pendingReschedule.revision_status = 'PENDING'
+          ) THEN 1 ELSE 0 END AS BIT) AS hasPendingReschedule
         FROM dbo.TM_meetings AS m
         INNER JOIN dbo.TM_meeting_revisions AS revision
           ON revision.id = m.current_revision_id
@@ -657,11 +784,18 @@ export const meetingWorkflowRepository = {
         nameAr: record.roomNameAr,
         nameEn: record.roomNameEn,
         locationText: record.roomLocationText,
+        colorKey: record.roomColorKey,
       },
       startAtUtc: record.startAtUtc,
       endAtUtc: record.endAtUtc,
       isOrganizer: Boolean(record.isOrganizer),
       isAttendee: Boolean(record.isAttendee),
+      participantCount: Number(record.participantCount),
+      agendaTopicCount: Number(record.agendaTopicCount),
+      agendaPlannedMinutes: Number(record.agendaPlannedMinutes),
+      hasPendingReschedule: Boolean(record.hasPendingReschedule),
     }));
   },
 };
+
+

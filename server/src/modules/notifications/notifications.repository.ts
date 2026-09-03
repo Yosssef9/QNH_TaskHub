@@ -11,6 +11,8 @@ export interface NotificationRecord {
   cycleId: number | string | null;
   kpiInstanceId: number | string | null;
   contractId: number | string | null;
+  meetingId: number | string | null;
+  meetingRevisionId: number | string | null;
   eventDate: Date | null;
   actualValue: number | null;
   targetValue: number | null;
@@ -91,6 +93,8 @@ export const notificationsRepository = {
         cycle_id AS cycleId,
         kpi_instance_id AS kpiInstanceId,
         contract_id AS contractId,
+        meeting_id AS meetingId,
+        meeting_revision_id AS meetingRevisionId,
         event_date AS eventDate,
         actual_value AS actualValue,
         target_value AS targetValue,
@@ -474,6 +478,8 @@ export const notificationsRepository = {
           cycle_id AS cycleId,
           kpi_instance_id AS kpiInstanceId,
           contract_id AS contractId,
+          meeting_id AS meetingId,
+          meeting_revision_id AS meetingRevisionId,
           event_date AS eventDate,
           actual_value AS actualValue,
           target_value AS targetValue,
@@ -525,4 +531,5 @@ export const notificationsRepository = {
     return result.rowsAffected[0] ?? 0;
   },
 };
+
 

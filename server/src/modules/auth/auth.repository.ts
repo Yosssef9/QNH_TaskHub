@@ -20,6 +20,8 @@ export interface AccessProfileRecord {
   theme: string | null;
   sidebarCollapsed: boolean | null;
   calendarShowAdjacentDates: boolean | null;
+  meetingStartReminderEnabled: boolean | null;
+  timeFormat: string | null;
   timezone: string | null;
   hasDefaultList: boolean;
 }
@@ -78,6 +80,8 @@ export async function findAccessProfile(userId: number): Promise<AccessProfileRe
         settings.theme,
         settings.sidebar_collapsed AS sidebarCollapsed,
         settings.calendar_show_adjacent_dates AS calendarShowAdjacentDates,
+        settings.meeting_start_reminder_enabled AS meetingStartReminderEnabled,
+        settings.time_format AS timeFormat,
         settings.timezone_name AS timezone,
         CAST(
           CASE WHEN EXISTS (
@@ -151,3 +155,5 @@ export const authRepository: AuthRepository = {
   findAccessProfile,
   ensureUserFoundation,
 };
+
+

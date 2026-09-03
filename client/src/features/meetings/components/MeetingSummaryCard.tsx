@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { formatDateTime } from '@/lib/date-time'
+import { useTimeFormatPreference } from '@/features/preferences/hooks/use-time-format'
 
 import type { MeetingStatus, MeetingSummary } from '../types/meeting.types'
 
@@ -37,6 +38,7 @@ export function MeetingSummaryCard({
   onReject,
 }: MeetingSummaryCardProps) {
   const { i18n, t } = useTranslation()
+  const timeFormat = useTimeFormatPreference()
   const roomName = i18n.language.startsWith('ar') ? meeting.room.nameAr : meeting.room.nameEn
   const locale = i18n.language.startsWith('ar') ? 'ar-SA' : 'en-SA'
   const attendeeNames = meeting.attendees.map((attendee) => attendee.userName).join(', ')
@@ -65,9 +67,9 @@ export function MeetingSummaryCard({
         <div className="bg-muted/45 flex items-start gap-2 rounded-lg border p-3">
           <CalendarClock aria-hidden="true" className="text-muted-foreground mt-0.5 size-4" />
           <div>
-            <p className="font-medium">{formatDateTime(meeting.startAtUtc, locale)}</p>
+            <p className="font-medium">{formatDateTime(meeting.startAtUtc, locale, timeFormat)}</p>
             <p className="text-muted-foreground mt-0.5 text-xs">
-              {t('meetings.endsAt', { value: formatDateTime(meeting.endAtUtc, locale) })}
+              {t('meetings.endsAt', { value: formatDateTime(meeting.endAtUtc, locale, timeFormat) })}
             </p>
           </div>
         </div>
@@ -110,13 +112,13 @@ export function MeetingSummaryCard({
           {coordinatorActions ? (<>
           <Button variant="outline" size="sm" onClick={onEditSchedule}>
             <Pencil aria-hidden="true" className="size-4" />
-            {t('meetings.editSchedule')}
+            {t('meetings.coordinatorSchedule.adjustAndApprove')}
           </Button>
           <Button variant="outline" size="sm" disabled={rejecting || approving} onClick={onReject}>
             {t('meetings.reject')}
           </Button>
           <Button size="sm" disabled={approving || rejecting} onClick={onApprove}>
-            {t('meetings.approve')}
+            {t('meetings.approveAsRequested')}
           </Button>
           </>) : null}
         </div>
@@ -124,4 +126,5 @@ export function MeetingSummaryCard({
     </Card>
   )
 }
+
 

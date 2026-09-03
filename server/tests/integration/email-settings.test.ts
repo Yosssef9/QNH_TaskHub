@@ -52,6 +52,8 @@ describe("email settings endpoints", () => {
         theme: "SYSTEM",
         sidebarCollapsed: false,
         calendarShowAdjacentDates: false,
+        meetingStartReminderEnabled: true,
+        timeFormat: "12H",
         timezone: "Asia/Riyadh",
       },
     });
@@ -120,4 +122,6 @@ describe("email settings endpoints", () => {
     expect(verify).toHaveBeenCalledWith(7, "483271");
   });
 });
+
+
 

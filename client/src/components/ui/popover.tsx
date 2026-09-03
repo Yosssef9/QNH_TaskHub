@@ -17,6 +17,16 @@ export function PopoverAnchor(props: ComponentProps<typeof PopoverPrimitive.Anch
   return <PopoverPrimitive.Anchor {...props} />
 }
 
+
+export function PopoverArrow({ className, ...props }: ComponentProps<typeof PopoverPrimitive.Arrow>) {
+  return (
+    <PopoverPrimitive.Arrow
+      className={cn('fill-popover stroke-border', className)}
+      {...props}
+    />
+  )
+}
+
 export const PopoverContent = forwardRef<
   HTMLDivElement,
   ComponentProps<typeof PopoverPrimitive.Content>

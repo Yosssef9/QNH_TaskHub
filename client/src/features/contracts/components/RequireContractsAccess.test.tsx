@@ -20,6 +20,8 @@ function renderGuard(contractsEnabled: boolean) {
         theme: 'SYSTEM',
         sidebarCollapsed: false,
         calendarShowAdjacentDates: true,
+        meetingStartReminderEnabled: true,
+        timeFormat: '12H',
         timezone: 'Asia/Riyadh',
       },
     },
@@ -53,3 +55,5 @@ describe('RequireContractsAccess', () => {
     expect(screen.getByText('Forbidden content')).toBeVisible()
   })
 })
+
+

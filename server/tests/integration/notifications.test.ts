@@ -25,6 +25,8 @@ describe("notification endpoints", () => {
         theme: "SYSTEM",
         sidebarCollapsed: false,
         calendarShowAdjacentDates: false,
+        meetingStartReminderEnabled: true,
+        timeFormat: "12H",
         timezone: "Asia/Riyadh",
       },
     });
@@ -82,4 +84,6 @@ describe("notification endpoints", () => {
     expect(response.body.data.updated).toBe(3);
   });
 });
+
+
 

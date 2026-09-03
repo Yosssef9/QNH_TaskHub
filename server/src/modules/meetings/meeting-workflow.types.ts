@@ -29,9 +29,17 @@ export interface MeetingSummary {
   schedulingNotes: string | null;
   participantCount: number;
   attendees: MeetingParticipant[];
+  hasPendingReschedule: boolean;
   revisionId: number;
+  revisionCreatedAtUtc?: string;
   meetingRowVersion: string;
   revisionRowVersion: string;
+}
+
+export interface MeetingAgendaItemInput {
+  topic: string;
+  presenterUserId?: number | null;
+  plannedDurationMinutes?: number | null;
 }
 
 export interface CreateMeetingInput {
@@ -41,6 +49,7 @@ export interface CreateMeetingInput {
   startAtUtc: string;
   endAtUtc: string;
   attendeeUserIds: number[];
+  agendaItems: MeetingAgendaItemInput[];
 }
 
 export interface UpdatePendingMeetingScheduleInput {
@@ -66,7 +75,21 @@ export interface MeetingScheduleFullEntry {
   meetingId: number;
   title: string;
   organizer: MeetingParticipant;
-  room: Pick<MeetingRoom, "id" | "code" | "nameAr" | "nameEn" | "locationText">;
+  room: Pick<MeetingRoom, "id" | "code" | "nameAr" | "nameEn" | "locationText" | "colorKey">;
+  startAtUtc: string;
+  endAtUtc: string;
+  participantCount: number;
+  agendaTopicCount: number;
+  agendaPlannedMinutes: number;
+  hasPendingReschedule: boolean;
+}
+
+export interface MeetingSchedulePreviewEntry {
+  visibility: "PREVIEW";
+  meetingId: null;
+  title: string;
+  organizer: MeetingParticipant;
+  room: Pick<MeetingRoom, "id" | "code" | "nameAr" | "nameEn" | "locationText" | "colorKey">;
   startAtUtc: string;
   endAtUtc: string;
 }
@@ -76,9 +99,14 @@ export interface MeetingScheduleBusyEntry {
   meetingId: null;
   title: null;
   organizer: MeetingParticipant;
-  room: Pick<MeetingRoom, "id" | "code" | "nameAr" | "nameEn" | "locationText">;
+  room: Pick<MeetingRoom, "id" | "code" | "nameAr" | "nameEn" | "locationText" | "colorKey">;
   startAtUtc: string;
   endAtUtc: string;
 }
 
-export type MeetingScheduleEntry = MeetingScheduleFullEntry | MeetingScheduleBusyEntry;
+export type MeetingScheduleEntry =
+  | MeetingScheduleFullEntry
+  | MeetingSchedulePreviewEntry
+  | MeetingScheduleBusyEntry;
+
+

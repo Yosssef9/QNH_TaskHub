@@ -41,6 +41,14 @@ function asTemplateKey(value: string): EmailTemplateKey {
     case "KPI_MEASUREMENT_DUE":
     case "CONTRACT_EXPIRATION_REMINDER":
     case "CONTRACT_NOTICE_DEADLINE_REMINDER":
+    case "MEETING_REQUEST_SUBMITTED":
+    case "MEETING_REQUEST_UPDATED":
+    case "MEETING_APPROVED":
+    case "MEETING_REJECTED":
+    case "MEETING_INVITED":
+    case "MEETING_RESCHEDULED":
+    case "MEETING_RESCHEDULE_REQUEST_CANCELLED":
+    case "MEETING_CANCELLED":
       return value;
     default:
       throw new Error(`Unsupported email template key: ${value}`);
@@ -206,4 +214,5 @@ export function startEmailWorker(): EmailWorkerHandle {
     },
   };
 }
+
 

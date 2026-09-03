@@ -13,22 +13,14 @@ import { toApiClientError } from '@/lib/api-error'
 
 import { downloadMeetingAttachment } from '../api/meetings.api'
 import { useMeetingAttachments, useRemoveMeetingAttachment, useUploadMeetingAttachment } from '../hooks/use-meetings'
+import {
+  MEETING_ATTACHMENT_EXTENSIONS,
+  MEETING_ATTACHMENT_MAX_COUNT,
+  formatMeetingAttachmentBytes,
+  validateMeetingAttachmentFile,
+} from '../meeting-attachment-policy'
 import type { MeetingAttachment } from '../types/meeting.types'
 import { MeetingAttachmentPreviewDialog } from './MeetingAttachmentPreviewDialog'
-
-const allowedExtensions = ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.txt', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx']
-const MAX_BYTES = 10 * 1024 * 1024
-
-function extension(name: string) {
-  const index = name.lastIndexOf('.')
-  return index >= 0 ? name.slice(index).toLowerCase() : ''
-}
-
-function formatBytes(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
 
 export function MeetingFilesPanel({ meetingId, canManage }: { meetingId: number; canManage: boolean }) {
   const { t } = useTranslation()
@@ -41,11 +33,12 @@ export function MeetingFilesPanel({ meetingId, canManage }: { meetingId: number;
 
   async function choose(file: File | null) {
     if (!file) return
-    if (!allowedExtensions.includes(extension(file.name))) {
+    const validationError = validateMeetingAttachmentFile(file)
+    if (validationError === 'TYPE') {
       toast.error(t('meetings.files.errors.type'))
       return
     }
-    if (file.size <= 0 || file.size > MAX_BYTES) {
+    if (validationError === 'SIZE') {
       toast.error(t('meetings.files.errors.tooLarge'))
       return
     }
@@ -76,31 +69,31 @@ export function MeetingFilesPanel({ meetingId, canManage }: { meetingId: number;
   const files = query.data ?? []
 
   return (
-    <Card className="p-5">
+    <Card className="border-border/70 p-5 shadow-sm sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold">{t('meetings.files.title')}</h2>
           <p className="text-muted-foreground mt-1 text-sm">{t('meetings.files.description')}</p>
         </div>
-        {canManage && files.length < 10 ? (
+        {canManage && files.length < MEETING_ATTACHMENT_MAX_COUNT ? (
           <Button size="sm" onClick={() => fileRef.current?.click()} disabled={upload.isPending}>
             <Plus className="size-4" aria-hidden="true" />
             {t('meetings.files.add')}
           </Button>
         ) : null}
       </div>
-      <input ref={fileRef} type="file" className="hidden" accept={allowedExtensions.join(',')} onChange={(event) => void choose(event.target.files?.item(0) ?? null)} />
+      <input ref={fileRef} type="file" className="hidden" accept={MEETING_ATTACHMENT_EXTENSIONS.join(',')} onChange={(event) => void choose(event.target.files?.item(0) ?? null)} />
 
       {files.length === 0 ? (
-        <EmptyState icon={Paperclip} title={t('meetings.files.emptyTitle')} description={t('meetings.files.emptyDescription')} className="mt-4 min-h-36" />
+        <EmptyState icon={Paperclip} title={t('meetings.files.emptyTitle')} description={t('meetings.files.emptyDescription')} className="mt-4 min-h-28 rounded-xl border border-dashed bg-muted/10" />
       ) : (
         <div className="mt-4 space-y-2">
           {files.map((file) => (
-            <div key={file.id} className="flex items-center gap-3 rounded-lg border p-3">
+            <div key={file.id} className="hover:bg-muted/25 flex items-center gap-3 rounded-xl border border-border/70 p-3 transition-colors">
               <span className="bg-muted grid size-9 shrink-0 place-items-center rounded-lg"><FileText className="size-4" /></span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{file.originalFileName}</p>
-                <p className="text-muted-foreground mt-0.5 text-xs">{formatBytes(file.sizeBytes)} · {file.uploadedBy.userName}</p>
+                <p className="text-muted-foreground mt-0.5 text-xs">{formatMeetingAttachmentBytes(file.sizeBytes)} · {file.uploadedBy.userName}</p>
               </div>
               <Button variant="ghost" size="icon" aria-label={t('meetings.files.preview')} onClick={() => setPreview(file)}><Eye className="size-4" /></Button>
               <Button variant="ghost" size="icon" aria-label={t('meetings.files.download')} onClick={() => void downloadMeetingAttachment(file).catch(() => toast.error(t('meetings.files.errors.download')))}><Download className="size-4" /></Button>
@@ -115,3 +108,4 @@ export function MeetingFilesPanel({ meetingId, canManage }: { meetingId: number;
     </Card>
   )
 }
+

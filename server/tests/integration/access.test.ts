@@ -29,6 +29,8 @@ function createProfile(roleCode: "USER" | "ADMIN"): AuthMeData {
       theme: "SYSTEM",
       sidebarCollapsed: false,
       calendarShowAdjacentDates: false,
+      meetingStartReminderEnabled: true,
+      timeFormat: "12H",
       timezone: "Asia/Riyadh",
     },
   };
@@ -81,4 +83,6 @@ describe("TaskHub access administration", () => {
     expect(updateUserAccess).not.toHaveBeenCalled();
   });
 });
+
+
 

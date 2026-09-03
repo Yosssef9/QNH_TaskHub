@@ -19,6 +19,8 @@ function renderGuard(roleCode: 'USER' | 'ADMIN') {
         theme: 'SYSTEM',
         sidebarCollapsed: false,
         calendarShowAdjacentDates: false,
+        meetingStartReminderEnabled: true,
+        timeFormat: '12H',
         timezone: 'Asia/Riyadh',
       },
     },
@@ -52,4 +54,6 @@ describe('RequireRole', () => {
     expect(screen.getByText('Forbidden content')).toBeVisible()
   })
 })
+
+
 

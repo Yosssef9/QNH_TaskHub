@@ -1,14 +1,19 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import {
+  adjustAndApproveMeetingRequest,
+  adjustAndApproveMeetingReschedule,
   approveMeetingRequest,
   approveMeetingReschedule,
   archiveMeetingTemplate,
   cancelMeeting,
+  cancelMeetingRescheduleRequest,
   checkMeetingAvailability,
   createDirectMeeting,
   createMeetingRequest,
   createMeetingTemplate,
+  directCoordinatorReschedule,
+  editMeetingRescheduleRequest,
   getCoordinatorMeetingQueue,
   getCoordinatorReschedules,
   getMeetingAttachments,
@@ -22,7 +27,9 @@ import {
   removeMeetingAttachment,
   requestMeetingReschedule,
   searchMeetingParticipants,
+  updateMeetingAgenda,
   updateMeetingReschedule,
+  updateOrganizerRequestedSchedule,
   updateMeetingTemplate,
   updatePendingMeetingSchedule,
   uploadMeetingAttachment,
@@ -58,9 +65,21 @@ export function useCoordinatorMeetingQueue(enabled: boolean) {
 }
 
 export function useMeetingParticipants(search: string, enabled: boolean) {
-  return useQuery({
-    queryKey: [...meetingsQueryKey, 'participants', search],
-    queryFn: () => searchMeetingParticipants({ search, page: 1, pageSize: 50 }),
+  const normalizedSearch = search.trim()
+
+  return useInfiniteQuery({
+    queryKey: [...meetingsQueryKey, 'participants', normalizedSearch],
+    queryFn: ({ pageParam }) =>
+      searchMeetingParticipants({
+        search: normalizedSearch,
+        page: pageParam,
+        pageSize: 50,
+      }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) =>
+      lastPage.page * lastPage.pageSize < lastPage.total
+        ? lastPage.page + 1
+        : undefined,
     enabled,
     staleTime: 60_000,
   })
@@ -95,6 +114,14 @@ export function useCreateDirectMeeting() {
 
 export function useUpdatePendingMeetingSchedule() {
   return useMeetingMutation(updatePendingMeetingSchedule)
+}
+
+export function useAdjustAndApproveMeetingRequest() {
+  return useMeetingMutation(adjustAndApproveMeetingRequest)
+}
+
+export function useUpdateOrganizerRequestedSchedule() {
+  return useMeetingMutation(updateOrganizerRequestedSchedule)
 }
 
 export function useApproveMeetingRequest() {
@@ -153,12 +180,40 @@ export function useMeetingTemplates(enabled: boolean) {
   })
 }
 
+export function useUpdateMeetingAgenda() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: updateMeetingAgenda,
+    onSuccess: (detail, input) => {
+      client.setQueryData([...meetingsQueryKey, 'detail', input.meetingId], detail)
+      void client.invalidateQueries({ queryKey: myMeetingsQueryKey })
+      void client.invalidateQueries({ queryKey: myMeetingRequestsQueryKey })
+    },
+  })
+}
+
 export function useRequestMeetingReschedule() {
   return useMeetingMutation(requestMeetingReschedule)
 }
 
 export function useUpdateMeetingReschedule() {
   return useMeetingMutation(updateMeetingReschedule)
+}
+
+export function useEditMeetingRescheduleRequest() {
+  return useMeetingMutation(editMeetingRescheduleRequest)
+}
+
+export function useCancelMeetingRescheduleRequest() {
+  return useMeetingMutation(cancelMeetingRescheduleRequest)
+}
+
+export function useAdjustAndApproveMeetingReschedule() {
+  return useMeetingMutation(adjustAndApproveMeetingReschedule)
+}
+
+export function useDirectCoordinatorReschedule() {
+  return useMeetingMutation(directCoordinatorReschedule)
 }
 
 export function useApproveMeetingReschedule() {

@@ -6,8 +6,11 @@ import { assertScheduleWindow } from "./meeting-scheduling.policy.js";
 import { meetingSchedulingRepository } from "./meeting-scheduling.repository.js";
 import { meetingSchedulingService } from "./meeting-scheduling.service.js";
 import { meetingWorkflowRepository } from "./meeting-workflow.repository.js";
+import { meetingWorkspaceRepository } from "./meeting-workspace.repository.js";
+import { meetingNotificationsService } from "./meeting-notifications.service.js";
 import type {
   CreateMeetingInput,
+  MeetingAgendaItemInput,
   DecideMeetingRequestInput,
   MeetingParticipantList,
   MeetingScheduleEntry,
@@ -21,7 +24,15 @@ function invalidAttendee(): AppError {
   return new AppError({
     statusCode: 400,
     code: "INVALID_MEETING_ATTENDEE",
-    message: "One or more selected attendees are not active TaskHub users.",
+    message: "One or more selected attendees are not active Portal users.",
+  });
+}
+
+function invalidAgendaPresenter(): AppError {
+  return new AppError({
+    statusCode: 400,
+    code: "INVALID_MEETING_AGENDA_PRESENTER",
+    message: "Agenda presenters must be the Meeting Organizer or one of the selected attendees.",
   });
 }
 
@@ -53,36 +64,69 @@ function normalizeAttendeeIds(actorUserId: number, attendeeUserIds: readonly num
   return [...new Set(attendeeUserIds)].filter((userId) => userId !== actorUserId);
 }
 
-async function assertActiveAttendees(
+async function assertActivePortalAttendees(
   transaction: DatabaseTransaction,
   actorUserId: number,
   attendeeUserIds: readonly number[],
 ): Promise<number[]> {
   const normalized = normalizeAttendeeIds(actorUserId, attendeeUserIds);
-  const active = await meetingWorkflowRepository.activeParticipantIds(transaction, normalized);
+  const active = await meetingWorkflowRepository.activePortalParticipantIds(transaction, normalized);
   if (active.length !== normalized.length) throw invalidAttendee();
 
   return normalized;
+}
+
+function normalizeAgendaItems(
+  actorUserId: number,
+  attendeeUserIds: readonly number[],
+  agendaItems: readonly MeetingAgendaItemInput[],
+): MeetingAgendaItemInput[] {
+  const allowedPresenterIds = new Set([actorUserId, ...attendeeUserIds]);
+
+  return agendaItems.map((item) => {
+    const topic = item.topic.trim();
+    const presenterUserId = item.presenterUserId ?? null;
+    const plannedDurationMinutes = item.plannedDurationMinutes ?? null;
+
+    if (!topic) {
+      throw new AppError({
+        statusCode: 400,
+        code: "INVALID_MEETING_AGENDA_TOPIC",
+        message: "Every Meeting agenda item must have a topic.",
+      });
+    }
+
+    if (presenterUserId !== null && !allowedPresenterIds.has(presenterUserId)) {
+      throw invalidAgendaPresenter();
+    }
+
+    return {
+      topic,
+      presenterUserId,
+      plannedDurationMinutes,
+    };
+  });
 }
 
 async function assertEffectiveOrganizerPermission(
   transaction: DatabaseTransaction,
   actorUserId: number,
 ): Promise<void> {
-  const [organize, coordinate] = await Promise.all([
-    meetingSchedulingRepository.hasActiveMeetingPermission(
-      transaction,
-      actorUserId,
-      "MEETING_ORGANIZE",
-    ),
-    meetingSchedulingRepository.hasActiveMeetingPermission(
-      transaction,
-      actorUserId,
-      "MEETING_COORDINATE",
-    ),
-  ]);
+  const organize = await meetingSchedulingRepository.hasActiveMeetingPermission(
+    transaction,
+    actorUserId,
+    "MEETING_ORGANIZE",
+  );
 
-  if (organize || coordinate) return;
+  if (organize) return;
+
+  const coordinate = await meetingSchedulingRepository.hasActiveMeetingPermission(
+    transaction,
+    actorUserId,
+    "MEETING_COORDINATE",
+  );
+
+  if (coordinate) return;
 
   throw new AppError({
     statusCode: 403,
@@ -123,11 +167,12 @@ async function createPendingMeetingInTransaction(
   const endAtUtc = new Date(input.endAtUtc);
   assertScheduleWindow(startAtUtc, endAtUtc);
   await assertActiveRequestedRoom(transaction, input.roomId);
-  const attendeeUserIds = await assertActiveAttendees(
+  const attendeeUserIds = await assertActivePortalAttendees(
     transaction,
     actorUserId,
     input.attendeeUserIds,
   );
+  const agendaItems = normalizeAgendaItems(actorUserId, attendeeUserIds, input.agendaItems);
 
   const meeting = await meetingWorkflowRepository.createMeeting(transaction, actorUserId, input);
   if (!meeting) throw meetingCreateFailed();
@@ -146,6 +191,12 @@ async function createPendingMeetingInTransaction(
     actorUserId,
     attendeeUserIds,
   );
+  await meetingWorkflowRepository.addAgendaItems(
+    transaction,
+    meeting.meetingId,
+    actorUserId,
+    agendaItems,
+  );
 
   await meetingSchedulingRepository.addActivity(
     transaction,
@@ -158,6 +209,7 @@ async function createPendingMeetingInTransaction(
       startAtUtc: startAtUtc.toISOString(),
       endAtUtc: endAtUtc.toISOString(),
       attendeeUserIds,
+      agendaItemCount: agendaItems.length,
     },
   );
 
@@ -207,6 +259,7 @@ export const meetingWorkflowService = {
       return createPendingMeetingInTransaction(transaction, actorUserId, input, "REQUESTED");
     });
 
+    await meetingNotificationsService.safeRequestSubmitted(created.meetingId, created.revisionId);
     return requireSummary(created.meetingId);
   },
 
@@ -229,7 +282,84 @@ export const meetingWorkflowService = {
       return pending;
     });
 
+    await meetingNotificationsService.safeInitialScheduled(
+      created.meetingId,
+      created.revisionId,
+      false,
+    );
     return requireSummary(created.meetingId);
+  },
+
+  async updateOrganizerPendingSchedule(
+    actorUserId: number,
+    meetingId: number,
+    input: UpdatePendingMeetingScheduleInput,
+  ): Promise<MeetingSummary> {
+    await withTransaction(async (transaction) => {
+      const context = await meetingWorkspaceRepository.findAccessContext(
+        meetingId,
+        actorUserId,
+        transaction,
+      );
+      if (!context || context.organizerUserId !== actorUserId) throw meetingRequestNotFound();
+      if (
+        context.status !== "PENDING_APPROVAL" ||
+        context.currentRevisionId !== null ||
+        input.revisionId <= 0
+      ) {
+        throw staleRequest();
+      }
+
+      const current = await meetingSchedulingRepository.findRevisionSchedule(
+        transaction,
+        meetingId,
+        input.revisionId,
+      );
+      if (
+        !current ||
+        current.meetingStatus !== "PENDING_APPROVAL" ||
+        current.revisionType !== "INITIAL" ||
+        current.revisionStatus !== "PENDING" ||
+        current.revisionRowVersion !== input.revisionRowVersion
+      ) {
+        throw staleRequest();
+      }
+
+      const startAtUtc = new Date(input.startAtUtc);
+      const endAtUtc = new Date(input.endAtUtc);
+      assertScheduleWindow(startAtUtc, endAtUtc);
+      await assertActiveRequestedRoom(transaction, input.roomId);
+
+      const updated = await meetingWorkflowRepository.updatePendingInitialRequestedSchedule(
+        transaction,
+        meetingId,
+        input,
+      );
+      if (!updated) throw staleRequest();
+
+      await meetingSchedulingRepository.addActivity(
+        transaction,
+        meetingId,
+        actorUserId,
+        "REQUEST_SCHEDULE_CHANGED",
+        {
+          revisionId: input.revisionId,
+          before: {
+            roomId: current.roomId,
+            startAtUtc: current.startAtUtc.toISOString(),
+            endAtUtc: current.endAtUtc.toISOString(),
+          },
+          requested: {
+            roomId: input.roomId,
+            startAtUtc: startAtUtc.toISOString(),
+            endAtUtc: endAtUtc.toISOString(),
+          },
+        },
+      );
+    });
+
+    await meetingNotificationsService.safeRequestUpdated(meetingId, input.revisionId);
+    return requireSummary(meetingId);
   },
 
   async updateCoordinatorSchedule(
@@ -291,6 +421,82 @@ export const meetingWorkflowService = {
     return requireSummary(meetingId);
   },
 
+  async adjustAndApproveRequest(
+    actorUserId: number,
+    meetingId: number,
+    input: UpdatePendingMeetingScheduleInput,
+  ): Promise<MeetingSummary> {
+    await withTransaction(async (transaction) => {
+      await meetingSchedulingService.assertCoordinatorPermission(transaction, actorUserId);
+      const requested = await meetingSchedulingRepository.findRevisionSchedule(
+        transaction,
+        meetingId,
+        input.revisionId,
+      );
+      if (
+        !requested ||
+        requested.meetingStatus !== "PENDING_APPROVAL" ||
+        requested.revisionType !== "INITIAL" ||
+        requested.revisionStatus !== "PENDING" ||
+        requested.revisionRowVersion !== input.revisionRowVersion
+      ) {
+        throw staleRequest();
+      }
+
+      const startAtUtc = new Date(input.startAtUtc);
+      const endAtUtc = new Date(input.endAtUtc);
+      assertScheduleWindow(startAtUtc, endAtUtc);
+      await assertActiveRequestedRoom(transaction, input.roomId);
+
+      const updated = await meetingWorkflowRepository.updatePendingInitialSchedule(
+        transaction,
+        meetingId,
+        input,
+      );
+      if (!updated) throw staleRequest();
+
+      const adjusted = await meetingSchedulingRepository.findRevisionSchedule(
+        transaction,
+        meetingId,
+        input.revisionId,
+      );
+      if (!adjusted || adjusted.revisionStatus !== "PENDING") throw staleRequest();
+
+      await meetingSchedulingRepository.addActivity(
+        transaction,
+        meetingId,
+        actorUserId,
+        "SCHEDULE_CHANGED",
+        {
+          context: "INITIAL_ADJUST_AND_APPROVE",
+          revisionId: input.revisionId,
+          requested: {
+            roomId: requested.roomId,
+            startAtUtc: requested.startAtUtc.toISOString(),
+            endAtUtc: requested.endAtUtc.toISOString(),
+          },
+          final: {
+            roomId: input.roomId,
+            startAtUtc: startAtUtc.toISOString(),
+            endAtUtc: endAtUtc.toISOString(),
+          },
+          schedulingNotes: input.schedulingNotes ?? null,
+        },
+      );
+
+      await meetingSchedulingService.commitPendingRevisionInTransaction(
+        transaction,
+        actorUserId,
+        meetingId,
+        input.revisionId,
+        adjusted.revisionRowVersion,
+      );
+    });
+
+    await meetingNotificationsService.safeInitialScheduled(meetingId, input.revisionId, true);
+    return requireSummary(meetingId);
+  },
+
   async approveRequest(
     actorUserId: number,
     meetingId: number,
@@ -322,6 +528,7 @@ export const meetingWorkflowService = {
       );
     });
 
+    await meetingNotificationsService.safeInitialScheduled(meetingId, input.revisionId, true);
     return requireSummary(meetingId);
   },
 
@@ -375,6 +582,7 @@ export const meetingWorkflowService = {
       );
     });
 
+    await meetingNotificationsService.safeRejected(meetingId, input.revisionId);
     return requireSummary(meetingId);
   },
 
@@ -422,14 +630,32 @@ export const meetingWorkflowService = {
         ];
       }
 
+      if (visibility === "PREVIEW") {
+        return [
+          {
+            visibility: "PREVIEW",
+            meetingId: null,
+            title: record.title,
+            ...shared,
+          },
+        ];
+      }
+
       return [
         {
           visibility: "FULL",
           meetingId: record.meetingId,
           title: record.title,
+          participantCount: record.participantCount,
+          agendaTopicCount: record.agendaTopicCount,
+          agendaPlannedMinutes: record.agendaPlannedMinutes,
+          hasPendingReschedule:
+            record.hasPendingReschedule &&
+            (Boolean(input.access.meetingCoordinateEnabled) || record.isOrganizer),
           ...shared,
         },
       ];
     });
   },
 };
+

@@ -17,6 +17,7 @@ import {
 } from "../notifications/notifications.repository.js";
 import type { NotificationType } from "../notifications/notifications.types.js";
 import { workCyclesService } from "../work-cycles/work-cycles.service.js";
+import { meetingNotificationsService } from "../meetings/meeting-notifications.service.js";
 import { emailService } from "./email.service.js";
 import { isContractNotificationType, templateKeyForNotification } from "./operational-email.policy.js";
 
@@ -52,9 +53,18 @@ function asEmailPreferenceEvent(type: NotificationType): EmailPreferenceEvent | 
     case "CURRENT_CYCLE_PAST_END":
     case "KPI_BELOW_TARGET":
     case "KPI_MEASUREMENT_DUE":
+    case "MEETING_REQUEST_SUBMITTED":
+    case "MEETING_REQUEST_UPDATED":
+    case "MEETING_APPROVED":
+    case "MEETING_REJECTED":
+    case "MEETING_INVITED":
+    case "MEETING_RESCHEDULED":
+    case "MEETING_RESCHEDULE_REQUEST_CANCELLED":
+    case "MEETING_CANCELLED":
       return type;
     case "CONTRACT_EXPIRATION_REMINDER":
     case "CONTRACT_NOTICE_DEADLINE_REMINDER":
+    case "MEETING_START_REMINDER":
       return null;
   }
 }
@@ -242,6 +252,26 @@ async function buildPayload(
     case "CONTRACT_EXPIRATION_REMINDER":
     case "CONTRACT_NOTICE_DEADLINE_REMINDER":
       return contractPayload(candidate, today);
+    case "MEETING_REQUEST_SUBMITTED":
+    case "MEETING_REQUEST_UPDATED":
+    case "MEETING_APPROVED":
+    case "MEETING_REJECTED":
+    case "MEETING_INVITED":
+    case "MEETING_RESCHEDULED":
+    case "MEETING_RESCHEDULE_REQUEST_CANCELLED":
+    case "MEETING_CANCELLED": {
+      const meetingId = id(candidate.meetingId);
+      const revisionId = id(candidate.meetingRevisionId);
+      if (meetingId === null || revisionId === null) return null;
+      return meetingNotificationsService.buildEmailPayload(
+        candidate.ownerUserId,
+        candidate.notificationType,
+        meetingId,
+        revisionId,
+      );
+    }
+    case "MEETING_START_REMINDER":
+      return null;
   }
 }
 
@@ -341,6 +371,11 @@ export const operationalEmailService = {
     if (isContractNotificationType(type)) {
       return (await validateContractPayloadAtSend(ownerUserId, type, payload)) ? delivery : null;
     }
+    if (type.startsWith("MEETING_")) {
+      return (await meetingNotificationsService.validateEmailPayload(ownerUserId, type, payload))
+        ? delivery
+        : null;
+    }
     return delivery;
   },
 
@@ -379,3 +414,4 @@ export const operationalEmailService = {
     return processed;
   },
 };
+

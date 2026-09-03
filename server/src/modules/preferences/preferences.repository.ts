@@ -7,6 +7,8 @@ interface PreferencesRecord {
   theme: "LIGHT" | "DARK" | "SYSTEM";
   sidebarCollapsed: boolean;
   calendarShowAdjacentDates: boolean;
+  meetingStartReminderEnabled: boolean;
+  timeFormat: "12H" | "24H";
   timezone: "Asia/Riyadh";
 }
 
@@ -25,7 +27,10 @@ export async function updatePreferences(
       "calendarShowAdjacentDates",
       sql.Bit,
       input.calendarShowAdjacentDates ?? null,
-    ).query<PreferencesRecord>(`
+    )
+    .input("meetingStartReminderEnabled", sql.Bit, input.meetingStartReminderEnabled ?? null)
+    .input("timeFormat", sql.VarChar(3), input.timeFormat ?? null)
+    .query<PreferencesRecord>(`
       UPDATE dbo.TM_user_settings
       SET
         language_code = COALESCE(@languageCode, language_code),
@@ -35,12 +40,19 @@ export async function updatePreferences(
           @calendarShowAdjacentDates,
           calendar_show_adjacent_dates
         ),
+        meeting_start_reminder_enabled = COALESCE(
+          @meetingStartReminderEnabled,
+          meeting_start_reminder_enabled
+        ),
+        time_format = COALESCE(@timeFormat, time_format),
         updated_at_utc = SYSUTCDATETIME()
       OUTPUT
         inserted.language_code AS languageCode,
         inserted.theme,
         inserted.sidebar_collapsed AS sidebarCollapsed,
         inserted.calendar_show_adjacent_dates AS calendarShowAdjacentDates,
+        inserted.meeting_start_reminder_enabled AS meetingStartReminderEnabled,
+        inserted.time_format AS timeFormat,
         inserted.timezone_name AS timezone
       WHERE portal_user_id = @userId;
     `);
@@ -49,3 +61,5 @@ export async function updatePreferences(
 }
 
 export const preferencesRepository = { updatePreferences };
+
+

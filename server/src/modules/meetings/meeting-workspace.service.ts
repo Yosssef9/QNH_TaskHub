@@ -13,9 +13,15 @@ import { MAX_MEETING_ATTACHMENTS } from "./meeting-attachment-upload.middleware.
 import { assertScheduleWindow } from "./meeting-scheduling.policy.js";
 import { meetingSchedulingRepository } from "./meeting-scheduling.repository.js";
 import { meetingSchedulingService } from "./meeting-scheduling.service.js";
-import { meetingWorkspaceRepository, mapMeetingAttachmentRecord } from "./meeting-workspace.repository.js";
+import { meetingNotificationsService } from "./meeting-notifications.service.js";
+import {
+  meetingWorkspaceRepository,
+  mapMeetingAttachmentRecord,
+} from "./meeting-workspace.repository.js";
 import type {
   CancelMeetingInput,
+  CancelMeetingRescheduleRequestInput,
+  CoordinatorDirectRescheduleInput,
   CreateMeetingRescheduleInput,
   DecideMeetingRescheduleInput,
   MeetingAttachment,
@@ -24,14 +30,20 @@ import type {
   MeetingTemplate,
   RejectMeetingRescheduleInput,
   SaveMeetingTemplateInput,
+  UpdateMeetingAgendaInput,
   UpdateMeetingRescheduleInput,
   UpdateMeetingTemplateInput,
+  UpdateOrganizerRescheduleInput,
 } from "./meeting-workspace.types.js";
 import { meetingWorkflowRepository } from "./meeting-workflow.repository.js";
 import { hasMeetingPermission } from "./meetings.policy.js";
 
 function notFound(): AppError {
-  return new AppError({ statusCode: 404, code: "MEETING_NOT_FOUND", message: "Meeting was not found." });
+  return new AppError({
+    statusCode: 404,
+    code: "MEETING_NOT_FOUND",
+    message: "Meeting was not found.",
+  });
 }
 
 function stale(): AppError {
@@ -62,19 +74,22 @@ async function assertEffectiveOrganizerPermission(
   transaction: DatabaseTransaction,
   actorUserId: number,
 ): Promise<void> {
-  const [organize, coordinate] = await Promise.all([
-    meetingSchedulingRepository.hasActiveMeetingPermission(
-      transaction,
-      actorUserId,
-      "MEETING_ORGANIZE",
-    ),
-    meetingSchedulingRepository.hasActiveMeetingPermission(
-      transaction,
-      actorUserId,
-      "MEETING_COORDINATE",
-    ),
-  ]);
-  if (organize || coordinate) return;
+  const organize = await meetingSchedulingRepository.hasActiveMeetingPermission(
+    transaction,
+    actorUserId,
+    "MEETING_ORGANIZE",
+  );
+
+  if (organize) return;
+
+  const coordinate = await meetingSchedulingRepository.hasActiveMeetingPermission(
+    transaction,
+    actorUserId,
+    "MEETING_COORDINATE",
+  );
+
+  if (coordinate) return;
+
   throw new AppError({
     statusCode: 403,
     code: "FORBIDDEN",
@@ -100,18 +115,18 @@ async function assertActiveRoom(transaction: DatabaseTransaction, roomId: number
   }
 }
 
-async function normalizedActiveAttendees(
+async function normalizedActivePortalAttendees(
   transaction: DatabaseTransaction,
   ownerUserId: number,
   attendeeUserIds: readonly number[],
 ): Promise<number[]> {
   const normalized = [...new Set(attendeeUserIds)].filter((userId) => userId !== ownerUserId);
-  const active = await meetingWorkflowRepository.activeParticipantIds(transaction, normalized);
+  const active = await meetingWorkflowRepository.activePortalParticipantIds(transaction, normalized);
   if (active.length !== normalized.length) {
     throw new AppError({
       statusCode: 400,
       code: "INVALID_MEETING_ATTENDEE",
-      message: "One or more selected attendees are not active TaskHub users.",
+      message: "One or more selected attendees are not active Portal users.",
     });
   }
   return normalized;
@@ -127,14 +142,13 @@ async function loadDetail(
 
   const isOrganizer = context.organizerUserId === actorUserId;
   const attendeeCanRead = context.isAttendee && ["SCHEDULED", "CANCELLED"].includes(context.status);
-  const coordinatorCanRead =
-    hasMeetingPermission(access, "MEETING_COORDINATE") &&
-    (context.status === "PENDING_APPROVAL" || context.hasPendingReschedule);
+  const coordinatorCanRead = hasMeetingPermission(access, "MEETING_COORDINATE");
 
   if (!isOrganizer && !attendeeCanRead && !coordinatorCanRead) throw notFound();
 
-  const [meeting, revisions, activity] = await Promise.all([
+  const [meeting, agendaItems, revisions, activity] = await Promise.all([
     meetingWorkflowRepository.findSummary(meetingId),
+    meetingWorkspaceRepository.listAgendaItems(meetingId),
     meetingWorkspaceRepository.listRevisions(meetingId),
     meetingWorkspaceRepository.listActivity(meetingId),
   ]);
@@ -142,19 +156,27 @@ async function loadDetail(
 
   const pendingReschedule =
     revisions.find(
-      (revision) =>
-        revision.revisionType === "RESCHEDULE" && revision.revisionStatus === "PENDING",
+      (revision) => revision.revisionType === "RESCHEDULE" && revision.revisionStatus === "PENDING",
     ) ?? null;
 
   return {
     meeting,
+    agendaItems,
     revisions,
     activity,
     pendingReschedule,
     permissions: {
-      canCancel:
-        isOrganizer && ["PENDING_APPROVAL", "SCHEDULED"].includes(context.status),
+      canCancel: isOrganizer && ["PENDING_APPROVAL", "SCHEDULED"].includes(context.status),
       canReschedule: isOrganizer && context.status === "SCHEDULED" && !context.hasPendingReschedule,
+      canEditPendingSchedule: isOrganizer && context.status === "PENDING_APPROVAL",
+      canEditPendingReschedule: isOrganizer && context.status === "SCHEDULED" && context.hasPendingReschedule,
+      canCancelPendingReschedule: isOrganizer && context.status === "SCHEDULED" && context.hasPendingReschedule,
+      canDecidePendingRequest: coordinatorCanRead && context.status === "PENDING_APPROVAL",
+      canCoordinatorReschedule: coordinatorCanRead && context.status === "SCHEDULED",
+      canDecidePendingReschedule:
+        coordinatorCanRead && context.status === "SCHEDULED" && context.hasPendingReschedule,
+      canManageAgenda:
+        isOrganizer && ["PENDING_APPROVAL", "SCHEDULED"].includes(context.status),
       canManageAttachments:
         isOrganizer && ["PENDING_APPROVAL", "SCHEDULED"].includes(context.status),
       canSaveAsTemplate: isOrganizer && hasMeetingPermission(access, "MEETING_ORGANIZE"),
@@ -234,12 +256,7 @@ async function assertAttachmentReadAccess(
   if (!context) throw attachmentNotFound();
   if (context.organizerUserId === actorUserId) return;
   if (context.isAttendee && ["SCHEDULED", "CANCELLED"].includes(context.status)) return;
-  if (
-    hasMeetingPermission(access, "MEETING_COORDINATE") &&
-    (context.status === "PENDING_APPROVAL" || context.hasPendingReschedule)
-  ) {
-    return;
-  }
+  if (hasMeetingPermission(access, "MEETING_COORDINATE")) return;
   throw attachmentNotFound();
 }
 
@@ -248,7 +265,11 @@ async function assertAttachmentWriteAccess(
   actorUserId: number,
   meetingId: number,
 ): Promise<void> {
-  const context = await meetingWorkspaceRepository.findAccessContext(meetingId, actorUserId, transaction);
+  const context = await meetingWorkspaceRepository.findAccessContext(
+    meetingId,
+    actorUserId,
+    transaction,
+  );
   if (!context || context.organizerUserId !== actorUserId) throw attachmentNotFound();
   if (!["PENDING_APPROVAL", "SCHEDULED"].includes(context.status)) {
     throw new AppError({
@@ -267,7 +288,7 @@ async function validateTemplateInput(
 ): Promise<number[]> {
   await assertEffectiveOrganizerPermission(transaction, ownerUserId);
   if (input.defaultRoomId) await assertActiveRoom(transaction, input.defaultRoomId);
-  const attendeeUserIds = await normalizedActiveAttendees(
+  const attendeeUserIds = await normalizedActivePortalAttendees(
     transaction,
     ownerUserId,
     input.attendeeUserIds,
@@ -311,13 +332,84 @@ async function listPendingReschedulesInternal(): Promise<MeetingRescheduleQueueI
 export const meetingWorkspaceService = {
   getDetail: loadDetail,
 
+  async updateAgenda(
+    actorUserId: number,
+    access: TaskHubAccess,
+    meetingId: number,
+    input: UpdateMeetingAgendaInput,
+  ): Promise<MeetingDetail> {
+    await withTransaction(async (transaction) => {
+      const context = await meetingWorkspaceRepository.findAccessContext(
+        meetingId,
+        actorUserId,
+        transaction,
+      );
+      if (!context || context.organizerUserId !== actorUserId) throw notFound();
+      if (!["PENDING_APPROVAL", "SCHEDULED"].includes(context.status)) {
+        throw new AppError({
+          statusCode: 409,
+          code: "MEETING_AGENDA_READ_ONLY",
+          message: "Agenda topics are read-only after a Meeting is rejected or cancelled.",
+        });
+      }
+      if (context.meetingRowVersion !== input.meetingRowVersion) throw stale();
+
+      const attendeeUserIds = await meetingWorkspaceRepository.listMeetingAttendeeIds(
+        transaction,
+        meetingId,
+      );
+      const allowedPresenterIds = new Set([actorUserId, ...attendeeUserIds]);
+      const agendaItems = input.agendaItems.map((item) => {
+        const topic = item.topic.trim();
+        if (!topic) {
+          throw new AppError({
+            statusCode: 400,
+            code: "INVALID_MEETING_AGENDA_TOPIC",
+            message: "Every agenda item must include a topic.",
+          });
+        }
+        const presenterUserId = item.presenterUserId ?? null;
+        if (presenterUserId !== null && !allowedPresenterIds.has(presenterUserId)) {
+          throw new AppError({
+            statusCode: 400,
+            code: "INVALID_MEETING_AGENDA_PRESENTER",
+            message: "Agenda presenters must be the Organizer or a Meeting attendee.",
+          });
+        }
+        return {
+          topic,
+          presenterUserId,
+          plannedDurationMinutes: item.plannedDurationMinutes ?? null,
+        };
+      });
+
+      const replaced = await meetingWorkspaceRepository.replaceAgendaItems(transaction, {
+        meetingId,
+        actorUserId,
+        expectedMeetingRowVersion: input.meetingRowVersion,
+        agendaItems,
+      });
+      if (!replaced) throw stale();
+
+      await meetingSchedulingRepository.addActivity(
+        transaction,
+        meetingId,
+        actorUserId,
+        "AGENDA_UPDATED",
+        { topicCount: agendaItems.length },
+      );
+    });
+
+    return loadDetail(actorUserId, access, meetingId);
+  },
+
   async requestReschedule(
     actorUserId: number,
     access: TaskHubAccess,
     meetingId: number,
     input: CreateMeetingRescheduleInput,
   ): Promise<MeetingDetail> {
-    await withTransaction(async (transaction) => {
+    const createdRevisionId = await withTransaction(async (transaction) => {
       const context = await meetingWorkspaceRepository.findAccessContext(
         meetingId,
         actorUserId,
@@ -327,7 +419,9 @@ export const meetingWorkspaceService = {
       if (context.status !== "SCHEDULED" || context.meetingRowVersion !== input.meetingRowVersion) {
         throw stale();
       }
-      if (await meetingWorkspaceRepository.pendingRescheduleExistsForUpdate(transaction, meetingId)) {
+      if (
+        await meetingWorkspaceRepository.pendingRescheduleExistsForUpdate(transaction, meetingId)
+      ) {
         throw new AppError({
           statusCode: 409,
           code: "MEETING_RESCHEDULE_ALREADY_PENDING",
@@ -382,7 +476,140 @@ export const meetingWorkspaceService = {
           },
         },
       );
+      return created.revisionId;
     });
+    await meetingNotificationsService.safeRescheduleRequested(meetingId, createdRevisionId);
+    return loadDetail(actorUserId, access, meetingId);
+  },
+
+  async updateOrganizerReschedule(
+    actorUserId: number,
+    access: TaskHubAccess,
+    meetingId: number,
+    input: UpdateOrganizerRescheduleInput,
+  ): Promise<MeetingDetail> {
+    await withTransaction(async (transaction) => {
+      const context = await meetingWorkspaceRepository.findAccessContext(
+        meetingId,
+        actorUserId,
+        transaction,
+      );
+      if (!context || context.organizerUserId !== actorUserId) throw notFound();
+      if (context.status !== "SCHEDULED") throw stale();
+
+      const current = await meetingSchedulingRepository.findRevisionSchedule(
+        transaction,
+        meetingId,
+        input.revisionId,
+      );
+      if (
+        !current ||
+        current.revisionType !== "RESCHEDULE" ||
+        current.revisionStatus !== "PENDING" ||
+        current.revisionRowVersion !== input.revisionRowVersion
+      ) {
+        throw stale();
+      }
+
+      const startAtUtc = new Date(input.startAtUtc);
+      const endAtUtc = new Date(input.endAtUtc);
+      assertScheduleWindow(startAtUtc, endAtUtc);
+      await assertActiveRoom(transaction, input.roomId);
+
+      if (
+        !(await meetingWorkspaceRepository.updatePendingRescheduleRequestedSchedule(
+          transaction,
+          meetingId,
+          input,
+        ))
+      ) {
+        throw stale();
+      }
+
+      await meetingSchedulingRepository.addActivity(
+        transaction,
+        meetingId,
+        actorUserId,
+        "RESCHEDULE_REQUEST_UPDATED",
+        {
+          revisionId: input.revisionId,
+          before: {
+            roomId: current.roomId,
+            startAtUtc: current.startAtUtc.toISOString(),
+            endAtUtc: current.endAtUtc.toISOString(),
+          },
+          requested: {
+            roomId: input.roomId,
+            startAtUtc: startAtUtc.toISOString(),
+            endAtUtc: endAtUtc.toISOString(),
+          },
+        },
+      );
+    });
+
+    await meetingNotificationsService.safeRequestUpdated(meetingId, input.revisionId);
+    return loadDetail(actorUserId, access, meetingId);
+  },
+
+  async cancelOrganizerRescheduleRequest(
+    actorUserId: number,
+    access: TaskHubAccess,
+    meetingId: number,
+    input: CancelMeetingRescheduleRequestInput,
+  ): Promise<MeetingDetail> {
+    await withTransaction(async (transaction) => {
+      const context = await meetingWorkspaceRepository.findAccessContext(
+        meetingId,
+        actorUserId,
+        transaction,
+      );
+      if (!context || context.organizerUserId !== actorUserId) throw notFound();
+      if (context.status !== "SCHEDULED") throw stale();
+
+      const current = await meetingSchedulingRepository.findRevisionSchedule(
+        transaction,
+        meetingId,
+        input.revisionId,
+      );
+      if (
+        !current ||
+        current.revisionType !== "RESCHEDULE" ||
+        current.revisionStatus !== "PENDING" ||
+        current.revisionRowVersion !== input.revisionRowVersion
+      ) {
+        throw stale();
+      }
+
+      if (
+        !(await meetingWorkspaceRepository.rejectPendingReschedule(
+          transaction,
+          meetingId,
+          input.revisionId,
+          input.revisionRowVersion,
+          actorUserId,
+        ))
+      ) {
+        throw stale();
+      }
+
+      await meetingSchedulingRepository.addActivity(
+        transaction,
+        meetingId,
+        actorUserId,
+        "RESCHEDULE_REQUEST_CANCELLED",
+        {
+          revisionId: input.revisionId,
+          reason: input.reason ?? null,
+          requested: {
+            roomId: current.roomId,
+            startAtUtc: current.startAtUtc.toISOString(),
+            endAtUtc: current.endAtUtc.toISOString(),
+          },
+        },
+      );
+    });
+
+    await meetingNotificationsService.safeRescheduleRequestCancelled(meetingId, input.revisionId);
     return loadDetail(actorUserId, access, meetingId);
   },
 
@@ -416,7 +643,13 @@ export const meetingWorkspaceService = {
       const endAtUtc = new Date(input.endAtUtc);
       assertScheduleWindow(startAtUtc, endAtUtc);
       await assertActiveRoom(transaction, input.roomId);
-      if (!(await meetingWorkspaceRepository.updatePendingRescheduleSchedule(transaction, meetingId, input))) {
+      if (
+        !(await meetingWorkspaceRepository.updatePendingRescheduleSchedule(
+          transaction,
+          meetingId,
+          input,
+        ))
+      ) {
         throw stale();
       }
       await meetingSchedulingRepository.addActivity(
@@ -441,9 +674,182 @@ export const meetingWorkspaceService = {
         },
       );
     });
-    const item = (await listPendingReschedulesInternal()).find((value) => value.meeting.id === meetingId);
+    const item = (await listPendingReschedulesInternal()).find(
+      (value) => value.meeting.id === meetingId,
+    );
     if (!item) throw notFound();
     return item;
+  },
+
+  async adjustAndApproveReschedule(
+    actorUserId: number,
+    access: TaskHubAccess,
+    meetingId: number,
+    input: UpdateMeetingRescheduleInput,
+  ): Promise<MeetingDetail> {
+    await withTransaction(async (transaction) => {
+      await meetingSchedulingService.assertCoordinatorPermission(transaction, actorUserId);
+      const requested = await meetingSchedulingRepository.findRevisionSchedule(
+        transaction,
+        meetingId,
+        input.revisionId,
+      );
+      if (
+        !requested ||
+        requested.meetingStatus !== "SCHEDULED" ||
+        requested.revisionType !== "RESCHEDULE" ||
+        requested.revisionStatus !== "PENDING" ||
+        requested.revisionRowVersion !== input.revisionRowVersion
+      ) {
+        throw stale();
+      }
+
+      const startAtUtc = new Date(input.startAtUtc);
+      const endAtUtc = new Date(input.endAtUtc);
+      assertScheduleWindow(startAtUtc, endAtUtc);
+      await assertActiveRoom(transaction, input.roomId);
+
+      if (
+        !(await meetingWorkspaceRepository.updatePendingRescheduleSchedule(
+          transaction,
+          meetingId,
+          input,
+        ))
+      ) {
+        throw stale();
+      }
+
+      const adjusted = await meetingSchedulingRepository.findRevisionSchedule(
+        transaction,
+        meetingId,
+        input.revisionId,
+      );
+      if (!adjusted || adjusted.revisionStatus !== "PENDING") throw stale();
+
+      await meetingSchedulingRepository.addActivity(
+        transaction,
+        meetingId,
+        actorUserId,
+        "SCHEDULE_CHANGED",
+        {
+          context: "RESCHEDULE_ADJUST_AND_APPROVE",
+          revisionId: input.revisionId,
+          requested: {
+            roomId: requested.roomId,
+            startAtUtc: requested.startAtUtc.toISOString(),
+            endAtUtc: requested.endAtUtc.toISOString(),
+          },
+          final: {
+            roomId: input.roomId,
+            startAtUtc: startAtUtc.toISOString(),
+            endAtUtc: endAtUtc.toISOString(),
+          },
+          schedulingNotes: input.schedulingNotes ?? null,
+        },
+      );
+
+      await meetingSchedulingService.commitPendingRevisionInTransaction(
+        transaction,
+        actorUserId,
+        meetingId,
+        input.revisionId,
+        adjusted.revisionRowVersion,
+      );
+    });
+
+    await meetingNotificationsService.safeRescheduled(meetingId, input.revisionId);
+    return loadDetail(actorUserId, access, meetingId);
+  },
+
+  async coordinatorDirectReschedule(
+    actorUserId: number,
+    access: TaskHubAccess,
+    meetingId: number,
+    input: CoordinatorDirectRescheduleInput,
+  ): Promise<MeetingDetail> {
+    const revisionId = await withTransaction(async (transaction) => {
+      await meetingSchedulingService.assertCoordinatorPermission(transaction, actorUserId);
+      const context = await meetingWorkspaceRepository.findAccessContext(
+        meetingId,
+        actorUserId,
+        transaction,
+      );
+      if (!context || context.status !== "SCHEDULED") throw notFound();
+      if (context.meetingRowVersion !== input.meetingRowVersion) throw stale();
+      if (context.hasPendingReschedule) {
+        throw new AppError({
+          statusCode: 409,
+          code: "MEETING_RESCHEDULE_ALREADY_PENDING",
+          message: "This Meeting already has a pending reschedule request. Review that request instead.",
+        });
+      }
+      if (!context.currentRevisionId) throw stale();
+
+      const current = await meetingSchedulingRepository.findRevisionSchedule(
+        transaction,
+        meetingId,
+        context.currentRevisionId,
+      );
+      if (!current || current.revisionStatus !== "APPROVED") throw stale();
+
+      const startAtUtc = new Date(input.startAtUtc);
+      const endAtUtc = new Date(input.endAtUtc);
+      assertScheduleWindow(startAtUtc, endAtUtc);
+      await assertActiveRoom(transaction, input.roomId);
+
+      const created = await meetingWorkspaceRepository.createRescheduleRevision(
+        transaction,
+        meetingId,
+        actorUserId,
+        {
+          roomId: input.roomId,
+          startAtUtc,
+          endAtUtc,
+          schedulingNotes: input.schedulingNotes ?? null,
+        },
+      );
+      if (!created) {
+        throw new AppError({
+          statusCode: 500,
+          code: "MEETING_RESCHEDULE_CREATE_FAILED",
+          message: "Meeting reschedule could not be created.",
+        });
+      }
+
+      await meetingSchedulingRepository.addActivity(
+        transaction,
+        meetingId,
+        actorUserId,
+        "SCHEDULE_CHANGED",
+        {
+          context: "COORDINATOR_DIRECT_RESCHEDULE",
+          revisionId: created.revisionId,
+          before: {
+            roomId: current.roomId,
+            startAtUtc: current.startAtUtc.toISOString(),
+            endAtUtc: current.endAtUtc.toISOString(),
+          },
+          final: {
+            roomId: input.roomId,
+            startAtUtc: startAtUtc.toISOString(),
+            endAtUtc: endAtUtc.toISOString(),
+          },
+          schedulingNotes: input.schedulingNotes ?? null,
+        },
+      );
+
+      await meetingSchedulingService.commitPendingRevisionInTransaction(
+        transaction,
+        actorUserId,
+        meetingId,
+        created.revisionId,
+        created.rowVersion,
+      );
+      return created.revisionId;
+    });
+
+    await meetingNotificationsService.safeRescheduled(meetingId, revisionId);
+    return loadDetail(actorUserId, access, meetingId);
   },
 
   async approveReschedule(
@@ -475,6 +881,7 @@ export const meetingWorkspaceService = {
         input.revisionRowVersion,
       );
     });
+    await meetingNotificationsService.safeRescheduled(meetingId, input.revisionId);
   },
 
   async rejectReschedule(
@@ -517,6 +924,7 @@ export const meetingWorkspaceService = {
         { revisionId: input.revisionId, reason: input.reason ?? null },
       );
     });
+    await meetingNotificationsService.safeRescheduleRejected(meetingId, input.revisionId);
   },
 
   async cancelMeeting(
@@ -554,6 +962,7 @@ export const meetingWorkspaceService = {
         { reason: input.reason ?? null },
       );
     });
+    await meetingNotificationsService.safeCancelled(meetingId);
     return loadDetail(actorUserId, access, meetingId);
   },
 
@@ -592,7 +1001,10 @@ export const meetingWorkspaceService = {
     try {
       const attachmentId = await withTransaction(async (transaction) => {
         await assertAttachmentWriteAccess(transaction, actorUserId, meetingId);
-        const count = await meetingWorkspaceRepository.countActiveAttachments(transaction, meetingId);
+        const count = await meetingWorkspaceRepository.countActiveAttachments(
+          transaction,
+          meetingId,
+        );
         if (count >= MAX_MEETING_ATTACHMENTS) {
           throw new AppError({
             statusCode: 409,
@@ -644,10 +1056,7 @@ export const meetingWorkspaceService = {
     };
   },
 
-  async removeAttachment(
-    actorUserId: number,
-    attachmentId: string,
-  ): Promise<void> {
+  async removeAttachment(actorUserId: number, attachmentId: string): Promise<void> {
     const removed = await withTransaction(async (transaction) => {
       const attachment = await meetingWorkspaceRepository.findAttachment(attachmentId, transaction);
       if (!attachment) throw attachmentNotFound();
@@ -661,7 +1070,11 @@ export const meetingWorkspaceService = {
         meetingId,
         actorUserId,
         "ATTACHMENT_REMOVED",
-        { attachmentId, fileName: attachment.originalFileName, sizeBytes: Number(attachment.sizeBytes) },
+        {
+          attachmentId,
+          fileName: attachment.originalFileName,
+          sizeBytes: Number(attachment.sizeBytes),
+        },
       );
       return attachment;
     });
@@ -706,7 +1119,11 @@ export const meetingWorkspaceService = {
   ): Promise<MeetingTemplate> {
     await withTransaction(async (transaction) => {
       await assertEffectiveOrganizerPermission(transaction, ownerUserId);
-      const current = await meetingWorkspaceRepository.findTemplate(ownerUserId, templateId, transaction);
+      const current = await meetingWorkspaceRepository.findTemplate(
+        ownerUserId,
+        templateId,
+        transaction,
+      );
       if (!current || current.rowVersion !== input.rowVersion) throw stale();
       const attendeeUserIds = await validateTemplateInput(
         transaction,
@@ -714,7 +1131,14 @@ export const meetingWorkspaceService = {
         input,
         templateId,
       );
-      if (!(await meetingWorkspaceRepository.updateTemplate(transaction, ownerUserId, templateId, input))) {
+      if (
+        !(await meetingWorkspaceRepository.updateTemplate(
+          transaction,
+          ownerUserId,
+          templateId,
+          input,
+        ))
+      ) {
         throw stale();
       }
       await meetingWorkspaceRepository.replaceTemplateAttendees(
@@ -729,12 +1153,27 @@ export const meetingWorkspaceService = {
     return template;
   },
 
-  async archiveTemplate(ownerUserId: number, templateId: number, rowVersion: string): Promise<void> {
+  async archiveTemplate(
+    ownerUserId: number,
+    templateId: number,
+    rowVersion: string,
+  ): Promise<void> {
     await withTransaction(async (transaction) => {
       await assertEffectiveOrganizerPermission(transaction, ownerUserId);
-      const current = await meetingWorkspaceRepository.findTemplate(ownerUserId, templateId, transaction);
+      const current = await meetingWorkspaceRepository.findTemplate(
+        ownerUserId,
+        templateId,
+        transaction,
+      );
       if (!current || current.rowVersion !== rowVersion) throw stale();
-      if (!(await meetingWorkspaceRepository.archiveTemplate(transaction, ownerUserId, templateId, rowVersion))) {
+      if (
+        !(await meetingWorkspaceRepository.archiveTemplate(
+          transaction,
+          ownerUserId,
+          templateId,
+          rowVersion,
+        ))
+      ) {
         throw stale();
       }
     });

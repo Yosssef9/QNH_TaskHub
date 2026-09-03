@@ -54,6 +54,8 @@ describe("personal task endpoints", () => {
         theme: "SYSTEM",
         sidebarCollapsed: false,
         calendarShowAdjacentDates: false,
+        meetingStartReminderEnabled: true,
+        timeFormat: "12H",
         timezone: "Asia/Riyadh",
       },
     });
@@ -113,4 +115,6 @@ describe("personal task endpoints", () => {
     expect(create).not.toHaveBeenCalled();
   });
 });
+
+
 

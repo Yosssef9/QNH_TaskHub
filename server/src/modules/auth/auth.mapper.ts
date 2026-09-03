@@ -1,5 +1,5 @@
 import { AppError } from "../../shared/errors/app-error.js";
-import type { AuthMeData, LanguageCode, TaskHubRoleCode, ThemePreference } from "./auth.types.js";
+import type { AuthMeData, LanguageCode, TaskHubRoleCode, ThemePreference, TimeFormatPreference } from "./auth.types.js";
 import type { AccessProfileRecord, PortalUserRecord } from "./auth.repository.js";
 
 function toRoleCode(value: string): TaskHubRoleCode {
@@ -38,6 +38,19 @@ function toTheme(value: string | null): ThemePreference {
   });
 }
 
+
+function toTimeFormat(value: string | null): TimeFormatPreference {
+  if (value === "12H" || value === "24H") {
+    return value;
+  }
+
+  throw new AppError({
+    statusCode: 500,
+    code: "INVALID_PREFERENCE_CONFIGURATION",
+    message: "TaskHub time-format preference is missing or invalid.",
+  });
+}
+
 export function mapAuthMeData(
   portalUser: PortalUserRecord,
   access: AccessProfileRecord,
@@ -45,6 +58,8 @@ export function mapAuthMeData(
   if (
     access.sidebarCollapsed === null ||
     access.calendarShowAdjacentDates === null ||
+    access.meetingStartReminderEnabled === null ||
+    access.timeFormat === null ||
     access.timezone !== "Asia/Riyadh"
   ) {
     throw new AppError({
@@ -72,7 +87,11 @@ export function mapAuthMeData(
       theme: toTheme(access.theme),
       sidebarCollapsed: access.sidebarCollapsed,
       calendarShowAdjacentDates: access.calendarShowAdjacentDates,
+      meetingStartReminderEnabled: access.meetingStartReminderEnabled,
+      timeFormat: toTimeFormat(access.timeFormat),
       timezone: access.timezone,
     },
   };
 }
+
+

@@ -35,6 +35,15 @@ const notificationIcons: Record<NotificationType, LucideIcon> = {
   KPI_MEASUREMENT_DUE: Gauge,
   CONTRACT_EXPIRATION_REMINDER: FileWarning,
   CONTRACT_NOTICE_DEADLINE_REMINDER: FileClock,
+  MEETING_REQUEST_SUBMITTED: CalendarClock,
+  MEETING_REQUEST_UPDATED: CalendarClock,
+  MEETING_RESCHEDULE_REQUEST_CANCELLED: CalendarClock,
+  MEETING_APPROVED: CheckCheck,
+  MEETING_REJECTED: AlertTriangle,
+  MEETING_INVITED: CalendarClock,
+  MEETING_RESCHEDULED: CalendarClock,
+  MEETING_CANCELLED: AlertTriangle,
+  MEETING_START_REMINDER: Clock3,
 }
 
 const notificationTones: Record<NotificationType, string> = {
@@ -47,6 +56,15 @@ const notificationTones: Record<NotificationType, string> = {
   KPI_MEASUREMENT_DUE: 'bg-primary/10 text-primary',
   CONTRACT_EXPIRATION_REMINDER: 'bg-warning/10 text-warning-foreground',
   CONTRACT_NOTICE_DEADLINE_REMINDER: 'bg-warning/10 text-warning-foreground',
+  MEETING_REQUEST_SUBMITTED: 'bg-info/10 text-info-foreground',
+  MEETING_REQUEST_UPDATED: 'bg-info/10 text-info-foreground',
+  MEETING_RESCHEDULE_REQUEST_CANCELLED: 'bg-warning/10 text-warning-foreground',
+  MEETING_APPROVED: 'bg-success/10 text-success',
+  MEETING_REJECTED: 'bg-destructive/10 text-destructive',
+  MEETING_INVITED: 'bg-primary/10 text-primary',
+  MEETING_RESCHEDULED: 'bg-info/10 text-info-foreground',
+  MEETING_CANCELLED: 'bg-destructive/10 text-destructive',
+  MEETING_START_REMINDER: 'bg-warning/10 text-warning-foreground',
 }
 
 function formatDate(value: string | null, locale: string): string | null {
@@ -312,4 +330,5 @@ function NotificationDetail({
 
   return null
 }
+
 

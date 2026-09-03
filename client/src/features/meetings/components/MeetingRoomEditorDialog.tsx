@@ -9,8 +9,14 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { ApiClientError } from '@/lib/api-error'
+import { cn } from '@/lib/cn'
 
 import { useSaveMeetingRoom } from '../hooks/use-meeting-rooms'
+import {
+  MEETING_ROOM_COLOR_OPTIONS,
+  getMeetingRoomAccent,
+  type MeetingRoomColorKey,
+} from '../meeting-room-colors'
 import type { MeetingRoom } from '../types/meeting.types'
 
 export function MeetingRoomEditorDialog({
@@ -28,6 +34,7 @@ export function MeetingRoomEditorDialog({
   const [nameAr, setNameAr] = useState(room?.nameAr ?? '')
   const [nameEn, setNameEn] = useState(room?.nameEn ?? '')
   const [locationText, setLocationText] = useState(room?.locationText ?? '')
+  const [colorKey, setColorKey] = useState<MeetingRoomColorKey | null>(room?.colorKey ?? null)
   const [capacity, setCapacity] = useState(String(room?.capacity ?? 1))
   const [equipmentNotes, setEquipmentNotes] = useState(room?.equipmentNotes ?? '')
   const [isActive, setIsActive] = useState(room?.isActive ?? true)
@@ -45,6 +52,7 @@ export function MeetingRoomEditorDialog({
       nameAr: nameAr.trim(),
       nameEn: nameEn.trim(),
       locationText: locationText.trim() || null,
+      colorKey,
       capacity: capacityNumber,
       equipmentNotes: equipmentNotes.trim() || null,
       isActive,
@@ -123,6 +131,75 @@ export function MeetingRoomEditorDialog({
             />
           </label>
 
+          <div className="space-y-2">
+            <div>
+              <p className="text-sm font-medium">{t('meetingRooms.color')}</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                {t('meetingRooms.colorDescription')}
+              </p>
+            </div>
+
+            <div
+              role="radiogroup"
+              aria-label={t('meetingRooms.color')}
+              className="grid gap-2 sm:grid-cols-2"
+            >
+              <button
+                type="button"
+                role="radio"
+                aria-checked={colorKey === null}
+                className={cn(
+                  'flex min-h-11 items-center gap-3 rounded-lg border px-3 py-2 text-start text-sm transition-colors',
+                  colorKey === null
+                    ? 'border-primary bg-primary/8 text-foreground ring-1 ring-primary/20'
+                    : 'border-border bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground',
+                )}
+                onClick={() => setColorKey(null)}
+              >
+                <span
+                  aria-hidden="true"
+                  className="grid size-6 shrink-0 place-items-center rounded-full border border-dashed border-muted-foreground/70 text-[9px] font-bold"
+                >
+                  A
+                </span>
+                <span className="min-w-0">
+                  <span className="block font-semibold">{t('meetingRooms.colorAutomatic')}</span>
+                  <span className="block text-[11px] leading-4 text-muted-foreground">
+                    {t('meetingRooms.colorAutomaticDescription')}
+                  </span>
+                </span>
+              </button>
+
+              {MEETING_ROOM_COLOR_OPTIONS.map((option) => {
+                const selected = colorKey === option.key
+                const label = t(`meetingRooms.colors.${option.key.toLowerCase()}`)
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    aria-label={t('meetingRooms.selectColor', { color: label })}
+                    className={cn(
+                      'flex min-h-11 items-center gap-3 rounded-lg border px-3 py-2 text-start text-sm font-semibold transition-colors',
+                      selected
+                        ? 'border-primary/55 bg-primary/6 text-foreground ring-1 ring-primary/20'
+                        : 'border-border bg-card text-foreground hover:border-primary/30',
+                    )}
+                    onClick={() => setColorKey(option.key)}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="size-6 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/15"
+                      style={{ backgroundColor: getMeetingRoomAccent(option.key) }}
+                    />
+                    <span className="truncate">{label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
           <label className="space-y-1.5 text-sm font-medium">
             <span>{t('meetingRooms.capacity')}</span>
             <Input
@@ -178,3 +255,4 @@ export function MeetingRoomEditorDialog({
     </Dialog>
   )
 }
+

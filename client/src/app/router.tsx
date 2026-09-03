@@ -3,6 +3,7 @@ import { createBrowserRouter } from 'react-router'
 import App from '@/App'
 import { RequireAuth } from '@/features/auth/components/RequireAuth'
 import { RequireContractsAccess } from '@/features/contracts/components/RequireContractsAccess'
+import { RequireMeetingAccess } from '@/features/meetings/components/RequireMeetingAccess'
 import { AdminAccessRoute } from '@/pages/admin/AdminAccessRoute'
 import { AdminHolidaysRoute } from '@/pages/admin/AdminHolidaysRoute'
 import { AdminMeetingRoomsRoute } from '@/pages/admin/AdminMeetingRoomsRoute'
@@ -16,7 +17,11 @@ import { KpisPage } from '@/pages/kpis/KpisPage'
 import { loadKpiTasksPage } from '@/pages/kpi-tasks/kpi-tasks.loader'
 import { KpiTasksPage } from '@/pages/kpi-tasks/KpiTasksPage'
 import { ListPage } from '@/pages/lists/ListPage'
+import { MeetingCoordinationPage } from '@/pages/meetings/MeetingCoordinationPage'
 import { MeetingDetailsPage } from '@/pages/meetings/MeetingDetailsPage'
+import { MeetingRequestsPage } from '@/pages/meetings/MeetingRequestsPage'
+import { MeetingSchedulePage } from '@/pages/meetings/MeetingSchedulePage'
+import { MeetingTemplatesPage } from '@/pages/meetings/MeetingTemplatesPage'
 import { MeetingsPage } from '@/pages/meetings/MeetingsPage'
 import { SettingsPage } from '@/pages/settings/SettingsPage'
 import { ForbiddenPage } from '@/pages/system/ForbiddenPage'
@@ -37,6 +42,38 @@ export const router = createBrowserRouter([
       { index: true, element: <HomePage /> },
       { path: 'calendar', element: <CalendarPage /> },
       { path: 'meetings', element: <MeetingsPage /> },
+      {
+        path: 'meetings/requests',
+        element: (
+          <RequireMeetingAccess capability="ORGANIZER">
+            <MeetingRequestsPage />
+          </RequireMeetingAccess>
+        ),
+      },
+      {
+        path: 'meetings/coordination',
+        element: (
+          <RequireMeetingAccess capability="COORDINATOR">
+            <MeetingCoordinationPage />
+          </RequireMeetingAccess>
+        ),
+      },
+      {
+        path: 'meetings/schedule',
+        element: (
+          <RequireMeetingAccess capability="ORGANIZE_OR_COORDINATE">
+            <MeetingSchedulePage />
+          </RequireMeetingAccess>
+        ),
+      },
+      {
+        path: 'meetings/templates',
+        element: (
+          <RequireMeetingAccess capability="ORGANIZE_OR_COORDINATE">
+            <MeetingTemplatesPage />
+          </RequireMeetingAccess>
+        ),
+      },
       { path: 'meetings/:meetingId', element: <MeetingDetailsPage /> },
       { path: 'lists/:listId', element: <ListPage /> },
       { path: 'work-cycles', element: <WorkCyclesPage /> },
@@ -89,4 +126,3 @@ export const router = createBrowserRouter([
     ],
   },
 ])
-

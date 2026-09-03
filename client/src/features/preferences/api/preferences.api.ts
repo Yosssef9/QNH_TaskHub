@@ -6,7 +6,7 @@ import type { UserPreferences } from '@/features/auth/types/auth.types'
 export type UpdatePreferencesInput = Partial<
   Pick<
     UserPreferences,
-    'languageCode' | 'theme' | 'sidebarCollapsed' | 'calendarShowAdjacentDates'
+    'languageCode' | 'theme' | 'sidebarCollapsed' | 'calendarShowAdjacentDates' | 'meetingStartReminderEnabled' | 'timeFormat'
   >
 >
 
@@ -18,3 +18,5 @@ export async function updatePreferences(input: UpdatePreferencesInput): Promise<
 
   return response.data.data.preferences
 }
+
+

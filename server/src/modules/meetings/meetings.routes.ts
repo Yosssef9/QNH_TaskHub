@@ -7,15 +7,19 @@ import { validateRequest } from "../../middleware/validate.middleware.js";
 import { verifyPortalJwt } from "../../middleware/verifyPortalJwt.middleware.js";
 import { uploadSingleMeetingAttachment } from "./meeting-attachment-upload.middleware.js";
 import {
+  adjustAndApproveMeetingRequest,
+  adjustAndApproveMeetingReschedule,
   approveMeetingRequest,
   approveMeetingReschedule,
   archiveMeetingTemplate,
   cancelMeeting,
+  cancelOrganizerMeetingReschedule,
   checkMeetingAvailability,
   createDirectMeeting,
   createMeetingRequest,
   createMeetingRoom,
   createMeetingTemplate,
+  coordinatorDirectRescheduleMeeting,
   downloadMeetingAttachment,
   getMeetingDetail,
   listActiveMeetingRooms,
@@ -35,6 +39,9 @@ import {
   searchMeetingParticipants,
   updateCoordinatorMeetingSchedule,
   updateCoordinatorReschedule,
+  updateMeetingAgenda,
+  updateOrganizerMeetingReschedule,
+  updateOrganizerPendingMeetingSchedule,
   updateMeetingRoom,
   updateMeetingTemplate,
   uploadMeetingAttachment,
@@ -51,6 +58,8 @@ import {
 import {
   archiveMeetingTemplateBodySchema,
   cancelMeetingBodySchema,
+  cancelMeetingRescheduleRequestBodySchema,
+  coordinatorDirectRescheduleBodySchema,
   createMeetingRescheduleBodySchema,
   createMeetingTemplateBodySchema,
   decideMeetingRescheduleBodySchema,
@@ -58,8 +67,10 @@ import {
   meetingTemplateParamsSchema,
   meetingWorkspaceParamsSchema,
   rejectMeetingRescheduleBodySchema,
+  updateMeetingAgendaBodySchema,
   updateMeetingRescheduleBodySchema,
   updateMeetingTemplateBodySchema,
+  updateOrganizerRescheduleBodySchema,
 } from "./meeting-workspace.schemas.js";
 import {
   createMeetingRoomBodySchema,
@@ -103,6 +114,15 @@ meetingsRouter.post(
   requireMeetingPermission("MEETING_ORGANIZE"),
   validateRequest({ body: createMeetingBodySchema }),
   createMeetingRequest,
+);
+meetingsRouter.patch(
+  "/requests/:meetingId/schedule",
+  requireMeetingPermission("MEETING_ORGANIZE"),
+  validateRequest({
+    params: meetingRequestParamsSchema,
+    body: updateMeetingScheduleBodySchema,
+  }),
+  updateOrganizerPendingMeetingSchedule,
 );
 meetingsRouter.post(
   "/direct",
@@ -156,6 +176,15 @@ meetingsRouter.patch(
   updateCoordinatorMeetingSchedule,
 );
 meetingsRouter.post(
+  "/coordinator/requests/:meetingId/adjust-and-approve",
+  requireMeetingPermission("MEETING_COORDINATE"),
+  validateRequest({
+    params: meetingRequestParamsSchema,
+    body: updateMeetingScheduleBodySchema,
+  }),
+  adjustAndApproveMeetingRequest,
+);
+meetingsRouter.post(
   "/coordinator/requests/:meetingId/approve",
   requireMeetingPermission("MEETING_COORDINATE"),
   validateRequest({
@@ -186,6 +215,24 @@ meetingsRouter.patch(
     body: updateMeetingRescheduleBodySchema,
   }),
   updateCoordinatorReschedule,
+);
+meetingsRouter.post(
+  "/coordinator/reschedules/:meetingId/adjust-and-approve",
+  requireMeetingPermission("MEETING_COORDINATE"),
+  validateRequest({
+    params: meetingWorkspaceParamsSchema,
+    body: updateMeetingRescheduleBodySchema,
+  }),
+  adjustAndApproveMeetingReschedule,
+);
+meetingsRouter.post(
+  "/coordinator/meetings/:meetingId/reschedule",
+  requireMeetingPermission("MEETING_COORDINATE"),
+  validateRequest({
+    params: meetingWorkspaceParamsSchema,
+    body: coordinatorDirectRescheduleBodySchema,
+  }),
+  coordinatorDirectRescheduleMeeting,
 );
 meetingsRouter.post(
   "/coordinator/reschedules/:meetingId/approve",
@@ -227,6 +274,14 @@ meetingsRouter.get(
   validateRequest({ params: meetingWorkspaceParamsSchema }),
   getMeetingDetail,
 );
+meetingsRouter.put(
+  "/:meetingId/agenda",
+  validateRequest({
+    params: meetingWorkspaceParamsSchema,
+    body: updateMeetingAgendaBodySchema,
+  }),
+  updateMeetingAgenda,
+);
 meetingsRouter.post(
   "/:meetingId/reschedule",
   requireMeetingPermission("MEETING_ORGANIZE"),
@@ -235,6 +290,24 @@ meetingsRouter.post(
     body: createMeetingRescheduleBodySchema,
   }),
   requestMeetingReschedule,
+);
+meetingsRouter.patch(
+  "/:meetingId/reschedule",
+  requireMeetingPermission("MEETING_ORGANIZE"),
+  validateRequest({
+    params: meetingWorkspaceParamsSchema,
+    body: updateOrganizerRescheduleBodySchema,
+  }),
+  updateOrganizerMeetingReschedule,
+);
+meetingsRouter.post(
+  "/:meetingId/reschedule/cancel",
+  requireMeetingPermission("MEETING_ORGANIZE"),
+  validateRequest({
+    params: meetingWorkspaceParamsSchema,
+    body: cancelMeetingRescheduleRequestBodySchema,
+  }),
+  cancelOrganizerMeetingReschedule,
 );
 meetingsRouter.post(
   "/:meetingId/cancel",

@@ -33,7 +33,8 @@ import {
 import type { Contract, ContractActivity } from '@/features/contracts/types/contracts.types'
 import type { ReactNode } from 'react'
 import { ApiClientError } from '@/lib/api-error'
-import { APP_TIME_ZONE } from '@/lib/date-time'
+import { APP_TIME_ZONE, formatDateTime } from '@/lib/date-time'
+import { useTimeFormatPreference } from '@/features/preferences/hooks/use-time-format'
 
 export function ContractDetailsPage() {
   const { i18n, t } = useTranslation()
@@ -495,7 +496,8 @@ function ReminderItem({
 }
 
 function History({ items, locale }: { items: ContractActivity[]; locale: string }) {
-  const { i18n, t } = useTranslation()
+  const { t } = useTranslation()
+  const timeFormat = useTimeFormatPreference()
   if (items.length === 0) {
     return <div className="text-muted-foreground rounded-xl border p-8 text-center text-sm">{t('contracts.historyEmpty')}</div>
   }
@@ -509,7 +511,7 @@ function History({ items, locale }: { items: ContractActivity[]; locale: string 
               <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                 <p className="font-semibold">{t(`contracts.activity.${item.type}`)}</p>
                 <time className="text-muted-foreground text-xs">
-                  {new Intl.DateTimeFormat(i18n.language, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(item.createdAtUtc))}
+                  {formatDateTime(item.createdAtUtc, locale, timeFormat)}
                 </time>
               </div>
               <p className="text-muted-foreground mt-1 text-xs">{item.actorName}</p>
@@ -624,4 +626,5 @@ function Info({ label, value }: { label: string; value: ReactNode }) {
     </div>
   )
 }
+
 

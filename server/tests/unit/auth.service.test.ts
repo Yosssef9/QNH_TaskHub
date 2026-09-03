@@ -24,6 +24,7 @@ const accessProfile: AccessProfileRecord = {
   theme: "SYSTEM",
   sidebarCollapsed: false,
   calendarShowAdjacentDates: false,
+  meetingStartReminderEnabled: true,
   timezone: "Asia/Riyadh",
   hasDefaultList: true,
 };
@@ -101,4 +102,5 @@ describe("auth service", () => {
     expect(result.access.roleCode).toBe("USER");
   });
 });
+
 

@@ -4,6 +4,7 @@ import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
 import { getKpiPeriodBounds } from "../kpis/kpi-period.js";
 import { kpiWorkService } from "../kpis/kpi-work.service.js";
 import { workCyclesService } from "../work-cycles/work-cycles.service.js";
+import { meetingNotificationsService } from "../meetings/meeting-notifications.service.js";
 import {
   notificationsRepository,
   type NotificationRecord,
@@ -32,6 +33,7 @@ export function notificationHref(record: NotificationRecord): string {
   const cycleId = optionalId(record.cycleId);
   const instanceId = optionalId(record.kpiInstanceId);
   const contractId = optionalId(record.contractId);
+  const meetingId = optionalId(record.meetingId);
 
   if (
     record.notificationType === "TASK_OVERDUE" ||
@@ -44,6 +46,11 @@ export function notificationHref(record: NotificationRecord): string {
       return `/work-cycles/${cycleId}/kpis/${instanceId}?taskId=${taskId}`;
     }
     return "/kpi-tasks";
+  }
+
+
+  if (record.notificationType.startsWith("MEETING_")) {
+    return meetingId === null ? "/meetings" : `/meetings/${meetingId}`;
   }
 
   if (
@@ -141,6 +148,7 @@ async function synchronize(owner: number): Promise<void> {
   const today = getCurrentDateInAppTimeZone();
   await notificationsRepository.syncTimeBased(owner, today, addDays(today, 1));
   await notificationsRepository.syncContractNotifications(owner, today);
+  await meetingNotificationsService.syncStartReminder(owner);
   await syncKpiNotifications(owner, today);
 }
 
@@ -174,4 +182,5 @@ export const notificationsService = {
     return notificationsRepository.markAllRead(owner);
   },
 };
+
 

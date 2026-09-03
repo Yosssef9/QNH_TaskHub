@@ -15,6 +15,8 @@ const authenticatedUserResponse = {
       theme: 'SYSTEM',
       sidebarCollapsed: false,
       timezone: 'Asia/Riyadh',
+      meetingStartReminderEnabled: true,
+      timeFormat: '12H',
     },
   },
 }
@@ -271,4 +273,6 @@ test('allows an administrator to grant TaskHub access with a role', async ({ pag
   await expect.poll(() => savedInput).toEqual({ roleCode: 'ADMIN', isActive: true, contractsEnabled: false })
   await expect(page.getByText('تم حفظ إعدادات الوصول.')).toBeVisible()
 })
+
+
 

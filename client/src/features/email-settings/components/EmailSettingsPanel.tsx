@@ -1,7 +1,9 @@
+import { useQueryClient } from '@tanstack/react-query'
 import type { LucideIcon } from 'lucide-react'
 import {
   BadgeCheck,
   BellRing,
+  CalendarClock,
   CircleAlert,
   Loader2,
   Mail,
@@ -19,6 +21,9 @@ import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
+import { useUpdatePreferences } from '@/features/preferences/hooks/use-update-preferences'
+import { notificationsQueryRoot } from '@/features/notifications/hooks/use-notifications'
 import { ApiClientError } from '@/lib/api-error'
 import { cn } from '@/lib/cn'
 
@@ -48,6 +53,16 @@ const cycleEvents: EmailPreferenceEvent[] = [
   'CURRENT_CYCLE_PAST_END',
 ]
 const kpiEvents: EmailPreferenceEvent[] = ['KPI_BELOW_TARGET', 'KPI_MEASUREMENT_DUE']
+const meetingEvents: EmailPreferenceEvent[] = [
+  'MEETING_REQUEST_SUBMITTED',
+  'MEETING_REQUEST_UPDATED',
+  'MEETING_APPROVED',
+  'MEETING_REJECTED',
+  'MEETING_INVITED',
+  'MEETING_RESCHEDULED',
+  'MEETING_RESCHEDULE_REQUEST_CANCELLED',
+  'MEETING_CANCELLED',
+]
 
 function settingError(error: unknown, fallback: string): string {
   return error instanceof ApiClientError ? error.message || fallback : fallback
@@ -55,6 +70,9 @@ function settingError(error: unknown, fallback: string): string {
 
 export function EmailSettingsPanel({ settings }: EmailSettingsPanelProps) {
   const { t } = useTranslation()
+  const currentUser = useCurrentUser()
+  const queryClient = useQueryClient()
+  const updatePreferencesMutation = useUpdatePreferences()
   const [alternateDialogOpen, setAlternateDialogOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const updateMutation = useUpdateEmailSettings()
@@ -87,6 +105,17 @@ export function EmailSettingsPanel({ settings }: EmailSettingsPanelProps) {
   async function setPreference(eventType: EmailPreferenceEvent, enabled: boolean) {
     try {
       await updateMutation.mutateAsync({ preferences: [{ eventType, enabled }] })
+    } catch (error) {
+      toast.error(settingError(error, t('emailSettings.errors.save')))
+    }
+  }
+
+
+  async function setMeetingReminder(enabled: boolean) {
+    try {
+      await updatePreferencesMutation.mutateAsync({ meetingStartReminderEnabled: enabled })
+      await queryClient.invalidateQueries({ queryKey: notificationsQueryRoot })
+      toast.success(t(enabled ? 'emailSettings.meetingReminder.enabledToast' : 'emailSettings.meetingReminder.disabledToast'))
     } catch (error) {
       toast.error(settingError(error, t('emailSettings.errors.save')))
     }
@@ -230,6 +259,21 @@ export function EmailSettingsPanel({ settings }: EmailSettingsPanelProps) {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader className="flex-row items-center justify-between gap-4">
+          <div className="min-w-0">
+            <CardTitle>{t('emailSettings.meetingReminder.title')}</CardTitle>
+            <CardDescription>{t('emailSettings.meetingReminder.description')}</CardDescription>
+          </div>
+          <Switch
+            checked={currentUser.data?.preferences.meetingStartReminderEnabled ?? true}
+            disabled={updatePreferencesMutation.isPending}
+            aria-label={t('emailSettings.meetingReminder.title')}
+            onCheckedChange={(checked) => void setMeetingReminder(checked)}
+          />
+        </CardHeader>
+      </Card>
+
       <Card className={cn(!settings.notificationsEnabled && 'opacity-70')}>
         <CardHeader>
           <CardTitle>{t('emailSettings.events.title')}</CardTitle>
@@ -256,6 +300,14 @@ export function EmailSettingsPanel({ settings }: EmailSettingsPanelProps) {
             icon={BadgeCheck}
             title={t('emailSettings.events.groups.kpis')}
             events={kpiEvents}
+            values={preferenceMap}
+            disabled={!settings.notificationsEnabled || updateMutation.isPending}
+            onChange={setPreference}
+          />
+          <PreferenceGroup
+            icon={CalendarClock}
+            title={t('emailSettings.events.groups.meetings')}
+            events={meetingEvents}
             values={preferenceMap}
             disabled={!settings.notificationsEnabled || updateMutation.isPending}
             onChange={setPreference}
@@ -421,3 +473,4 @@ function PreferenceGroup({
     </section>
   )
 }
+

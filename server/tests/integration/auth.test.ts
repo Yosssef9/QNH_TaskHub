@@ -20,6 +20,8 @@ const authProfile: AuthMeData = {
     theme: "SYSTEM",
     sidebarCollapsed: false,
     calendarShowAdjacentDates: false,
+    meetingStartReminderEnabled: true,
+    timeFormat: "12H",
     timezone: "Asia/Riyadh",
   },
 };
@@ -78,4 +80,6 @@ describe("GET /api/auth/me", () => {
     expect(response.body.data.access.roleCode).toBe("USER");
   });
 });
+
+
 

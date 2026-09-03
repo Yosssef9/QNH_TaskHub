@@ -14,22 +14,24 @@ export function hasMeetingPermission(
 
 
 
-export type MeetingScheduleVisibility = "FULL" | "BUSY" | "NONE";
+export type MeetingScheduleVisibility = "FULL" | "PREVIEW" | "BUSY" | "NONE";
 
 export function meetingScheduleVisibility(
   access: TaskHubAccess,
   relationship: { isOrganizer: boolean; isAttendee: boolean },
 ): MeetingScheduleVisibility {
+  if (access.meetingCoordinateEnabled === true) {
+    return "FULL";
+  }
+
   if (relationship.isOrganizer || relationship.isAttendee) {
     return "FULL";
   }
 
-  if (
-    access.meetingOrganizeEnabled === true ||
-    access.meetingCoordinateEnabled === true
-  ) {
-    return "BUSY";
+  if (access.meetingOrganizeEnabled === true) {
+    return "PREVIEW";
   }
 
   return "NONE";
 }
+

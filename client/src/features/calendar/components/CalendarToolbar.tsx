@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import type { TimeFormatPreference } from '@/features/auth/types/auth.types'
 import { cn } from '@/lib/cn'
 
 import type { CalendarViewMode } from '../types/calendar.types'
@@ -25,6 +26,10 @@ interface Props {
   showAdjacentDates: boolean
   displayPreferencePending: boolean
   onShowAdjacentDatesChange: (showAdjacentDates: boolean) => void
+  showTimeFormat: boolean
+  timeFormat: TimeFormatPreference
+  timeFormatPending: boolean
+  onTimeFormatChange: (timeFormat: TimeFormatPreference) => void
 }
 
 export function CalendarToolbar({
@@ -38,6 +43,10 @@ export function CalendarToolbar({
   showAdjacentDates,
   displayPreferencePending,
   onShowAdjacentDatesChange,
+  showTimeFormat,
+  timeFormat,
+  timeFormatPending,
+  onTimeFormatChange,
 }: Props) {
   const { i18n, t } = useTranslation()
   const isRtl = i18n.dir() === 'rtl'
@@ -87,7 +96,7 @@ export function CalendarToolbar({
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
         {viewMode === 'MONTH' ? (
           <Select
             value={showAdjacentDates ? 'ADJACENT' : 'CURRENT'}
@@ -101,6 +110,31 @@ export function CalendarToolbar({
             <SelectContent>
               <SelectItem value="CURRENT">{t('calendar.currentMonthOnly')}</SelectItem>
               <SelectItem value="ADJACENT">{t('calendar.includeAdjacentDates')}</SelectItem>
+            </SelectContent>
+          </Select>
+        ) : null}
+
+        {showTimeFormat ? (
+          <Select
+            value={timeFormat}
+            disabled={timeFormatPending}
+            onValueChange={(value) => onTimeFormatChange(value as TimeFormatPreference)}
+          >
+            <SelectTrigger
+              className="h-9 w-full sm:w-[8.5rem]"
+              aria-label={t('calendar.timeFormatLabel')}
+              title={t('calendar.timeFormatGlobalHint')}
+            >
+              <Clock3 aria-hidden="true" className="text-primary size-4 shrink-0" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="12H">
+                {t('calendar.timeFormat12Hour')} · {t('calendar.timeFormatExample12')}
+              </SelectItem>
+              <SelectItem value="24H">
+                {t('calendar.timeFormat24Hour')} · {t('calendar.timeFormatExample24')}
+              </SelectItem>
             </SelectContent>
           </Select>
         ) : null}

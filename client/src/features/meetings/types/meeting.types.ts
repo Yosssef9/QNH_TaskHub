@@ -1,9 +1,12 @@
+import type { MeetingRoomColorKey } from '../meeting-room-colors'
+
 export interface MeetingRoom {
   id: number
   code: string | null
   nameAr: string
   nameEn: string
   locationText: string | null
+  colorKey: MeetingRoomColorKey
   capacity: number
   equipmentNotes: string | null
   isActive: boolean
@@ -15,6 +18,7 @@ export interface SaveMeetingRoomInput {
   nameAr: string
   nameEn: string
   locationText: string | null
+  colorKey: MeetingRoomColorKey | null
   capacity: number
   equipmentNotes: string | null
   isActive: boolean
@@ -51,7 +55,9 @@ export interface MeetingSummary {
   schedulingNotes: string | null
   participantCount: number
   attendees: MeetingParticipant[]
+  hasPendingReschedule: boolean
   revisionId: number
+  revisionCreatedAtUtc?: string
   meetingRowVersion: string
   revisionRowVersion: string
 }
@@ -71,6 +77,27 @@ export interface MeetingAvailability extends MeetingAvailabilityInput {
   canSchedule: boolean
 }
 
+export interface MeetingAgendaItemInput {
+  topic: string
+  presenterUserId: number | null
+  plannedDurationMinutes: number | null
+}
+
+export interface UpdateMeetingAgendaInput {
+  meetingId: number
+  meetingRowVersion: string
+  agendaItems: MeetingAgendaItemInput[]
+}
+
+export interface MeetingAgendaItem {
+  id: number
+  topic: string
+  presenter: MeetingParticipant | null
+  plannedDurationMinutes: number | null
+  sortOrder: number
+  rowVersion: string
+}
+
 export interface SaveMeetingInput {
   title: string
   description: string | null
@@ -78,6 +105,7 @@ export interface SaveMeetingInput {
   startAtUtc: string
   endAtUtc: string
   attendeeUserIds: number[]
+  agendaItems: MeetingAgendaItemInput[]
 }
 
 export interface UpdatePendingMeetingScheduleInput {
@@ -102,7 +130,7 @@ export interface RejectMeetingRequestInput extends DecideMeetingRequestInput {
 
 interface MeetingScheduleSharedEntry {
   organizer: MeetingParticipant
-  room: Pick<MeetingRoom, 'id' | 'code' | 'nameAr' | 'nameEn' | 'locationText'>
+  room: Pick<MeetingRoom, 'id' | 'code' | 'nameAr' | 'nameEn' | 'locationText' | 'colorKey'>
   startAtUtc: string
   endAtUtc: string
 }
@@ -110,6 +138,16 @@ interface MeetingScheduleSharedEntry {
 export interface MeetingScheduleFullEntry extends MeetingScheduleSharedEntry {
   visibility: 'FULL'
   meetingId: number
+  title: string
+  participantCount: number
+  agendaTopicCount: number
+  agendaPlannedMinutes: number
+  hasPendingReschedule: boolean
+}
+
+export interface MeetingSchedulePreviewEntry extends MeetingScheduleSharedEntry {
+  visibility: 'PREVIEW'
+  meetingId: null
   title: string
 }
 
@@ -119,7 +157,10 @@ export interface MeetingScheduleBusyEntry extends MeetingScheduleSharedEntry {
   title: null
 }
 
-export type MeetingScheduleEntry = MeetingScheduleFullEntry | MeetingScheduleBusyEntry
+export type MeetingScheduleEntry =
+  | MeetingScheduleFullEntry
+  | MeetingSchedulePreviewEntry
+  | MeetingScheduleBusyEntry
 
 
 export type MeetingRevisionType = 'INITIAL' | 'RESCHEDULE'
@@ -152,12 +193,20 @@ export interface MeetingActivityItem {
 
 export interface MeetingDetail {
   meeting: MeetingSummary
+  agendaItems: MeetingAgendaItem[]
   revisions: MeetingRevisionDetail[]
   activity: MeetingActivityItem[]
   pendingReschedule: MeetingRevisionDetail | null
   permissions: {
     canCancel: boolean
     canReschedule: boolean
+    canEditPendingSchedule: boolean
+    canEditPendingReschedule: boolean
+    canCancelPendingReschedule: boolean
+    canDecidePendingRequest: boolean
+    canCoordinatorReschedule: boolean
+    canDecidePendingReschedule: boolean
+    canManageAgenda: boolean
     canManageAttachments: boolean
     canSaveAsTemplate: boolean
   }
@@ -174,6 +223,29 @@ export interface RequestMeetingRescheduleInput {
   roomId: number
   startAtUtc: string
   endAtUtc: string
+}
+
+
+export interface UpdateOrganizerRescheduleInput {
+  meetingId: number
+  revisionId: number
+  revisionRowVersion: string
+  roomId: number
+  startAtUtc: string
+  endAtUtc: string
+}
+
+export interface CancelMeetingRescheduleRequestInput extends DecideMeetingRescheduleInput {
+  reason: string | null
+}
+
+export interface DirectCoordinatorRescheduleInput {
+  meetingId: number
+  meetingRowVersion: string
+  roomId: number
+  startAtUtc: string
+  endAtUtc: string
+  schedulingNotes: string | null
 }
 
 export interface UpdateMeetingRescheduleInput {
@@ -237,3 +309,5 @@ export interface UpdateMeetingTemplateInput extends SaveMeetingTemplateInput {
   templateId: number
   rowVersion: string
 }
+
+

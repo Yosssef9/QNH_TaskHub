@@ -8,6 +8,15 @@ export const NOTIFICATION_TYPES = [
   "KPI_MEASUREMENT_DUE",
   "CONTRACT_EXPIRATION_REMINDER",
   "CONTRACT_NOTICE_DEADLINE_REMINDER",
+  "MEETING_REQUEST_SUBMITTED",
+  "MEETING_REQUEST_UPDATED",
+  "MEETING_APPROVED",
+  "MEETING_REJECTED",
+  "MEETING_INVITED",
+  "MEETING_RESCHEDULED",
+  "MEETING_RESCHEDULE_REQUEST_CANCELLED",
+  "MEETING_CANCELLED",
+  "MEETING_START_REMINDER",
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -30,3 +39,4 @@ export interface NotificationListData {
   items: NotificationItem[];
   unreadCount: number;
 }
+

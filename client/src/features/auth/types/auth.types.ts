@@ -8,6 +8,7 @@ export interface PortalUser {
 export type TaskHubRoleCode = 'USER' | 'ADMIN'
 export type LanguageCode = 'AR' | 'EN'
 export type ThemePreference = 'LIGHT' | 'DARK' | 'SYSTEM'
+export type TimeFormatPreference = '12H' | '24H'
 
 export interface TaskHubAccess {
   roleCode: TaskHubRoleCode
@@ -21,6 +22,8 @@ export interface UserPreferences {
   theme: ThemePreference
   sidebarCollapsed: boolean
   calendarShowAdjacentDates: boolean
+  meetingStartReminderEnabled: boolean
+  timeFormat: TimeFormatPreference
   timezone: 'Asia/Riyadh'
 }
 
@@ -29,3 +32,5 @@ export interface AuthMeData {
   access: TaskHubAccess
   preferences: UserPreferences
 }
+
+
