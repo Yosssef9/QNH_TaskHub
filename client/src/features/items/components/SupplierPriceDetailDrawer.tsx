@@ -57,7 +57,7 @@ export function SupplierPriceDetailDrawer({
       <DialogContent
         variant="drawer"
         closeLabel={t('common.close')}
-        className="start-auto end-0 w-[min(68rem,96vw)] border-e-0 border-s"
+        className="w-screen border-e-0"
       >
         <div className="space-y-5 p-5 pe-14 sm:p-6 sm:pe-16">
           <div>
