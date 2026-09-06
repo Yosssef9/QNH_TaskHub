@@ -352,7 +352,7 @@ export function ItemsPage() {
                 <col className="w-[9rem]" />
                 <col className="w-[11rem]" />
               </colgroup>
-              <thead className="sticky top-0 z-20">
+              <thead className="sticky top-0 z-20 bg-card">
                 <tr>
                   <SortableHeader
                     label={t('items.name')}
@@ -362,19 +362,19 @@ export function ItemsPage() {
                     onSort={onSort}
                     tone="soft-primary"
                     rowSpan={2}
-                    className="sticky start-0 z-30 border-e bg-accent/95 align-middle backdrop-blur"
+                    className="sticky start-0 z-30 border-e bg-accent align-middle"
                   />
                   <th
                     scope="colgroup"
                     colSpan={4}
-                    className="border-primary/15 bg-primary/[0.06] border-b px-4 py-2.5 text-center text-[11px] font-semibold tracking-wide text-primary"
+                    className="border-primary/15 bg-accent border-b px-4 py-2.5 text-center text-[11px] font-semibold tracking-wide text-primary"
                   >
                     {t('items.analytics.priceIntelligenceGroup')}
                   </th>
                   <th
                     scope="colgroup"
                     colSpan={2}
-                    className="border-primary/15 bg-primary/[0.06] border-b border-s px-4 py-2.5 text-center text-[11px] font-semibold tracking-wide text-primary"
+                    className="border-primary/15 bg-accent border-b border-s px-4 py-2.5 text-center text-[11px] font-semibold tracking-wide text-primary"
                   >
                     {t('items.analytics.activityGroup')}
                   </th>

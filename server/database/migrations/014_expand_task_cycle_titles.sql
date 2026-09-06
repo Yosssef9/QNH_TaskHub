@@ -1,3 +1,6 @@
+USE [QNHDB];
+GO
+
 SET XACT_ABORT ON;
 GO
 
@@ -23,7 +26,9 @@ BEGIN TRY
     /* =====================================================
        Work Cycle title
 
-       Drop old wide unique index first.
+       title_unique_hash is a computed column based on title,
+       so both its index and the computed column itself must
+       be removed before title can be altered.
        ===================================================== */
 
     IF EXISTS (
@@ -38,29 +43,34 @@ BEGIN TRY
     END;
 
 
+    /* Drop computed column before changing title */
+    IF COL_LENGTH(
+        N'dbo.TM_work_cycles',
+        N'title_unique_hash'
+    ) IS NOT NULL
+    BEGIN
+        ALTER TABLE dbo.TM_work_cycles
+        DROP COLUMN title_unique_hash;
+    END;
+
+
     ALTER TABLE dbo.TM_work_cycles
     ALTER COLUMN title NVARCHAR(1000) NOT NULL;
 
 
     /* =====================================================
-       Compact hash used for Work Cycle uniqueness
+       Recreate compact hash used for Work Cycle uniqueness
        ===================================================== */
 
-    IF COL_LENGTH(
-        N'dbo.TM_work_cycles',
-        N'title_unique_hash'
-    ) IS NULL
-    BEGIN
-        ALTER TABLE dbo.TM_work_cycles
-        ADD title_unique_hash AS
-            CONVERT(
-                BINARY(32),
-                HASHBYTES(
-                    'SHA2_256',
-                    UPPER(LTRIM(RTRIM(title)))
-                )
-            ) PERSISTED;
-    END;
+    ALTER TABLE dbo.TM_work_cycles
+    ADD title_unique_hash AS
+        CONVERT(
+            BINARY(32),
+            HASHBYTES(
+                'SHA2_256',
+                UPPER(LTRIM(RTRIM(title)))
+            )
+        ) PERSISTED;
 
 
     CREATE UNIQUE INDEX UX_TM_work_cycles_active_title
@@ -87,6 +97,8 @@ BEGIN TRY
 
 
     COMMIT TRANSACTION;
+
+    PRINT 'Migration 014 completed successfully.';
 END TRY
 BEGIN CATCH
     IF @@TRANCOUNT > 0

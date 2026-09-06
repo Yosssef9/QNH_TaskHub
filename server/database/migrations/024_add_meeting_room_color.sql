@@ -20,19 +20,23 @@ BEGIN TRY
 
 
     ------------------------------------------------------------
-    -- 2. Add persisted room color key if it does not exist
+    -- 2. Add color_key if it does not exist
+    --
+    -- Dynamic SQL is intentional because later statements in
+    -- this same batch must not be compiled against a column
+    -- that may not exist yet.
     ------------------------------------------------------------
     IF COL_LENGTH(N'dbo.TM_meeting_rooms', N'color_key') IS NULL
     BEGIN
-        ALTER TABLE dbo.TM_meeting_rooms
-            ADD color_key VARCHAR(20) NULL;
+        EXEC sys.sp_executesql N'
+            ALTER TABLE dbo.TM_meeting_rooms
+                ADD color_key VARCHAR(20) NULL;
+        ';
     END;
 
 
     ------------------------------------------------------------
-    -- 3. DROP THE OLD CHECK CONSTRAINT FIRST
-    --
-    -- This must happen BEFORE updating old palette values.
+    -- 3. Drop existing color constraint
     ------------------------------------------------------------
     IF EXISTS
     (
@@ -48,23 +52,7 @@ BEGIN TRY
 
 
     ------------------------------------------------------------
-    -- 4. Reassign ALL existing rooms using the FINAL palette
-    --
-    -- Development-time cleanup:
-    --
-    -- Room 1 -> BLUE
-    -- Room 2 -> PURPLE
-    -- Room 3 -> GREEN
-    -- Room 4 -> ORANGE
-    -- Room 5 -> RED
-    -- Room 6 -> GOLD
-    -- Room 7 -> SLATE
-    -- Room 8 -> PINK
-    --
-    -- Then cycle again if more than 8 rooms exist.
-    --
-    -- We intentionally update ALL rooms instead of carrying
-    -- old development color assignments forward.
+    -- 4. Reassign ALL existing rooms using FINAL palette
     ------------------------------------------------------------
     EXEC sys.sp_executesql N'
         ;WITH numbered AS
@@ -93,7 +81,29 @@ BEGIN TRY
 
 
     ------------------------------------------------------------
-    -- 5. Make persisted color mandatory
+    -- 5. Validate that no NULL values remain
+    ------------------------------------------------------------
+    DECLARE @NullColorCount BIGINT;
+
+    EXEC sys.sp_executesql
+        N'
+            SELECT @CountOutput = COUNT_BIG(*)
+            FROM dbo.TM_meeting_rooms
+            WHERE color_key IS NULL;
+        ',
+        N'@CountOutput BIGINT OUTPUT',
+        @CountOutput = @NullColorCount OUTPUT;
+
+    IF @NullColorCount > 0
+    BEGIN
+        THROW 52402,
+            'One or more Meeting Rooms still have a NULL color_key.',
+            1;
+    END;
+
+
+    ------------------------------------------------------------
+    -- 6. Make color mandatory
     ------------------------------------------------------------
     EXEC sys.sp_executesql N'
         ALTER TABLE dbo.TM_meeting_rooms
@@ -102,36 +112,42 @@ BEGIN TRY
 
 
     ------------------------------------------------------------
-    -- 6. Add FINAL palette constraint
+    -- 7. Add FINAL palette constraint
+    --
+    -- MUST also be dynamic SQL. A static CHECK(color_key...)
+    -- in this batch causes SQL Server compile-time error 207
+    -- when color_key did not exist before the migration.
     ------------------------------------------------------------
-    ALTER TABLE dbo.TM_meeting_rooms
-        WITH CHECK
-        ADD CONSTRAINT CK_TM_meeting_rooms_color_key
-        CHECK
-        (
-            color_key IN
+    EXEC sys.sp_executesql N'
+        ALTER TABLE dbo.TM_meeting_rooms
+            WITH CHECK
+            ADD CONSTRAINT CK_TM_meeting_rooms_color_key
+            CHECK
             (
-                'BLUE',
-                'PURPLE',
-                'GREEN',
-                'ORANGE',
-                'RED',
-                'GOLD',
-                'SLATE',
-                'PINK'
-            )
-        );
+                color_key IN
+                (
+                    ''BLUE'',
+                    ''PURPLE'',
+                    ''GREEN'',
+                    ''ORANGE'',
+                    ''RED'',
+                    ''GOLD'',
+                    ''SLATE'',
+                    ''PINK''
+                )
+            );
+    ';
 
 
     ------------------------------------------------------------
-    -- 7. Explicitly enable and validate the constraint
+    -- 8. Explicitly enable and validate constraint
     ------------------------------------------------------------
     ALTER TABLE dbo.TM_meeting_rooms
         CHECK CONSTRAINT CK_TM_meeting_rooms_color_key;
 
 
     ------------------------------------------------------------
-    -- 8. Commit
+    -- 9. Commit
     ------------------------------------------------------------
     COMMIT TRANSACTION;
 
@@ -149,13 +165,24 @@ GO
 
 ------------------------------------------------------------
 -- Verification
+-- This is now a NEW batch, so SQL Server sees color_key
+-- after the successful migration above.
 ------------------------------------------------------------
-SELECT
-    id,
-    code,
-    name_ar,
-    name_en,
-    color_key
-FROM dbo.TM_meeting_rooms
-ORDER BY id;
-GO
+IF COL_LENGTH(N'dbo.TM_meeting_rooms', N'color_key') IS NOT NULL
+BEGIN
+    EXEC sys.sp_executesql N'
+        SELECT
+            id,
+            code,
+            name_ar,
+            name_en,
+            color_key
+        FROM dbo.TM_meeting_rooms
+        ORDER BY id;
+    ';
+END
+ELSE
+BEGIN
+    PRINT 'Verification skipped: color_key does not exist because the migration did not complete.';
+END;
+GO 
