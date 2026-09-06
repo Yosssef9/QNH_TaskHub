@@ -291,7 +291,11 @@ export function MeetingEditorDialog({
   }
 
   function updateAttendees(values: Array<string | number>) {
-    setValidationErrors((current) => ({ ...current, capacity: undefined }))
+    setValidationErrors((current) => {
+      const next = { ...current }
+      delete next.capacity
+      return next
+    })
     const ids = values.map(Number)
     setAttendeeUserIds(ids)
     setSelectedParticipantOptions((current) => {

@@ -144,9 +144,11 @@ function singleComparableBest(
   }
   const comparableGroups = [...groups.values()].filter((group) => group.length >= 2)
   if (comparableGroups.length !== 1) return null
+  const comparableGroup = comparableGroups[0]
+  if (!comparableGroup) return null
 
   return (
-    comparableGroups[0]
+    comparableGroup
       .slice()
       .sort(
         (left, right) =>
@@ -401,7 +403,7 @@ export function SavedViewSupplierComparisonTable({
                       className="bg-accent min-w-[16rem] border-e border-b px-4 py-3 text-start align-top text-xs font-semibold"
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <TableEntityLink kind="supplier" id={supplierId} name={supplier.label} code={supplier.description} compact className="min-w-0 max-w-[13rem]" />
+                        <TableEntityLink kind="supplier" id={supplierId} name={supplier.label} code={supplier.description ?? null} compact className="min-w-0 max-w-[13rem]" />
                         <Button
                           type="button"
                           variant="ghost"

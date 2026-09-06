@@ -7,8 +7,8 @@ import { cn } from '@/lib/cn'
 
 interface FieldShellProps {
   label?: string
-  description?: string
-  error?: string
+  description?: string | undefined
+  error?: string | undefined
   required?: boolean
   containerClassName?: string
   leftIcon?: ReactNode

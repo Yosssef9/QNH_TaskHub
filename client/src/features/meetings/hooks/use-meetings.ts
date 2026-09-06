@@ -250,7 +250,7 @@ export function useUploadMeetingAttachment() {
 export function useRemoveMeetingAttachment() {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: ({ meetingId, attachmentId }: { meetingId: number; attachmentId: string }) =>
+    mutationFn: ({ attachmentId }: { meetingId: number; attachmentId: string }) =>
       removeMeetingAttachment(attachmentId),
     onSuccess: (_result, input) => {
       void client.invalidateQueries({ queryKey: [...meetingsQueryKey, 'attachments', input.meetingId] })

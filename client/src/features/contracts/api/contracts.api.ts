@@ -110,7 +110,10 @@ export async function getContractAttachmentPreview(
 ): Promise<Blob> {
   const response = await apiClient.get<Blob>(
     `/contracts/attachments/${attachmentId}/preview`,
-    { responseType: 'blob', signal },
+    {
+      responseType: 'blob',
+      ...(signal ? { signal } : {}),
+    },
   )
   return response.data
 }

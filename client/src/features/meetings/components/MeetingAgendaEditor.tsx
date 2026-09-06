@@ -366,7 +366,7 @@ function SortableAgendaItem({
   organizerUserId: number | null
   editing: boolean
   disabled: boolean
-  error?: string
+  error?: string | undefined
   topicRef: (node: HTMLInputElement | null) => void
   onEdit: () => void
   onDone: () => void

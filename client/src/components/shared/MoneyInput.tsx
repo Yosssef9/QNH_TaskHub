@@ -40,8 +40,8 @@ export function MoneyInput({
   minimumFractionDigits?: number
   maximumFractionDigits?: number
   disabled?: boolean
-  className?: string
-  ariaLabel?: string
+  className?: string | undefined
+  ariaLabel?: string | undefined
 }) {
   const focused = useRef(false)
   const maxDigits = Math.max(0, Math.min(maximumFractionDigits, 20))

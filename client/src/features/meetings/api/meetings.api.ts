@@ -324,7 +324,7 @@ export async function getMeetingAttachmentPreview(
 ): Promise<Blob> {
   const response = await apiClient.get<Blob>(`/meetings/attachments/${attachmentId}/preview`, {
     responseType: 'blob',
-    signal,
+    ...(signal ? { signal } : {}),
   })
   return response.data
 }

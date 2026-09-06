@@ -83,7 +83,7 @@ export function useUploadContractAttachment() {
 export function useRemoveContractAttachment() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ contractId, attachmentId }: { contractId: number; attachmentId: string }) =>
+    mutationFn: ({ attachmentId }: { contractId: number; attachmentId: string }) =>
       removeContractAttachment(attachmentId),
     onSuccess: (_result, input) => {
       void queryClient.invalidateQueries({ queryKey: [...contractAttachmentsQueryKey, input.contractId] })

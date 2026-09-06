@@ -111,7 +111,7 @@ export function ContractFileUploadDialog({
         onOpenChange(next)
       }}
     >
-      <DialogContent variant="modal" className="w-[min(36rem,calc(100vw-2rem))]">
+      <DialogContent closeLabel={t('common.close')} variant="modal" className="w-[min(36rem,calc(100vw-2rem))]">
         <div className="flex items-start gap-3 pe-10">
           <div className="bg-primary/10 text-primary grid size-11 shrink-0 place-items-center rounded-xl">
             <FileUp aria-hidden="true" className="size-5" />

@@ -20,6 +20,7 @@ function FocusedMatrix({ suppliers }: { suppliers: ItemSupplierPriceSummary[] })
   const locale = i18n.language
   if (suppliers.length < 2 || suppliers.length > 5) return null
   const scope = suppliers[0]
+  if (!scope) return null
   const rows = [
     { key: 'latest', label: t('items.analytics.latestActual'), value: (supplier: ItemSupplierPriceSummary) => supplier.latestUnitCost },
     { key: 'previous', label: t('items.analytics.previousActual'), value: (supplier: ItemSupplierPriceSummary) => supplier.previousUnitCost },

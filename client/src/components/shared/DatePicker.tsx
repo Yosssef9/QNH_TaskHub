@@ -17,8 +17,8 @@ export interface DatePickerProps {
   required?: boolean
   disabled?: boolean
 
-  minDate?: string
-  maxDate?: string
+  minDate?: string | undefined
+  maxDate?: string | undefined
 
   className?: string
 }

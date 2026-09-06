@@ -75,7 +75,7 @@ const SERIES_DASHES = [
   '1 5',
 ] as const
 
-const MARKERS: MarkerShape[] = ['circle', 'square', 'triangle', 'diamond', 'pentagon']
+const MARKERS = ['circle', 'square', 'triangle', 'diamond', 'pentagon'] as const satisfies readonly MarkerShape[]
 
 function dateValue(point: ProcurementPricePoint): number {
   const value = Date.parse(`${point.transactionDate}T00:00:00`)
@@ -316,22 +316,29 @@ function distributeLabelYs(
   }))
 
   for (let index = 0; index < positioned.length; index += 1) {
+    const current = positioned[index]
+    if (!current) continue
     const previous = positioned[index - 1]
-    positioned[index].y = Math.max(
-      positioned[index].desiredY,
-      index === 0 ? minY : previous.y + LABEL_GAP,
+    current.y = Math.max(
+      current.desiredY,
+      index === 0 ? minY : (previous?.y ?? minY) + LABEL_GAP,
     )
   }
 
-  const overflow = positioned.length ? positioned[positioned.length - 1].y - maxY : 0
+  const lastPositioned = positioned[positioned.length - 1]
+  const overflow = lastPositioned ? lastPositioned.y - maxY : 0
   if (overflow > 0) {
     for (const entry of positioned) entry.y -= overflow
 
     for (let index = positioned.length - 2; index >= 0; index -= 1) {
-      positioned[index].y = Math.min(positioned[index].y, positioned[index + 1].y - LABEL_GAP)
+      const current = positioned[index]
+      const next = positioned[index + 1]
+      if (!current || !next) continue
+      current.y = Math.min(current.y, next.y - LABEL_GAP)
     }
 
-    const underflow = positioned.length ? minY - positioned[0].y : 0
+    const firstPositioned = positioned[0]
+    const underflow = firstPositioned ? minY - firstPositioned.y : 0
     if (underflow > 0) {
       for (const entry of positioned) entry.y += underflow
     }
@@ -442,13 +449,24 @@ export function ItemPriceHistoryChart({ history }: { history: ItemPriceHistory }
     setKeyboardPointKey(null)
   }, [history.points, focusedSupplierId, model?.series])
 
+  function getSeriesStyle(seriesIndex: number): {
+    color: string
+    dash: string | undefined
+    marker: MarkerShape
+  } {
+    return {
+      color: colors[seriesIndex % colors.length] ?? colors[0],
+      dash: SERIES_DASHES[seriesIndex % SERIES_DASHES.length],
+      marker: MARKERS[seriesIndex % MARKERS.length] ?? 'circle',
+    }
+  }
+
   const activeKey = pointerPointKey ?? keyboardPointKey
   const activeBase = activeKey ? model?.pointByKey.get(activeKey) ?? null : null
   const activePoint: ActivePoint | null = activeBase
     ? {
         ...activeBase,
-        color: colors[activeBase.seriesIndex % colors.length],
-        marker: MARKERS[activeBase.seriesIndex % MARKERS.length],
+        ...getSeriesStyle(activeBase.seriesIndex),
       }
     : null
 
@@ -462,22 +480,16 @@ export function ItemPriceHistoryChart({ history }: { history: ItemPriceHistory }
 
   const latestLabelYs = model
     ? distributeLabelYs(
-        displayLabelSeries.map((series) => ({
-          supplierId: series.supplierId,
-          desiredY: model.y(series.points[series.points.length - 1].point.unitCost),
-        })),
+        displayLabelSeries.flatMap((series) => {
+          const latest = series.points[series.points.length - 1]
+          return latest
+            ? [{ supplierId: series.supplierId, desiredY: model.y(latest.point.unitCost) }]
+            : []
+        }),
         PADDING.top + 14,
         HEIGHT - PADDING.bottom - 14,
       )
     : new Map<number, number>()
-
-  function getSeriesStyle(seriesIndex: number) {
-    return {
-      color: colors[seriesIndex % colors.length],
-      dash: SERIES_DASHES[seriesIndex % SERIES_DASHES.length],
-      marker: MARKERS[seriesIndex % MARKERS.length],
-    }
-  }
 
   function setPointerPoint(point: PositionedPoint | null) {
     setPointerPointKey(point?.key ?? null)
@@ -499,23 +511,27 @@ export function ItemPriceHistoryChart({ history }: { history: ItemPriceHistory }
       : -1
 
     if (direction === 'first') {
-      setKeyboardPointKey(points[0].key)
+      const firstPoint = points[0]
+      if (firstPoint) setKeyboardPointKey(firstPoint.key)
       return
     }
 
     if (direction === 'last') {
-      setKeyboardPointKey(points[points.length - 1].key)
+      const lastPoint = points[points.length - 1]
+      if (lastPoint) setKeyboardPointKey(lastPoint.key)
       return
     }
 
     if (direction === 'next') {
       const nextIndex = currentIndex < 0 ? points.length - 1 : Math.min(points.length - 1, currentIndex + 1)
-      setKeyboardPointKey(points[nextIndex].key)
+      const nextPoint = points[nextIndex]
+      if (nextPoint) setKeyboardPointKey(nextPoint.key)
       return
     }
 
     const previousIndex = currentIndex < 0 ? points.length - 1 : Math.max(0, currentIndex - 1)
-    setKeyboardPointKey(points[previousIndex].key)
+    const previousPoint = points[previousIndex]
+    if (previousPoint) setKeyboardPointKey(previousPoint.key)
   }
 
   return (
@@ -777,6 +793,7 @@ export function ItemPriceHistoryChart({ history }: { history: ItemPriceHistory }
                     )
                     const style = getSeriesStyle(seriesIndex)
                     const latest = series.points[series.points.length - 1]
+                    if (!latest) return null
                     const pointX = model.x(latest.point)
                     const pointY = model.y(latest.point.unitCost)
                     const labelY = latestLabelYs.get(series.supplierId) ?? pointY

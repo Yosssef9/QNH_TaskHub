@@ -49,7 +49,7 @@ export function MeetingAttachmentPreviewDialog({ attachment, open, onOpenChange 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent variant="modal" className="w-[min(64rem,calc(100vw-2rem))] p-0">
+      <DialogContent closeLabel={t('common.close')} variant="modal" className="w-[min(64rem,calc(100vw-2rem))] p-0">
         <div className="border-b px-6 py-4 pe-12">
           <DialogTitle>{attachment?.originalFileName ?? t('meetings.files.preview')}</DialogTitle>
           <DialogDescription>{t('meetings.files.previewDescription')}</DialogDescription>

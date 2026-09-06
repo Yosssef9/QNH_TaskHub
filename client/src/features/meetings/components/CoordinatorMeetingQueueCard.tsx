@@ -4,7 +4,6 @@ import {
   CalendarDays,
   Check,
   Clock3,
-  DoorOpen,
   ExternalLink,
   Pencil,
   UserRound,

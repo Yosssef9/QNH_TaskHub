@@ -38,7 +38,7 @@ export function IconPicker<K extends string>({
   accentColor,
 }: IconPickerProps<K>) {
   const [search, setSearch] = useState('')
-  const SelectedIcon = icons[value]
+  const SelectedIcon = icons[value] as LucideIcon
 
   const filteredOptions = useMemo(() => {
     const query = normalizeSearchValue(search)
@@ -98,7 +98,7 @@ export function IconPicker<K extends string>({
         {filteredOptions.length > 0 ? (
           <div className="grid grid-cols-6 gap-2 sm:grid-cols-8">
             {filteredOptions.map((option) => {
-              const Icon = icons[option]
+              const Icon = icons[option] as LucideIcon
               const label = getLabel(option)
               const selected = option === value
 

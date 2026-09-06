@@ -1,4 +1,4 @@
-import { Activity, Check, Info, Minus, Pencil, PackageSearch, TriangleAlert } from 'lucide-react'
+import { Activity, Check, Info, Minus, Pencil, TriangleAlert } from 'lucide-react'
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Navigate, useParams, useSearchParams } from 'react-router'

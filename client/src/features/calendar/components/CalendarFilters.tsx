@@ -442,11 +442,7 @@ export function CalendarFilters({ onChange, onOpenSearchResult, value }: Props) 
               <SelectTrigger aria-label={t('calendar.kpiFilter')}>
                 <SelectValue>
                   {selectedInstance ? (
-                    <KpiSelectIndicator
-                      name={selectedInstance.name}
-                      iconKey={selectedInstance.iconKey}
-                      color={selectedInstance.color}
-                    />
+                    <KpiSelectIndicator kpi={selectedInstance} />
                   ) : (
                     <NeutralFilterIndicator icon={Gauge} label={t('calendar.allKpis')} />
                   )}
@@ -459,11 +455,7 @@ export function CalendarFilters({ onChange, onOpenSearchResult, value }: Props) 
                 {availableInstances.map((instance) => (
                   <SelectItem key={instance.id} value={String(instance.id)}>
                     <span className="flex min-w-0 items-center gap-2">
-                      <KpiSelectIndicator
-                        name={instance.name}
-                        iconKey={instance.iconKey}
-                        color={instance.color}
-                      />
+                      <KpiSelectIndicator kpi={instance} />
                       {!selectedCycle && instance.cycleTitle ? (
                         <span className="text-muted-foreground shrink-0 text-xs">
                           · {instance.cycleTitle}

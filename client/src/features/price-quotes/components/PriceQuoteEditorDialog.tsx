@@ -174,7 +174,7 @@ export function PriceQuoteEditorDialog({
             />
           </Field>
           <Field label={t('priceQuotes.unit')} required>
-            <Select value={form.unitName || undefined} onValueChange={(value) => change('unitName', value)} disabled={!form.itemId || context.isPending || unitOptions.length === 0}>
+            <Select value={form.unitName} onValueChange={(value) => change('unitName', value)} disabled={!form.itemId || context.isPending || unitOptions.length === 0}>
               <SelectTrigger aria-label={t('priceQuotes.unit')}>
                 <SelectValue placeholder={!form.itemId ? t('priceQuotes.unitSelectItemFirst') : context.isPending ? t('priceQuotes.unitLoading') : t('priceQuotes.unitSelectPlaceholder')} />
               </SelectTrigger>

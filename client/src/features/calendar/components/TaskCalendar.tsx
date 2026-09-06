@@ -9,7 +9,7 @@ import '@fullcalendar/react/themes/classic/theme.css'
 import '@fullcalendar/react/themes/classic/palette.css'
 import '../calendar-theme.css'
 import { Clock3 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { type ComponentRef, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 
@@ -81,8 +81,8 @@ function dateOnlyInTimeZone(value: Date): string {
 }
 
 function dayOfWeekInAppTimeZone(value: Date): number {
-  const [year, month, day] = dateOnlyInTimeZone(value).split('-').map(Number)
-  return new Date(Date.UTC(year, month - 1, day)).getUTCDay()
+  const [year = '1970', month = '01', day = '01'] = dateOnlyInTimeZone(value).split('-')
+  return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day))).getUTCDay()
 }
 
 function isWeekendInAppTimeZone(value: Date): boolean {
@@ -153,7 +153,7 @@ export function TaskCalendar({
   const updatePreferencesMutation = useUpdatePreferences()
   const timeFormat = currentUser.data?.preferences.timeFormat ?? '12H'
   const isCompactMonth = useMediaQuery('(max-width: 639px)')
-  const calendarRef = useRef<FullCalendar | null>(null)
+  const calendarRef = useRef<ComponentRef<typeof FullCalendar> | null>(null)
   const isRtl = i18n.dir() === 'rtl'
   const [currentTitle, setCurrentTitle] = useState(() =>
     new Intl.DateTimeFormat(i18n.language, {
@@ -464,9 +464,13 @@ export function TaskCalendar({
           allDaySlot={!meetingScheduleMode}
           allDayHeaderContent={() => t('calendar.allDay')}
           slotDuration={CALENDAR_SLOT_DURATION}
-          slotMinHeight={meetingVisualMode ? 39 : undefined}
-          eventMinHeight={meetingVisualMode ? 26 : undefined}
-          eventShortHeight={meetingVisualMode ? 44 : undefined}
+          {...(meetingVisualMode
+            ? {
+                slotMinHeight: 39,
+                eventMinHeight: 26,
+                eventShortHeight: 44,
+              }
+            : {})}
           slotHeaderInterval={meetingVisualMode ? MEETING_SCHEDULE_LABEL_INTERVAL : CALENDAR_SLOT_DURATION}
           slotMinTime={meetingScheduleMode ? meetingTimeGridSlotRange.slotMinTime : CALENDAR_SLOT_MIN_TIME}
           slotMaxTime={meetingScheduleMode ? meetingTimeGridSlotRange.slotMaxTime : CALENDAR_SLOT_MAX_TIME}
