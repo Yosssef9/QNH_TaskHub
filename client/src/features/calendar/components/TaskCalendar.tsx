@@ -450,15 +450,16 @@ export function TaskCalendar({
                 )
               : undefined
           }
-          eventMaxStack={
-            meetingVisualMode
-              ? viewMode === 'DAY'
-                ? 4
-                : viewMode === 'WEEK'
-                  ? 2
-                  : 3
-              : undefined
-          }
+          {...(meetingVisualMode
+            ? {
+                eventMaxStack:
+                  viewMode === 'DAY'
+                    ? 4
+                    : viewMode === 'WEEK'
+                      ? 2
+                      : 3,
+              }
+            : {})}
           eventInteractive
           events={events}
           allDaySlot={!meetingScheduleMode}
