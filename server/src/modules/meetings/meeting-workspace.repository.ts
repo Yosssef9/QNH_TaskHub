@@ -226,6 +226,7 @@ function mapTemplate(record: TemplateRecord): MeetingTemplate | null {
       nameAr: record.nameAr ?? "",
       nameEn: record.nameEn ?? "",
       locationText: record.locationText ?? null,
+      colorKey: record.colorKey ?? "BLUE",
       capacity: Number(record.capacity ?? 0),
       equipmentNotes: record.equipmentNotes ?? null,
       isActive: Boolean(record.isActive),
@@ -1066,4 +1067,5 @@ export const meetingWorkspaceRepository = {
 export function mapMeetingAttachmentRecord(record: MeetingAttachmentRecord): MeetingAttachment {
   return mapAttachment(record);
 }
+
 

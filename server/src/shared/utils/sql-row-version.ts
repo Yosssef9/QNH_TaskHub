@@ -51,7 +51,8 @@ export function normalizeSqlRowVersion(value: unknown): string | null {
 
   const trimmed = value.trim();
   const prefixedHex = PREFIXED_HEX_ROW_VERSION.exec(trimmed);
-  if (prefixedHex) return `0x${prefixedHex[1].toUpperCase()}`;
+  const prefixedHexValue = prefixedHex?.[1];
+  if (prefixedHexValue) return `0x${prefixedHexValue.toUpperCase()}`;
   if (HEX_ROW_VERSION.test(trimmed)) return `0x${trimmed.toUpperCase()}`;
 
   return decodeBase64RowVersion(trimmed);
@@ -64,3 +65,4 @@ export function rowVersionToBuffer(value: unknown): Buffer | null {
   if (!normalized) return null;
   return Buffer.from(normalized.slice(2), "hex");
 }
+

@@ -353,7 +353,15 @@ export const emailSettingsService = {
       });
     }
 
-    await emailSettingsRepository.updateSettings(ownerUserId, input);
+    await emailSettingsRepository.updateSettings(ownerUserId, {
+      ...(input.notificationsEnabled === undefined
+        ? {}
+        : { notificationsEnabled: input.notificationsEnabled }),
+      ...(input.activeEmailSource === undefined
+        ? {}
+        : { activeEmailSource: input.activeEmailSource }),
+      ...(input.preferences === undefined ? {} : { preferences: input.preferences }),
+    });
     return buildSettings(ownerUserId);
   },
 
@@ -469,4 +477,5 @@ export const emailSettingsService = {
     return { recipient: maskEmail(recipient.email) };
   },
 };
+
 

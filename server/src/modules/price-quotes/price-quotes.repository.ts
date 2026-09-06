@@ -316,7 +316,7 @@ export async function updateQuote(
   const request = transaction.request()
     .input("ownerUserId", sql.Int, ownerUserId)
     .input("quoteId", sql.BigInt, quoteId)
-    .input("rowVersion", sql.Binary(8), bytes);
+    .input("rowVersion", sql.VarBinary(8), bytes);
   bindInput(request, input);
   const result = await request.query(`
     UPDATE dbo.TM_price_quotes
@@ -350,7 +350,7 @@ export async function setQuoteActive(
     .input("ownerUserId", sql.Int, ownerUserId)
     .input("quoteId", sql.BigInt, quoteId)
     .input("isActive", sql.Bit, active)
-    .input("rowVersion", sql.Binary(8), bytes)
+    .input("rowVersion", sql.VarBinary(8), bytes)
     .query(`
       UPDATE dbo.TM_price_quotes
       SET is_active = @isActive,
@@ -706,3 +706,4 @@ export const priceQuotesRepository = {
   getSummary,
   getQuoteContextTransactions,
 };
+

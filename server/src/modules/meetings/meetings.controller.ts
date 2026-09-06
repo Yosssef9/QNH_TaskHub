@@ -102,7 +102,11 @@ export const listAdminMeetingRooms: RequestHandler = async (_req, res) => {
 
 export const createMeetingRoom: RequestHandler = async (req, res) => {
   const input = getValidatedRequestPart<CreateMeetingRoomBody>(req, "body");
-  const room = await meetingsService.createRoom(actorUserId(req), input);
+  const { colorKey, ...roomInput } = input;
+  const room = await meetingsService.createRoom(actorUserId(req), {
+    ...roomInput,
+    ...(colorKey === undefined ? {} : { colorKey }),
+  });
   const body: ApiSuccessResponse<{ room: MeetingRoom }> = {
     success: true,
     data: { room },
@@ -114,7 +118,11 @@ export const createMeetingRoom: RequestHandler = async (req, res) => {
 export const updateMeetingRoom: RequestHandler = async (req, res) => {
   const params = getValidatedRequestPart<MeetingRoomParams>(req, "params");
   const input = getValidatedRequestPart<UpdateMeetingRoomBody>(req, "body");
-  const room = await meetingsService.updateRoom(actorUserId(req), params.roomId, input);
+  const { colorKey, ...roomInput } = input;
+  const room = await meetingsService.updateRoom(actorUserId(req), params.roomId, {
+    ...roomInput,
+    ...(colorKey === undefined ? {} : { colorKey }),
+  });
   const body: ApiSuccessResponse<{ room: MeetingRoom }> = {
     success: true,
     data: { room },
@@ -496,7 +504,11 @@ export const listMeetingTemplates: RequestHandler = async (req, res) => {
 
 export const createMeetingTemplate: RequestHandler = async (req, res) => {
   const input = getValidatedRequestPart<CreateMeetingTemplateBody>(req, "body");
-  const template = await meetingWorkspaceService.createTemplate(actorUserId(req), input);
+  const { defaultRoomId, ...templateInput } = input;
+  const template = await meetingWorkspaceService.createTemplate(actorUserId(req), {
+    ...templateInput,
+    ...(defaultRoomId === undefined ? {} : { defaultRoomId }),
+  });
   const body: ApiSuccessResponse<{ template: MeetingTemplate }> = {
     success: true,
     data: { template },
@@ -507,10 +519,14 @@ export const createMeetingTemplate: RequestHandler = async (req, res) => {
 export const updateMeetingTemplate: RequestHandler = async (req, res) => {
   const params = getValidatedRequestPart<MeetingTemplateParams>(req, "params");
   const input = getValidatedRequestPart<UpdateMeetingTemplateBody>(req, "body");
+  const { defaultRoomId, ...templateInput } = input;
   const template = await meetingWorkspaceService.updateTemplate(
     actorUserId(req),
     params.templateId,
-    input,
+    {
+      ...templateInput,
+      ...(defaultRoomId === undefined ? {} : { defaultRoomId }),
+    },
   );
   const body: ApiSuccessResponse<{ template: MeetingTemplate }> = {
     success: true,
@@ -525,4 +541,5 @@ export const archiveMeetingTemplate: RequestHandler = async (req, res) => {
   await meetingWorkspaceService.archiveTemplate(actorUserId(req), params.templateId, input.rowVersion);
   res.status(200).json({ success: true, data: { templateId: params.templateId } });
 };
+
 
