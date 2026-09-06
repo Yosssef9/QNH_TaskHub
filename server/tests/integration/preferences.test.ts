@@ -18,7 +18,7 @@ describe("PATCH /api/users/me/preferences", () => {
   beforeEach(() => {
     vi.spyOn(authService, "resolveCurrentUser").mockResolvedValue({
       user: { userId: 7, userCode: "QNH0007", userName: "User", email: null },
-      access: { roleCode: "USER", contractsEnabled: false },
+      access: { roleCode: "USER", procurementEnabled: false },
       preferences: {
         languageCode: "AR",
         theme: "SYSTEM",
@@ -77,6 +77,7 @@ describe("PATCH /api/users/me/preferences", () => {
     expect(update).not.toHaveBeenCalled();
   });
 });
+
 
 
 

@@ -13,7 +13,7 @@ export interface PortalUserRecord {
 export interface AccessProfileRecord {
   roleCode: string;
   isActive: boolean;
-  contractsEnabled: boolean;
+  procurementEnabled: boolean;
   meetingOrganizeEnabled?: boolean;
   meetingCoordinateEnabled?: boolean;
   languageCode: string | null;
@@ -55,7 +55,7 @@ export async function findAccessProfile(userId: number): Promise<AccessProfileRe
       SELECT
         access.role_code AS roleCode,
         access.is_active AS isActive,
-        CAST(access.contracts_enabled AS BIT) AS contractsEnabled,
+        CAST(access.procurement_enabled AS BIT) AS procurementEnabled,
         CAST(
           CASE WHEN EXISTS (
             SELECT 1
@@ -155,5 +155,6 @@ export const authRepository: AuthRepository = {
   findAccessProfile,
   ensureUserFoundation,
 };
+
 
 

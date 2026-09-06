@@ -18,7 +18,7 @@ function token() {
 function profile(roleCode: "USER" | "ADMIN"): AuthMeData {
   return {
     user: { userId: 1, userCode: "ADMIN001", userName: "Admin", email: null },
-    access: { roleCode, contractsEnabled: false },
+    access: { roleCode, procurementEnabled: false },
     preferences: {
       languageCode: "AR",
       theme: "SYSTEM",
@@ -57,6 +57,7 @@ describe("official holiday administration", () => {
     expect(list).not.toHaveBeenCalled();
   });
 });
+
 
 
 

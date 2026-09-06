@@ -23,7 +23,7 @@ function createProfile(roleCode: "USER" | "ADMIN"): AuthMeData {
       userName: "Admin User",
       email: null,
     },
-    access: { roleCode, contractsEnabled: false },
+    access: { roleCode, procurementEnabled: false },
     preferences: {
       languageCode: "AR",
       theme: "SYSTEM",
@@ -83,6 +83,7 @@ describe("TaskHub access administration", () => {
     expect(updateUserAccess).not.toHaveBeenCalled();
   });
 });
+
 
 
 

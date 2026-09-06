@@ -1,30 +1,24 @@
 import { Router, type Router as ExpressRouter } from "express";
 
-import { requireContractsAccess } from "../../middleware/requireContractsAccess.middleware.js";
+import { requireProcurementAccess } from "../../middleware/requireProcurementAccess.middleware.js";
 import { resolveTaskHubAccess } from "../../middleware/resolveTaskHubAccess.middleware.js";
 import { validateRequest } from "../../middleware/validate.middleware.js";
 import { verifyPortalJwt } from "../../middleware/verifyPortalJwt.middleware.js";
 import { uploadSingleContractAttachment } from "./contract-attachment-upload.middleware.js";
 import {
   archiveContract,
-  archiveSupplier,
   createContract,
   downloadContractAttachment,
-  createSupplier,
   getContract,
   getContractSettings,
-  getSupplier,
   listContractAttachments,
   listContractActivity,
   listContracts,
-  listSuppliers,
   previewContractAttachment,
   removeContractAttachment,
   restoreContract,
-  restoreSupplier,
   updateContract,
   updateContractSettings,
-  updateSupplier,
   uploadContractAttachment,
 } from "./contracts.controller.js";
 import {
@@ -33,17 +27,13 @@ import {
   contractListQuerySchema,
   contractSettingsBodySchema,
   createContractBodySchema,
-  createSupplierBodySchema,
   rowVersionBodySchema,
-  supplierIdParamsSchema,
-  supplierListQuerySchema,
   updateContractBodySchema,
-  updateSupplierBodySchema,
 } from "./contracts.schemas.js";
 
 export const contractsRouter: ExpressRouter = Router();
 
-contractsRouter.use(verifyPortalJwt, resolveTaskHubAccess, requireContractsAccess);
+contractsRouter.use(verifyPortalJwt, resolveTaskHubAccess, requireProcurementAccess);
 
 contractsRouter.get("/", validateRequest({ query: contractListQuerySchema }), listContracts);
 contractsRouter.post("/", validateRequest({ body: createContractBodySchema }), createContract);
@@ -52,29 +42,6 @@ contractsRouter.patch(
   "/settings",
   validateRequest({ body: contractSettingsBodySchema }),
   updateContractSettings,
-);
-
-contractsRouter.get("/suppliers", validateRequest({ query: supplierListQuerySchema }), listSuppliers);
-contractsRouter.post("/suppliers", validateRequest({ body: createSupplierBodySchema }), createSupplier);
-contractsRouter.get(
-  "/suppliers/:supplierId",
-  validateRequest({ params: supplierIdParamsSchema }),
-  getSupplier,
-);
-contractsRouter.patch(
-  "/suppliers/:supplierId",
-  validateRequest({ params: supplierIdParamsSchema, body: updateSupplierBodySchema }),
-  updateSupplier,
-);
-contractsRouter.post(
-  "/suppliers/:supplierId/archive",
-  validateRequest({ params: supplierIdParamsSchema, body: rowVersionBodySchema }),
-  archiveSupplier,
-);
-contractsRouter.post(
-  "/suppliers/:supplierId/restore",
-  validateRequest({ params: supplierIdParamsSchema, body: rowVersionBodySchema }),
-  restoreSupplier,
 );
 
 contractsRouter.get(
@@ -129,3 +96,4 @@ contractsRouter.get(
   validateRequest({ params: contractIdParamsSchema }),
   listContractActivity,
 );
+

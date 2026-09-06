@@ -6,13 +6,11 @@ import type {
   ContractActivityType,
   ContractAttachment,
   ContractSummary,
-  Supplier,
 } from "./contracts.types.js";
 import type {
   ActivityRecord,
   ContractAttachmentRecord,
   ContractRecord,
-  SupplierRecord,
 } from "./contracts.repository.js";
 
 function dateOnly(value: Date | null): string | null {
@@ -58,7 +56,6 @@ export function mapContract(record: ContractRecord): Contract {
     id: Number(record.id),
     supplierId: Number(record.supplierId),
     supplierName: record.supplierName,
-    supplierIsActive: record.supplierIsActive,
     contractNumber: record.contractNumber,
     title: record.title,
     startDate: record.startDate.toISOString().slice(0, 10),
@@ -95,25 +92,6 @@ export function mapContractAttachment(record: ContractAttachmentRecord): Contrac
   };
 }
 
-export function mapSupplier(record: SupplierRecord): Supplier {
-  return {
-    id: Number(record.id),
-    name: record.name,
-    commercialRegistrationNo: record.commercialRegistrationNo,
-    taxNumber: record.taxNumber,
-    primaryContactName: record.primaryContactName,
-    primaryContactEmail: record.primaryContactEmail,
-    primaryContactPhone: record.primaryContactPhone,
-    addressText: record.addressText,
-    notes: record.notes,
-    isActive: record.isActive,
-    currentContractCount: Number(record.currentContractCount ?? 0),
-    expiringSoonContractCount: Number(record.expiringSoonContractCount ?? 0),
-    createdAtUtc: record.createdAtUtc.toISOString(),
-    updatedAtUtc: dateTime(record.updatedAtUtc),
-    rowVersion: rowVersion(record.rowVersion),
-  };
-}
 
 export function mapSummary(record: {
   total: number | string;
@@ -149,3 +127,4 @@ export function mapActivity(record: ActivityRecord): ContractActivity {
     createdAtUtc: record.createdAtUtc.toISOString(),
   };
 }
+

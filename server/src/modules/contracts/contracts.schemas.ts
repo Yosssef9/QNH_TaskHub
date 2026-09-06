@@ -24,17 +24,13 @@ export const contractIdParamsSchema = z.object({
   contractId: z.coerce.number().int().positive(),
 });
 
-export const supplierIdParamsSchema = z.object({
-  supplierId: z.coerce.number().int().positive(),
-});
-
 export const contractListQuerySchema = z.object({
   search: z.string().trim().max(100).optional(),
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
   archived: z.preprocess(optionalBooleanQuery, z.boolean().default(false)),
   status: z.enum(["UPCOMING", "ACTIVE", "EXPIRING_SOON", "EXPIRED"]).optional(),
-  supplierId: z.coerce.number().int().positive().optional(),
+  supplierId: z.coerce.number().int().refine((value) => value !== 0, "Supplier ID cannot be zero.").optional(),
   autoRenewal: z.preprocess(optionalBooleanQuery, z.boolean().optional()),
   valueType: z.enum(["FIXED", "VARIABLE"]).optional(),
   paymentFrequency: z
@@ -49,29 +45,8 @@ export const contractListQuerySchema = z.object({
   sortDirection: z.enum(["asc", "desc"]).default("asc"),
 });
 
-export const supplierListQuerySchema = z.object({
-  search: z.string().trim().max(100).optional(),
-  page: z.coerce.number().int().positive().default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(25),
-  archived: z.preprocess(optionalBooleanQuery, z.boolean().default(false)),
-});
-
-const supplierFields = {
-  name: z.string().trim().min(1).max(250),
-  commercialRegistrationNo: nullableTrimmed(80),
-  taxNumber: nullableTrimmed(80),
-  primaryContactName: nullableTrimmed(200),
-  primaryContactEmail: z.string().trim().email().max(320).nullable(),
-  primaryContactPhone: nullableTrimmed(50),
-  addressText: nullableTrimmed(1000),
-  notes: z.string().trim().max(10000).nullable(),
-} as const;
-
-export const createSupplierBodySchema = z.object(supplierFields);
-export const updateSupplierBodySchema = z.object({ ...supplierFields, rowVersion });
-
 const contractFields = {
-  supplierId: z.coerce.number().int().positive(),
+  supplierId: z.coerce.number().int().refine((value) => value !== 0, "Supplier ID cannot be zero."),
   contractNumber: nullableTrimmed(120),
   title: z.string().trim().min(1).max(250),
   startDate: dateOnly,
@@ -161,13 +136,10 @@ export const contractSettingsBodySchema = z.object({
 
 export type AttachmentIdParams = z.infer<typeof attachmentIdParamsSchema>;
 export type ContractIdParams = z.infer<typeof contractIdParamsSchema>;
-export type SupplierIdParams = z.infer<typeof supplierIdParamsSchema>;
 export type ContractListQueryInput = z.infer<typeof contractListQuerySchema>;
-export type SupplierListQueryInput = z.infer<typeof supplierListQuerySchema>;
-export type CreateSupplierBody = z.infer<typeof createSupplierBodySchema>;
-export type UpdateSupplierBody = z.infer<typeof updateSupplierBodySchema>;
 export type CreateContractBody = z.infer<typeof createContractBodySchema>;
 export type UpdateContractBody = z.infer<typeof updateContractBodySchema>;
 export type RowVersionBody = z.infer<typeof rowVersionBodySchema>;
 export type ContractSettingsBody = z.infer<typeof contractSettingsBodySchema>;
+
 

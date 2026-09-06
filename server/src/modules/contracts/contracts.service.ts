@@ -3,19 +3,14 @@ import path from "node:path";
 import { withTransaction } from "../../database/transaction.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
-import {
-  mapActivity,
-  mapContract,
-  mapContractAttachment,
-  mapSupplier,
-  mapSummary,
-} from "./contracts.mapper.js";
+import { mapActivity, mapContract, mapContractAttachment, mapSummary } from "./contracts.mapper.js";
 import {
   readContractAttachment,
   removeStoredContractAttachment,
   storeContractAttachment,
 } from "./contract-attachment-storage.js";
 import { contractsRepository } from "./contracts.repository.js";
+import { suppliersRepository } from "../suppliers/suppliers.repository.js";
 import type {
   Contract,
   ContractActivity,
@@ -25,12 +20,7 @@ import type {
   ContractListQuery,
   ContractUserSettings,
   RowVersionInput,
-  Supplier,
-  SupplierInput,
-  SupplierList,
-  SupplierListQuery,
   UpdateContractInput,
-  UpdateSupplierInput,
 } from "./contracts.types.js";
 
 function notFound(entity: "Contract" | "Supplier"): AppError {
@@ -41,10 +31,10 @@ function notFound(entity: "Contract" | "Supplier"): AppError {
   });
 }
 
-function stale(entity: "Contract" | "Supplier" | "Contract settings"): AppError {
+function stale(entity: "Contract" | "Contract settings"): AppError {
   return new AppError({
     statusCode: 409,
-    code: entity === "Contract" ? "CONTRACT_CHANGED" : entity === "Supplier" ? "SUPPLIER_CHANGED" : "CONTRACT_SETTINGS_CHANGED",
+    code: entity === "Contract" ? "CONTRACT_CHANGED" : "CONTRACT_SETTINGS_CHANGED",
     message: `${entity} changed after it was loaded. Reload the latest version and try again.`,
   });
 }
@@ -59,26 +49,6 @@ function normalizeContract(input: ContractInput): ContractInput {
     contractValueSar: input.valueType === "FIXED" ? input.contractValueSar : null,
     notes: input.notes?.trim() || null,
   };
-}
-
-function normalizeSupplier(input: SupplierInput): SupplierInput {
-  const clean = (value: string | null): string | null => value?.trim() || null;
-  return {
-    name: input.name.trim(),
-    commercialRegistrationNo: clean(input.commercialRegistrationNo),
-    taxNumber: clean(input.taxNumber),
-    primaryContactName: clean(input.primaryContactName),
-    primaryContactEmail: clean(input.primaryContactEmail),
-    primaryContactPhone: clean(input.primaryContactPhone),
-    addressText: clean(input.addressText),
-    notes: clean(input.notes),
-  };
-}
-
-function isDuplicateKeyError(error: unknown): boolean {
-  if (typeof error !== "object" || error === null || !("number" in error)) return false;
-  const number = (error as { number?: unknown }).number;
-  return number === 2601 || number === 2627;
 }
 
 async function getSettings(ownerUserId: number): Promise<ContractUserSettings> {
@@ -211,18 +181,8 @@ export const contractsService = {
   async createContract(ownerUserId: number, rawInput: ContractInput): Promise<Contract> {
     const input = normalizeContract(rawInput);
     const contractId = await withTransaction(async (transaction) => {
-      const supplier = await contractsRepository.findOwnedSupplierForUpdate(
-        transaction,
-        ownerUserId,
-        input.supplierId,
-      );
-      if (!supplier || !supplier.isActive) {
-        throw new AppError({
-          statusCode: 409,
-          code: "ACTIVE_SUPPLIER_REQUIRED",
-          message: "Choose an active supplier before creating the contract.",
-        });
-      }
+      const supplier = await suppliersRepository.findSupplierIdentity(input.supplierId, transaction);
+      if (!supplier) throw notFound("Supplier");
       const id = await contractsRepository.createContract(transaction, ownerUserId, input);
       await contractsRepository.addContractActivity(transaction, ownerUserId, id, "CREATED", null);
       return id;
@@ -260,19 +220,11 @@ export const contractsService = {
         });
       }
 
-      const selectedSupplier = await contractsRepository.findOwnedSupplierForUpdate(
-        transaction,
-        ownerUserId,
+      const selectedSupplier = await suppliersRepository.findSupplierIdentity(
         input.supplierId,
+        transaction,
       );
       if (!selectedSupplier) throw notFound("Supplier");
-      if (input.supplierId !== current.supplierId && !selectedSupplier.isActive) {
-        throw new AppError({
-          statusCode: 409,
-          code: "ACTIVE_SUPPLIER_REQUIRED",
-          message: "Archived suppliers cannot be newly assigned to a contract.",
-        });
-      }
 
       const changes = contractChanges(current, input, selectedSupplier.name);
       if (Object.keys(changes).length === 0) return;
@@ -497,169 +449,6 @@ export const contractsService = {
     await removeStoredContractAttachment(removed.storageKey);
   },
 
-  async listSuppliers(ownerUserId: number, query: SupplierListQuery): Promise<SupplierList> {
-    const settings = await getSettings(ownerUserId);
-    const page = await contractsRepository.listSuppliers(
-      ownerUserId,
-      query,
-      getCurrentDateInAppTimeZone(),
-      settings.expiringSoonDays,
-    );
-    return {
-      items: page.records.map(mapSupplier),
-      page: query.page,
-      pageSize: query.pageSize,
-      total: page.total,
-    };
-  },
-
-  async getSupplier(ownerUserId: number, supplierId: number): Promise<Supplier> {
-    const settings = await getSettings(ownerUserId);
-    const row = await contractsRepository.findOwnedSupplier(
-      ownerUserId,
-      supplierId,
-      getCurrentDateInAppTimeZone(),
-      settings.expiringSoonDays,
-    );
-    if (!row) throw notFound("Supplier");
-    return mapSupplier(row);
-  },
-
-  async createSupplier(ownerUserId: number, rawInput: SupplierInput): Promise<Supplier> {
-    const input = normalizeSupplier(rawInput);
-    let supplierId: number;
-    try {
-      supplierId = await withTransaction(async (transaction) => {
-        if (await contractsRepository.supplierNameExists(ownerUserId, input.name, undefined, transaction)) {
-          throw new AppError({
-            statusCode: 409,
-            code: "SUPPLIER_NAME_EXISTS",
-            message: "An active supplier with this name already exists.",
-          });
-        }
-        return contractsRepository.createSupplier(transaction, ownerUserId, input);
-      });
-    } catch (error) {
-      if (isDuplicateKeyError(error)) {
-        throw new AppError({
-          statusCode: 409,
-          code: "SUPPLIER_NAME_EXISTS",
-          message: "An active supplier with this name already exists.",
-        });
-      }
-      throw error;
-    }
-    return this.getSupplier(ownerUserId, supplierId);
-  },
-
-  async updateSupplier(
-    ownerUserId: number,
-    supplierId: number,
-    rawInput: UpdateSupplierInput,
-  ): Promise<Supplier> {
-    const input = normalizeSupplier(rawInput);
-    try {
-      await withTransaction(async (transaction) => {
-        const current = await contractsRepository.findOwnedSupplierForUpdate(
-          transaction,
-          ownerUserId,
-          supplierId,
-        );
-        if (!current) throw notFound("Supplier");
-        if (current.rowVersion.toUpperCase() !== rawInput.rowVersion.toUpperCase()) {
-          throw stale("Supplier");
-        }
-        if (
-          await contractsRepository.supplierNameExists(
-            ownerUserId,
-            input.name,
-            supplierId,
-            transaction,
-          )
-        ) {
-          throw new AppError({
-            statusCode: 409,
-            code: "SUPPLIER_NAME_EXISTS",
-            message: "An active supplier with this name already exists.",
-          });
-        }
-        const updated = await contractsRepository.updateSupplier(
-          transaction,
-          ownerUserId,
-          supplierId,
-          rawInput.rowVersion,
-          input,
-        );
-        if (!updated) throw stale("Supplier");
-      });
-    } catch (error) {
-      if (isDuplicateKeyError(error)) {
-        throw new AppError({
-          statusCode: 409,
-          code: "SUPPLIER_NAME_EXISTS",
-          message: "An active supplier with this name already exists.",
-        });
-      }
-      throw error;
-    }
-    return this.getSupplier(ownerUserId, supplierId);
-  },
-
-  async setSupplierArchived(
-    ownerUserId: number,
-    supplierId: number,
-    input: RowVersionInput,
-    archived: boolean,
-  ): Promise<Supplier> {
-    try {
-      await withTransaction(async (transaction) => {
-        const current = await contractsRepository.findOwnedSupplierForUpdate(
-          transaction,
-          ownerUserId,
-          supplierId,
-        );
-        if (!current) throw notFound("Supplier");
-        if (current.rowVersion.toUpperCase() !== input.rowVersion.toUpperCase()) throw stale("Supplier");
-        if (current.isActive === !archived) return;
-
-        if (!archived) {
-          const duplicate = await contractsRepository.supplierNameExists(
-            ownerUserId,
-            current.name,
-            supplierId,
-            transaction,
-          );
-          if (duplicate) {
-            throw new AppError({
-              statusCode: 409,
-              code: "SUPPLIER_NAME_EXISTS",
-              message: "Another active supplier already uses this name.",
-            });
-          }
-        }
-
-        const changed = await contractsRepository.setSupplierActive(
-          transaction,
-          ownerUserId,
-          supplierId,
-          input.rowVersion,
-          !archived,
-        );
-        if (!changed) throw stale("Supplier");
-      });
-    } catch (error) {
-      if (isDuplicateKeyError(error)) {
-        throw new AppError({
-          statusCode: 409,
-          code: "SUPPLIER_NAME_EXISTS",
-          message: "Another active supplier already uses this name.",
-        });
-      }
-      throw error;
-    }
-    return this.getSupplier(ownerUserId, supplierId);
-  },
-
   async getSettings(ownerUserId: number): Promise<ContractUserSettings> {
     return getSettings(ownerUserId);
   },
@@ -677,4 +466,5 @@ export const contractsService = {
     return getSettings(ownerUserId);
   },
 };
+
 

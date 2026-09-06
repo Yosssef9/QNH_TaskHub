@@ -15,54 +15,10 @@ export type ContractActivityType =
   | 'ATTACHMENT_ADDED'
   | 'ATTACHMENT_REMOVED'
 
-export interface Supplier {
-  id: number
-  name: string
-  commercialRegistrationNo: string | null
-  taxNumber: string | null
-  primaryContactName: string | null
-  primaryContactEmail: string | null
-  primaryContactPhone: string | null
-  addressText: string | null
-  notes: string | null
-  isActive: boolean
-  currentContractCount: number
-  expiringSoonContractCount: number
-  createdAtUtc: string
-  updatedAtUtc: string | null
-  rowVersion: string
-}
-
-export interface SupplierInput {
-  name: string
-  commercialRegistrationNo: string | null
-  taxNumber: string | null
-  primaryContactName: string | null
-  primaryContactEmail: string | null
-  primaryContactPhone: string | null
-  addressText: string | null
-  notes: string | null
-}
-
-export interface SupplierListQuery {
-  search: string
-  page: number
-  pageSize: number
-  archived: boolean
-}
-
-export interface SupplierList {
-  items: Supplier[]
-  page: number
-  pageSize: number
-  total: number
-}
-
 export interface Contract {
   id: number
   supplierId: number
   supplierName: string
-  supplierIsActive: boolean
   contractNumber: string | null
   title: string
   startDate: string
@@ -164,4 +120,5 @@ export interface ContractUserSettings {
   noticeReminderLeadDays: number
   rowVersion: string
 }
+
 

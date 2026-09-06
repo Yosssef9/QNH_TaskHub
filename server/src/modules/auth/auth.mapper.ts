@@ -78,7 +78,7 @@ export function mapAuthMeData(
     },
     access: {
       roleCode: toRoleCode(access.roleCode),
-      contractsEnabled: access.contractsEnabled,
+      procurementEnabled: access.procurementEnabled,
       meetingOrganizeEnabled: access.meetingOrganizeEnabled ?? false,
       meetingCoordinateEnabled: access.meetingCoordinateEnabled ?? false,
     },
@@ -93,5 +93,6 @@ export function mapAuthMeData(
     },
   };
 }
+
 
 

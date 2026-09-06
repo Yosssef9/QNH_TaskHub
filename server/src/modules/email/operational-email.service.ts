@@ -281,7 +281,7 @@ async function resolveDelivery(
 ): Promise<OperationalEmailDelivery | null> {
   if (isContractNotificationType(type)) {
     const access = await findAccessUserById(ownerUserId);
-    if (!access?.portalIsActive || !access.accessIsActive || !access.contractsEnabled) return null;
+    if (!access?.portalIsActive || !access.accessIsActive || !access.procurementEnabled) return null;
     const settings = await contractsService.getSettings(ownerUserId);
     const enabled = type === "CONTRACT_EXPIRATION_REMINDER"
       ? settings.expirationEmailEnabled
@@ -414,4 +414,5 @@ export const operationalEmailService = {
     return processed;
   },
 };
+
 

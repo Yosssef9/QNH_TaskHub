@@ -12,7 +12,7 @@ export type TimeFormatPreference = '12H' | '24H'
 
 export interface TaskHubAccess {
   roleCode: TaskHubRoleCode
-  contractsEnabled: boolean
+  procurementEnabled: boolean
   meetingOrganizeEnabled?: boolean
   meetingCoordinateEnabled?: boolean
 }
@@ -32,5 +32,6 @@ export interface AuthMeData {
   access: TaskHubAccess
   preferences: UserPreferences
 }
+
 
 

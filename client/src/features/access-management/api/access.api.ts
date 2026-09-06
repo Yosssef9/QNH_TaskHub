@@ -22,7 +22,7 @@ export async function updateAccessUser(input: UpdateAccessInput): Promise<Access
     {
       roleCode: input.roleCode,
       isActive: input.isActive,
-      contractsEnabled: input.contractsEnabled,
+      procurementEnabled: input.procurementEnabled,
       meetingOrganizeEnabled: input.meetingOrganizeEnabled,
       meetingCoordinateEnabled: input.meetingCoordinateEnabled,
     },
@@ -30,3 +30,4 @@ export async function updateAccessUser(input: UpdateAccessInput): Promise<Access
 
   return response.data.data.user
 }
+

@@ -37,7 +37,7 @@ export async function listAccessUsers(query: AccessListQuery): Promise<AccessUse
         CAST(portal.IS_ACTIVE AS BIT) AS portalIsActive,
         access.role_code AS roleCode,
         access.is_active AS accessIsActive,
-        CAST(COALESCE(access.contracts_enabled, 0) AS BIT) AS contractsEnabled,
+        CAST(COALESCE(access.procurement_enabled, 0) AS BIT) AS procurementEnabled,
         CAST(
           CASE WHEN EXISTS (
             SELECT 1
@@ -101,7 +101,7 @@ export async function findAccessUserById(userId: number): Promise<AccessUserReco
         CAST(portal.IS_ACTIVE AS BIT) AS portalIsActive,
         access.role_code AS roleCode,
         access.is_active AS accessIsActive,
-        CAST(COALESCE(access.contracts_enabled, 0) AS BIT) AS contractsEnabled,
+        CAST(COALESCE(access.procurement_enabled, 0) AS BIT) AS procurementEnabled,
         CAST(
           CASE WHEN EXISTS (
             SELECT 1
@@ -159,7 +159,7 @@ export async function findCurrentAccessForUpdate(
       SELECT
         role_code AS roleCode,
         is_active AS isActive,
-        CAST(contracts_enabled AS BIT) AS contractsEnabled,
+        CAST(procurement_enabled AS BIT) AS procurementEnabled,
         CAST(
           CASE WHEN EXISTS (
             SELECT 1
@@ -208,7 +208,7 @@ export async function saveAccess(
     roleCode: TaskHubRoleCode;
     isActive: boolean;
     accessExists: boolean;
-    contractsEnabled: boolean;
+    procurementEnabled: boolean;
   },
 ): Promise<void> {
   const request = transaction
@@ -217,7 +217,7 @@ export async function saveAccess(
     .input("targetUserId", sql.Int, input.targetUserId)
     .input("roleCode", sql.VarChar(20), input.roleCode)
     .input("isActive", sql.Bit, input.isActive)
-    .input("contractsEnabled", sql.Bit, input.contractsEnabled);
+    .input("procurementEnabled", sql.Bit, input.procurementEnabled);
 
   if (input.accessExists) {
     await request.query(`
@@ -225,7 +225,7 @@ export async function saveAccess(
       SET
         role_code = @roleCode,
         is_active = @isActive,
-        contracts_enabled = @contractsEnabled,
+        procurement_enabled = @procurementEnabled,
         deactivated_by_user_id = CASE WHEN @isActive = 0 THEN @actorUserId ELSE NULL END,
         deactivated_at_utc = CASE WHEN @isActive = 0 THEN SYSUTCDATETIME() ELSE NULL END,
         updated_at_utc = SYSUTCDATETIME()
@@ -239,7 +239,7 @@ export async function saveAccess(
       portal_user_id,
       role_code,
       is_active,
-      contracts_enabled,
+      procurement_enabled,
       granted_by_user_id,
       deactivated_by_user_id,
       deactivated_at_utc
@@ -248,7 +248,7 @@ export async function saveAccess(
       @targetUserId,
       @roleCode,
       @isActive,
-      @contractsEnabled,
+      @procurementEnabled,
       @actorUserId,
       CASE WHEN @isActive = 0 THEN @actorUserId ELSE NULL END,
       CASE WHEN @isActive = 0 THEN SYSUTCDATETIME() ELSE NULL END
@@ -359,3 +359,4 @@ export const accessRepository = {
   ensureUserFoundationInTransaction,
   ensureContractSettingsInTransaction,
 };
+

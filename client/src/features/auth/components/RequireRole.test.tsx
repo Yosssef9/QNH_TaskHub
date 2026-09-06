@@ -13,7 +13,7 @@ function renderGuard(roleCode: 'USER' | 'ADMIN') {
   vi.mocked(useCurrentUser).mockReturnValue({
     data: {
       user: { userId: 1, userCode: '2410', userName: 'Test', email: null },
-      access: { roleCode, contractsEnabled: false },
+      access: { roleCode, procurementEnabled: false },
       preferences: {
         languageCode: 'AR',
         theme: 'SYSTEM',
@@ -54,6 +54,7 @@ describe('RequireRole', () => {
     expect(screen.getByText('Forbidden content')).toBeVisible()
   })
 })
+
 
 
 

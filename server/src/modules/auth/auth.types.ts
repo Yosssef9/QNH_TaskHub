@@ -16,7 +16,7 @@ export interface PortalUser {
 
 export interface TaskHubAccess {
   roleCode: TaskHubRoleCode;
-  contractsEnabled: boolean;
+  procurementEnabled: boolean;
   meetingOrganizeEnabled?: boolean;
   meetingCoordinateEnabled?: boolean;
 }
@@ -36,5 +36,6 @@ export interface AuthMeData {
   access: TaskHubAccess;
   preferences: UserPreferences;
 }
+
 
 

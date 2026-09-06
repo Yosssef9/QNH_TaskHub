@@ -18,7 +18,7 @@ describe("personal list endpoints", () => {
   beforeEach(() => {
     vi.spyOn(authService, "resolveCurrentUser").mockResolvedValue({
       user: { userId: 7, userCode: "USER0007", userName: "User", email: null },
-      access: { roleCode: "USER", contractsEnabled: false },
+      access: { roleCode: "USER", procurementEnabled: false },
       preferences: {
         languageCode: "AR",
         theme: "SYSTEM",
@@ -79,6 +79,7 @@ describe("personal list endpoints", () => {
     expect(create).not.toHaveBeenCalled();
   });
 });
+
 
 
 

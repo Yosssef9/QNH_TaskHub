@@ -286,7 +286,7 @@ function Overview({ contract, locale }: { contract: Contract; locale: string }) 
             value={
               <Link
                 className="hover:bg-primary/10 hover:text-primary focus-visible:ring-ring inline-flex items-center gap-1.5 rounded-full border bg-muted/30 px-2.5 py-1 text-xs outline-none focus-visible:ring-2"
-                to={`/contracts/suppliers/${contract.supplierId}`}
+                to={`/suppliers/${contract.supplierId}`}
               >
                 {contract.supplierName}
               </Link>
@@ -626,5 +626,6 @@ function Info({ label, value }: { label: string; value: ReactNode }) {
     </div>
   )
 }
+
 
 

@@ -8,7 +8,7 @@ import type { TaskHubAccess } from "../../src/modules/auth/auth.types.js";
 
 const baseAccess: TaskHubAccess = {
   roleCode: "USER",
-  contractsEnabled: false,
+  procurementEnabled: false,
   meetingOrganizeEnabled: false,
   meetingCoordinateEnabled: false,
 };
@@ -62,4 +62,5 @@ describe("Meetings policy", () => {
     ).toBe("NONE");
   });
 });
+
 

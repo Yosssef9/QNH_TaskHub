@@ -6,7 +6,7 @@
 
 **QNH TaskHub** is an Arabic-first productivity application for QNH Portal users.
 
-The core product lets each user organize private personal work in a permanent **My Tasks** list, create additional private lists, create independently configured KPIs with their own KPI tasks, and use an optional private **Contracts** domain. The approved **Meetings** module is the deliberate shared-domain exception: it introduces controlled Organizer/Coordinator/attendee relationships without changing the private ownership semantics of Tasks, Lists, KPIs, Work Cycles, or Contracts. Do not infer unrelated collaboration requirements from the Meetings exception or superseded planning material.
+The core product lets each user organize private personal work in a permanent **My Tasks** list, create additional private lists, create independently configured KPIs with their own KPI tasks, and use an optional **Procurement** domain containing private Contracts plus shared Procurement master data. The approved **Meetings** module is the deliberate shared-domain exception: it introduces controlled Organizer/Coordinator/attendee relationships without changing the private ownership semantics of Tasks, Lists, KPIs, Work Cycles, or Contracts. Do not infer unrelated collaboration requirements from the Meetings exception or superseded planning material.
 
 Detailed product behavior is maintained in [`docs/product-requirements.md`](docs/product-requirements.md).
 
@@ -28,9 +28,9 @@ Detailed product behavior is maintained in [`docs/product-requirements.md`](docs
 
 ## 3. Product invariants
 
-- Every user's lists, tasks, subtasks, attachments, KPIs, measurements, Contracts, Contract Suppliers, Contract settings, and Contract history are private to that user.
+- Every user's lists, tasks, subtasks, attachments, KPIs, measurements, Contracts, Contract settings, Contract history, and future Price Quotes are private to that user. Procurement Items, Suppliers, and imported purchase transactions are intentionally shared among Procurement-enabled users.
 - An `ADMIN` does not automatically gain access to another user's private work.
-- The only application role codes are `USER` and `ADMIN`; Contracts access is a separate optional module flag, not a new role or granular permission system.
+- The only application role codes are `USER` and `ADMIN`; Procurement access is a separate optional module flag (`procurement_enabled`), not a new role or granular permission system.
 - Every user has one permanent default **My Tasks** list and may create additional personal lists with a name, icon, and color.
 - A normal task belongs to exactly one normal list.
 - KPI work is separate from normal lists. A KPI is a reusable private template; a KPI task belongs to exactly one KPI instance inside exactly one private Work Cycle and does not appear in My Tasks or a custom list.
@@ -76,22 +76,32 @@ Role codes are technical identifiers. Display labels may be localized and must n
 All private-resource queries and mutations must enforce `owner_user_id = authenticated Portal USER_ID` on the backend. This applies to direct detail endpoints, lists, search, counts, KPI results, attachments, and future exports. Frontend guards are UX only.
 
 
-## 6. Contracts domain
+## 6. Procurement and Contracts domain
 
-Contracts are an optional, first-class private domain that is independent from Tasks, Lists, KPIs, Work Cycles, and Calendar items.
+Procurement is an optional first-class domain gated by `procurement_enabled = 1`. Its approved navigation is **Procurement → Contracts / Items / Suppliers / Price Quotes**. Phase 1 establishes the Procurement foundation and shared Suppliers. Phase 2 adds the shared Item master, private Saved Views foundation, and simple startup source synchronization. Phase 3 adds the read-only purchase-transaction time-series and Item/Supplier price analytics engine. Phase 4 presents that engine through the Items price-intelligence UX and fully connects Saved Views to live analytics. Phase 5 adds Supplier Intelligence: Supplier-level purchasing statistics, one row per Item with Supplier history/current-market comparison, and drill-down back to the Item time series while keeping My Contracts private. Price Quotes remain Phase 6.
 
-- A user sees the Contracts navigation and APIs only when their existing TaskHub access has `contracts_enabled = 1`. Disabling the module removes access but preserves all Contract data.
-- `ADMIN` never implies access to another user's Contracts. All Contract and Supplier queries remain backend owner-scoped.
-- The Phase 1A navigation is an expandable **Contracts** section with **My Contracts** and **Suppliers**.
-- Suppliers are private first-class entities. Supplier Name is required; CR/tax/contact/address/notes are optional. Archived Suppliers remain visible on existing Contracts but cannot be newly assigned.
+- `ADMIN` does not imply Procurement business access. Backend routes enforce `procurement_enabled`.
+- Contracts remain private and owner-scoped. No user may read or mutate another user's Contract data.
+- Suppliers and Items are shared Procurement master data. All Procurement-enabled users see and may edit the same master records; source identity and visible Supplier/Item Codes are immutable through the UI/API.
+- Production Procurement sources are `QNHDB.dbo.TM_APS_SUPPLIERS_IMPORT`, `QNHDB.dbo.TM_INV_Items_Import`, and `QNHDB.dbo.TM_Purchase_Invoice_Details_Import`; startup procedures are `QNHDB.dbo.SP_Import_APS_SUPPLIERS`, `QNHDB.dbo.SP_Import_INV_Items_All`, and `QNHDB.dbo.SP_Import_Purchase_Invoices_All`. Keep these physical names centralized in Procurement config. Migration `030_validate_procurement_production_sources.sql` is the go-live source/schema preflight and preserves IDs from any earlier placeholder Supplier/Item tables.
+- Procurement users may create manual Suppliers and Items. TaskHub generates protected `USR-SUP-...` / `USR-ITEM-...` codes with reserved manual identities so TaskHub-created records remain distinguishable from Oracle/CarWare imports.
+- Shared Supplier and Item changes are recorded in immutable `TM_procurement_activity` rows with the acting Portal user.
+- Saved Views are private owner-scoped UI/filter configurations. They store selected Item/Supplier IDs and view configuration only, never calculated prices. Every open/refetch recalculates current Item/Supplier statistics from the shared Transaction source.
+- A user may create, edit, rename, duplicate, delete, and set one default Saved View. The Items page can open that default view while still allowing return to All Items.
+- Procurement startup synchronization executes the configured Supplier → Item → Transaction procedures sequentially for Procurement-enabled application sessions. A sync failure must not delete/reset existing SQL Server data or block the rest of TaskHub.
+- Phase 3 treats each Item + Supplier as a historical time series: repeated Transactions remain separate even on the same date. `DELIVERY_NOTE_DATE` is the primary timeline date and `UNIT_COST` is the only actual purchase price used in analytics.
+- Item analytics expose latest/previous/lowest/highest/average actual Unit Cost, change amount/percent, Supplier count, Transaction count, and last purchase date. Supplier comparison exposes the same statistics per Supplier.
+- Currency/UOM compatibility is enforced by a comparison scope. When no explicit scope filter is supplied, the latest eligible Transaction determines the default currency + UOM scope; previous/min/max/average and Supplier comparisons are calculated only inside that scope.
+- Actual purchase Transaction APIs are read-only. Server-side filtering, sorting, pagination, and SQL window functions handle history; no browser-side loading of the global transaction table is allowed.
+- Phase 4 Items UX stays scalable: the landing table is one Item-level summary row (Latest/Low/High/Change/Supplier Count/Last Purchase), not an all-Items × all-Suppliers matrix. Item Details provides summary cards, a vertical Supplier comparison, a focused 2–5 Supplier matrix only when explicitly selected, a lightweight price-history chart, and exact read-only Transaction drill-down.
+- Item-list price summaries and overview cards are computed server-side in one paginated/aggregated query path rather than issuing one analytics request per visible Item. Saved View Supplier/period filters drive those live calculations immediately.
+- Existing Contracts reference the shared Supplier master while preserving Contract owner privacy. Legacy `TM_contract_suppliers` data is retained during migration so legacy-only fields are not silently destroyed.
 - Contract Number is optional text; Contract Title and Start Date are required. End Date may be omitted for open-ended Contracts, but automatic renewal requires an End Date, Renewal Term, and Notice Period.
-- Automatic Renewal is a yes/no contractual attribute. TaskHub must not automatically mutate End Date or decide that a legal renewal occurred.
-- Notice Deadline is derived from End Date minus Notice Period. Duration, Days Remaining, and date-tracking state (`UPCOMING`, `ACTIVE`, `EXPIRING_SOON`, `EXPIRED`) are also derived, not editable status fields.
-- `expiring_soon_days` is a private per-user Contract setting (default 90) and affects derived tracking only. Phase 1C adds independent reminder lead days for End Date and automatic-renewal Notice Deadline events plus optional email copies.
-- Contract value distinguishes `FIXED` from `VARIABLE`. Payment Frequency and Payment Timing are separate; `IN_ADVANCE` means payment in advance, not a frequency.
+- Contract value is either Fixed (requires amount) or Variable (does not store a fixed amount). SAR is the fixed Contract-value currency.
+- Payment Frequency and Payment Timing are structured nullable values.
+- My Contracts uses server-side search/filter/sort/pagination and summary counts; Contract detail uses Overview / Files / Activity and preserves existing reminder/file behavior.
 - Contract edits use explicit Save, a review/confirmation diff, optimistic `ROWVERSION` concurrency, and one immutable audit event in the same SQL transaction. Archived Contracts are read-only until restored.
-- Phase 1B adds private Contract Files: PDF/JPG/JPEG/PNG only, up to 10 active files per Contract and 10 MB per file, protected server-managed storage, owner-authorized preview/download/remove, file-count hints in My Contracts, a Files tab in Contract Details, and immutable `ATTACHMENT_ADDED` / `ATTACHMENT_REMOVED` history events. Archived Contracts remain read-only for file mutations.
-- Phase 1C adds owner-scoped Contract expiration and automatic-renewal Notice Deadline reminders. Reminder generation is date-based and deduplicated; if the configured lead date has passed but the actual End Date/Notice Deadline is still future, TaskHub creates the reminder on the next scan. In-app reminders remain independent from email. Optional Contract email copies reuse the existing TaskHub outbox/worker, active verified destination, bilingual templates, send-time revalidation, and cancellation rules. Contract reminder settings are personal and Contract access must still be enabled.
+- Private Contract Files remain PDF/JPG/JPEG/PNG only, up to 10 active files per Contract and 10 MB per file, with protected owner-authorized storage.
 
 ## 7. Meetings domain
 
@@ -378,6 +388,11 @@ Use this source order:
 
 If documentation and implementation conflict on privacy, security, ownership, or KPI behavior, identify the mismatch instead of silently guessing.
 
+## Procurement Phase 6 completion
 
-
+- Procurement Price Quotes are private owner-scoped time-series records in `dbo.TM_price_quotes`; never collapse one owner + Item + Supplier to a single Quote.
+- Quote analytics never change actual-purchase analytics. Actual price remains `UNIT_COST` only; Quote-vs-actual comparison requires compatible Currency and UOM.
+- Quote mutations use `ROWVERSION` stale-write detection and immutable `TM_procurement_activity` history.
+- Procurement UI is decision-first: keep the Items landing page compact, Item Details hierarchy focused on Latest/Change, Supplier landing purchasing-activity-first, and use existing TaskHub shared sorting/pagination/search patterns.
+- Do not expose another user's Quotes through list, analytics, summary, Item/Supplier integration, Saved Views, or history.
 

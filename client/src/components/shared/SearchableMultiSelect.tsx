@@ -34,6 +34,7 @@ interface CommonSearchableSelectProps {
   maxVisibleBadges?: number
   searchValue?: string
   onSearchChange?: (value: string) => void
+  onOpenChange?: (open: boolean) => void
   onLoadMore?: () => void
   hasMore?: boolean
   loading?: boolean
@@ -88,6 +89,7 @@ export function SearchableMultiSelect(props: SearchableMultiSelectProps) {
 
   function changeOpen(nextOpen: boolean) {
     setOpen(nextOpen)
+    props.onOpenChange?.(nextOpen)
     if (!nextOpen) resetSearch()
   }
 

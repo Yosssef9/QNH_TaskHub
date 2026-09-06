@@ -11,6 +11,7 @@ import { authRouter } from "./modules/auth/auth.routes.js";
 import { calendarRouter } from "./modules/calendar/calendar.routes.js";
 import { dashboardRouter } from "./modules/dashboard/dashboard.routes.js";
 import { contractsRouter } from "./modules/contracts/contracts.routes.js";
+import { itemsRouter } from "./modules/items/items.routes.js";
 import { emailSettingsRouter } from "./modules/email-settings/email-settings.routes.js";
 import { listsRouter } from "./modules/lists/lists.routes.js";
 import { holidaysRouter } from "./modules/holidays/holidays.routes.js";
@@ -19,7 +20,10 @@ import { kpiTasksRouter } from "./modules/kpis/kpi-tasks.routes.js";
 import { kpiInstancesRouter } from "./modules/kpis/kpi-instances.routes.js";
 import { workCyclesRouter } from "./modules/work-cycles/work-cycles.routes.js";
 import { preferencesRouter } from "./modules/preferences/preferences.routes.js";
+import { priceQuotesRouter } from "./modules/price-quotes/price-quotes.routes.js";
+import { procurementRouter } from "./modules/procurement/procurement.routes.js";
 import { searchRouter } from "./modules/search/search.routes.js";
+import { suppliersRouter } from "./modules/suppliers/suppliers.routes.js";
 import { notificationsRouter } from "./modules/notifications/notifications.routes.js";
 import {
   meetingRoomsAdminRouter,
@@ -64,6 +68,10 @@ export function createApp(): express.Express {
   app.use("/api/auth", authRouter);
   app.use("/api/dashboard", dashboardRouter);
   app.use("/api/contracts", contractsRouter);
+  app.use("/api/items", itemsRouter);
+  app.use("/api/suppliers", suppliersRouter);
+  app.use("/api/procurement", procurementRouter);
+  app.use("/api/price-quotes", priceQuotesRouter);
   app.use("/api/calendar", calendarRouter);
   app.use("/api/search", searchRouter);
   app.use("/api/notifications", notificationsRouter);
@@ -89,3 +97,6 @@ export function createApp(): express.Express {
 }
 
 export const app = createApp();
+
+
+

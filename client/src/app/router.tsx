@@ -2,17 +2,20 @@ import { createBrowserRouter } from 'react-router'
 
 import App from '@/App'
 import { RequireAuth } from '@/features/auth/components/RequireAuth'
-import { RequireContractsAccess } from '@/features/contracts/components/RequireContractsAccess'
+import { RequireProcurementAccess } from '@/features/procurement/components/RequireProcurementAccess'
 import { RequireMeetingAccess } from '@/features/meetings/components/RequireMeetingAccess'
 import { AdminAccessRoute } from '@/pages/admin/AdminAccessRoute'
 import { AdminHolidaysRoute } from '@/pages/admin/AdminHolidaysRoute'
 import { AdminMeetingRoomsRoute } from '@/pages/admin/AdminMeetingRoomsRoute'
 import { CalendarPage } from '@/pages/calendar/CalendarPage'
 import { HomePage } from '@/pages/home/HomePage'
+import { ItemsPage } from '@/pages/items/ItemsPage'
+import { ItemDetailsPage } from '@/pages/items/ItemDetailsPage'
+import { PriceQuotesPage } from '@/pages/price-quotes/PriceQuotesPage'
 import { ContractsPage } from '@/pages/contracts/ContractsPage'
 import { ContractDetailsPage } from '@/pages/contracts/ContractDetailsPage'
-import { SuppliersPage } from '@/pages/contracts/SuppliersPage'
-import { SupplierDetailsPage } from '@/pages/contracts/SupplierDetailsPage'
+import { SuppliersPage } from '@/pages/suppliers/SuppliersPage'
+import { SupplierDetailsPage } from '@/pages/suppliers/SupplierDetailsPage'
 import { KpisPage } from '@/pages/kpis/KpisPage'
 import { loadKpiTasksPage } from '@/pages/kpi-tasks/kpi-tasks.loader'
 import { KpiTasksPage } from '@/pages/kpi-tasks/KpiTasksPage'
@@ -85,33 +88,73 @@ export const router = createBrowserRouter([
       {
         path: 'contracts',
         element: (
-          <RequireContractsAccess>
+          <RequireProcurementAccess>
             <ContractsPage />
-          </RequireContractsAccess>
+          </RequireProcurementAccess>
+        ),
+      },
+      {
+        path: 'items',
+        element: (
+          <RequireProcurementAccess>
+            <ItemsPage />
+          </RequireProcurementAccess>
+        ),
+      },
+      {
+        path: 'items/:itemId',
+        element: (
+          <RequireProcurementAccess>
+            <ItemDetailsPage />
+          </RequireProcurementAccess>
+        ),
+      },
+      {
+        path: 'suppliers',
+        element: (
+          <RequireProcurementAccess>
+            <SuppliersPage />
+          </RequireProcurementAccess>
+        ),
+      },
+      {
+        path: 'price-quotes',
+        element: (
+          <RequireProcurementAccess>
+            <PriceQuotesPage />
+          </RequireProcurementAccess>
+        ),
+      },
+      {
+        path: 'suppliers/:supplierId',
+        element: (
+          <RequireProcurementAccess>
+            <SupplierDetailsPage />
+          </RequireProcurementAccess>
         ),
       },
       {
         path: 'contracts/suppliers',
         element: (
-          <RequireContractsAccess>
+          <RequireProcurementAccess>
             <SuppliersPage />
-          </RequireContractsAccess>
+          </RequireProcurementAccess>
         ),
       },
       {
         path: 'contracts/suppliers/:supplierId',
         element: (
-          <RequireContractsAccess>
+          <RequireProcurementAccess>
             <SupplierDetailsPage />
-          </RequireContractsAccess>
+          </RequireProcurementAccess>
         ),
       },
       {
         path: 'contracts/:contractId',
         element: (
-          <RequireContractsAccess>
+          <RequireProcurementAccess>
             <ContractDetailsPage />
-          </RequireContractsAccess>
+          </RequireProcurementAccess>
         ),
       },
       { path: 'settings', element: <SettingsPage /> },
@@ -126,3 +169,6 @@ export const router = createBrowserRouter([
     ],
   },
 ])
+
+
+

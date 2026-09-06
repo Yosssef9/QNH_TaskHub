@@ -43,6 +43,8 @@ const envSchema = z
 
     ATTACHMENT_STORAGE_PATH: z.string().trim().min(1).default("storage/attachments"),
 
+    PROCUREMENT_STARTUP_SYNC_ENABLED: booleanString.prefault("false"),
+
     EMAIL_ENABLED: booleanString.prefault("false"),
     EMAIL_PROVIDER: z.enum(["SMTP"]).default("SMTP"),
     TASKHUB_PUBLIC_URL: z.string().trim().url().default("http://localhost:5173"),

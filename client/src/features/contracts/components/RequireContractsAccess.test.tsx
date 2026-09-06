@@ -10,11 +10,11 @@ vi.mock('@/features/auth/hooks/use-current-user', () => ({
   useCurrentUser: vi.fn(),
 }))
 
-function renderGuard(contractsEnabled: boolean) {
+function renderGuard(procurementEnabled: boolean) {
   vi.mocked(useCurrentUser).mockReturnValue({
     data: {
       user: { userId: 1, userCode: 'TEST001', userName: 'Test User', email: null },
-      access: { roleCode: 'USER', contractsEnabled },
+      access: { roleCode: 'USER', procurementEnabled },
       preferences: {
         languageCode: 'EN',
         theme: 'SYSTEM',
@@ -55,5 +55,6 @@ describe('RequireContractsAccess', () => {
     expect(screen.getByText('Forbidden content')).toBeVisible()
   })
 })
+
 
 

@@ -9,10 +9,6 @@ import type {
   ContractList,
   ContractListQuery,
   ContractUserSettings,
-  Supplier,
-  SupplierInput,
-  SupplierList,
-  SupplierListQuery,
 } from '../types/contracts.types'
 
 export async function getContracts(query: ContractListQuery): Promise<ContractList> {
@@ -64,52 +60,6 @@ export async function getContractActivity(contractId: number): Promise<ContractA
     `/contracts/${contractId}/activity`,
   )
   return response.data.data.items
-}
-
-export async function getSuppliers(query: SupplierListQuery): Promise<SupplierList> {
-  const response = await apiClient.get<ApiSuccessResponse<SupplierList>>('/contracts/suppliers', {
-    params: query,
-  })
-  return response.data.data
-}
-
-export async function getSupplier(supplierId: number): Promise<Supplier> {
-  const response = await apiClient.get<ApiSuccessResponse<Supplier>>(
-    `/contracts/suppliers/${supplierId}`,
-  )
-  return response.data.data
-}
-
-export async function createSupplier(input: SupplierInput): Promise<Supplier> {
-  const response = await apiClient.post<ApiSuccessResponse<Supplier>>('/contracts/suppliers', input)
-  return response.data.data
-}
-
-export async function updateSupplier(
-  supplierId: number,
-  input: SupplierInput & { rowVersion: string },
-): Promise<Supplier> {
-  const response = await apiClient.patch<ApiSuccessResponse<Supplier>>(
-    `/contracts/suppliers/${supplierId}`,
-    input,
-  )
-  return response.data.data
-}
-
-export async function archiveSupplier(supplier: Supplier): Promise<Supplier> {
-  const response = await apiClient.post<ApiSuccessResponse<Supplier>>(
-    `/contracts/suppliers/${supplier.id}/archive`,
-    { rowVersion: supplier.rowVersion },
-  )
-  return response.data.data
-}
-
-export async function restoreSupplier(supplier: Supplier): Promise<Supplier> {
-  const response = await apiClient.post<ApiSuccessResponse<Supplier>>(
-    `/contracts/suppliers/${supplier.id}/restore`,
-    { rowVersion: supplier.rowVersion },
-  )
-  return response.data.data
 }
 
 export async function getContractSettings(): Promise<ContractUserSettings> {
@@ -183,4 +133,5 @@ export async function downloadContractAttachment(attachment: ContractAttachment)
 export async function removeContractAttachment(attachmentId: string): Promise<void> {
   await apiClient.delete(`/contracts/attachments/${attachmentId}`)
 }
+
 

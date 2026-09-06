@@ -1,6 +1,7 @@
 import type { DatabaseTransaction } from "../../database/types.js";
 import { getDatabasePool, sql } from "../../database/sql.js";
 import { normalizeSqlRowVersion, rowVersionToBuffer } from "./contracts-row-version.js";
+import { PROCUREMENT_DB_OBJECTS } from "../procurement/procurement.config.js";
 import type {
   ContractInput,
   ContractListQuery,
@@ -8,33 +9,12 @@ import type {
   ContractPaymentTiming,
   ContractTrackingState,
   ContractValueType,
-  SupplierInput,
-  SupplierListQuery,
 } from "./contracts.types.js";
-
-export interface SupplierRecord {
-  id: number | string;
-  name: string;
-  commercialRegistrationNo: string | null;
-  taxNumber: string | null;
-  primaryContactName: string | null;
-  primaryContactEmail: string | null;
-  primaryContactPhone: string | null;
-  addressText: string | null;
-  notes: string | null;
-  isActive: boolean;
-  currentContractCount: number | string;
-  expiringSoonContractCount: number | string;
-  createdAtUtc: Date;
-  updatedAtUtc: Date | null;
-  rowVersion: Buffer;
-}
 
 export interface ContractRecord {
   id: number | string;
   supplierId: number | string;
   supplierName: string;
-  supplierIsActive: boolean;
   contractNumber: string | null;
   title: string;
   startDate: Date;
@@ -150,8 +130,7 @@ function contractSelectSql(includeFileCount = false): string {
   return `
     contract.id,
     contract.supplier_id AS supplierId,
-    supplier.name AS supplierName,
-    CAST(supplier.is_active AS BIT) AS supplierIsActive,
+    CONVERT(NVARCHAR(250), supplier.SUPPLIER_NAME) AS supplierName,
     contract.contract_number AS contractNumber,
     contract.title,
     contract.start_date AS startDate,
@@ -209,7 +188,7 @@ function contractFilterSql(): string {
       @search IS NULL
       OR contract.title LIKE N'%' + @search + N'%'
       OR contract.contract_number LIKE N'%' + @search + N'%'
-      OR supplier.name LIKE N'%' + @search + N'%'
+      OR CONVERT(NVARCHAR(250), supplier.SUPPLIER_NAME) LIKE N'%' + @search + N'%'
     )
     AND (@status IS NULL OR derived.trackingState = @status)
     AND (@supplierId IS NULL OR contract.supplier_id = @supplierId)
@@ -226,7 +205,7 @@ function contractFilterSql(): string {
 
 const sortColumns: Record<ContractListQuery["sortBy"], string> = {
   title: "contract.title",
-  supplier: "supplier.name",
+  supplier: "supplier.SUPPLIER_NAME",
   startDate: "contract.start_date",
   endDate: "contract.end_date",
   value: "contract.contract_value_sar",
@@ -253,9 +232,8 @@ export async function listContracts(
   const result = await request.query<ContractRecord>(`
     SELECT ${contractSelectSql(true)}
     FROM dbo.TM_contracts AS contract
-    INNER JOIN dbo.TM_contract_suppliers AS supplier
-      ON supplier.id = contract.supplier_id
-      AND supplier.owner_user_id = contract.owner_user_id
+    INNER JOIN ${PROCUREMENT_DB_OBJECTS.suppliersTable} AS supplier
+      ON CONVERT(BIGINT, supplier.SUPPLIER_ID) = contract.supplier_id
     ${contractDerivedSql()}
     WHERE ${contractFilterSql()}
     ORDER BY ${nullOrder} ${orderColumn} ${orderDirection}, contract.id ${orderDirection}
@@ -267,9 +245,8 @@ export async function listContracts(
   const countResult = await countRequest.query<CountRecord>(`
     SELECT COUNT_BIG(1) AS total
     FROM dbo.TM_contracts AS contract
-    INNER JOIN dbo.TM_contract_suppliers AS supplier
-      ON supplier.id = contract.supplier_id
-      AND supplier.owner_user_id = contract.owner_user_id
+    INNER JOIN ${PROCUREMENT_DB_OBJECTS.suppliersTable} AS supplier
+      ON CONVERT(BIGINT, supplier.SUPPLIER_ID) = contract.supplier_id
     ${contractDerivedSql()}
     WHERE ${contractFilterSql()};
   `);
@@ -323,9 +300,8 @@ export async function findOwnedContract(
     .input("expiringSoonDays", sql.Int, expiringSoonDays).query<ContractRecord>(`
       SELECT TOP (1) ${contractSelectSql()}
       FROM dbo.TM_contracts AS contract
-      INNER JOIN dbo.TM_contract_suppliers AS supplier
-        ON supplier.id = contract.supplier_id
-        AND supplier.owner_user_id = contract.owner_user_id
+      INNER JOIN ${PROCUREMENT_DB_OBJECTS.suppliersTable} AS supplier
+        ON CONVERT(BIGINT, supplier.SUPPLIER_ID) = contract.supplier_id
       ${contractDerivedSql()}
       WHERE contract.id = @contractId
         AND contract.owner_user_id = @ownerUserId;
@@ -348,9 +324,8 @@ export async function findOwnedContractForUpdate(
     .input("expiringSoonDays", sql.Int, expiringSoonDays).query<ContractRecord>(`
       SELECT TOP (1) ${contractSelectSql()}
       FROM dbo.TM_contracts AS contract WITH (UPDLOCK, HOLDLOCK)
-      INNER JOIN dbo.TM_contract_suppliers AS supplier
-        ON supplier.id = contract.supplier_id
-        AND supplier.owner_user_id = contract.owner_user_id
+      INNER JOIN ${PROCUREMENT_DB_OBJECTS.suppliersTable} AS supplier
+        ON CONVERT(BIGINT, supplier.SUPPLIER_ID) = contract.supplier_id
       ${contractDerivedSql()}
       WHERE contract.id = @contractId
         AND contract.owner_user_id = @ownerUserId;
@@ -530,303 +505,6 @@ export async function listContractActivity(
       ORDER BY activity.created_at_utc DESC, activity.id DESC;
     `);
   return result.recordset;
-}
-
-function supplierSelectSql(): string {
-  return `
-    supplier.id,
-    supplier.name,
-    supplier.commercial_registration_no AS commercialRegistrationNo,
-    supplier.tax_number AS taxNumber,
-    supplier.primary_contact_name AS primaryContactName,
-    supplier.primary_contact_email AS primaryContactEmail,
-    supplier.primary_contact_phone AS primaryContactPhone,
-    supplier.address_text AS addressText,
-    supplier.notes,
-    CAST(supplier.is_active AS BIT) AS isActive,
-    COUNT_BIG(CASE WHEN contract.is_active = 1 THEN contract.id END) AS currentContractCount,
-    COALESCE(SUM(CASE
-      WHEN contract.is_active = 1
-       AND contract.start_date <= @today
-       AND contract.end_date IS NOT NULL
-       AND contract.end_date >= @today
-       AND DATEDIFF(DAY, @today, contract.end_date) <= @expiringSoonDays
-      THEN 1 ELSE 0 END), 0) AS expiringSoonContractCount,
-    supplier.created_at_utc AS createdAtUtc,
-    supplier.updated_at_utc AS updatedAtUtc,
-    supplier.row_version AS rowVersion
-  `;
-}
-
-export async function listSuppliers(
-  ownerUserId: number,
-  query: SupplierListQuery,
-  today: string,
-  expiringSoonDays: number,
-): Promise<{ records: SupplierRecord[]; total: number }> {
-  const pool = await getDatabasePool();
-  const offset = (query.page - 1) * query.pageSize;
-  const search = query.search?.trim() || null;
-  const request = pool
-    .request()
-    .input("ownerUserId", sql.Int, ownerUserId)
-    .input("isActive", sql.Bit, !query.archived)
-    .input("search", sql.NVarChar(100), search)
-    .input("today", sql.Date, today)
-    .input("expiringSoonDays", sql.Int, expiringSoonDays)
-    .input("offset", sql.Int, offset)
-    .input("pageSize", sql.Int, query.pageSize);
-
-  const result = await request.query<SupplierRecord>(`
-    SELECT ${supplierSelectSql()}
-    FROM dbo.TM_contract_suppliers AS supplier
-    LEFT JOIN dbo.TM_contracts AS contract
-      ON contract.supplier_id = supplier.id
-      AND contract.owner_user_id = supplier.owner_user_id
-    WHERE supplier.owner_user_id = @ownerUserId
-      AND supplier.is_active = @isActive
-      AND (@search IS NULL OR supplier.name LIKE N'%' + @search + N'%')
-    GROUP BY
-      supplier.id,
-      supplier.name,
-      supplier.commercial_registration_no,
-      supplier.tax_number,
-      supplier.primary_contact_name,
-      supplier.primary_contact_email,
-      supplier.primary_contact_phone,
-      supplier.address_text,
-      supplier.notes,
-      supplier.is_active,
-      supplier.created_at_utc,
-      supplier.updated_at_utc,
-      supplier.row_version
-    ORDER BY supplier.name, supplier.id
-    OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;
-  `);
-
-  const countResult = await pool
-    .request()
-    .input("ownerUserId", sql.Int, ownerUserId)
-    .input("isActive", sql.Bit, !query.archived)
-    .input("search", sql.NVarChar(100), search).query<CountRecord>(`
-      SELECT COUNT_BIG(1) AS total
-      FROM dbo.TM_contract_suppliers AS supplier
-      WHERE supplier.owner_user_id = @ownerUserId
-        AND supplier.is_active = @isActive
-        AND (@search IS NULL OR supplier.name LIKE N'%' + @search + N'%');
-    `);
-
-  return { records: result.recordset, total: Number(countResult.recordset[0]?.total ?? 0) };
-}
-
-export async function findOwnedSupplier(
-  ownerUserId: number,
-  supplierId: number,
-  today: string,
-  expiringSoonDays: number,
-): Promise<SupplierRecord | null> {
-  const pool = await getDatabasePool();
-  const result = await pool
-    .request()
-    .input("ownerUserId", sql.Int, ownerUserId)
-    .input("supplierId", sql.BigInt, supplierId)
-    .input("today", sql.Date, today)
-    .input("expiringSoonDays", sql.Int, expiringSoonDays).query<SupplierRecord>(`
-      SELECT TOP (1) ${supplierSelectSql()}
-      FROM dbo.TM_contract_suppliers AS supplier
-      LEFT JOIN dbo.TM_contracts AS contract
-        ON contract.supplier_id = supplier.id
-        AND contract.owner_user_id = supplier.owner_user_id
-      WHERE supplier.id = @supplierId
-        AND supplier.owner_user_id = @ownerUserId
-      GROUP BY
-        supplier.id,
-        supplier.name,
-        supplier.commercial_registration_no,
-        supplier.tax_number,
-        supplier.primary_contact_name,
-        supplier.primary_contact_email,
-        supplier.primary_contact_phone,
-        supplier.address_text,
-        supplier.notes,
-        supplier.is_active,
-        supplier.created_at_utc,
-        supplier.updated_at_utc,
-        supplier.row_version;
-    `);
-  return result.recordset[0] ?? null;
-}
-
-export async function findOwnedSupplierForUpdate(
-  transaction: DatabaseTransaction,
-  ownerUserId: number,
-  supplierId: number,
-): Promise<{ id: number; name: string; isActive: boolean; rowVersion: string } | null> {
-  const result = await transaction
-    .request()
-    .input("ownerUserId", sql.Int, ownerUserId)
-    .input("supplierId", sql.BigInt, supplierId).query<{
-      id: number | string;
-      name: string;
-      isActive: boolean;
-      rowVersion: Buffer;
-    }>(`
-      SELECT TOP (1)
-        id,
-        name,
-        CAST(is_active AS BIT) AS isActive,
-        row_version AS rowVersion
-      FROM dbo.TM_contract_suppliers WITH (UPDLOCK, HOLDLOCK)
-      WHERE id = @supplierId AND owner_user_id = @ownerUserId;
-    `);
-  const row = result.recordset[0];
-  if (!row) return null;
-  const rowVersion = normalizeSqlRowVersion(row.rowVersion);
-  if (!rowVersion) throw new Error("SQL Server returned an invalid supplier rowversion token.");
-  return { ...row, id: Number(row.id), rowVersion };
-}
-
-export async function activeSupplierExists(
-  ownerUserId: number,
-  supplierId: number,
-  transaction?: DatabaseTransaction,
-): Promise<boolean> {
-  const request = transaction ? transaction.request() : (await getDatabasePool()).request();
-  const result = await request
-    .input("ownerUserId", sql.Int, ownerUserId)
-    .input("supplierId", sql.BigInt, supplierId).query<IdRecord>(`
-      SELECT TOP (1) id
-      FROM dbo.TM_contract_suppliers ${transaction ? "WITH (UPDLOCK, HOLDLOCK)" : ""}
-      WHERE id = @supplierId
-        AND owner_user_id = @ownerUserId
-        AND is_active = 1;
-    `);
-  return Boolean(result.recordset[0]);
-}
-
-export async function supplierNameExists(
-  ownerUserId: number,
-  name: string,
-  excludeSupplierId?: number,
-  transaction?: DatabaseTransaction,
-): Promise<boolean> {
-  const request = transaction ? transaction.request() : (await getDatabasePool()).request();
-  request
-    .input("ownerUserId", sql.Int, ownerUserId)
-    .input("name", sql.NVarChar(250), name)
-    .input("excludeSupplierId", sql.BigInt, excludeSupplierId ?? null);
-  const result = await request.query<IdRecord>(`
-    SELECT TOP (1) id
-    FROM dbo.TM_contract_suppliers ${transaction ? "WITH (UPDLOCK, HOLDLOCK)" : ""}
-    WHERE owner_user_id = @ownerUserId
-      AND name = @name
-      AND (@excludeSupplierId IS NULL OR id <> @excludeSupplierId);
-  `);
-  return Boolean(result.recordset[0]);
-}
-
-function bindSupplierInput(
-  request: import("mssql").Request,
-  ownerUserId: number,
-  input: SupplierInput,
-): void {
-  request
-    .input("ownerUserId", sql.Int, ownerUserId)
-    .input("name", sql.NVarChar(250), input.name)
-    .input("commercialRegistrationNo", sql.NVarChar(80), input.commercialRegistrationNo)
-    .input("taxNumber", sql.NVarChar(80), input.taxNumber)
-    .input("primaryContactName", sql.NVarChar(200), input.primaryContactName)
-    .input("primaryContactEmail", sql.NVarChar(320), input.primaryContactEmail)
-    .input("primaryContactPhone", sql.NVarChar(50), input.primaryContactPhone)
-    .input("addressText", sql.NVarChar(1000), input.addressText)
-    .input("notes", sql.NVarChar(sql.MAX), input.notes);
-}
-
-export async function createSupplier(
-  transaction: DatabaseTransaction,
-  ownerUserId: number,
-  input: SupplierInput,
-): Promise<number> {
-  const request = transaction.request();
-  bindSupplierInput(request, ownerUserId, input);
-  const result = await request.query<IdRecord>(`
-    INSERT INTO dbo.TM_contract_suppliers (
-      owner_user_id,
-      name,
-      commercial_registration_no,
-      tax_number,
-      primary_contact_name,
-      primary_contact_email,
-      primary_contact_phone,
-      address_text,
-      notes
-    )
-    OUTPUT inserted.id
-    VALUES (
-      @ownerUserId,
-      @name,
-      @commercialRegistrationNo,
-      @taxNumber,
-      @primaryContactName,
-      @primaryContactEmail,
-      @primaryContactPhone,
-      @addressText,
-      @notes
-    );
-  `);
-  return Number(result.recordset[0]?.id);
-}
-
-export async function updateSupplier(
-  transaction: DatabaseTransaction,
-  ownerUserId: number,
-  supplierId: number,
-  rowVersion: string,
-  input: SupplierInput,
-): Promise<boolean> {
-  const request = transaction.request();
-  bindSupplierInput(request, ownerUserId, input);
-  request.input("supplierId", sql.BigInt, supplierId);
-  bindRowVersion(request, rowVersion);
-  const result = await request.query(`
-    UPDATE dbo.TM_contract_suppliers
-    SET
-      name = @name,
-      commercial_registration_no = @commercialRegistrationNo,
-      tax_number = @taxNumber,
-      primary_contact_name = @primaryContactName,
-      primary_contact_email = @primaryContactEmail,
-      primary_contact_phone = @primaryContactPhone,
-      address_text = @addressText,
-      notes = @notes,
-      updated_at_utc = SYSUTCDATETIME()
-    WHERE id = @supplierId
-      AND owner_user_id = @ownerUserId
-      AND row_version = @rowVersion;
-  `);
-  return Number(result.rowsAffected[0] ?? 0) === 1;
-}
-
-export async function setSupplierActive(
-  transaction: DatabaseTransaction,
-  ownerUserId: number,
-  supplierId: number,
-  rowVersion: string,
-  isActive: boolean,
-): Promise<boolean> {
-  const request = transaction
-    .request()
-    .input("ownerUserId", sql.Int, ownerUserId)
-    .input("supplierId", sql.BigInt, supplierId);
-  bindRowVersion(request, rowVersion);
-  const result = await request.input("isActive", sql.Bit, isActive).query(`
-      UPDATE dbo.TM_contract_suppliers
-      SET is_active = @isActive, updated_at_utc = SYSUTCDATETIME()
-      WHERE id = @supplierId
-        AND owner_user_id = @ownerUserId
-        AND row_version = @rowVersion;
-    `);
-  return Number(result.rowsAffected[0] ?? 0) === 1;
 }
 
 export async function ensureContractSettings(ownerUserId: number): Promise<void> {
@@ -1081,16 +759,9 @@ export const contractsRepository = {
   createContractAttachment,
   findOwnedContractAttachment,
   deactivateContractAttachment,
-  listSuppliers,
-  findOwnedSupplier,
-  findOwnedSupplierForUpdate,
-  activeSupplierExists,
-  supplierNameExists,
-  createSupplier,
-  updateSupplier,
-  setSupplierActive,
   ensureContractSettings,
   getContractSettings,
   updateContractSettings,
 };
+
 

@@ -1,4 +1,5 @@
 import { getDatabasePool, sql } from "../../database/sql.js";
+import { PROCUREMENT_DB_OBJECTS } from "../procurement/procurement.config.js";
 import type { NotificationType } from "./notifications.types.js";
 
 export interface NotificationRecord {
@@ -116,7 +117,7 @@ export const notificationsRepository = {
                 ON user_settings.portal_user_id = contract_settings.owner_user_id
               WHERE contract_settings.owner_user_id = notification.owner_user_id
                 AND access.is_active = 1
-                AND access.contracts_enabled = 1
+                AND access.procurement_enabled = 1
                 AND user_settings.email_notifications_enabled = 1
                 AND (
                   (notification.notification_type = 'CONTRACT_EXPIRATION_REMINDER'
@@ -357,19 +358,19 @@ export const notificationsRepository = {
           CAST('CONTRACT_EXPIRATION_REMINDER' AS VARCHAR(40)) AS notificationType,
           CONVERT(VARCHAR(220), CONCAT('CONTRACT_EXPIRATION_REMINDER:', contract.id, ':', CONVERT(VARCHAR(10), contract.end_date, 23))) AS dedupeKey,
           contract.title AS subjectTitle,
-          supplier.name AS contextTitle,
+          CONVERT(NVARCHAR(250), supplier.SUPPLIER_NAME) AS contextTitle,
           contract.id AS contractId,
           contract.end_date AS eventDate
         FROM dbo.TM_contracts AS contract
-        INNER JOIN dbo.TM_contract_suppliers AS supplier
-          ON supplier.id = contract.supplier_id AND supplier.owner_user_id = contract.owner_user_id
+        INNER JOIN ${PROCUREMENT_DB_OBJECTS.suppliersTable} AS supplier
+          ON CONVERT(BIGINT, supplier.SUPPLIER_ID) = contract.supplier_id
         INNER JOIN dbo.TM_contract_user_settings AS settings
           ON settings.owner_user_id = contract.owner_user_id
         INNER JOIN dbo.TM_user_access AS access
           ON access.portal_user_id = contract.owner_user_id
         WHERE contract.owner_user_id = @owner
           AND access.is_active = 1
-          AND access.contracts_enabled = 1
+          AND access.procurement_enabled = 1
           AND contract.is_active = 1
           AND contract.end_date IS NOT NULL
           AND @today BETWEEN DATEADD(DAY, -settings.expiration_reminder_lead_days, contract.end_date) AND contract.end_date
@@ -380,19 +381,19 @@ export const notificationsRepository = {
           CAST('CONTRACT_NOTICE_DEADLINE_REMINDER' AS VARCHAR(40)),
           CONVERT(VARCHAR(220), CONCAT('CONTRACT_NOTICE_DEADLINE_REMINDER:', contract.id, ':', CONVERT(VARCHAR(10), DATEADD(DAY, -contract.notice_period_days, contract.end_date), 23))),
           contract.title,
-          supplier.name,
+          CONVERT(NVARCHAR(250), supplier.SUPPLIER_NAME),
           contract.id,
           DATEADD(DAY, -contract.notice_period_days, contract.end_date)
         FROM dbo.TM_contracts AS contract
-        INNER JOIN dbo.TM_contract_suppliers AS supplier
-          ON supplier.id = contract.supplier_id AND supplier.owner_user_id = contract.owner_user_id
+        INNER JOIN ${PROCUREMENT_DB_OBJECTS.suppliersTable} AS supplier
+          ON CONVERT(BIGINT, supplier.SUPPLIER_ID) = contract.supplier_id
         INNER JOIN dbo.TM_contract_user_settings AS settings
           ON settings.owner_user_id = contract.owner_user_id
         INNER JOIN dbo.TM_user_access AS access
           ON access.portal_user_id = contract.owner_user_id
         WHERE contract.owner_user_id = @owner
           AND access.is_active = 1
-          AND access.contracts_enabled = 1
+          AND access.procurement_enabled = 1
           AND contract.is_active = 1
           AND contract.is_auto_renewal = 1
           AND contract.end_date IS NOT NULL
@@ -531,5 +532,6 @@ export const notificationsRepository = {
     return result.rowsAffected[0] ?? 0;
   },
 };
+
 
 

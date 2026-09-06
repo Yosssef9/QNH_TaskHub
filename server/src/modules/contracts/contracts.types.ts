@@ -15,36 +15,10 @@ export type ContractActivityType =
   | "ATTACHMENT_ADDED"
   | "ATTACHMENT_REMOVED";
 
-export interface Supplier {
-  id: number;
-  name: string;
-  commercialRegistrationNo: string | null;
-  taxNumber: string | null;
-  primaryContactName: string | null;
-  primaryContactEmail: string | null;
-  primaryContactPhone: string | null;
-  addressText: string | null;
-  notes: string | null;
-  isActive: boolean;
-  currentContractCount: number;
-  expiringSoonContractCount: number;
-  createdAtUtc: string;
-  updatedAtUtc: string | null;
-  rowVersion: string;
-}
-
-export interface SupplierList {
-  items: Supplier[];
-  page: number;
-  pageSize: number;
-  total: number;
-}
-
 export interface Contract {
   id: number;
   supplierId: number;
   supplierName: string;
-  supplierIsActive: boolean;
   contractNumber: string | null;
   title: string;
   startDate: string;
@@ -131,28 +105,6 @@ export interface ContractListQuery {
   sortDirection: "asc" | "desc";
 }
 
-export interface SupplierListQuery {
-  search?: string | undefined;
-  page: number;
-  pageSize: number;
-  archived: boolean;
-}
-
-export interface SupplierInput {
-  name: string;
-  commercialRegistrationNo: string | null;
-  taxNumber: string | null;
-  primaryContactName: string | null;
-  primaryContactEmail: string | null;
-  primaryContactPhone: string | null;
-  addressText: string | null;
-  notes: string | null;
-}
-
-export interface UpdateSupplierInput extends SupplierInput {
-  rowVersion: string;
-}
-
 export interface ContractInput {
   supplierId: number;
   contractNumber: string | null;
@@ -176,4 +128,3 @@ export interface UpdateContractInput extends ContractInput {
 export interface RowVersionInput {
   rowVersion: string;
 }
-

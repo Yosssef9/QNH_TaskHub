@@ -2,23 +2,17 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 
 import {
   archiveContract,
-  archiveSupplier,
   createContract,
-  createSupplier,
   downloadContractAttachment,
   getContract,
   getContractActivity,
   getContractAttachments,
   getContracts,
   getContractSettings,
-  getSupplier,
-  getSuppliers,
   restoreContract,
-  restoreSupplier,
   removeContractAttachment,
   updateContract,
   updateContractSettings,
-  updateSupplier,
   uploadContractAttachment,
 } from '../api/contracts.api'
 import type {
@@ -26,18 +20,13 @@ import type {
   ContractInput,
   ContractListQuery,
   ContractUserSettings,
-  Supplier,
-  SupplierInput,
-  SupplierListQuery,
 } from '../types/contracts.types'
 
 export const contractsQueryKey = ['contracts'] as const
-export const suppliersQueryKey = ['contract-suppliers'] as const
 export const contractSettingsQueryKey = ['contract-settings'] as const
 export const contractAttachmentsQueryKey = ['contract-attachments'] as const
 
 const contractListsQueryKey = [...contractsQueryKey, 'list'] as const
-const supplierListsQueryKey = [...suppliersQueryKey, 'list'] as const
 
 export function useContracts(query: ContractListQuery) {
   return useQuery({
@@ -148,67 +137,6 @@ export function useRestoreContract() {
   })
 }
 
-export function useSuppliers(query: SupplierListQuery) {
-  return useQuery({
-    queryKey: [...suppliersQueryKey, 'list', query],
-    queryFn: () => getSuppliers(query),
-    placeholderData: keepPreviousData,
-  })
-}
-
-export function useSupplier(supplierId: number | null) {
-  return useQuery({
-    queryKey: [...suppliersQueryKey, 'detail', supplierId],
-    queryFn: () => getSupplier(supplierId as number),
-    enabled: supplierId !== null,
-  })
-}
-
-export function useCreateSupplier() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: createSupplier,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: supplierListsQueryKey }),
-  })
-}
-
-export function useUpdateSupplier() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ supplierId, input }: { supplierId: number; input: SupplierInput & { rowVersion: string } }) =>
-      updateSupplier(supplierId, input),
-    onSuccess: (supplier) => {
-      queryClient.setQueryData([...suppliersQueryKey, 'detail', supplier.id], supplier)
-      void queryClient.invalidateQueries({ queryKey: supplierListsQueryKey })
-      void queryClient.invalidateQueries({ queryKey: contractListsQueryKey })
-    },
-  })
-}
-
-export function useArchiveSupplier() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: archiveSupplier,
-    onSuccess: (supplier) => {
-      queryClient.setQueryData([...suppliersQueryKey, 'detail', supplier.id], supplier)
-      void queryClient.invalidateQueries({ queryKey: supplierListsQueryKey })
-      void queryClient.invalidateQueries({ queryKey: contractListsQueryKey })
-    },
-  })
-}
-
-export function useRestoreSupplier() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: restoreSupplier,
-    onSuccess: (supplier) => {
-      queryClient.setQueryData([...suppliersQueryKey, 'detail', supplier.id], supplier)
-      void queryClient.invalidateQueries({ queryKey: supplierListsQueryKey })
-      void queryClient.invalidateQueries({ queryKey: contractListsQueryKey })
-    },
-  })
-}
-
 export function useContractSettings() {
   return useQuery({ queryKey: contractSettingsQueryKey, queryFn: getContractSettings })
 }
@@ -220,7 +148,6 @@ export function useUpdateContractSettings() {
     onSuccess: (settings) => {
       queryClient.setQueryData(contractSettingsQueryKey, settings)
       void queryClient.invalidateQueries({ queryKey: contractListsQueryKey })
-      void queryClient.invalidateQueries({ queryKey: supplierListsQueryKey })
     },
   })
 }
@@ -243,15 +170,10 @@ export function contractInputFromContract(contract: Contract): ContractInput {
   }
 }
 
-export function supplierInputFromSupplier(supplier: Supplier): SupplierInput {
-  return {
-    name: supplier.name,
-    commercialRegistrationNo: supplier.commercialRegistrationNo,
-    taxNumber: supplier.taxNumber,
-    primaryContactName: supplier.primaryContactName,
-    primaryContactEmail: supplier.primaryContactEmail,
-    primaryContactPhone: supplier.primaryContactPhone,
-    addressText: supplier.addressText,
-    notes: supplier.notes,
-  }
-}
+export {
+  useCreateSupplier,
+  useSupplier,
+  useSupplierActivity,
+  useSuppliers,
+  useUpdateSupplier,
+} from '@/features/suppliers/hooks/use-suppliers'

@@ -43,7 +43,7 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
   const updateAccess = useUpdateAccess()
   const [roleCode, setRoleCode] = useState<TaskHubRoleCode>(user.roleCode ?? 'USER')
   const [isActive, setIsActive] = useState(user.roleCode ? user.accessIsActive : true)
-  const [contractsEnabled, setContractsEnabled] = useState(user.contractsEnabled)
+  const [procurementEnabled, setProcurementEnabled] = useState(user.procurementEnabled)
   const [meetingOrganizeEnabled, setMeetingOrganizeEnabled] = useState(
     user.meetingOrganizeEnabled ?? false,
   )
@@ -57,7 +57,7 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
         userId: user.userId,
         roleCode,
         isActive,
-        contractsEnabled,
+        procurementEnabled,
         meetingOrganizeEnabled,
         meetingCoordinateEnabled,
       },
@@ -136,15 +136,15 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
 
           <div className="bg-muted/60 flex items-center justify-between gap-4 rounded-lg border p-4">
             <div>
-              <p className="text-sm font-medium">{t('access.contractsModule')}</p>
+              <p className="text-sm font-medium">{t('access.procurementModule')}</p>
               <p className="text-muted-foreground mt-1 text-xs leading-5">
-                {t('access.contractsModuleDescription')}
+                {t('access.procurementModuleDescription')}
               </p>
             </div>
             <Switch
-              checked={contractsEnabled}
-              aria-label={t('access.contractsModule')}
-              onCheckedChange={setContractsEnabled}
+              checked={procurementEnabled}
+              aria-label={t('access.procurementModule')}
+              onCheckedChange={setProcurementEnabled}
             />
           </div>
 
@@ -201,3 +201,4 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
     </Dialog>
   )
 }
+

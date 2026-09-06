@@ -8,7 +8,7 @@ export interface AccessUser {
   portalIsActive: boolean
   roleCode: TaskHubRoleCode | null
   accessIsActive: boolean
-  contractsEnabled: boolean
+  procurementEnabled: boolean
   meetingOrganizeEnabled?: boolean
   meetingCoordinateEnabled?: boolean
 }
@@ -30,7 +30,8 @@ export interface UpdateAccessInput {
   userId: number
   roleCode: TaskHubRoleCode
   isActive: boolean
-  contractsEnabled: boolean
+  procurementEnabled: boolean
   meetingOrganizeEnabled: boolean
   meetingCoordinateEnabled: boolean
 }
+

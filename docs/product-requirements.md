@@ -4,7 +4,7 @@
 
 ## Product summary
 
-QNH TaskHub is an Arabic-first productivity application authenticated through QNH Portal. Normal Tasks, Lists, KPIs, Work Cycles, and Contracts remain private owner-scoped domains. The Meetings module is the deliberate shared-domain exception and uses relationship-aware authorization for Organizers, Coordinators, attendees, room scheduling, and later Meeting Action Items.
+QNH TaskHub is an Arabic-first productivity application authenticated through QNH Portal. Normal Tasks, Lists, KPIs, Work Cycles, Contracts, and future Price Quotes remain private owner-scoped domains. Procurement Items, Suppliers, and imported purchase transactions are intentionally shared among Procurement-enabled users. The Meetings module is the deliberate shared-domain exception and uses relationship-aware authorization for Organizers, Coordinators, attendees, room scheduling, and later Meeting Action Items.
 
 The Meetings exception must not weaken the privacy model of existing owner-scoped domains. Superseded planning material must not be used to introduce unrelated multi-user or organizational workflows.
 
@@ -160,46 +160,88 @@ Example: actual 95% and target 90% produces 105.6% target achievement.
 The numeric value may exceed 100%, while a visual progress fill may stop at 100%. When division is undefined, especially around zero-valued lower-is-better targets, show met/not met instead of a misleading percentage.
 
 
-## Contracts
+## Procurement and Contracts
 
-Contracts are an optional private domain. An administrator can enable or disable the Contracts module independently of the existing `USER` / `ADMIN` role. Removing module access preserves the user's Contract data. `ADMIN` does not grant cross-user Contract visibility.
+Procurement is an optional module controlled by `procurement_enabled`. It groups **Contracts**, **Items**, **Suppliers**, and **Price Quotes** under one sidebar section. `ADMIN` does not automatically grant Procurement business access.
 
-Phase 1A includes:
 
-- expandable Contracts navigation with **My Contracts** and **Suppliers**;
-- private owner-scoped Suppliers with required Name and optional commercial registration, tax/VAT, primary contact, address, and notes;
-- Supplier list/detail/create/edit/archive/restore plus contextual quick-create from Contract editing;
-- private owner-scoped Contracts with optional text Contract Number, required Title/Start Date/Supplier, optional End Date for open-ended agreements, and archive/restore;
-- automatic-renewal tracking with required End Date, Renewal Term, and Notice Period when enabled;
-- derived Notice Deadline (`End Date - Notice Period`), Duration, Days Remaining, and date-tracking state;
-- `FIXED` versus `VARIABLE` Contract value semantics;
-- separate payment frequency (`ONE_TIME`, `MONTHLY`, `QUARTERLY`, `SEMI_ANNUAL`, `ANNUAL`) and payment timing (`IN_ADVANCE`, `IN_ARREARS`);
-- a per-user Expiring Soon threshold, default 90 days;
-- server-side search/filter/sort/pagination;
-- explicit edit mode with manual Save, review-confirmation diff, unsaved-change protection, and SQL Server `ROWVERSION` stale-edit protection;
-- immutable Contract history for create/update/archive/restore, committed atomically with Contract changes.
+Production source mapping finalized on 2026-09-03:
 
-Phase 1B adds Contract Files:
-- protected owner-scoped PDF/JPG/JPEG/PNG uploads, up to 10 active files per Contract and 10 MB per file;
-- server-generated storage keys under protected Contract attachment storage, with extension and file-signature validation;
-- Files tab with upload, drag/drop, preview, download, and remove actions;
-- optional primary Contract file selection during Contract creation, uploaded only after the Contract record is created;
-- compact file-count hints in My Contracts that deep-link to the Contract Files tab;
-- immutable `ATTACHMENT_ADDED` and `ATTACHMENT_REMOVED` Contract-history events;
-- archived Contracts remain readable/downloadable but cannot add or remove files until restored.
+- Suppliers: `QNHDB.dbo.TM_APS_SUPPLIERS_IMPORT` → `QNHDB.dbo.SP_Import_APS_SUPPLIERS`.
+- Items: `QNHDB.dbo.TM_INV_Items_Import` → `QNHDB.dbo.SP_Import_INV_Items_All`.
+- Transactions: `QNHDB.dbo.TM_Purchase_Invoice_Details_Import` → `QNHDB.dbo.SP_Import_Purchase_Invoices_All`.
+- Transaction `SOURCE_ROWID` is used as the final deterministic tie-break for repeated same-date history rows.
+- Migration `030_validate_procurement_production_sources.sql` validates the production source objects and manual-write compatibility before go-live.
 
-Phase 1C adds Contract reminders:
-- two private date-driven events: Contract End Date and automatic-renewal Notice Deadline;
-- independent personal lead days (default 30 days before End Date and 14 days before Notice Deadline) plus optional email-copy toggles;
-- in-app notifications remain independent from email delivery and deep-link directly to the private Contract;
-- if the preferred reminder date already passed but the real End Date/Notice Deadline is still future, create the reminder once on the next synchronization;
-- dedupe by Contract plus the actual event date so changing lead days does not create duplicate reminders, while a genuinely changed End Date/Notice Deadline creates a new event cycle;
-- archived Contracts and users without active Contracts access do not produce new Contract reminders;
-- email copies reuse the existing TaskHub email master switch, active verified destination, branded bilingual templates, outbox/worker, retries, and send-time revalidation; stale queued messages are canceled when the Contract date/state/access or email permission no longer matches;
-- Settings uses one sticky Email/Contracts navigation surface; Contract reminder settings live with Contract tracking rather than duplicating them in the generic email event list.
+Phase 1 establishes the Procurement foundation and shared Supplier master:
 
-Contracts never create fake Tasks/KPIs and are not included in global search.
+- Contracts remain private and owner-scoped.
+- Suppliers become shared globally among Procurement-enabled users and are used by Contracts plus Items/Pricing features.
+- Supplier data comes from the externally managed `QNHDB.dbo.TM_APS_SUPPLIERS_IMPORT` source table using the approved Oracle/CarWare columns. Supplier Code and source identity are immutable in TaskHub.
+- Procurement users can create manual Suppliers; TaskHub generates a protected `USR-SUP-...` code/reserved manual identity.
+- Shared Supplier edits are audited in `dbo.TM_procurement_activity`.
+- Existing private Contract Supplier rows are migrated conservatively to the shared master while the legacy table is retained so legacy-only fields are not silently discarded.
+- Procurement access replaces the former Contracts-only module flag while preserving existing enabled users.
+- My Contracts, Contract Details, reminders, files, activity, owner authorization, archive/restore, and Contract settings remain private and continue to behave as before.
+- Supplier detail may show **My Contracts** for the authenticated user only; sharing a Supplier never exposes another user's Contracts.
 
+Phase 2 adds the shared Item master, Saved Views foundation, and startup source synchronization:
+
+- Items use the externally managed `QNHDB.dbo.TM_INV_Items_Import` table with the approved Oracle/CarWare Item columns. `ITEM_NO` / `ITEM_CODE` are system identity and are not user-editable.
+- Procurement users may create manual shared Items. TaskHub assigns a reserved negative identity and protected `USR-ITEM-...` Item Code so manual Items cannot be confused with source records.
+- Item create/edit operations are audited in `dbo.TM_procurement_activity`.
+- The Items list uses server-side search, filtering, sorting, and pagination and reuses the existing `SortableHeader`, `TablePagination`, `SearchInput`, loading, empty, and error patterns.
+- Phase 2 intentionally shows master-data Item fields only. Actual latest/lowest/highest/average price analytics and Item × Supplier time-series calculations are added in Phase 3.
+- Saved Views are private per user and stored in `dbo.TM_procurement_saved_views`. A Saved View stores selected Item/Supplier IDs plus filter/sort/display configuration, never calculated prices.
+- Saved Views support create/edit/rename, duplicate, delete, and one optional default view. Opening a Saved View filters the current Items experience; supplier/time-series analytics are connected in the analytics phases.
+- On a Procurement-enabled application session, TaskHub calls the configured Supplier → Item → Transaction import procedures sequentially. Procedure/table names remain centralized placeholders and may be changed later without changing UI/business logic.
+- Startup sync failure leaves existing SQL Server data available and does not make TaskHub unusable.
+- Price Quotes remain private per user and are implemented in a later Procurement phase.
+
+Phase 3 adds the read-only actual purchase Transaction and price analytics engine:
+
+- The externally managed `QNHDB.dbo.TM_Purchase_Invoice_Details_Import` table remains read-only in TaskHub. No create/edit/delete Transaction endpoint is added.
+- Every actual price calculation uses `UNIT_COST` only. `UNIT_PRICE`, `NET_AMOUNT`, `SELL_PRICE`, and discount fields are not used as Procurement price values.
+- `DELIVERY_NOTE_DATE` is the primary historical date. The same Item + Supplier may have unlimited repeated Transactions, including multiple rows on the same calendar date.
+- Latest/previous ordering uses `DELIVERY_NOTE_DATE` plus stable source date/document fields as deterministic tie-breakers; historical rows are never collapsed to one permanent Item/Supplier price.
+- `/api/items/:itemId/transactions` provides read-only server-side paginated/sortable history. `/analytics` provides Item-level latest/previous/min/max/average/change/count statistics. `/suppliers` provides one analytics summary row per Supplier for the Item.
+- Item-level and per-Supplier statistics use exact SQL `DECIMAL` calculations and never mix incompatible currencies/UOMs. Without an explicit currency/UOM filter, the latest eligible Transaction determines the comparison scope.
+- Supplier comparison identifies the current lowest/highest Supplier by each Supplier's latest `UNIT_COST` within the selected compatible scope.
+- Phase 3 adds API/data hooks only for these analytics. The polished Item cards, charts, comparison tables, and Saved View analytics presentation are Phase 4.
+
+Phase 4 adds the Item price-intelligence and Saved Views analytics UX:
+
+- The Items landing page is deliberately compact: one row per Item with Latest Actual, Lowest, Highest, Latest Change, Supplier Count, and Last Purchase. It must not become a giant Item × Supplier matrix.
+- Item list price summaries and overview counts are calculated server-side for the full filtered result set so sorting/pagination remain correct and the browser does not issue one analytics request per visible Item.
+- Saved View Item/Supplier/period/source/status/sort configuration now drives live Item price results. Saved Views continue to store configuration only; no calculated price is persisted.
+- Item Details follows Summary → Supplier Comparison → Price History → Actual Transactions. Summary cards expose latest/previous/low/high/average/change/counts using `UNIT_COST` only.
+- Supplier Comparison normally uses Suppliers as vertical rows. When the user deliberately selects 2–5 Suppliers, a focused side-by-side matrix is also shown; larger Supplier sets remain vertical/paginated.
+- Price History uses the read-only repeated Transaction series and a lightweight accessible SVG implementation rather than adding a new chart dependency. Actual Transactions remain separately sortable/paginated and read-only.
+- Period and Supplier filters apply consistently to Item summary, Supplier comparison, price history, and Transaction drill-down. Incompatible currency/UOM values are never mixed.
+- Phase 4 does not fabricate Price Quote statistics. Private Quote history and Actual-vs-Quote integration remain Phase 6 work.
+
+
+Phase 5 adds the Supplier Intelligence UX:
+
+- Supplier Details now answers what is purchased from the Supplier and how its current Item prices compare with other Suppliers.
+- Supplier-level cards show Items Purchased, Transaction Count, Last Purchase, Items currently lowest/highest among genuinely comparable Suppliers, and the average percentage gap from the current lowest Supplier price.
+- Items & Prices shows one server-side paginated/sortable row per Item. Each row summarizes this Supplier's repeated Transaction history (latest/previous/lowest/highest/average/count) and compares the Supplier's latest `UNIT_COST` with the current lowest/highest latest Supplier prices for that Item inside the same currency/UOM scope.
+- Items with only one available Supplier are explicitly labeled and are not counted as both cheapest and highest.
+- Clicking an Item opens the existing Item Details time series pre-filtered to this Supplier and period, preserving the Summary → Supplier Comparison → Price History → Actual Transactions drill-down.
+- My Contracts remains authenticated-owner scoped even though the Supplier master and purchase analytics are shared.
+- Phase 5 does not add Price Quote values to Supplier analytics; private Quote history and Actual-vs-Quote integration remain Phase 6.
+
+Phase 6 completes the planned Procurement module:
+
+- Private `TM_price_quotes` records are owner-scoped and support unlimited repeated dated Quotes for the same Item + Supplier, including multiple Quotes on the same date. Quotes use optimistic `ROWVERSION` concurrency, retain activity history, and use deactivate/reactivate rather than ordinary hard deletion.
+- Price Quote comparisons remain separate from actual purchase analytics. Quote-vs-actual differences use the latest compatible actual `UNIT_COST` only when both Currency and UOM match.
+- Price Quotes integrate into Item Details, Supplier Details, Saved View/Items attention metrics, and a dedicated My Price Quotes page. Other users' Quotes must never appear in list, analytics, counts, or history responses.
+- Procurement UI polish prioritizes decision-making information: Item Details gives Latest Actual + Latest Change stronger hierarchy, uses sticky section navigation, and keeps Supplier/Transaction drill-downs progressively disclosed.
+- The Suppliers landing page becomes purchasing-activity-first by surfacing purchased Item count, Transaction count, and last purchase before secondary master-data fields.
+- The Items landing page includes a compact Needs Attention area for increases, decreases, historical highs, and private Quotes below latest actual.
+- Arabic/English, RTL/LTR, light/dark behavior, existing shared sorting/pagination/search controls, and mobile fallbacks remain mandatory.
+
+The authoritative Procurement pricing, time-series, Saved Views, and later Price Quotes rules are maintained in `docs/PROCUREMENT_MODULE_SOURCE_OF_TRUTH_UPDATED.md`.
 
 ## Meetings
 
@@ -218,7 +260,7 @@ Phase 1 foundation:
 - the Meetings schema introduces stable Meeting identity, scheduling revisions, attendees, and immutable Meeting activity as the foundation for later workflow phases;
 - Phase 2 adds the server-side scheduling engine: Organizer/Coordinator availability checks, active-room validation, participant-capacity enforcement, overlap checks against only the current approved revision of scheduled Meetings, transaction-scoped per-room locking, and atomic activation of a pending revision. Pending requests/revisions do not reserve rooms. Request approval UI, Calendar integration, Meeting notifications, Templates, attachments, and Action Items remain later phases.
 - Phase 3 connects the scheduling engine to the core Meeting workflow: Organizers submit `PENDING_APPROVAL` requests, Coordinators share a pending queue, may adjust only room/date/time/scheduling notes before decision, approve/reject with stale-row protection, and may create Meetings directly without self-approval. Attendees are selected from active Portal users (`dbo.users.IS_ACTIVE = 1`) regardless of whether they currently have active TaskHub access; the Organizer is an implicit participant. Selecting a Portal user as an attendee does not grant TaskHub access or Meeting Organizer/Coordinator permissions, and TaskHub-only in-app/email delivery remains subject to the recipient's applicable TaskHub access/settings. The participant picker uses server-side paginated search with progressive loading on scroll, keeps selected attendees visible independently of the currently loaded/search page, and presents large selections through a compact summary plus a dedicated selected-participants management pane. Normal users receive only Meetings they attend, Organizer/attendee relationships receive full Meeting details, and unrelated scheduling occupancy is limited to title + Organizer + room/time for Organizers, while Coordinators receive full Meeting visibility for coordination. Important request, scheduling-change, approval, rejection, and direct-create actions write immutable Meeting activity. Calendar rendering, Meeting notifications/email/reminders, Templates, attachments, rescheduling/cancellation, and Action Items remain later phases.
-- Phase 4 adds the Meeting Details workspace and core lifecycle after scheduling. While an initial request remains `PENDING_APPROVAL`, its Organizer may change the requested room/date/time and the Coordinator reviews the latest version. After a Meeting is scheduled, its Organizer may create at most one pending `RESCHEDULE` revision, edit that pending request, or cancel it; the current approved reservation remains active until a Coordinator decision. Coordinators are the final scheduling authority: they may approve as requested, atomically adjust-and-approve the Organizer's proposal, reject it, or directly reschedule any scheduled Meeting regardless of who created it. A direct Coordinator change never requires Organizer re-approval, but it must pass the same active-room/capacity/conflict checks, create a revision, switch the authoritative reservation atomically, and preserve before/requested/final values in immutable Meeting activity. Rejection or Organizer cancellation of a pending reschedule leaves the current approved reservation unchanged. Organizers may cancel pending/scheduled Meetings without deletion, preserving history and releasing any active reservation. Meeting attachments use protected server-managed storage, the existing 10-file/10-MB general allowlist policy, signature/content validation, and relationship authorization; Organizer manages files, scheduled/cancelled attendees may read them, and Coordinator read access covers Meeting details and protected Meeting files across the Meetings domain; file mutation remains Organizer-owned. Personal Meeting Templates are private to each Organizer/Coordinator and may store reusable title, description/purpose, duration, optional default room, and attendees. The Template editor separates Template identity from default Meeting settings, offers common duration presets with a custom 1–1440-minute fallback, uses the shared paginated Meeting participant picker for default attendees, and shows a compact summary before save; Template attachments remain deferred. Structured agenda topics are Meeting-specific in this phase rather than Template content. Calendar integration, Meeting notifications/email/reminders, and Action Items remain later phases.
+- Phase 4 adds the Meeting Details workspace and core lifecycle after scheduling. While an initial request remains `PENDING_APPROVAL`, its Organizer may change the requested room/date/time and the Coordinator reviews the latest version. After a Meeting is scheduled, its Organizer may create at most one pending `RESCHEDULE` revision, edit that pending request, or cancel it; the current approved reservation remains active until a Coordinator decision. Coordinators are the final scheduling authority: they may approve as requested, atomically adjust-and-approve the Organizer's proposal, reject it, or directly reschedule any scheduled Meeting regardless of who created it. A direct Coordinator change never requires Organizer re-approval, but it must pass the same active-room/capacity/conflict checks, create a revision, switch the authoritative reservation atomically, and preserve before/requested/final values in immutable Meeting activity. Rejection or Organizer cancellation of a pending reschedule leaves the current approved reservation unchanged. Organizers may cancel pending/scheduled Meetings without deletion, preserving history and releasing any active reservation. Meeting attachments use protected server-managed storage, the existing 10-file/10-MB general allowlist policy, signature/content validation, and relationship authorization; Organizer manages files, scheduled/cancelled attendees may read them, and Coordinator read access covers Meeting details and protected Meeting files across the Meetings domain; file mutation remains Organizer-owned. Personal Meeting Templates are private to each Organizer/Coordinator and may store reusable title, description/purpose, duration, optional default room, and attendees; Template attachments remain deferred. Structured agenda topics are Meeting-specific in this phase rather than Template content. Calendar integration, Meeting notifications/email/reminders, and Action Items remain later phases.
 - Structured Meeting Agenda is stored as ordered Meeting-owned items, separate from the optional Meeting description/purpose. Each item requires a topic and may optionally name a presenter/topic owner and a planned duration. Presenter selection is restricted to the Organizer or selected attendees. Agenda timing is planning guidance only: the UI may compare planned agenda minutes with the Meeting duration and warn when it runs over, but the total never blocks Meeting creation or scheduling. The Meeting Organizer may add, edit, remove, and reorder Agenda topics from Meeting Details while the Meeting is pending or scheduled; attendee access is read-only, and Coordinator/Admin scheduling authority does not grant Agenda-content edit rights for another Organizer's Meeting. Agenda, later Meeting Notes/Decisions, and later Action Items remain distinct concepts.
 - Phase 5 integrates scheduled Meetings into the existing Calendar. Calendar sources become composable Personal Tasks, KPI Tasks, and Meetings. Meetings use real `startAtUtc` / `endAtUtc` values and appear as timed events in Week/Day TimeGrid views with 30-minute visual slots; date-only Tasks/KPI Tasks remain in the all-day/date area. Month remains the overview, and clicking a Month date while Meetings are enabled opens that date's Day TimeGrid. A Meeting Room filter narrows scheduling occupancy. Normal users receive only Meetings they attend; Organizer users receive title + Organizer + room/time previews for unrelated scheduled Meetings, while Coordinators receive full Meeting entries and may inspect/open their details. Full Meeting blocks open the existing Meeting Details workspace; Organizer-only preview blocks are not detail links. No new Calendar database table or duplicate Meeting source is introduced.
 - Phase 6 connects Meeting lifecycle events to the existing in-app Notification Bell and asynchronous email outbox/worker. Meeting lifecycle email event preferences are personal and default ON, while the separate 15-minute Meeting-start reminder is personal, default ON, and in-app only. Request submission and requested-schedule changes notify the Organizer and active Coordinators; Organizer cancellation of a pending reschedule also notifies that coordination audience. Attendees are not notified about unapproved proposals. Once a Coordinator approves, adjusts-and-approves, or directly reschedules a Meeting, the Organizer and attendees receive the final schedule change through in-app notifications and preference-aware email; rejection notifies the Organizer. Rescheduling/cancellation invalidates stale reminders, and operational email delivery revalidates current Meeting/revision/recipient state and the recipient's current email settings immediately before send. Communication failures do not roll back an already-successful Meeting business transaction. No new queue or worker is introduced.
@@ -366,3 +408,6 @@ User-authored email templates are not planned. Users customize delivery preferen
 - Meetings Phase 6 notification/email/reminder schema is introduced by migration 020; applying it is a separate manual database step.
 - Structured Meeting Agenda items are introduced by migration 021; applying it is a separate manual database step. Existing Meetings remain valid with an empty Agenda.
 - Expanded Meeting reschedule lifecycle notification/email event types are introduced by migration 022; applying it is a separate manual database step after 021.
+
+
+

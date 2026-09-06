@@ -138,7 +138,7 @@ export function ContractsPage() {
     sortDirection,
   }
   const contracts = useContracts(queryInput)
-  const suppliers = useSuppliers({ search: '', page: 1, pageSize: 100, archived: false })
+  const suppliers = useSuppliers({ search: '', page: 1, pageSize: 100, sortBy: 'name', sortDirection: 'asc' })
   const data = contracts.data
   const supplierItems = suppliers.data?.items ?? []
   const selectedSupplier = supplierItems.find((item) => item.id === supplierId)
@@ -281,9 +281,9 @@ export function ContractsPage() {
         description={t('contracts.pageDescription')}
         actions={
           <>
-            <Button variant="outline" onClick={() => navigate('/contracts/suppliers')}>
+            <Button variant="outline" onClick={() => navigate('/suppliers')}>
               <Building2 aria-hidden="true" className="size-4" />
-              {t('contracts.navigation.suppliers')}
+              {t('procurement.navigation.suppliers')}
             </Button>
             <Button onClick={() => setCreateOpen(true)}>
               <FilePlus2 aria-hidden="true" className="size-4" />
@@ -994,7 +994,7 @@ function SupplierLink({ contract }: { contract: Contract }) {
   return (
     <Link
       className="hover:bg-primary/10 hover:text-primary focus-visible:ring-ring inline-flex max-w-56 items-center gap-1.5 rounded-full border border-border/70 bg-muted/30 px-2.5 py-1 text-xs font-medium outline-none focus-visible:ring-2"
-      to={`/contracts/suppliers/${contract.supplierId}`}
+      to={`/suppliers/${contract.supplierId}`}
     >
       <Building2 aria-hidden="true" className="text-primary size-3.5 shrink-0" />
       <OverflowTooltipText className="max-w-48">{contract.supplierName}</OverflowTooltipText>
@@ -1101,4 +1101,5 @@ function SummaryButton({
     </button>
   )
 }
+
 

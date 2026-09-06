@@ -8,12 +8,8 @@ import type {
   ContractListQueryInput,
   ContractSettingsBody,
   CreateContractBody,
-  CreateSupplierBody,
   RowVersionBody,
-  SupplierIdParams,
-  SupplierListQueryInput,
   UpdateContractBody,
-  UpdateSupplierBody,
 } from "./contracts.schemas.js";
 import { contractsService } from "./contracts.service.js";
 import type {
@@ -22,8 +18,6 @@ import type {
   ContractAttachment,
   ContractList,
   ContractUserSettings,
-  Supplier,
-  SupplierList,
 } from "./contracts.types.js";
 
 function ownerId(req: Request): number {
@@ -163,51 +157,6 @@ export const removeContractAttachment: RequestHandler = async (req, res) => {
   res.status(204).send();
 };
 
-export const listSuppliers: RequestHandler = async (req, res) => {
-  const query = getValidatedRequestPart<SupplierListQueryInput>(req, "query");
-  const data = await contractsService.listSuppliers(ownerId(req), query);
-  const body: ApiSuccessResponse<SupplierList> = { success: true, data };
-  res.status(200).json(body);
-};
-
-export const getSupplier: RequestHandler = async (req, res) => {
-  const params = getValidatedRequestPart<SupplierIdParams>(req, "params");
-  const data = await contractsService.getSupplier(ownerId(req), params.supplierId);
-  const body: ApiSuccessResponse<Supplier> = { success: true, data };
-  res.status(200).json(body);
-};
-
-export const createSupplier: RequestHandler = async (req, res) => {
-  const input = getValidatedRequestPart<CreateSupplierBody>(req, "body");
-  const data = await contractsService.createSupplier(ownerId(req), input);
-  const body: ApiSuccessResponse<Supplier> = { success: true, data };
-  res.status(201).json(body);
-};
-
-export const updateSupplier: RequestHandler = async (req, res) => {
-  const params = getValidatedRequestPart<SupplierIdParams>(req, "params");
-  const input = getValidatedRequestPart<UpdateSupplierBody>(req, "body");
-  const data = await contractsService.updateSupplier(ownerId(req), params.supplierId, input);
-  const body: ApiSuccessResponse<Supplier> = { success: true, data };
-  res.status(200).json(body);
-};
-
-export const archiveSupplier: RequestHandler = async (req, res) => {
-  const params = getValidatedRequestPart<SupplierIdParams>(req, "params");
-  const input = getValidatedRequestPart<RowVersionBody>(req, "body");
-  const data = await contractsService.setSupplierArchived(ownerId(req), params.supplierId, input, true);
-  const body: ApiSuccessResponse<Supplier> = { success: true, data };
-  res.status(200).json(body);
-};
-
-export const restoreSupplier: RequestHandler = async (req, res) => {
-  const params = getValidatedRequestPart<SupplierIdParams>(req, "params");
-  const input = getValidatedRequestPart<RowVersionBody>(req, "body");
-  const data = await contractsService.setSupplierArchived(ownerId(req), params.supplierId, input, false);
-  const body: ApiSuccessResponse<Supplier> = { success: true, data };
-  res.status(200).json(body);
-};
-
 export const getContractSettings: RequestHandler = async (req, res) => {
   const data = await contractsService.getSettings(ownerId(req));
   const body: ApiSuccessResponse<ContractUserSettings> = { success: true, data };
@@ -220,3 +169,4 @@ export const updateContractSettings: RequestHandler = async (req, res) => {
   const body: ApiSuccessResponse<ContractUserSettings> = { success: true, data };
   res.status(200).json(body);
 };
+

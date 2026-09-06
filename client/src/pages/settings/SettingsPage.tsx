@@ -19,12 +19,12 @@ export function SettingsPage() {
   const { t } = useTranslation()
   const emailQuery = useEmailSettings()
   const currentUser = useCurrentUser()
-  const contractsEnabled = Boolean(currentUser.data?.access.contractsEnabled)
+  const procurementEnabled = Boolean(currentUser.data?.access.procurementEnabled)
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
 
   useEffect(() => {
-    if (!contractsEnabled && activeTab === 'contracts') setActiveTab('general')
-  }, [activeTab, contractsEnabled])
+    if (!procurementEnabled && activeTab === 'contracts') setActiveTab('general')
+  }, [activeTab, procurementEnabled])
 
   const emailDependentTab = activeTab === 'email' || activeTab === 'contracts'
 
@@ -75,7 +75,7 @@ export function SettingsPage() {
                 description={t('settings.emailSectionDescription')}
                 onClick={() => setActiveTab('email')}
               />
-              {contractsEnabled ? (
+              {procurementEnabled ? (
                 <SettingsTabButton
                   active={activeTab === 'contracts'}
                   icon={FileText}
@@ -142,3 +142,4 @@ function SettingsTabButton({
     </button>
   )
 }
+

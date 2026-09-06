@@ -27,8 +27,8 @@ import type {
   ContractPaymentFrequency,
   ContractPaymentTiming,
   ContractValueType,
-  Supplier,
 } from '../types/contracts.types'
+import type { Supplier } from '@/features/suppliers/types/supplier.types'
 import {
   defaultContractInput,
   displayDate,
@@ -731,3 +731,4 @@ function Field({
     </label>
   )
 }
+
