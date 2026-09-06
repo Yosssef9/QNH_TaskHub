@@ -2,6 +2,7 @@ import { ReceiptText } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { EmptyState } from '@/components/shared/EmptyState'
+import { TableEntityLink } from '@/components/shared/TableEntityLink'
 import { SortableHeader } from '@/components/shared/SortableHeader'
 import { TablePagination } from '@/components/shared/TablePagination'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -66,7 +67,9 @@ export function ItemTransactionsTable({
                   {data.transactions.map((transaction, index) => (
                     <tr key={`${transaction.transactionDate}-${transaction.invoiceNo ?? 'invoice'}-${transaction.supplierId}-${index}`} className="hover:bg-primary/[0.035] border-b last:border-b-0">
                       <td className="px-4 py-3">{formatDateOnly(transaction.transactionDate, locale)}</td>
-                      <td className="px-4 py-3"><p className="font-medium">{transaction.supplierName}</p>{transaction.supplierCode ? <p dir="ltr" className="text-muted-foreground mt-1 font-mono text-xs">{transaction.supplierCode}</p> : null}</td>
+                      <td className="px-4 py-3">
+                        <TableEntityLink kind="supplier" id={transaction.supplierId} name={transaction.supplierName} code={transaction.supplierCode} compact />
+                      </td>
                       <td dir="ltr" className="px-4 py-3 font-semibold tabular-nums">{formatUnitCost(transaction.unitCost, locale, transaction.currencyCode, transaction.unitName)}</td>
                       <td dir="ltr" className="px-4 py-3 tabular-nums">{formatProcurementNumber(transaction.quantity, locale)}</td>
                       <td dir="ltr" className="px-4 py-3">{transaction.invoiceNo ?? '—'}</td>

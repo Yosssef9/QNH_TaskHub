@@ -5,10 +5,10 @@ import { Link } from 'react-router'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { LoadingState } from '@/components/shared/LoadingState'
-import { OverflowTooltipText } from '@/components/shared/OverflowTooltipText'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { SearchInput } from '@/components/shared/SearchInput'
 import { SortableHeader } from '@/components/shared/SortableHeader'
+import { TableEntityLink } from '@/components/shared/TableEntityLink'
 import { TablePagination } from '@/components/shared/TablePagination'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -90,11 +90,8 @@ export function SuppliersPage() {
               <tbody>{data.items.map((supplier) => (
                 <tr key={supplier.id} className="hover:bg-primary/[0.035] border-b last:border-b-0">
                   <td className="px-4 py-4">
-                    <Link to={`/suppliers/${supplier.id}`} className="group hover:text-primary focus-visible:ring-ring inline-flex max-w-full items-center gap-2 rounded-md font-semibold outline-none focus-visible:ring-2">
-                      <Building2 aria-hidden="true" className="text-primary size-4 shrink-0" />
-                      <OverflowTooltipText className="max-w-[24rem]">{supplier.name}</OverflowTooltipText>
-                    </Link>
-                    <div className="text-muted-foreground mt-1 flex flex-wrap gap-x-2 text-xs"><span dir="ltr" className="font-mono">{supplier.code}</span>{supplier.countryName ? <span>· {supplier.countryName}</span> : null}</div>
+                    <TableEntityLink kind="supplier" id={supplier.id} name={supplier.name} code={supplier.code} className="max-w-[24rem]" />
+                    {supplier.countryName ? <p className="text-muted-foreground mt-1 text-xs">{supplier.countryName}</p> : null}
                   </td>
                   <td className="px-4 py-4 font-semibold tabular-nums">{supplier.purchasedItemCount.toLocaleString()}</td>
                   <td className="px-4 py-4 tabular-nums">{supplier.transactionCount.toLocaleString()}</td>

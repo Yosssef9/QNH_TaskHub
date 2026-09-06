@@ -91,6 +91,7 @@ export interface ItemPriceSummaryQuery {
 }
 
 export type ItemSupplierMatrixMetric = 'latest' | 'previous' | 'lowest' | 'highest' | 'average'
+export type ItemSupplierMatrixPriceSource = 'actual' | 'quote' | 'compare'
 
 export interface ItemSupplierMatrixQuery {
   itemIds: number[]
@@ -120,6 +121,17 @@ export interface ItemSupplierMatrixCell {
   changePercent: number | null
   latestQuoteUnitCost: number | null
   latestQuoteDate: string | null
+  previousQuoteUnitCost: number | null
+  previousQuoteDate: string | null
+  lowestQuoteUnitCost: number | null
+  lowestQuoteDate: string | null
+  highestQuoteUnitCost: number | null
+  highestQuoteDate: string | null
+  averageQuoteUnitCost: number | null
+  quoteCount: number
+  lastQuoteDate: string | null
+  quoteChangeAmount: number | null
+  quoteChangePercent: number | null
   quoteCurrencyCode: string | null
   quoteUnitName: string | null
 }

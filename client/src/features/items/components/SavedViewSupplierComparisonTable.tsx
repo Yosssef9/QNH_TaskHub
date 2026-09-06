@@ -5,14 +5,15 @@ import {
   ChevronDown,
   EyeOff,
   Minus,
+  ReceiptText,
   SlidersHorizontal,
   Tags,
   Trophy,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-
 import type { SearchableSelectOption } from '@/components/shared/SearchableMultiSelect'
+import { TableEntityLink } from '@/components/shared/TableEntityLink'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -29,6 +30,7 @@ import type {
   ItemSupplierMatrixBatch,
   ItemSupplierMatrixCell,
   ItemSupplierMatrixMetric,
+  ItemSupplierMatrixPriceSource,
   ProcurementPricePeriod,
 } from '../types/item.types'
 import { formatDateOnly, formatPercent, formatUnitCost } from './item-price-format'
@@ -46,45 +48,71 @@ interface MetricValue {
   date: string | null
 }
 
+type SinglePriceSource = Exclude<ItemSupplierMatrixPriceSource, 'compare'>
+
 function metricValue(
   cell: ItemSupplierMatrixCell | undefined,
   metric: ItemSupplierMatrixMetric,
+  source: SinglePriceSource,
 ): MetricValue {
   if (!cell) return { value: null, date: null }
+
+  if (source === 'quote') {
+    if (metric === 'latest') return { value: cell.latestQuoteUnitCost, date: cell.latestQuoteDate }
+    if (metric === 'previous') return { value: cell.previousQuoteUnitCost, date: cell.previousQuoteDate }
+    if (metric === 'lowest') return { value: cell.lowestQuoteUnitCost, date: cell.lowestQuoteDate }
+    if (metric === 'highest') return { value: cell.highestQuoteUnitCost, date: cell.highestQuoteDate }
+    return { value: cell.averageQuoteUnitCost, date: cell.lastQuoteDate }
+  }
+
   if (metric === 'latest') return { value: cell.latestUnitCost, date: cell.latestTransactionDate }
-  if (metric === 'previous')
-    return { value: cell.previousUnitCost, date: cell.previousTransactionDate }
+  if (metric === 'previous') return { value: cell.previousUnitCost, date: cell.previousTransactionDate }
   if (metric === 'lowest') return { value: cell.lowestUnitCost, date: cell.lowestTransactionDate }
-  if (metric === 'highest')
-    return { value: cell.highestUnitCost, date: cell.highestTransactionDate }
+  if (metric === 'highest') return { value: cell.highestUnitCost, date: cell.highestTransactionDate }
   return { value: cell.averageUnitCost, date: cell.lastPurchaseDate }
 }
 
-function scopeKey(cell: ItemSupplierMatrixCell): string {
-  return `${cell.currencyCode ?? ''}\u0000${cell.unitName ?? ''}`
+function scopeKey(cell: ItemSupplierMatrixCell, source: SinglePriceSource): string {
+  return source === 'quote'
+    ? `${cell.quoteCurrencyCode ?? ''}\u0000${cell.quoteUnitName ?? ''}`
+    : `${cell.currencyCode ?? ''}\u0000${cell.unitName ?? ''}`
 }
 
-function scopeLabel(cell: ItemSupplierMatrixCell): string {
-  return [cell.currencyCode, cell.unitName].filter(Boolean).join(' / ') || '—'
+function scopeLabel(cell: ItemSupplierMatrixCell, source: SinglePriceSource): string {
+  const values = source === 'quote'
+    ? [cell.quoteCurrencyCode, cell.quoteUnitName]
+    : [cell.currencyCode, cell.unitName]
+  return values.filter(Boolean).join(' / ') || '—'
 }
 
-function quoteComparable(cell: ItemSupplierMatrixCell): boolean {
-  if (cell.latestQuoteUnitCost === null || cell.latestUnitCost === null) return false
+function scopesMatch(cell: ItemSupplierMatrixCell): boolean {
   return (
-    (cell.quoteCurrencyCode ?? '') === (cell.currencyCode ?? '') &&
-    (cell.quoteUnitName ?? '') === (cell.unitName ?? '')
+    (cell.quoteCurrencyCode ?? '') === (cell.currencyCode ?? '')
+    && (cell.quoteUnitName ?? '') === (cell.unitName ?? '')
   )
+}
+
+function comparisonPercent(
+  cell: ItemSupplierMatrixCell | undefined,
+  metric: ItemSupplierMatrixMetric,
+): number | null {
+  if (!cell || !scopesMatch(cell)) return null
+  const actual = metricValue(cell, metric, 'actual').value
+  const quote = metricValue(cell, metric, 'quote').value
+  if (actual === null || quote === null || actual === 0) return null
+  return ((quote - actual) / actual) * 100
 }
 
 function bestSupplierIds(
   cells: ItemSupplierMatrixCell[],
   metric: ItemSupplierMatrixMetric,
+  source: SinglePriceSource,
 ): Set<number> {
   const groups = new Map<string, Array<{ supplierId: number; value: number }>>()
   for (const cell of cells) {
-    const value = metricValue(cell, metric).value
+    const value = metricValue(cell, metric, source).value
     if (value === null) continue
-    const key = scopeKey(cell)
+    const key = scopeKey(cell, source)
     const current = groups.get(key) ?? []
     current.push({ supplierId: cell.supplierId, value })
     groups.set(key, current)
@@ -104,25 +132,42 @@ function bestSupplierIds(
 function singleComparableBest(
   cells: ItemSupplierMatrixCell[],
   metric: ItemSupplierMatrixMetric,
+  source: SinglePriceSource,
 ): ItemSupplierMatrixCell | null {
   const groups = new Map<string, ItemSupplierMatrixCell[]>()
   for (const cell of cells) {
-    if (metricValue(cell, metric).value === null) continue
-    const key = scopeKey(cell)
+    if (metricValue(cell, metric, source).value === null) continue
+    const key = scopeKey(cell, source)
     const current = groups.get(key) ?? []
     current.push(cell)
     groups.set(key, current)
   }
   const comparableGroups = [...groups.values()].filter((group) => group.length >= 2)
   if (comparableGroups.length !== 1) return null
+
   return (
     comparableGroups[0]
       .slice()
       .sort(
         (left, right) =>
-          (metricValue(left, metric).value ?? Number.POSITIVE_INFINITY) -
-          (metricValue(right, metric).value ?? Number.POSITIVE_INFINITY),
+          (metricValue(left, metric, source).value ?? Number.POSITIVE_INFINITY)
+          - (metricValue(right, metric, source).value ?? Number.POSITIVE_INFINITY),
       )[0] ?? null
+  )
+}
+
+function bestCompareCell(
+  cells: ItemSupplierMatrixCell[],
+  metric: ItemSupplierMatrixMetric,
+): ItemSupplierMatrixCell | null {
+  return (
+    cells
+      .map((cell) => ({ cell, difference: comparisonPercent(cell, metric) }))
+      .filter(
+        (entry): entry is { cell: ItemSupplierMatrixCell; difference: number } =>
+          entry.difference !== null,
+      )
+      .sort((left, right) => left.difference - right.difference)[0]?.cell ?? null
   )
 }
 
@@ -136,7 +181,12 @@ export function SavedViewSupplierComparisonTable({
   matrixLoading,
   matrixError,
   visibleSupplierIds,
+  priceSource,
+  metric,
+  settingsSaving,
   onVisibleSupplierIdsChange,
+  onPriceSourceChange,
+  onMetricChange,
   onRetryMatrix,
 }: {
   savedViewId: number
@@ -148,12 +198,16 @@ export function SavedViewSupplierComparisonTable({
   matrixLoading: boolean
   matrixError: boolean
   visibleSupplierIds: number[]
+  priceSource: ItemSupplierMatrixPriceSource
+  metric: ItemSupplierMatrixMetric
+  settingsSaving: boolean
   onVisibleSupplierIdsChange: (ids: number[]) => void
+  onPriceSourceChange: (source: ItemSupplierMatrixPriceSource) => void
+  onMetricChange: (metric: ItemSupplierMatrixMetric) => void
   onRetryMatrix: () => void
 }) {
   const { i18n, t } = useTranslation()
   const locale = i18n.language
-  const [metric, setMetric] = useState<ItemSupplierMatrixMetric>('latest')
   const [selectedPair, setSelectedPair] = useState<SelectedPair | null>(null)
 
   const matrixByItem = useMemo(
@@ -176,6 +230,13 @@ export function SavedViewSupplierComparisonTable({
     onVisibleSupplierIdsChange(next)
   }
 
+  const resultHeader =
+    priceSource === 'actual'
+      ? t('items.matrix.lowestActual')
+      : priceSource === 'quote'
+        ? t('items.matrix.lowestQuote')
+        : t('items.matrix.bestQuoteVsActual')
+
   if (suppliers.length === 0) {
     return (
       <div className="px-4 py-12 text-center">
@@ -189,88 +250,127 @@ export function SavedViewSupplierComparisonTable({
 
   return (
     <>
-      <div className="bg-muted/15 flex flex-col gap-3 border-b px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <p className="text-sm font-semibold">{t('items.matrix.title')}</p>
-          <p className="text-muted-foreground mt-1 text-xs">
-            {t('items.matrix.description', { view: savedViewName })}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Select
-            value={metric}
-            onValueChange={(value) => setMetric(value as ItemSupplierMatrixMetric)}
-          >
-            <SelectTrigger className="w-44" aria-label={t('items.matrix.metricLabel')}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="latest">{t('items.matrix.metrics.latest')}</SelectItem>
-              <SelectItem value="previous">{t('items.matrix.metrics.previous')}</SelectItem>
-              <SelectItem value="lowest">{t('items.matrix.metrics.lowest')}</SelectItem>
-              <SelectItem value="highest">{t('items.matrix.metrics.highest')}</SelectItem>
-              <SelectItem value="average">{t('items.matrix.metrics.average')}</SelectItem>
-            </SelectContent>
-          </Select>
+      <div className="bg-muted/15 flex flex-col gap-4 border-b px-4 py-3">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <p className="text-sm font-semibold">{t('items.matrix.title')}</p>
+            <p className="text-muted-foreground mt-1 text-xs">
+              {t('items.matrix.description', { view: savedViewName })}
+            </p>
+          </div>
 
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button type="button" variant="outline" size="sm">
-                <SlidersHorizontal className="size-4" />
-                {t('items.matrix.suppliersShown', {
-                  shown: visibleSuppliers.length,
-                  total: suppliers.length,
-                })}
-                <ChevronDown className="size-3.5" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-[min(22rem,calc(100vw-2rem))] p-2">
-              <p className="px-2 py-1 text-sm font-semibold">{t('items.matrix.chooseSuppliers')}</p>
-              <p className="text-muted-foreground px-2 pb-2 text-xs">
-                {t('items.matrix.chooseSuppliersHint', { max: MAX_VISIBLE_SUPPLIERS })}
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <p className="text-muted-foreground mb-1.5 text-[11px] font-medium">
+                {t('items.matrix.priceSourceLabel')}
               </p>
-              <div className="max-h-72 space-y-1 overflow-y-auto">
-                {suppliers.map((supplier) => {
-                  const supplierId = Number(supplier.value)
-                  const checked = visibleSupplierIds.includes(supplierId)
-                  const disabled = !checked && visibleSupplierIds.length >= MAX_VISIBLE_SUPPLIERS
-                  return (
-                    <button
-                      key={supplierId}
-                      type="button"
-                      disabled={disabled}
-                      className={cn(
-                        'hover:bg-muted flex w-full items-center gap-2 rounded-lg px-2 py-2 text-start text-sm',
-                        disabled && 'cursor-not-allowed opacity-45',
-                      )}
-                      onClick={() => toggleSupplier(supplierId)}
-                    >
-                      <span
-                        className={cn(
-                          'grid size-5 shrink-0 place-items-center rounded border',
-                          checked && 'border-primary bg-primary text-primary-foreground',
-                        )}
-                      >
-                        {checked ? <Check className="size-3.5" /> : null}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate font-medium">{supplier.label}</span>
-                        {supplier.description ? (
-                          <span
-                            dir="ltr"
-                            className="text-muted-foreground block truncate font-mono text-[11px]"
-                          >
-                            {supplier.description}
-                          </span>
-                        ) : null}
-                      </span>
-                    </button>
-                  )
-                })}
+              <div
+                role="group"
+                aria-label={t('items.matrix.priceSourceLabel')}
+                className="flex rounded-lg border bg-background p-1"
+              >
+                {(['actual', 'quote', 'compare'] as const).map((source) => (
+                  <Button
+                    key={source}
+                    type="button"
+                    size="sm"
+                    variant={priceSource === source ? 'default' : 'ghost'}
+                    disabled={settingsSaving}
+                    className="h-8"
+                    onClick={() => onPriceSourceChange(source)}
+                  >
+                    {source === 'actual' ? <ReceiptText className="size-3.5" /> : <Tags className="size-3.5" />}
+                    {t(`items.matrix.priceSources.${source}`)}
+                  </Button>
+                ))}
               </div>
-            </PopoverContent>
-          </Popover>
+            </div>
+
+            <div>
+              <p className="text-muted-foreground mb-1.5 text-[11px] font-medium">
+                {t('items.matrix.metricLabel')}
+              </p>
+              <Select
+                value={metric}
+                disabled={settingsSaving}
+                onValueChange={(value) => onMetricChange(value as ItemSupplierMatrixMetric)}
+              >
+                <SelectTrigger className="w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="latest">{t('items.matrix.metrics.latest')}</SelectItem>
+                  <SelectItem value="previous">{t('items.matrix.metrics.previous')}</SelectItem>
+                  <SelectItem value="lowest">{t('items.matrix.metrics.lowest')}</SelectItem>
+                  <SelectItem value="highest">{t('items.matrix.metrics.highest')}</SelectItem>
+                  <SelectItem value="average">{t('items.matrix.metrics.average')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button type="button" variant="outline" size="sm">
+                  <SlidersHorizontal className="size-4" />
+                  {t('items.matrix.suppliersShown', {
+                    shown: visibleSuppliers.length,
+                    total: suppliers.length,
+                  })}
+                  <ChevronDown className="size-3.5" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-[min(22rem,calc(100vw-2rem))] p-2">
+                <p className="px-2 py-1 text-sm font-semibold">{t('items.matrix.chooseSuppliers')}</p>
+                <p className="text-muted-foreground px-2 pb-2 text-xs">
+                  {t('items.matrix.chooseSuppliersHint', { max: MAX_VISIBLE_SUPPLIERS })}
+                </p>
+                <div className="max-h-72 space-y-1 overflow-y-auto">
+                  {suppliers.map((supplier) => {
+                    const supplierId = Number(supplier.value)
+                    const checked = visibleSupplierIds.includes(supplierId)
+                    const disabled = !checked && visibleSupplierIds.length >= MAX_VISIBLE_SUPPLIERS
+                    return (
+                      <button
+                        key={supplierId}
+                        type="button"
+                        disabled={disabled}
+                        className={cn(
+                          'hover:bg-muted flex w-full items-center gap-2 rounded-lg px-2 py-2 text-start text-sm',
+                          disabled && 'cursor-not-allowed opacity-45',
+                        )}
+                        onClick={() => toggleSupplier(supplierId)}
+                      >
+                        <span
+                          className={cn(
+                            'grid size-5 shrink-0 place-items-center rounded border',
+                            checked && 'border-primary bg-primary text-primary-foreground',
+                          )}
+                        >
+                          {checked ? <Check className="size-3.5" /> : null}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-medium">{supplier.label}</span>
+                          {supplier.description ? (
+                            <span
+                              dir="ltr"
+                              className="text-muted-foreground block truncate font-mono text-[11px]"
+                            >
+                              {supplier.description}
+                            </span>
+                          ) : null}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
         </div>
+
+        <p className="text-muted-foreground text-[11px]">
+          {settingsSaving ? t('items.matrix.savingViewSettings') : t('items.matrix.settingsSavedWithView')}
+        </p>
       </div>
 
       {matrixLoading ? (
@@ -298,20 +398,10 @@ export function SavedViewSupplierComparisonTable({
                   return (
                     <th
                       key={supplierId}
-                      className="bg-accent min-w-[15rem] border-e border-b px-4 py-3 text-start align-top text-xs font-semibold"
+                      className="bg-accent min-w-[16rem] border-e border-b px-4 py-3 text-start align-top text-xs font-semibold"
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="truncate">{supplier.label}</p>
-                          {supplier.description ? (
-                            <p
-                              dir="ltr"
-                              className="text-muted-foreground mt-1 truncate font-mono text-[11px]"
-                            >
-                              {supplier.description}
-                            </p>
-                          ) : null}
-                        </div>
+                        <TableEntityLink kind="supplier" id={supplierId} name={supplier.label} code={supplier.description} compact className="min-w-0 max-w-[13rem]" />
                         <Button
                           type="button"
                           variant="ghost"
@@ -327,8 +417,8 @@ export function SavedViewSupplierComparisonTable({
                     </th>
                   )
                 })}
-                <th className="bg-accent min-w-[14rem] border-b px-4 py-3 text-start text-xs font-semibold">
-                  {t('items.matrix.bestSupplier')}
+                <th className="bg-accent min-w-[15rem] border-b px-4 py-3 text-start text-xs font-semibold">
+                  {resultHeader}
                 </th>
               </tr>
             </thead>
@@ -339,31 +429,42 @@ export function SavedViewSupplierComparisonTable({
                 const visibleCells = visibleSuppliers
                   .map((supplier) => cellBySupplier.get(Number(supplier.value)))
                   .filter((cell): cell is ItemSupplierMatrixCell => Boolean(cell))
-                const bestIds = bestSupplierIds(visibleCells, metric)
-                const scopeGroups = new Set(
-                  visibleCells
-                    .filter((cell) => metricValue(cell, metric).value !== null)
-                    .map(scopeKey),
-                )
+
+                const singleSource = priceSource === 'compare' ? null : priceSource
+                const bestIds = singleSource
+                  ? bestSupplierIds(visibleCells, metric, singleSource)
+                  : new Set<number>()
+                const scopeGroups = singleSource
+                  ? new Set(
+                      visibleCells
+                        .filter((cell) => metricValue(cell, metric, singleSource).value !== null)
+                        .map((cell) => scopeKey(cell, singleSource)),
+                    )
+                  : new Set<string>()
                 const singleBest =
-                  scopeGroups.size === 1 ? singleComparableBest(visibleCells, metric) : null
+                  singleSource && scopeGroups.size === 1
+                    ? singleComparableBest(visibleCells, metric, singleSource)
+                    : null
+                const compareBest = priceSource === 'compare' ? bestCompareCell(visibleCells, metric) : null
 
                 return (
                   <tr key={item.id} className="group">
                     <th className="bg-background group-hover:bg-muted sticky start-0 z-10 border-e border-b px-4 py-3 text-start align-top">
-                      <p className="max-w-[22rem] font-semibold">{item.name}</p>
-                      <p dir="ltr" className="text-muted-foreground mt-1 font-mono text-xs">
-                        {item.code}
-                      </p>
+                      <TableEntityLink kind="item" id={item.id} name={item.name} code={item.code} to={`/items/${item.id}?view=${savedViewId}&period=${period}`} className="max-w-[22rem]" />
                       {item.categoryName ? (
                         <p className="text-muted-foreground mt-1 max-w-[20rem] truncate text-xs">
                           {item.categoryName}
                         </p>
                       ) : null}
                     </th>
+
                     {visibleSuppliers.map((supplier) => {
                       const supplierId = Number(supplier.value)
                       const cell = cellBySupplier.get(supplierId)
+                      const isBest =
+                        priceSource === 'compare'
+                          ? compareBest?.supplierId === supplierId
+                          : Boolean(cell && bestIds.has(cell.supplierId))
                       return (
                         <td
                           key={supplierId}
@@ -372,35 +473,32 @@ export function SavedViewSupplierComparisonTable({
                           <MatrixCell
                             cell={cell}
                             metric={metric}
+                            priceSource={priceSource}
                             locale={locale}
-                            isBest={cell ? bestIds.has(cell.supplierId) : false}
+                            isBest={isBest}
                             supplierName={supplier.label}
                             onOpen={() => setSelectedPair({ item, supplier })}
                           />
                         </td>
                       )
                     })}
+
                     <td className="group-hover:bg-primary/[0.015] border-b px-4 py-3 align-top">
-                      {singleBest ? (
-                        <div>
-                          <div className="flex items-center gap-1.5 font-semibold">
-                            <Trophy className="text-success size-4" />
-                            {singleBest.supplierName}
-                          </div>
-                          <p dir="ltr" className="mt-1 text-sm font-semibold tabular-nums">
-                            {formatUnitCost(
-                              metricValue(singleBest, metric).value,
-                              locale,
-                              singleBest.currencyCode,
-                              singleBest.unitName,
-                            )}
-                          </p>
-                          <p className="text-muted-foreground mt-1 text-xs">
-                            {t('items.matrix.bestBasedOnMetric', {
-                              metric: t(`items.matrix.metrics.${metric}`),
-                            })}
-                          </p>
-                        </div>
+                      {priceSource === 'compare' ? (
+                        compareBest ? (
+                          <CompareResult cell={compareBest} metric={metric} locale={locale} />
+                        ) : (
+                          <span className="text-muted-foreground text-xs">
+                            {t('items.matrix.noComparableQuoteActual')}
+                          </span>
+                        )
+                      ) : singleBest ? (
+                        <SingleSourceResult
+                          cell={singleBest}
+                          metric={metric}
+                          source={priceSource}
+                          locale={locale}
+                        />
                       ) : scopeGroups.size > 1 ? (
                         <div>
                           <p className="font-medium">{t('items.matrix.multipleScopes')}</p>
@@ -438,9 +536,60 @@ export function SavedViewSupplierComparisonTable({
   )
 }
 
+function SourceBlock({
+  cell,
+  metric,
+  source,
+  locale,
+}: {
+  cell: ItemSupplierMatrixCell
+  metric: ItemSupplierMatrixMetric
+  source: SinglePriceSource
+  locale: string
+}) {
+  const { t } = useTranslation()
+  const data = metricValue(cell, metric, source)
+  const isQuote = source === 'quote'
+  const change = isQuote ? cell.quoteChangePercent : cell.changePercent
+  const count = isQuote ? cell.quoteCount : cell.transactionCount
+
+  return (
+    <div>
+      <p className={cn(
+        'flex items-center gap-1 text-[11px] font-semibold',
+        isQuote ? 'text-primary' : 'text-foreground',
+      )}>
+        {isQuote ? <Tags className="size-3" /> : <ReceiptText className="size-3" />}
+        {t(isQuote ? 'items.matrix.myQuote' : 'items.matrix.actualPurchase')}
+      </p>
+      <p dir="ltr" className="mt-1 text-base font-semibold tabular-nums">
+        {formatUnitCost(
+          data.value,
+          locale,
+          isQuote ? cell.quoteCurrencyCode : cell.currencyCode,
+          isQuote ? cell.quoteUnitName : cell.unitName,
+        )}
+      </p>
+      <p className="text-muted-foreground mt-0.5 text-[11px]">{scopeLabel(cell, source)}</p>
+      {data.date ? (
+        <p className="text-muted-foreground mt-1 text-xs">{formatDateOnly(data.date, locale)}</p>
+      ) : null}
+      {metric === 'latest' && change !== null ? (
+        <ChangeValue value={change} locale={locale} />
+      ) : null}
+      {metric === 'average' && count > 0 ? (
+        <p className="text-muted-foreground mt-1 text-[11px]">
+          {t(isQuote ? 'items.matrix.quoteCountValue' : 'items.analytics.transactionCountValue', { count })}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 function MatrixCell({
   cell,
   metric,
+  priceSource,
   locale,
   isBest,
   supplierName,
@@ -448,27 +597,41 @@ function MatrixCell({
 }: {
   cell: ItemSupplierMatrixCell | undefined
   metric: ItemSupplierMatrixMetric
+  priceSource: ItemSupplierMatrixPriceSource
   locale: string
   isBest: boolean
   supplierName: string
   onOpen: () => void
 }) {
   const { t } = useTranslation()
-  const metricData = metricValue(cell, metric)
-  const hasActual = metricData.value !== null
-  const hasQuote = Boolean(
-    cell?.latestQuoteUnitCost !== null && cell?.latestQuoteUnitCost !== undefined,
-  )
-  const canOpen = Boolean(cell && (cell.latestUnitCost !== null || hasQuote))
+  const actual = metricValue(cell, metric, 'actual')
+  const quote = metricValue(cell, metric, 'quote')
+  const hasActual = actual.value !== null
+  const hasQuote = quote.value !== null
+  const hasRelevant =
+    priceSource === 'actual'
+      ? hasActual
+      : priceSource === 'quote'
+        ? hasQuote
+        : hasActual || hasQuote
+  const canOpen = Boolean(cell && (cell.latestUnitCost !== null || cell.latestQuoteUnitCost !== null))
 
-  if (!cell || (!hasActual && !hasQuote)) {
+  if (!cell || !hasRelevant) {
+    const emptyKey =
+      priceSource === 'actual'
+        ? 'items.matrix.noActualHistory'
+        : priceSource === 'quote'
+          ? 'items.matrix.noQuoteHistory'
+          : 'items.matrix.noPriceHistory'
     return (
       <div className="min-h-24 rounded-lg px-2 py-3">
         <p className="text-muted-foreground text-lg">—</p>
-        <p className="text-muted-foreground mt-1 text-xs">{t('items.matrix.noActualHistory')}</p>
+        <p className="text-muted-foreground mt-1 text-xs">{t(emptyKey)}</p>
       </div>
     )
   }
+
+  const difference = comparisonPercent(cell, metric)
 
   return (
     <button
@@ -482,87 +645,144 @@ function MatrixCell({
       aria-label={t('items.matrix.openDetails', { supplier: supplierName })}
       onClick={onOpen}
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p dir="ltr" className="text-base font-semibold tabular-nums">
-            {formatUnitCost(metricData.value, locale, cell.currencyCode, cell.unitName)}
-          </p>
-          {hasActual ? (
-            <p className="text-muted-foreground mt-1 text-[11px]">{scopeLabel(cell)}</p>
-          ) : (
-            <p className="text-muted-foreground mt-1 text-[11px]">
-              {t('items.matrix.noActualHistory')}
-            </p>
-          )}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1 space-y-3">
+          {priceSource !== 'quote' && hasActual ? (
+            <SourceBlock cell={cell} metric={metric} source="actual" locale={locale} />
+          ) : null}
+
+          {priceSource === 'compare' && hasActual && hasQuote ? <div className="border-t" /> : null}
+
+          {priceSource !== 'actual' && hasQuote ? (
+            <SourceBlock cell={cell} metric={metric} source="quote" locale={locale} />
+          ) : null}
+
+          {priceSource === 'compare' && hasActual && hasQuote ? (
+            scopesMatch(cell) ? (
+              <div className="rounded-md bg-muted/45 px-2 py-1.5">
+                <p className="text-muted-foreground text-[10px] font-medium">
+                  {t('items.matrix.quoteVsActualMetric', {
+                    metric: t(`items.matrix.metrics.${metric}`),
+                  })}
+                </p>
+                <ChangeValue value={difference} locale={locale} compact />
+              </div>
+            ) : (
+              <p className="text-warning-foreground text-[11px]">
+                {t('items.matrix.quoteDifferentScope')}
+              </p>
+            )
+          ) : null}
         </div>
+
         {isBest ? (
-          <Badge variant="success">
+          <Badge variant="success" className="shrink-0">
             <Trophy className="me-1 size-3" />
-            {t('items.matrix.bestInScope')}
+            {priceSource === 'compare'
+              ? t('items.matrix.bestQuoteVsActualBadge')
+              : t('items.matrix.bestInScope')}
           </Badge>
         ) : null}
       </div>
-
-      {metric === 'latest' && cell.changePercent !== null ? (
-        <p
-          dir="ltr"
-          className={cn(
-            'mt-2 inline-flex items-center gap-1 text-xs font-semibold',
-            cell.changePercent > 0
-              ? 'text-destructive'
-              : cell.changePercent < 0
-                ? 'text-success'
-                : 'text-muted-foreground',
-          )}
-        >
-          {cell.changePercent > 0 ? (
-            <ArrowUp className="size-3" />
-          ) : cell.changePercent < 0 ? (
-            <ArrowDown className="size-3" />
-          ) : (
-            <Minus className="size-3" />
-          )}
-          {formatPercent(cell.changePercent, locale)}
-        </p>
-      ) : null}
-
-      {metricData.date ? (
-        <p className="text-muted-foreground mt-1 text-xs">
-          {formatDateOnly(metricData.date, locale)}
-        </p>
-      ) : null}
-      {metric === 'average' && cell.transactionCount > 0 ? (
-        <p className="text-muted-foreground mt-1 text-xs">
-          {t('items.analytics.transactionCountValue', { count: cell.transactionCount })}
-        </p>
-      ) : null}
-
-      {hasQuote ? (
-        <div className="mt-2 border-t pt-2">
-          <p className="flex items-center gap-1 text-[11px] font-medium">
-            <Tags className="size-3" />
-            {t('items.matrix.myLatestQuote')}
-          </p>
-          <p dir="ltr" className="mt-0.5 text-xs font-semibold tabular-nums">
-            {formatUnitCost(
-              cell.latestQuoteUnitCost,
-              locale,
-              cell.quoteCurrencyCode,
-              cell.quoteUnitName,
-            )}
-          </p>
-          {cell.latestQuoteDate ? (
-            <p className="text-muted-foreground mt-0.5 text-[11px]">
-              {formatDateOnly(cell.latestQuoteDate, locale)}
-            </p>
-          ) : null}
-          {cell.latestUnitCost !== null && !quoteComparable(cell) ? (
-            <p className="text-warning-foreground mt-1 text-[11px]">
-              {t('items.matrix.quoteDifferentScope')}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
     </button>
+  )
+}
+
+function ChangeValue({
+  value,
+  locale,
+  compact = false,
+}: {
+  value: number | null
+  locale: string
+  compact?: boolean
+}) {
+  if (value === null) return <span className="text-muted-foreground text-xs">—</span>
+  return (
+    <p
+      dir="ltr"
+      className={cn(
+        'inline-flex items-center gap-1 font-semibold',
+        compact ? 'mt-0.5 text-xs' : 'mt-1 text-xs',
+        value > 0
+          ? 'text-destructive'
+          : value < 0
+            ? 'text-success'
+            : 'text-muted-foreground',
+      )}
+    >
+      {value > 0 ? (
+        <ArrowUp className="size-3" />
+      ) : value < 0 ? (
+        <ArrowDown className="size-3" />
+      ) : (
+        <Minus className="size-3" />
+      )}
+      {formatPercent(value, locale)}
+    </p>
+  )
+}
+
+function SingleSourceResult({
+  cell,
+  metric,
+  source,
+  locale,
+}: {
+  cell: ItemSupplierMatrixCell
+  metric: ItemSupplierMatrixMetric
+  source: SinglePriceSource
+  locale: string
+}) {
+  const { t } = useTranslation()
+  const data = metricValue(cell, metric, source)
+  const isQuote = source === 'quote'
+  return (
+    <div>
+      <div className="flex items-center gap-1.5">
+        <Trophy className="text-success size-4 shrink-0" />
+        <TableEntityLink kind="supplier" id={cell.supplierId} name={cell.supplierName} code={cell.supplierCode} compact />
+      </div>
+      <p dir="ltr" className="mt-1 text-sm font-semibold tabular-nums">
+        {formatUnitCost(
+          data.value,
+          locale,
+          isQuote ? cell.quoteCurrencyCode : cell.currencyCode,
+          isQuote ? cell.quoteUnitName : cell.unitName,
+        )}
+      </p>
+      <p className="text-muted-foreground mt-1 text-xs">
+        {t(isQuote ? 'items.matrix.lowestQuoteBasedOnMetric' : 'items.matrix.lowestActualBasedOnMetric', {
+          metric: t(`items.matrix.metrics.${metric}`),
+        })}
+      </p>
+    </div>
+  )
+}
+
+function CompareResult({
+  cell,
+  metric,
+  locale,
+}: {
+  cell: ItemSupplierMatrixCell
+  metric: ItemSupplierMatrixMetric
+  locale: string
+}) {
+  const { t } = useTranslation()
+  const difference = comparisonPercent(cell, metric)
+  return (
+    <div>
+      <div className="flex items-center gap-1.5">
+        <Trophy className="text-success size-4 shrink-0" />
+        <TableEntityLink kind="supplier" id={cell.supplierId} name={cell.supplierName} code={cell.supplierCode} compact />
+      </div>
+      <ChangeValue value={difference} locale={locale} />
+      <p className="text-muted-foreground mt-1 text-xs">
+        {t('items.matrix.bestQuoteVsActualHint', {
+          metric: t(`items.matrix.metrics.${metric}`),
+        })}
+      </p>
+    </div>
   )
 }

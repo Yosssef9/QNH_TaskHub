@@ -1,5 +1,7 @@
 export type SavedViewPeriod = "1M" | "3M" | "6M" | "1Y" | "ALL";
 export type SavedViewSortDirection = "asc" | "desc";
+export type SavedViewMatrixPriceSource = "actual" | "quote" | "compare";
+export type SavedViewMatrixMetric = "latest" | "previous" | "lowest" | "highest" | "average";
 
 export interface ProcurementSavedViewConfig {
   itemIds: number[];
@@ -11,6 +13,8 @@ export interface ProcurementSavedViewConfig {
   sortBy: string | null;
   sortDirection: SavedViewSortDirection;
   columns: string[];
+  matrixPriceSource: SavedViewMatrixPriceSource;
+  matrixMetric: SavedViewMatrixMetric;
 }
 
 export interface ProcurementSavedView {

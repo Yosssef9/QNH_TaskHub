@@ -1,18 +1,40 @@
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vitest/config'
+import tailwindcss from '@tailwindcss/vite'
+import { defineConfig, loadEnv } from 'vite'
 
-export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    alias: {
-      '@': new URL('./src', import.meta.url).pathname,
+function normalizeBasePath(value: string | undefined): string {
+  const trimmed = value?.trim() || '/'
+
+  if (trimmed === '/') {
+    return '/'
+  }
+
+  const withLeadingSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`
+
+  return withLeadingSlash.endsWith('/') ? withLeadingSlash : `${withLeadingSlash}/`
+}
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+
+  return {
+    base: normalizeBasePath(env.VITE_APP_BASE_PATH),
+
+    plugins: [react(), tailwindcss()],
+
+    resolve: {
+      alias: {
+        '@': new URL('./src', import.meta.url).pathname,
+      },
     },
-  },
-  test: {
-    environment: 'jsdom',
-    setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.test.{ts,tsx}'],
-    clearMocks: true,
-    restoreMocks: true,
-  },
+
+    server: {
+      proxy: {
+        '/api': {
+          target: 'http://localhost:4000',
+          changeOrigin: true,
+        },
+      },
+    },
+  }
 })

@@ -9,6 +9,7 @@ import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { SearchInput } from '@/components/shared/SearchInput'
 import { SortableHeader } from '@/components/shared/SortableHeader'
+import { TableEntityLink } from '@/components/shared/TableEntityLink'
 import { TablePagination } from '@/components/shared/TablePagination'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -284,18 +285,8 @@ export function PriceQuotesPage() {
                       className="hover:bg-primary/[0.035] border-b last:border-b-0"
                     >
                       <td className="px-4 py-4">{formatDateOnly(quote.quoteDate, locale)}</td>
-                      <td className="px-4 py-4">
-                        <p className="font-semibold">{quote.itemName}</p>
-                        <p dir="ltr" className="text-muted-foreground mt-1 text-xs">
-                          {quote.itemCode ?? '—'}
-                        </p>
-                      </td>
-                      <td className="px-4 py-4">
-                        <p className="font-medium">{quote.supplierName}</p>
-                        <p dir="ltr" className="text-muted-foreground mt-1 text-xs">
-                          {quote.supplierCode ?? '—'}
-                        </p>
-                      </td>
+                      <td className="px-4 py-4"><TableEntityLink kind="item" id={quote.itemId} name={quote.itemName} code={quote.itemCode} compact /></td>
+                      <td className="px-4 py-4"><TableEntityLink kind="supplier" id={quote.supplierId} name={quote.supplierName} code={quote.supplierCode} compact /></td>
                       <td dir="ltr" className="px-4 py-4 font-semibold tabular-nums">
                         {formatUnitCost(
                           quote.quotedUnitCost,

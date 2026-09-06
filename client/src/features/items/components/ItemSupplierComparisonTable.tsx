@@ -2,6 +2,7 @@ import { Building2, Trophy } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { EmptyState } from '@/components/shared/EmptyState'
+import { TableEntityLink } from '@/components/shared/TableEntityLink'
 import { SortableHeader } from '@/components/shared/SortableHeader'
 import { TablePagination } from '@/components/shared/TablePagination'
 import { Badge } from '@/components/ui/badge'
@@ -39,7 +40,7 @@ function FocusedMatrix({ suppliers }: { suppliers: ItemSupplierPriceSummary[] })
             <th className="bg-accent px-4 py-3 text-start text-xs font-semibold">{t('items.analytics.metric')}</th>
             {suppliers.map((supplier) => (
               <th key={supplier.supplierId} className="bg-accent px-4 py-3 text-start text-xs font-semibold">
-                {supplier.supplierName}
+                <TableEntityLink kind="supplier" id={supplier.supplierId} name={supplier.supplierName} code={supplier.supplierCode} compact className="max-w-[14rem]" />
               </th>
             ))}
           </tr>
@@ -131,12 +132,11 @@ export function ItemSupplierComparisonTable({
                   {data.suppliers.map((supplier) => (
                     <tr key={supplier.supplierId} className="hover:bg-primary/[0.035] border-b last:border-b-0">
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold">{supplier.supplierName}</span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <TableEntityLink kind="supplier" id={supplier.supplierId} name={supplier.supplierName} code={supplier.supplierCode} className="max-w-[20rem]" />
                           {supplier.isCurrentLowest ? <Badge variant="success"><Trophy aria-hidden="true" className="me-1 size-3" />{t('items.analytics.currentLowest')}</Badge> : null}
                           {supplier.isCurrentHighest && !supplier.isCurrentLowest ? <Badge variant="warning">{t('items.analytics.currentHighest')}</Badge> : null}
                         </div>
-                        {supplier.supplierCode ? <p dir="ltr" className="text-muted-foreground mt-1 font-mono text-xs">{supplier.supplierCode}</p> : null}
                       </td>
                       <td dir="ltr" className="px-4 py-3 font-semibold tabular-nums">{formatUnitCost(supplier.latestUnitCost, locale, supplier.currencyCode, supplier.unitName)}</td>
                       <td dir="ltr" className="px-4 py-3 tabular-nums">{formatUnitCost(supplier.lowestUnitCost, locale, supplier.currencyCode, supplier.unitName)}</td>

@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, Loader2, X } from 'lucide-react'
+import { Check, ChevronsUpDown, CircleAlert, Loader2, RotateCcw, X } from 'lucide-react'
 import { useId, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -33,6 +33,10 @@ interface CommonSearchableSelectProps {
   disabled?: boolean
   disableClear?: boolean
   maxVisibleBadges?: number
+  selectedSummaryText?: string
+  pinSelectedOptions?: boolean
+  selectedSectionLabel?: string
+  optionsSectionLabel?: string
   searchValue?: string
   onSearchChange?: (value: string) => void
   onOpenChange?: (open: boolean) => void
@@ -40,6 +44,8 @@ interface CommonSearchableSelectProps {
   hasMore?: boolean
   loading?: boolean
   loadingMore?: boolean
+  loadErrorText?: string
+  onRetry?: () => void
   className?: string
   ariaLabel?: string
 }
@@ -69,6 +75,7 @@ export function SearchableMultiSelect(props: SearchableMultiSelectProps) {
   const errorId = `${useId()}-error`
   const selectedValues = props.multiple ? props.values : props.value === null ? [] : [props.value]
   const actualSearch = props.searchValue ?? localSearch
+  const serverDriven = Boolean(props.onSearchChange)
   const maxVisibleBadges = Math.max(1, props.maxVisibleBadges ?? 2)
 
   const optionsByKey = useMemo(
@@ -84,6 +91,11 @@ export function SearchableMultiSelect(props: SearchableMultiSelectProps) {
   const selectedOptions = selectedValues
     .map((selectedValue) => optionsByKey.get(valueKey(selectedValue)))
     .filter((option): option is SearchableSelectOption => Boolean(option))
+  const selectedKeys = new Set(selectedValues.map(valueKey))
+  const pinSelected = Boolean(props.multiple && props.pinSelectedOptions)
+  const remainingOptions = pinSelected
+    ? props.options.filter((option) => !selectedKeys.has(valueKey(option.value)))
+    : props.options
 
   function resetSearch() {
     setLocalSearch('')
@@ -124,10 +136,49 @@ export function SearchableMultiSelect(props: SearchableMultiSelectProps) {
 
   const visibleLabels = selectedOptions.slice(0, maxVisibleBadges).map((option) => option.label)
   const hiddenCount = Math.max(0, selectedOptions.length - visibleLabels.length)
-  const triggerText =
-    visibleLabels.length === 0
-      ? (props.placeholder ?? 'Select option')
-      : `${visibleLabels.join(', ')}${hiddenCount > 0 ? ` +${hiddenCount}` : ''}`
+  const triggerText = selectedValues.length > 0 && props.selectedSummaryText
+    ? props.selectedSummaryText
+    : visibleLabels.length > 0
+      ? `${visibleLabels.join(', ')}${hiddenCount > 0 ? ` +${hiddenCount}` : ''}`
+      : selectedValues.length > 0
+        ? t('common.selectedCount', { count: selectedValues.length })
+        : (props.placeholder ?? 'Select option')
+
+  function renderOption(option: SearchableSelectOption) {
+    const selected = selectedValues.some(
+      (selectedValue) => valueKey(selectedValue) === valueKey(option.value),
+    )
+
+    return (
+      <CommandItem
+        key={valueKey(option.value)}
+        value={valueKey(option.value)}
+        keywords={[option.label, option.description ?? '']}
+        {...(option.disabled === undefined ? {} : { disabled: option.disabled })}
+        onSelect={() => toggleOption(option)}
+      >
+        <span
+          aria-hidden="true"
+          className={cn(
+            'flex size-4 shrink-0 items-center justify-center rounded-sm border',
+            selected
+              ? 'bg-primary text-primary-foreground border-primary'
+              : 'border-input',
+          )}
+        >
+          {selected ? <Check className="size-3" /> : null}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate">{option.label}</span>
+          {option.description ? (
+            <span className="text-muted-foreground block truncate text-xs">
+              {option.description}
+            </span>
+          ) : null}
+        </span>
+      </CommandItem>
+    )
+  }
 
   return (
     <div className={props.className}>
@@ -177,44 +228,57 @@ export function SearchableMultiSelect(props: SearchableMultiSelectProps) {
                   {t('common.loading')}
                 </CommandLoading>
               ) : null}
-              {!props.loading ? (
+              {!serverDriven && !props.loading ? (
                 <CommandEmpty>{props.noResultsText ?? 'No results found'}</CommandEmpty>
               ) : null}
-              {props.options.map((option) => {
-                const selected = selectedValues.some(
-                  (selectedValue) => valueKey(selectedValue) === valueKey(option.value),
-                )
-
-                return (
-                  <CommandItem
-                    key={valueKey(option.value)}
-                    value={valueKey(option.value)}
-                    keywords={[option.label, option.description ?? '']}
-                    {...(option.disabled === undefined ? {} : { disabled: option.disabled })}
-                    onSelect={() => toggleOption(option)}
-                  >
-                    <span
-                      aria-hidden="true"
-                      className={cn(
-                        'flex size-4 shrink-0 items-center justify-center rounded-sm border',
-                        selected
-                          ? 'bg-primary text-primary-foreground border-primary'
-                          : 'border-input',
-                      )}
+              {serverDriven && props.loadErrorText ? (
+                <div className="mx-2 my-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-3 text-sm">
+                  <div className="flex items-start gap-2">
+                    <CircleAlert aria-hidden="true" className="text-destructive mt-0.5 size-4 shrink-0" />
+                    <p className="text-muted-foreground min-w-0 flex-1 leading-5">{props.loadErrorText}</p>
+                  </div>
+                  {props.onRetry ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="mt-2 h-8"
+                      onClick={() => props.onRetry?.()}
                     >
-                      {selected ? <Check className="size-3" /> : null}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate">{option.label}</span>
-                      {option.description ? (
-                        <span className="text-muted-foreground block truncate text-xs">
-                          {option.description}
-                        </span>
-                      ) : null}
-                    </span>
-                  </CommandItem>
-                )
-              })}
+                      <RotateCcw aria-hidden="true" className="size-3.5" />
+                      {t('common.retry')}
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+              {serverDriven && !props.loading && !props.loadErrorText && props.options.length === 0 && selectedOptions.length === 0 ? (
+                <p className="text-muted-foreground px-3 py-4 text-center text-sm">
+                  {props.noResultsText ?? 'No results found'}
+                </p>
+              ) : null}
+              {pinSelected && selectedOptions.length > 0 ? (
+                <>
+                  {props.selectedSectionLabel ? (
+                    <div className="text-muted-foreground sticky top-0 z-10 bg-popover px-3 py-2 text-[11px] font-semibold uppercase tracking-wide">
+                      {props.selectedSectionLabel} · {selectedOptions.length}
+                    </div>
+                  ) : null}
+                  {selectedOptions.map(renderOption)}
+                  {props.optionsSectionLabel ? (
+                    <div className="text-muted-foreground sticky top-0 z-10 border-t bg-popover px-3 py-2 text-[11px] font-semibold uppercase tracking-wide">
+                      {props.optionsSectionLabel}
+                    </div>
+                  ) : null}
+                  {remainingOptions.map(renderOption)}
+                  {!props.loading && !props.loadErrorText && remainingOptions.length === 0 && actualSearch.trim() ? (
+                    <p className="text-muted-foreground px-3 py-4 text-center text-sm">
+                      {props.noResultsText ?? 'No results found'}
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                props.options.map(renderOption)
+              )}
               {props.loadingMore ? (
                 <div className="text-muted-foreground flex items-center justify-center gap-2 px-3 py-3 text-xs">
                   <Loader2 aria-hidden="true" className="size-4 animate-spin" />
@@ -226,7 +290,7 @@ export function SearchableMultiSelect(props: SearchableMultiSelectProps) {
               <div className="border-t p-2">
                 <Button variant="ghost" size="sm" className="w-full" onClick={clearSelection}>
                   <X aria-hidden="true" className="size-3.5" />
-                  Clear selection
+                  {t('common.clearSelection')}
                 </Button>
               </div>
             ) : null}

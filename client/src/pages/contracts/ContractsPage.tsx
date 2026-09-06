@@ -22,8 +22,8 @@ import { DatePicker } from '@/components/shared/DatePicker'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { LoadingState } from '@/components/shared/LoadingState'
-import { OverflowTooltipText } from '@/components/shared/OverflowTooltipText'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { TableEntityLink } from '@/components/shared/TableEntityLink'
 import { SearchInput } from '@/components/shared/SearchInput'
 import { SearchableMultiSelect, type SearchableSelectOption } from '@/components/shared/SearchableMultiSelect'
 import { SortableHeader } from '@/components/shared/SortableHeader'
@@ -544,8 +544,12 @@ export function ContractsPage() {
                           }}
                           onLoadMore={() => { void suppliers.fetchNextPage() }}
                           hasMore={Boolean(suppliers.hasNextPage)}
-                          loading={suppliers.isPending}
+                          loading={suppliers.isLoading}
                           loadingMore={suppliers.isFetchingNextPage}
+                          {...(suppliers.isError ? {
+                            loadErrorText: t('suppliers.optionsLoadError'),
+                            onRetry: () => { void suppliers.refetch() },
+                          } : {})}
                           placeholder={t('contracts.filters.allSuppliers')}
                           searchPlaceholder={t('suppliers.searchPlaceholder')}
                           noResultsText={t('suppliers.noResults')}
@@ -975,39 +979,11 @@ export function ContractsPage() {
 }
 
 function ContractLink({ contract }: { contract: Contract }) {
-  return (
-    <div className="min-w-0">
-      <Link
-        className="group hover:bg-primary/10 hover:text-primary focus-visible:ring-ring -ms-2 inline-flex max-w-full items-center gap-1 rounded-lg px-2 py-1 font-semibold outline-none focus-visible:ring-2"
-        to={`/contracts/${contract.id}`}
-      >
-        <OverflowTooltipText className="max-w-full">{contract.title}</OverflowTooltipText>
-        <span
-          aria-hidden="true"
-          className="translate-x-0 text-xs opacity-0 group-hover:translate-x-0.5 group-hover:opacity-100 rtl:group-hover:-translate-x-0.5"
-        >
-          ›
-        </span>
-      </Link>
-      {contract.contractNumber ? (
-        <p dir="ltr" className="text-muted-foreground mt-1 w-fit text-xs tabular-nums">
-          {contract.contractNumber}
-        </p>
-      ) : null}
-    </div>
-  )
+  return <TableEntityLink kind="contract" id={contract.id} name={contract.title} code={contract.contractNumber} className="max-w-[22rem]" />
 }
 
 function SupplierLink({ contract }: { contract: Contract }) {
-  return (
-    <Link
-      className="hover:bg-primary/10 hover:text-primary focus-visible:ring-ring inline-flex max-w-56 items-center gap-1.5 rounded-full border border-border/70 bg-muted/30 px-2.5 py-1 text-xs font-medium outline-none focus-visible:ring-2"
-      to={`/suppliers/${contract.supplierId}`}
-    >
-      <Building2 aria-hidden="true" className="text-primary size-3.5 shrink-0" />
-      <OverflowTooltipText className="max-w-48">{contract.supplierName}</OverflowTooltipText>
-    </Link>
-  )
+  return <TableEntityLink kind="supplier" id={contract.supplierId} name={contract.supplierName} compact className="max-w-56" />
 }
 
 function NoticeDeadlineCell({

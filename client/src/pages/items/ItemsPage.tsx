@@ -1,16 +1,17 @@
-import { ArrowDown, ArrowUp, Columns3, List, Minus, PackageSearch, Plus, SearchX } from 'lucide-react'
+import { ArrowDown, ArrowUp, Building2, Columns3, List, Minus, PackageSearch, Plus, SearchX } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import toast from 'react-hot-toast'
 import { Link, useSearchParams } from 'react-router'
 
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { LoadingState } from '@/components/shared/LoadingState'
-import { OverflowTooltipText } from '@/components/shared/OverflowTooltipText'
 import { PageHeader } from '@/components/shared/PageHeader'
 import type { SearchableSelectOption } from '@/components/shared/SearchableMultiSelect'
 import { SearchInput } from '@/components/shared/SearchInput'
 import { SortableHeader } from '@/components/shared/SortableHeader'
+import { TableEntityLink } from '@/components/shared/TableEntityLink'
 import { TablePagination } from '@/components/shared/TablePagination'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -21,9 +22,9 @@ import { formatDateOnly, formatPercent, formatUnitCost } from '@/features/items/
 import { ItemsOverviewCards } from '@/features/items/components/ItemsOverviewCards'
 import { SavedViewSupplierComparisonTable } from '@/features/items/components/SavedViewSupplierComparisonTable'
 import { useItemPriceSummaries, useItemSupplierMatrix, useItems, useItemsOverview } from '@/features/items/hooks/use-items'
-import type { ItemSortBy, ItemSource, ProcurementPricePeriod } from '@/features/items/types/item.types'
+import type { ItemSortBy, ItemSource, ItemSupplierMatrixMetric, ItemSupplierMatrixPriceSource, ProcurementPricePeriod } from '@/features/items/types/item.types'
 import { ProcurementSavedViewsBar } from '@/features/procurement-saved-views/components/ProcurementSavedViewsBar'
-import { useProcurementSavedView, useProcurementSavedViews } from '@/features/procurement-saved-views/hooks/use-procurement-saved-views'
+import { useProcurementSavedView, useProcurementSavedViews, useUpdateProcurementSavedView } from '@/features/procurement-saved-views/hooks/use-procurement-saved-views'
 import { usePriceQuoteSummary } from '@/features/price-quotes/hooks/use-price-quotes'
 import { useSortState } from '@/hooks/use-sort-state'
 
@@ -53,8 +54,11 @@ export function ItemsPage() {
   const [activeViewId, setActiveViewId] = useState<number | null>(Number.isSafeInteger(initialView) && initialView > 0 ? initialView : null)
   const [displayMode, setDisplayMode] = useState<SavedViewDisplayMode>('summary')
   const [matrixSupplierIds, setMatrixSupplierIds] = useState<number[]>([])
+  const [matrixPriceSourceOverride, setMatrixPriceSourceOverride] = useState<ItemSupplierMatrixPriceSource | null>(null)
+  const [matrixMetricOverride, setMatrixMetricOverride] = useState<ItemSupplierMatrixMetric | null>(null)
   const [viewSortOverride, setViewSortOverride] = useState<{ column: ItemSortBy; direction: 'asc' | 'desc' } | null>(null)
   const savedViews = useProcurementSavedViews()
+  const updateSavedView = useUpdateProcurementSavedView()
   const activeViewDetail = useProcurementSavedView(activeViewId)
   const initializedDefault = useRef(false)
   const sort = useSortState<ItemSortBy>('name', 'asc')
@@ -72,6 +76,8 @@ export function ItemsPage() {
   }, [activeViewId, savedViews.data, setUrlParams])
 
   useEffect(() => {
+    setMatrixPriceSourceOverride(null)
+    setMatrixMetricOverride(null)
     if (activeViewId === null) {
       setDisplayMode('summary')
       return
@@ -99,6 +105,9 @@ export function ItemsPage() {
   }, [activeViewId, supplierIds])
 
   const activeView = savedViews.data?.find((view) => view.id === activeViewId) ?? null
+  const matrixConfig = activeViewDetail.data?.config ?? activeView?.config
+  const matrixPriceSource = matrixPriceSourceOverride ?? matrixConfig?.matrixPriceSource ?? 'actual'
+  const matrixMetric = matrixMetricOverride ?? matrixConfig?.matrixMetric ?? 'latest'
   const configuredSort = activeView?.config.sortBy
   const allowedSorts: ItemSortBy[] = ['code', 'name', 'category', 'unit', 'status', 'source', 'latest', 'lowest', 'highest', 'change', 'suppliers', 'lastPurchase']
   const savedViewSort = configuredSort && allowedSorts.includes(configuredSort as ItemSortBy) ? configuredSort as ItemSortBy : 'name'
@@ -236,6 +245,32 @@ export function ItemsPage() {
     setPage(1)
   }
 
+  async function persistMatrixSettings(
+    next: Partial<{ matrixPriceSource: ItemSupplierMatrixPriceSource; matrixMetric: ItemSupplierMatrixMetric }>,
+  ) {
+    const view = activeViewDetail.data
+    if (!view || updateSavedView.isPending) return
+
+    if (next.matrixPriceSource) setMatrixPriceSourceOverride(next.matrixPriceSource)
+    if (next.matrixMetric) setMatrixMetricOverride(next.matrixMetric)
+
+    try {
+      await updateSavedView.mutateAsync({
+        id: view.id,
+        input: {
+          name: view.name,
+          config: { ...view.config, ...next },
+          isDefault: view.isDefault,
+          rowVersion: view.rowVersion,
+        },
+      })
+    } catch {
+      if (next.matrixPriceSource) setMatrixPriceSourceOverride(null)
+      if (next.matrixMetric) setMatrixMetricOverride(null)
+      toast.error(t('savedViews.errors.save'))
+    }
+  }
+
   function resetPriceScope() {
     if (activeViewDetail.data) {
       setPeriod(activeViewDetail.data.config.period)
@@ -297,34 +332,280 @@ export function ItemsPage() {
             matrixLoading={supplierMatrix.isPending || supplierMatrix.isFetching}
             matrixError={supplierMatrix.isError}
             visibleSupplierIds={matrixSupplierIds}
+            priceSource={matrixPriceSource}
+            metric={matrixMetric}
+            settingsSaving={updateSavedView.isPending}
             onVisibleSupplierIdsChange={setMatrixSupplierIds}
+            onPriceSourceChange={(value) => { void persistMatrixSettings({ matrixPriceSource: value }) }}
+            onMetricChange={(value) => { void persistMatrixSettings({ matrixMetric: value }) }}
             onRetryMatrix={() => void supplierMatrix.refetch()}
           />
         ) : <>
-          <div className="hidden max-h-[68vh] overflow-auto md:block"><table className="min-w-[64rem] w-full text-sm"><thead className="sticky top-0 z-10"><tr>
-            <SortableHeader label={t('items.name')} column="name" sortColumn={displayedSortColumn} sortDirection={sortDirection} onSort={onSort} tone="soft-primary" />
-            <SortableHeader label={t('items.analytics.latest')} column="latest" sortColumn={displayedSortColumn} sortDirection={sortDirection} onSort={onSort} tone="soft-primary" />
-            <SortableHeader label={t('items.analytics.lowest')} column="lowest" sortColumn={displayedSortColumn} sortDirection={sortDirection} onSort={onSort} tone="soft-primary" />
-            <SortableHeader label={t('items.analytics.highest')} column="highest" sortColumn={displayedSortColumn} sortDirection={sortDirection} onSort={onSort} tone="soft-primary" />
-            <SortableHeader label={t('items.analytics.latestChange')} column="change" sortColumn={displayedSortColumn} sortDirection={sortDirection} onSort={onSort} tone="soft-primary" />
-            <SortableHeader label={t('items.analytics.suppliers')} column="suppliers" sortColumn={displayedSortColumn} sortDirection={sortDirection} onSort={onSort} tone="soft-primary" />
-            <SortableHeader label={t('items.analytics.lastPurchase')} column="lastPurchase" sortColumn={displayedSortColumn} sortDirection={sortDirection} onSort={onSort} tone="soft-primary" />
-          </tr></thead><tbody>{data.items.map((item) => {
-            const detailsPath = activeViewId ? `/items/${item.id}?view=${activeViewId}` : `/items/${item.id}`
-            return <tr key={item.id} className="hover:bg-primary/[0.035] border-b last:border-b-0">
-              <td className="px-4 py-4"><Link to={detailsPath} className="group hover:text-primary focus-visible:ring-ring inline-flex max-w-full items-center gap-2 rounded-md font-semibold outline-none focus-visible:ring-2"><PackageSearch className="text-primary size-4 shrink-0" /><OverflowTooltipText className="max-w-[24rem]">{item.name}</OverflowTooltipText></Link><div className="text-muted-foreground mt-1 flex flex-wrap gap-x-2 text-xs"><span dir="ltr" className="font-mono">{item.code}</span>{item.categoryName ? <span>· {item.categoryName}</span> : null}</div></td>
-              <td className="px-4 py-4">{visiblePricesLoading ? <PriceCellSkeleton wide /> : <><p dir="ltr" className="font-semibold tabular-nums">{formatUnitCost(item.price?.latestUnitCost ?? null, locale, item.price?.currencyCode, item.price?.unitName)}</p>{item.price ? <p className="text-muted-foreground mt-1 max-w-[14rem] truncate text-xs">{item.price.latestSupplierName}</p> : null}</>}</td>
-              <td dir="ltr" className="px-4 py-4 tabular-nums">{visiblePricesLoading ? <PriceCellSkeleton /> : formatUnitCost(item.price?.lowestUnitCost ?? null, locale, item.price?.currencyCode, item.price?.unitName)}</td>
-              <td dir="ltr" className="px-4 py-4 tabular-nums">{visiblePricesLoading ? <PriceCellSkeleton /> : formatUnitCost(item.price?.highestUnitCost ?? null, locale, item.price?.currencyCode, item.price?.unitName)}</td>
-              <td className="px-4 py-4">{visiblePricesLoading ? <PriceCellSkeleton compact /> : item.price?.changePercent === null || item.price?.changePercent === undefined ? '—' : <span dir="ltr" className={`inline-flex items-center gap-1 font-semibold ${item.price.changePercent > 0 ? 'text-destructive' : item.price.changePercent < 0 ? 'text-success' : 'text-muted-foreground'}`}>{item.price.changePercent > 0 ? <ArrowUp className="size-3.5" /> : item.price.changePercent < 0 ? <ArrowDown className="size-3.5" /> : <Minus className="size-3.5" />}{formatPercent(item.price.changePercent, locale)}</span>}</td>
-              <td className="px-4 py-4 tabular-nums">{visiblePricesLoading ? <PriceCellSkeleton compact /> : visiblePricesUnavailable ? '—' : (item.price?.supplierCount ?? 0)}</td>
-              <td className="px-4 py-4">{visiblePricesLoading ? <PriceCellSkeleton /> : formatDateOnly(item.price?.lastPurchaseDate ?? null, locale)}</td>
-            </tr>
-          })}</tbody></table></div>
-          <div className="divide-y md:hidden">{data.items.map((item) => {
-            const detailsPath = activeViewId ? `/items/${item.id}?view=${activeViewId}` : `/items/${item.id}`
-            return <Link key={item.id} to={detailsPath} className="hover:bg-primary/[0.035] block p-4"><div className="flex gap-3"><span className="bg-primary/10 text-primary grid size-10 place-items-center rounded-lg"><PackageSearch className="size-5" /></span><div className="min-w-0 flex-1"><p className="truncate font-semibold">{item.name}</p><p dir="ltr" className="text-muted-foreground mt-1 font-mono text-xs">{item.code}</p><div className="mt-3 grid grid-cols-2 gap-3 text-xs"><div><p className="text-muted-foreground">{t('items.analytics.latest')}</p><p dir="ltr" className="mt-1 font-semibold">{visiblePricesLoading ? <PriceCellSkeleton /> : formatUnitCost(item.price?.latestUnitCost ?? null, locale, item.price?.currencyCode, item.price?.unitName)}</p></div><div><p className="text-muted-foreground">{t('items.analytics.latestChange')}</p><p dir="ltr" className="mt-1 font-semibold">{visiblePricesLoading ? <PriceCellSkeleton compact /> : formatPercent(item.price?.changePercent ?? null, locale)}</p></div><div><p className="text-muted-foreground">{t('items.analytics.suppliers')}</p><p className="mt-1 font-semibold">{visiblePricesLoading ? <PriceCellSkeleton compact /> : visiblePricesUnavailable ? '—' : (item.price?.supplierCount ?? 0)}</p></div><div><p className="text-muted-foreground">{t('items.analytics.lastPurchase')}</p><p className="mt-1 font-semibold">{visiblePricesLoading ? <PriceCellSkeleton /> : formatDateOnly(item.price?.lastPurchaseDate ?? null, locale)}</p></div></div></div></div></Link>
-          })}</div>
+          <div className="hidden max-h-[68vh] overflow-auto md:block">
+            <table className="w-full min-w-[82rem] table-fixed text-sm">
+              <colgroup>
+                <col className="w-[22rem]" />
+                <col className="w-[16rem]" />
+                <col className="w-[11rem]" />
+                <col className="w-[11rem]" />
+                <col className="w-[13rem]" />
+                <col className="w-[9rem]" />
+                <col className="w-[11rem]" />
+              </colgroup>
+              <thead className="sticky top-0 z-20">
+                <tr>
+                  <SortableHeader
+                    label={t('items.name')}
+                    column="name"
+                    sortColumn={displayedSortColumn}
+                    sortDirection={sortDirection}
+                    onSort={onSort}
+                    tone="soft-primary"
+                    rowSpan={2}
+                    className="sticky start-0 z-30 border-e bg-accent/95 align-middle backdrop-blur"
+                  />
+                  <th
+                    scope="colgroup"
+                    colSpan={4}
+                    className="border-primary/15 bg-primary/[0.06] border-b px-4 py-2.5 text-center text-[11px] font-semibold tracking-wide text-primary"
+                  >
+                    {t('items.analytics.priceIntelligenceGroup')}
+                  </th>
+                  <th
+                    scope="colgroup"
+                    colSpan={2}
+                    className="border-primary/15 bg-primary/[0.06] border-b border-s px-4 py-2.5 text-center text-[11px] font-semibold tracking-wide text-primary"
+                  >
+                    {t('items.analytics.activityGroup')}
+                  </th>
+                </tr>
+                <tr>
+                  <SortableHeader label={t('items.analytics.latest')} column="latest" sortColumn={displayedSortColumn} sortDirection={sortDirection} onSort={onSort} tone="soft-primary" className="text-center" />
+                  <SortableHeader label={t('items.analytics.lowest')} column="lowest" sortColumn={displayedSortColumn} sortDirection={sortDirection} onSort={onSort} tone="soft-primary" className="text-center" />
+                  <SortableHeader label={t('items.analytics.highest')} column="highest" sortColumn={displayedSortColumn} sortDirection={sortDirection} onSort={onSort} tone="soft-primary" className="text-center" />
+                  <SortableHeader label={t('items.analytics.latestChange')} column="change" sortColumn={displayedSortColumn} sortDirection={sortDirection} onSort={onSort} tone="soft-primary" className="text-center" />
+                  <SortableHeader label={t('items.analytics.suppliers')} column="suppliers" sortColumn={displayedSortColumn} sortDirection={sortDirection} onSort={onSort} tone="soft-primary" className="border-s text-center" />
+                  <SortableHeader label={t('items.analytics.lastPurchase')} column="lastPurchase" sortColumn={displayedSortColumn} sortDirection={sortDirection} onSort={onSort} tone="soft-primary" className="text-center" />
+                </tr>
+              </thead>
+              <tbody>
+                {data.items.map((item) => {
+                  const detailsPath = activeViewId ? `/items/${item.id}?view=${activeViewId}` : `/items/${item.id}`
+                  const hasPurchaseHistory = Boolean(item.price)
+
+                  return (
+                    <tr
+                      key={item.id}
+                      className="border-b transition-colors even:bg-muted/10 hover:bg-primary/[0.035] last:border-b-0"
+                    >
+                      <td className="sticky start-0 z-10 border-e bg-inherit px-4 py-3.5 align-middle">
+                        <TableEntityLink
+                          kind="item"
+                          id={item.id}
+                          name={item.name}
+                          code={item.code}
+                          to={detailsPath}
+                          compact
+                          className="max-w-[20rem]"
+                        />
+                        {item.categoryName ? (
+                          <p className="text-muted-foreground mt-1.5 truncate text-start text-xs">
+                            {item.categoryName}
+                          </p>
+                        ) : null}
+                      </td>
+
+                      <td className="px-4 py-3.5 text-center align-middle">
+                        {visiblePricesLoading ? (
+                          <PriceCellSkeleton wide />
+                        ) : visiblePricesUnavailable ? (
+                          <span className="text-muted-foreground text-xs">{t('items.analytics.notAvailable')}</span>
+                        ) : item.price ? (
+                          <div className="flex flex-col items-center gap-2">
+                            <span dir="ltr" className="inline-block text-base font-bold tabular-nums">
+                              {formatUnitCost(item.price.latestUnitCost, locale, item.price.currencyCode, item.price.unitName)}
+                            </span>
+                            <TableEntityLink
+                              kind="supplier"
+                              id={item.price.latestSupplierId}
+                              name={item.price.latestSupplierName}
+                              code={item.price.latestSupplierCode}
+                              compact
+                              className="max-w-[13rem]"
+                            />
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground inline-flex rounded-md bg-muted px-2.5 py-1.5 text-xs font-medium">
+                            {t('items.analytics.noPurchaseHistory')}
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-3.5 text-center align-middle">
+                        {visiblePricesLoading ? (
+                          <PriceCellSkeleton />
+                        ) : (
+                          <span dir="ltr" className="inline-block font-medium tabular-nums">
+                            {hasPurchaseHistory
+                              ? formatUnitCost(item.price?.lowestUnitCost ?? null, locale, item.price?.currencyCode, item.price?.unitName)
+                              : '—'}
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-3.5 text-center align-middle">
+                        {visiblePricesLoading ? (
+                          <PriceCellSkeleton />
+                        ) : (
+                          <span dir="ltr" className="inline-block font-medium tabular-nums">
+                            {hasPurchaseHistory
+                              ? formatUnitCost(item.price?.highestUnitCost ?? null, locale, item.price?.currencyCode, item.price?.unitName)
+                              : '—'}
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-3.5 text-center align-middle">
+                        {visiblePricesLoading ? (
+                          <PriceCellSkeleton compact />
+                        ) : visiblePricesUnavailable ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <PriceChangePill
+                            value={item.price?.changePercent ?? null}
+                            locale={locale}
+                            hasPurchaseHistory={hasPurchaseHistory}
+                            noPreviousLabel={t('items.analytics.noPreviousShort')}
+                          />
+                        )}
+                      </td>
+
+                      <td className="border-s px-4 py-3.5 text-center align-middle">
+                        {visiblePricesLoading ? (
+                          <PriceCellSkeleton compact />
+                        ) : visiblePricesUnavailable || !item.price ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <span
+                            aria-label={`${t('items.analytics.supplierCount')}: ${item.price.supplierCount}`}
+                            className="bg-primary/8 text-primary inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold"
+                          >
+                            <Building2 aria-hidden="true" className="size-3.5" />
+                            <span dir="ltr" className="tabular-nums">{item.price.supplierCount}</span>
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-3.5 text-center align-middle">
+                        {visiblePricesLoading ? (
+                          <PriceCellSkeleton />
+                        ) : (
+                          <span className="inline-block tabular-nums">
+                            {item.price ? formatDateOnly(item.price.lastPurchaseDate, locale) : '—'}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="divide-y md:hidden">
+            {data.items.map((item) => {
+              const detailsPath = activeViewId ? `/items/${item.id}?view=${activeViewId}` : `/items/${item.id}`
+              const hasPurchaseHistory = Boolean(item.price)
+
+              return (
+                <Link
+                  key={item.id}
+                  to={detailsPath}
+                  className="hover:bg-primary/[0.035] block p-4 transition-colors"
+                >
+                  <div className="flex gap-3">
+                    <span className="bg-primary/10 text-primary grid size-10 place-items-center rounded-lg">
+                      <PackageSearch className="size-5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold">{item.name}</p>
+                      <p dir="ltr" className="text-muted-foreground mt-1 font-mono text-xs">{item.code}</p>
+                      {item.categoryName ? <p className="text-muted-foreground mt-1 truncate text-xs">{item.categoryName}</p> : null}
+
+                      {!visiblePricesLoading && !visiblePricesUnavailable && !item.price ? (
+                        <p className="text-muted-foreground mt-3 rounded-lg bg-muted/50 px-3 py-2 text-xs font-medium">
+                          {t('items.analytics.noPurchaseHistory')}
+                        </p>
+                      ) : (
+                        <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                          <div>
+                            <p className="text-muted-foreground">{t('items.analytics.latest')}</p>
+                            <p className="mt-1 font-semibold">
+                              {visiblePricesLoading ? (
+                                <PriceCellSkeleton />
+                              ) : visiblePricesUnavailable ? (
+                                t('items.analytics.notAvailable')
+                              ) : (
+                                <span dir="ltr" className="inline-block tabular-nums">
+                                  {formatUnitCost(item.price?.latestUnitCost ?? null, locale, item.price?.currencyCode, item.price?.unitName)}
+                                </span>
+                              )}
+                            </p>
+                          </div>
+
+                          <div>
+                            <p className="text-muted-foreground">{t('items.analytics.latestChange')}</p>
+                            <div className="mt-1">
+                              {visiblePricesLoading ? (
+                                <PriceCellSkeleton compact />
+                              ) : visiblePricesUnavailable ? (
+                                <span className="text-muted-foreground">—</span>
+                              ) : (
+                                <PriceChangePill
+                                  value={item.price?.changePercent ?? null}
+                                  locale={locale}
+                                  hasPurchaseHistory={hasPurchaseHistory}
+                                  noPreviousLabel={t('items.analytics.noPreviousShort')}
+                                  compact
+                                />
+                              )}
+                            </div>
+                          </div>
+
+                          <div>
+                            <p className="text-muted-foreground">{t('items.analytics.suppliers')}</p>
+                            <div className="mt-1">
+                              {visiblePricesLoading ? (
+                                <PriceCellSkeleton compact />
+                              ) : visiblePricesUnavailable || !item.price ? (
+                                <span className="text-muted-foreground">—</span>
+                              ) : (
+                                <span className="bg-primary/8 text-primary inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold">
+                                  <Building2 aria-hidden="true" className="size-3" />
+                                  <span dir="ltr" className="tabular-nums">{item.price.supplierCount}</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div>
+                            <p className="text-muted-foreground">{t('items.analytics.lastPurchase')}</p>
+                            <p className="mt-1 font-semibold tabular-nums">
+                              {visiblePricesLoading ? (
+                                <PriceCellSkeleton />
+                              ) : item.price ? (
+                                formatDateOnly(item.price.lastPurchaseDate, locale)
+                              ) : '—'}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+
         </>}
         <TablePagination page={page} totalPages={totalPages} pageSize={pageSize} startRow={startRow} endRow={endRow} totalRows={data.total} onPageChange={setPage} onPageSizeChange={(value) => { setPageSize(value); setPage(1) }} />
       </>}
@@ -336,5 +617,49 @@ export function ItemsPage() {
 function PriceCellSkeleton({ wide = false, compact = false }: { wide?: boolean; compact?: boolean }) {
   const width = compact ? 'w-10' : wide ? 'w-28' : 'w-20'
   return <span aria-hidden="true" className={`bg-muted inline-block h-4 ${width} animate-pulse rounded`} />
+}
+
+function PriceChangePill({
+  value,
+  locale,
+  hasPurchaseHistory,
+  noPreviousLabel,
+  compact = false,
+}: {
+  value: number | null
+  locale: string
+  hasPurchaseHistory: boolean
+  noPreviousLabel: string
+  compact?: boolean
+}) {
+  if (!hasPurchaseHistory) {
+    return <span className="text-muted-foreground">—</span>
+  }
+
+  if (value === null || !Number.isFinite(value)) {
+    return (
+      <span className={`inline-flex items-center gap-1 rounded-full bg-muted text-muted-foreground ${compact ? 'px-2 py-0.5 text-[11px]' : 'px-2.5 py-1 text-xs'}`}>
+        <Minus aria-hidden="true" className="size-3" />
+        {noPreviousLabel}
+      </span>
+    )
+  }
+
+  const Icon = value > 0 ? ArrowUp : value < 0 ? ArrowDown : Minus
+  const toneClass = value > 0
+    ? 'bg-destructive/10 text-destructive'
+    : value < 0
+      ? 'bg-success/10 text-success'
+      : 'bg-muted text-muted-foreground'
+
+  return (
+    <span
+      dir="ltr"
+      className={`inline-flex items-center gap-1 rounded-full font-semibold tabular-nums ${toneClass} ${compact ? 'px-2 py-0.5 text-[11px]' : 'px-2.5 py-1 text-xs'}`}
+    >
+      <Icon aria-hidden="true" className="size-3.5" />
+      {formatPercent(value, locale)}
+    </span>
+  )
 }
 

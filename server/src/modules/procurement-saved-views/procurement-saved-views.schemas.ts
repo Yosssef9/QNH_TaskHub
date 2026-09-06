@@ -13,6 +13,8 @@ export const savedViewConfigSchema = z.object({
   sortBy: z.string().trim().max(80).nullable().default("name"),
   sortDirection: z.enum(["asc", "desc"]).default("asc"),
   columns: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
+  matrixPriceSource: z.enum(["actual", "quote", "compare"]).default("actual"),
+  matrixMetric: z.enum(["latest", "previous", "lowest", "highest", "average"]).default("latest"),
 });
 
 export const savedViewIdParamsSchema = z.object({

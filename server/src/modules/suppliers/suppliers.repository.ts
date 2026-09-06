@@ -470,6 +470,7 @@ export async function listActivity(supplierId: number): Promise<SupplierActivity
 
 export const suppliersRepository = {
   listSuppliers,
+  listSupplierOptions,
   findSupplier,
   findSupplierIdentity,
   createManualSupplier,

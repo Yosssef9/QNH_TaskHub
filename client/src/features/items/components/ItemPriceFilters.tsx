@@ -19,6 +19,7 @@ export function ItemPriceFilters({
   onSupplierIdsChange,
   onSelectedSuppliersChange,
   onReset,
+  resetDisabled = false,
 }: {
   period: ProcurementPricePeriod
   supplierIds: number[]
@@ -28,6 +29,7 @@ export function ItemPriceFilters({
   onSupplierIdsChange: (ids: number[]) => void
   onSelectedSuppliersChange?: (options: SearchableSelectOption[]) => void
   onReset: () => void
+  resetDisabled?: boolean
 }) {
   const { t } = useTranslation()
   const [supplierSearch, setSupplierSearch] = useState('')
@@ -45,10 +47,26 @@ export function ItemPriceFilters({
       })),
     [suppliers.data],
   )
+  const selectedDisplayOptions = useMemo<SearchableSelectOption[]>(() => {
+    const known = new Map<number, SearchableSelectOption>()
+    selectedSuppliers.forEach((entry) => known.set(Number(entry.value), entry))
+    options.forEach((entry) => known.set(Number(entry.value), entry))
+
+    return supplierIds.map((id) => known.get(id) ?? {
+      value: id,
+      label: t('items.analytics.supplierFallback', { id }),
+      description: String(id),
+    })
+  }, [options, selectedSuppliers, supplierIds, t])
+  const selectedSummaryText = supplierIds.length === 0
+    ? undefined
+    : supplierIds.length === 1
+      ? selectedDisplayOptions[0]?.label
+      : t('items.analytics.suppliersSelected', { count: supplierIds.length })
 
   function changeSuppliers(values: SelectValue[]) {
     const ids = values.map(Number)
-    const known = new Map([...selectedSuppliers, ...options].map((entry) => [Number(entry.value), entry]))
+    const known = new Map([...selectedDisplayOptions, ...options].map((entry) => [Number(entry.value), entry]))
     const next = ids.map((id) => known.get(id)).filter((entry): entry is SearchableSelectOption => Boolean(entry))
     onSupplierIdsChange(ids)
     onSelectedSuppliersChange?.(next)
@@ -75,20 +93,29 @@ export function ItemPriceFilters({
             multiple
             values={supplierIds}
             options={options}
-            selectedOptions={selectedSuppliers}
+            selectedOptions={selectedDisplayOptions}
+            {...(selectedSummaryText ? { selectedSummaryText } : {})}
+            pinSelectedOptions
+            selectedSectionLabel={t('items.analytics.selectedSuppliersGroup')}
+            optionsSectionLabel={t('items.analytics.otherSuppliersGroup')}
             searchValue={supplierSearch}
             onSearchChange={setSupplierSearch}
             onOpenChange={setSupplierPickerOpen}
             onChange={changeSuppliers}
-            loading={suppliers.isPending}
+            loading={suppliers.isLoading}
             loadingMore={suppliers.isFetchingNextPage}
+            {...(suppliers.isError ? {
+              loadErrorText: t('suppliers.optionsLoadError'),
+              onRetry: () => { void suppliers.refetch() },
+            } : {})}
             hasMore={Boolean(suppliers.hasNextPage)}
             onLoadMore={() => { void suppliers.fetchNextPage() }}
             placeholder={t('items.analytics.allSuppliers')}
             searchPlaceholder={t('suppliers.searchPlaceholder')}
+            noResultsText={t('suppliers.noResults')}
             ariaLabel={t('items.analytics.suppliersFilter')}
           />
-          <Button type="button" variant="outline" onClick={onReset}><RotateCcw className="size-4" />{t('items.analytics.resetScope')}</Button>
+          <Button type="button" variant="outline" disabled={resetDisabled} onClick={onReset}><RotateCcw className="size-4" />{t('items.analytics.resetScope')}</Button>
         </div>
       </div>
     </Card>

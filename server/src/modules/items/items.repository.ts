@@ -77,6 +77,17 @@ export interface ItemSupplierMatrixRecord {
   changePercent: number | string | null;
   latestQuoteUnitCost: number | string | null;
   latestQuoteDate: Date | null;
+  previousQuoteUnitCost: number | string | null;
+  previousQuoteDate: Date | null;
+  lowestQuoteUnitCost: number | string | null;
+  lowestQuoteDate: Date | null;
+  highestQuoteUnitCost: number | string | null;
+  highestQuoteDate: Date | null;
+  averageQuoteUnitCost: number | string | null;
+  quoteCount: number | string | null;
+  lastQuoteDate: Date | null;
+  quoteChangeAmount: number | string | null;
+  quoteChangePercent: number | string | null;
   quoteCurrencyCode: string | null;
   quoteUnitName: string | null;
 }
@@ -744,18 +755,15 @@ export async function listSupplierMatrix(
        AND highest.supplierId = aggregates.supplierId
        AND highest.highestRowNumber = 1
     ),
-    quote_ranked AS (
+    quote_normalized AS (
       SELECT
         quote_row.item_id AS itemId,
         quote_row.supplier_id AS supplierId,
-        quote_row.quoted_unit_cost AS latestQuoteUnitCost,
-        quote_row.quote_date AS latestQuoteDate,
-        quote_row.currency_code AS quoteCurrencyCode,
-        quote_row.unit_name AS quoteUnitName,
-        ROW_NUMBER() OVER (
-          PARTITION BY quote_row.item_id, quote_row.supplier_id
-          ORDER BY quote_row.quote_date DESC, quote_row.id DESC
-        ) AS quoteRowNumber
+        TRY_CONVERT(DECIMAL(19,6), quote_row.quoted_unit_cost) AS quotedUnitCost,
+        TRY_CONVERT(DATE, quote_row.quote_date) AS quoteDate,
+        NULLIF(LTRIM(RTRIM(CONVERT(NVARCHAR(30), quote_row.currency_code))), N'') AS quoteCurrencyCode,
+        NULLIF(LTRIM(RTRIM(CONVERT(NVARCHAR(100), quote_row.unit_name))), N'') AS quoteUnitName,
+        quote_row.id AS quoteId
       FROM dbo.TM_price_quotes AS quote_row
       INNER JOIN selected_items AS selected_item
         ON selected_item.itemId = quote_row.item_id
@@ -763,6 +771,8 @@ export async function listSupplierMatrix(
         ON selected_supplier.supplierId = quote_row.supplier_id
       WHERE quote_row.owner_user_id = @ownerUserId
         AND quote_row.is_active = 1
+        AND TRY_CONVERT(DATE, quote_row.quote_date) IS NOT NULL
+        AND TRY_CONVERT(DECIMAL(19,6), quote_row.quoted_unit_cost) IS NOT NULL
         AND (
           @period = 'ALL'
           OR quote_row.quote_date >= CASE @period
@@ -774,16 +784,101 @@ export async function listSupplierMatrix(
           END
         )
     ),
-    latest_quote AS (
+    quote_scope_ranked AS (
+      SELECT
+        quote_normalized.*,
+        ROW_NUMBER() OVER (
+          PARTITION BY itemId, supplierId
+          ORDER BY quoteDate DESC, quoteId DESC
+        ) AS scopeRowNumber
+      FROM quote_normalized
+    ),
+    quote_chosen_scope AS (
+      SELECT itemId, supplierId, quoteCurrencyCode, quoteUnitName
+      FROM quote_scope_ranked
+      WHERE scopeRowNumber = 1
+    ),
+    quote_scoped AS (
+      SELECT quote_normalized.*
+      FROM quote_normalized
+      INNER JOIN quote_chosen_scope
+        ON quote_chosen_scope.itemId = quote_normalized.itemId
+       AND quote_chosen_scope.supplierId = quote_normalized.supplierId
+       AND ISNULL(quote_chosen_scope.quoteCurrencyCode, N'') = ISNULL(quote_normalized.quoteCurrencyCode, N'')
+       AND ISNULL(quote_chosen_scope.quoteUnitName, N'') = ISNULL(quote_normalized.quoteUnitName, N'')
+    ),
+    quote_ranked AS (
+      SELECT
+        quote_scoped.*,
+        ROW_NUMBER() OVER (
+          PARTITION BY itemId, supplierId
+          ORDER BY quoteDate DESC, quoteId DESC
+        ) AS chronologicalRowNumber,
+        ROW_NUMBER() OVER (
+          PARTITION BY itemId, supplierId
+          ORDER BY quotedUnitCost ASC, quoteDate DESC, quoteId DESC
+        ) AS lowestRowNumber,
+        ROW_NUMBER() OVER (
+          PARTITION BY itemId, supplierId
+          ORDER BY quotedUnitCost DESC, quoteDate DESC, quoteId DESC
+        ) AS highestRowNumber
+      FROM quote_scoped
+    ),
+    quote_aggregates AS (
       SELECT
         itemId,
         supplierId,
-        latestQuoteUnitCost,
-        latestQuoteDate,
-        quoteCurrencyCode,
-        quoteUnitName
-      FROM quote_ranked
-      WHERE quoteRowNumber = 1
+        AVG(CONVERT(DECIMAL(38,10), quotedUnitCost)) AS averageQuoteUnitCost,
+        COUNT_BIG(1) AS quoteCount,
+        MAX(quoteDate) AS lastQuoteDate
+      FROM quote_scoped
+      GROUP BY itemId, supplierId
+    ),
+    quote_summary AS (
+      SELECT
+        aggregates.itemId,
+        aggregates.supplierId,
+        chosen.quoteCurrencyCode,
+        chosen.quoteUnitName,
+        latest.quotedUnitCost AS latestQuoteUnitCost,
+        latest.quoteDate AS latestQuoteDate,
+        previous.quotedUnitCost AS previousQuoteUnitCost,
+        previous.quoteDate AS previousQuoteDate,
+        lowest.quotedUnitCost AS lowestQuoteUnitCost,
+        lowest.quoteDate AS lowestQuoteDate,
+        highest.quotedUnitCost AS highestQuoteUnitCost,
+        highest.quoteDate AS highestQuoteDate,
+        aggregates.averageQuoteUnitCost,
+        aggregates.quoteCount,
+        aggregates.lastQuoteDate,
+        CASE
+          WHEN previous.quotedUnitCost IS NULL THEN NULL
+          ELSE CONVERT(DECIMAL(19,6), latest.quotedUnitCost - previous.quotedUnitCost)
+        END AS quoteChangeAmount,
+        CASE
+          WHEN previous.quotedUnitCost IS NULL OR previous.quotedUnitCost = 0 THEN NULL
+          ELSE CONVERT(DECIMAL(19,6), ((latest.quotedUnitCost - previous.quotedUnitCost) / previous.quotedUnitCost) * 100)
+        END AS quoteChangePercent
+      FROM quote_aggregates AS aggregates
+      INNER JOIN quote_chosen_scope AS chosen
+        ON chosen.itemId = aggregates.itemId
+       AND chosen.supplierId = aggregates.supplierId
+      INNER JOIN quote_ranked AS latest
+        ON latest.itemId = aggregates.itemId
+       AND latest.supplierId = aggregates.supplierId
+       AND latest.chronologicalRowNumber = 1
+      LEFT JOIN quote_ranked AS previous
+        ON previous.itemId = aggregates.itemId
+       AND previous.supplierId = aggregates.supplierId
+       AND previous.chronologicalRowNumber = 2
+      INNER JOIN quote_ranked AS lowest
+        ON lowest.itemId = aggregates.itemId
+       AND lowest.supplierId = aggregates.supplierId
+       AND lowest.lowestRowNumber = 1
+      INNER JOIN quote_ranked AS highest
+        ON highest.itemId = aggregates.itemId
+       AND highest.supplierId = aggregates.supplierId
+       AND highest.highestRowNumber = 1
     )
     SELECT
       COALESCE(actual.itemId, quote.itemId) AS itemId,
@@ -807,10 +902,21 @@ export async function listSupplierMatrix(
       actual.changePercent,
       quote.latestQuoteUnitCost,
       quote.latestQuoteDate,
+      quote.previousQuoteUnitCost,
+      quote.previousQuoteDate,
+      quote.lowestQuoteUnitCost,
+      quote.lowestQuoteDate,
+      quote.highestQuoteUnitCost,
+      quote.highestQuoteDate,
+      quote.averageQuoteUnitCost,
+      quote.quoteCount,
+      quote.lastQuoteDate,
+      quote.quoteChangeAmount,
+      quote.quoteChangePercent,
       quote.quoteCurrencyCode,
       quote.quoteUnitName
     FROM actual_summary AS actual
-    FULL OUTER JOIN latest_quote AS quote
+    FULL OUTER JOIN quote_summary AS quote
       ON quote.itemId = actual.itemId
      AND quote.supplierId = actual.supplierId
     LEFT JOIN ${suppliersTable} AS supplier

@@ -1,8 +1,9 @@
-import { ExternalLink, PackageSearch, Trophy } from 'lucide-react'
+import { PackageSearch, Trophy } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 
 import { EmptyState } from '@/components/shared/EmptyState'
+import { TableEntityLink } from '@/components/shared/TableEntityLink'
 import { SortableHeader } from '@/components/shared/SortableHeader'
 import { TablePagination } from '@/components/shared/TablePagination'
 import { Badge } from '@/components/ui/badge'
@@ -88,13 +89,9 @@ export function SupplierItemsPriceTable({
                     return (
                       <tr key={item.itemId} className="hover:bg-primary/[0.035] border-b last:border-b-0">
                         <td className="px-4 py-3">
-                          <Link to={detailsPath} className="hover:text-primary focus-visible:ring-ring inline-flex max-w-[22rem] items-center gap-2 rounded-md font-semibold outline-none focus-visible:ring-2">
-                            <span className="truncate">{item.itemName}</span>
-                            <ExternalLink aria-hidden="true" className="size-3.5 shrink-0" />
-                          </Link>
+                          <TableEntityLink kind="item" id={item.itemId} name={item.itemName} code={item.itemCode} to={detailsPath} className="max-w-[22rem]" />
                           <div className="mt-1 flex flex-wrap items-center gap-2">
-                            {item.itemCode ? <span dir="ltr" className="text-muted-foreground font-mono text-xs">{item.itemCode}</span> : null}
-                            {item.categoryName ? <span className="text-muted-foreground text-xs">· {item.categoryName}</span> : null}
+                            {item.categoryName ? <span className="text-muted-foreground text-xs">{item.categoryName}</span> : null}
                             {item.isCurrentLowest ? <Badge variant="success"><Trophy aria-hidden="true" className="me-1 size-3" />{t('suppliers.intelligence.cheapest')}</Badge> : null}
                             {item.isCurrentHighest && !item.isCurrentLowest ? <Badge variant="warning">{t('suppliers.intelligence.highest')}</Badge> : null}
                             {item.marketSupplierCount === 1 ? <Badge variant="secondary">{t('suppliers.intelligence.onlySupplier')}</Badge> : null}

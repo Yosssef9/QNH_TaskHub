@@ -19,6 +19,7 @@ import type { ProcurementSavedViewConfig, ProcurementSavedViewDetail, Procuremen
 const defaultConfig: ProcurementSavedViewConfig = {
   itemIds: [], supplierIds: [], period: '1Y', category: null, source: null, statusCode: null,
   sortBy: 'name', sortDirection: 'asc', columns: ['item', 'latest', 'lowest', 'highest', 'change', 'suppliers', 'lastPurchase'],
+  matrixPriceSource: 'actual', matrixMetric: 'latest',
 }
 
 const SORTS: ItemSortBy[] = ['name', 'code', 'category', 'latest', 'lowest', 'highest', 'change', 'suppliers', 'lastPurchase']
@@ -111,9 +112,58 @@ export function ProcurementSavedViewEditorDialog({ open, savedViewId, onOpenChan
       <div className="flex items-start gap-3 pe-10"><div className="bg-primary/10 text-primary grid size-11 place-items-center rounded-xl"><BookmarkPlus className="size-5" /></div><div><DialogTitle>{t(savedViewId ? 'savedViews.editTitle' : 'savedViews.createTitle')}</DialogTitle><DialogDescription className="mt-1">{t('savedViews.description')}</DialogDescription></div></div>
       {savedViewId && detail.isPending ? <div className="py-8 text-center text-sm text-muted-foreground">{t('common.loading')}</div> : <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <label className="sm:col-span-2"><span className="mb-1.5 block text-sm font-medium">{t('savedViews.name')} *</span><Input value={name} onChange={(e) => setName(e.target.value)} /></label>
-        <label className="sm:col-span-2"><span className="mb-1.5 block text-sm font-medium">{t('savedViews.items')}</span><SearchableMultiSelect multiple values={config.itemIds} options={itemOptions} selectedOptions={selectedItemOptions} searchValue={itemSearch} onSearchChange={setItemSearch} onOpenChange={setItemPickerOpen} onChange={(values) => updateSelections('items', values, itemOptions)} loading={items.isPending} loadingMore={items.isFetchingNextPage} hasMore={Boolean(items.hasNextPage)} onLoadMore={() => { void items.fetchNextPage() }} placeholder={t('savedViews.selectItems')} searchPlaceholder={t('items.searchPlaceholder')} /></label>
-        <label className="sm:col-span-2"><span className="mb-1.5 block text-sm font-medium">{t('savedViews.suppliers')}</span><SearchableMultiSelect multiple values={config.supplierIds} options={supplierOptions} selectedOptions={selectedSupplierOptions} searchValue={supplierSearch} onSearchChange={setSupplierSearch} onOpenChange={setSupplierPickerOpen} onChange={(values) => updateSelections('suppliers', values, supplierOptions)} loading={suppliers.isPending} loadingMore={suppliers.isFetchingNextPage} hasMore={Boolean(suppliers.hasNextPage)} onLoadMore={() => { void suppliers.fetchNextPage() }} placeholder={t('savedViews.selectSuppliers')} searchPlaceholder={t('suppliers.searchPlaceholder')} /><span className="text-muted-foreground mt-1.5 block text-xs">{t('savedViews.supplierAnalyticsHint')}</span></label>
+        <label className="sm:col-span-2">
+          <span className="mb-1.5 block text-sm font-medium">{t('savedViews.items')}</span>
+          <SearchableMultiSelect
+            multiple
+            values={config.itemIds}
+            options={itemOptions}
+            selectedOptions={selectedItemOptions}
+            searchValue={itemSearch}
+            onSearchChange={setItemSearch}
+            onOpenChange={setItemPickerOpen}
+            onChange={(values) => updateSelections('items', values, itemOptions)}
+            loading={items.isLoading}
+            loadingMore={items.isFetchingNextPage}
+            {...(items.isError ? {
+              loadErrorText: t('items.optionsLoadError'),
+              onRetry: () => { void items.refetch() },
+            } : {})}
+            hasMore={Boolean(items.hasNextPage)}
+            onLoadMore={() => { void items.fetchNextPage() }}
+            placeholder={t('savedViews.selectItems')}
+            searchPlaceholder={t('items.searchPlaceholder')}
+            noResultsText={t('items.emptyTitle')}
+          />
+        </label>
+        <label className="sm:col-span-2">
+          <span className="mb-1.5 block text-sm font-medium">{t('savedViews.suppliers')}</span>
+          <SearchableMultiSelect
+            multiple
+            values={config.supplierIds}
+            options={supplierOptions}
+            selectedOptions={selectedSupplierOptions}
+            searchValue={supplierSearch}
+            onSearchChange={setSupplierSearch}
+            onOpenChange={setSupplierPickerOpen}
+            onChange={(values) => updateSelections('suppliers', values, supplierOptions)}
+            loading={suppliers.isLoading}
+            loadingMore={suppliers.isFetchingNextPage}
+            {...(suppliers.isError ? {
+              loadErrorText: t('suppliers.optionsLoadError'),
+              onRetry: () => { void suppliers.refetch() },
+            } : {})}
+            hasMore={Boolean(suppliers.hasNextPage)}
+            onLoadMore={() => { void suppliers.fetchNextPage() }}
+            placeholder={t('savedViews.selectSuppliers')}
+            searchPlaceholder={t('suppliers.searchPlaceholder')}
+            noResultsText={t('suppliers.noResults')}
+          />
+          <span className="text-muted-foreground mt-1.5 block text-xs">{t('savedViews.supplierAnalyticsHint')}</span>
+        </label>
         <label><span className="mb-1.5 block text-sm font-medium">{t('savedViews.period')}</span><Select value={config.period} onValueChange={(value) => setConfig((current) => ({ ...current, period: value as SavedViewPeriod }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1M">{t('savedViews.periods.1M')}</SelectItem><SelectItem value="3M">{t('savedViews.periods.3M')}</SelectItem><SelectItem value="6M">{t('savedViews.periods.6M')}</SelectItem><SelectItem value="1Y">{t('savedViews.periods.1Y')}</SelectItem><SelectItem value="ALL">{t('savedViews.periods.ALL')}</SelectItem></SelectContent></Select></label>
+        <label><span className="mb-1.5 block text-sm font-medium">{t('savedViews.matrixPriceSource')}</span><Select value={config.matrixPriceSource} onValueChange={(value) => setConfig((current) => ({ ...current, matrixPriceSource: value as ProcurementSavedViewConfig['matrixPriceSource'] }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="actual">{t('items.matrix.priceSources.actual')}</SelectItem><SelectItem value="quote">{t('items.matrix.priceSources.quote')}</SelectItem><SelectItem value="compare">{t('items.matrix.priceSources.compare')}</SelectItem></SelectContent></Select></label>
+        <label><span className="mb-1.5 block text-sm font-medium">{t('savedViews.matrixMetric')}</span><Select value={config.matrixMetric} onValueChange={(value) => setConfig((current) => ({ ...current, matrixMetric: value as ProcurementSavedViewConfig['matrixMetric'] }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="latest">{t('items.matrix.metrics.latest')}</SelectItem><SelectItem value="previous">{t('items.matrix.metrics.previous')}</SelectItem><SelectItem value="lowest">{t('items.matrix.metrics.lowest')}</SelectItem><SelectItem value="highest">{t('items.matrix.metrics.highest')}</SelectItem><SelectItem value="average">{t('items.matrix.metrics.average')}</SelectItem></SelectContent></Select></label>
         <label><span className="mb-1.5 block text-sm font-medium">{t('savedViews.category')}</span><Input value={config.category ?? ''} onChange={(e) => setConfig((current) => ({ ...current, category: e.target.value.trim() || null }))} /></label>
         <label><span className="mb-1.5 block text-sm font-medium">{t('savedViews.source')}</span><Select value={config.source ?? 'ALL'} onValueChange={(value) => setConfig((current) => ({ ...current, source: value === 'ALL' ? null : value as 'ORACLE' | 'MANUAL' }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">{t('items.sourceAll')}</SelectItem><SelectItem value="ORACLE">{t('items.sourceOracle')}</SelectItem><SelectItem value="MANUAL">{t('items.sourceManual')}</SelectItem></SelectContent></Select></label>
         <label><span className="mb-1.5 block text-sm font-medium">{t('savedViews.status')}</span><Select value={config.statusCode === null ? 'ALL' : String(config.statusCode)} onValueChange={(value) => setConfig((current) => ({ ...current, statusCode: value === 'ALL' ? null : Number(value) }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">{t('items.statusAll')}</SelectItem><SelectItem value="1">{t('items.statusActive')}</SelectItem><SelectItem value="0">{t('items.statusInactive')}</SelectItem></SelectContent></Select></label>
