@@ -6,13 +6,14 @@ import type {
   CreatePriceQuoteBody,
   LifecyclePriceQuoteBody,
   PriceQuoteAnalyticsQueryInput,
+  PriceQuoteContextQueryInput,
   PriceQuoteIdParams,
   PriceQuoteListQueryInput,
   PriceQuoteSummaryBody,
   UpdatePriceQuoteBody,
 } from "./price-quotes.schemas.js";
 import { priceQuotesService } from "./price-quotes.service.js";
-import type { PriceQuote, PriceQuoteActivity, PriceQuoteAnalytics, PriceQuoteList, PriceQuoteSummary } from "./price-quotes.types.js";
+import type { PriceQuote, PriceQuoteActivity, PriceQuoteAnalytics, PriceQuoteContext, PriceQuoteList, PriceQuoteSummary } from "./price-quotes.types.js";
 
 function userId(req: Request): number {
   const value = req.authContext?.user.userId;
@@ -23,6 +24,11 @@ function userId(req: Request): number {
 export const listPriceQuotes: RequestHandler = async (req, res) => {
   const query = getValidatedRequestPart<PriceQuoteListQueryInput>(req, "query");
   const body: ApiSuccessResponse<PriceQuoteList> = { success: true, data: await priceQuotesService.list(userId(req), query) };
+  res.status(200).json(body);
+};
+export const getPriceQuoteContext: RequestHandler = async (req, res) => {
+  const query = getValidatedRequestPart<PriceQuoteContextQueryInput>(req, "query");
+  const body: ApiSuccessResponse<PriceQuoteContext> = { success: true, data: await priceQuotesService.context(query.itemId, query.supplierId) };
   res.status(200).json(body);
 };
 export const getPriceQuote: RequestHandler = async (req, res) => {

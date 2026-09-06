@@ -28,7 +28,7 @@ import type {
   ContractPaymentTiming,
   ContractValueType,
 } from '../types/contracts.types'
-import type { Supplier } from '@/features/suppliers/types/supplier.types'
+import type { SupplierOption } from '@/features/suppliers/types/supplier.types'
 import {
   defaultContractInput,
   displayDate,
@@ -260,7 +260,7 @@ export function ContractEditorDialog({
                   <SupplierPicker
                     value={form.supplierId}
                     selectedName={selectedSupplierName}
-                    onChange={(supplier: Supplier) => {
+                    onChange={(supplier: SupplierOption) => {
                       change('supplierId', supplier.id)
                       setSelectedSupplierName(supplier.name)
                     }}

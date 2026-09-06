@@ -3,9 +3,10 @@ import type {
   ProcurementActivityType,
   Supplier,
   SupplierActivity,
+  SupplierOption,
   SupplierSource,
 } from "./suppliers.types.js";
-import type { SupplierActivityRecord, SupplierRecord } from "./suppliers.repository.js";
+import type { SupplierActivityRecord, SupplierOptionRecord, SupplierRecord } from "./suppliers.repository.js";
 
 function source(value: string): SupplierSource {
   if (value === "ORACLE" || value === "MANUAL") return value;
@@ -25,6 +26,14 @@ function activityType(value: string): ProcurementActivityType {
     code: "INVALID_PROCUREMENT_ACTIVITY",
     message: "Procurement activity has an unsupported type.",
   });
+}
+
+export function mapSupplierOption(record: SupplierOptionRecord): SupplierOption {
+  return {
+    id: Number(record.id),
+    code: record.code,
+    name: record.name,
+  };
 }
 
 export function mapSupplier(record: SupplierRecord): Supplier {

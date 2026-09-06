@@ -14,7 +14,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router'
 
@@ -25,6 +25,7 @@ import { LoadingState } from '@/components/shared/LoadingState'
 import { OverflowTooltipText } from '@/components/shared/OverflowTooltipText'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { SearchInput } from '@/components/shared/SearchInput'
+import { SearchableMultiSelect, type SearchableSelectOption } from '@/components/shared/SearchableMultiSelect'
 import { SortableHeader } from '@/components/shared/SortableHeader'
 import { TablePagination } from '@/components/shared/TablePagination'
 import { taskHubEase, taskHubMotion } from '@/components/shared/TaskHubMotion'
@@ -55,7 +56,8 @@ import {
   trackingStates,
   valueTypes,
 } from '@/features/contracts/components/contract-display'
-import { useContracts, useSuppliers } from '@/features/contracts/hooks/use-contracts'
+import { useContracts } from '@/features/contracts/hooks/use-contracts'
+import { useInfiniteSupplierOptions } from '@/features/suppliers/hooks/use-suppliers'
 import type {
   Contract,
   ContractListQuery,
@@ -118,6 +120,10 @@ export function ContractsPage() {
   const [sortBy, setSortBy] = useState<ContractListQuery['sortBy']>('endDate')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
   const [createOpen, setCreateOpen] = useState(false)
+  const [supplierSearch, setSupplierSearch] = useState('')
+  const [supplierPickerOpen, setSupplierPickerOpen] = useState(false)
+  const [selectedSupplierOption, setSelectedSupplierOption] = useState<SearchableSelectOption | null>(null)
+  const [draftSupplierOption, setDraftSupplierOption] = useState<SearchableSelectOption | null>(null)
 
   const queryInput: ContractListQuery = {
     search,
@@ -138,11 +144,20 @@ export function ContractsPage() {
     sortDirection,
   }
   const contracts = useContracts(queryInput)
-  const suppliers = useSuppliers({ search: '', page: 1, pageSize: 100, sortBy: 'name', sortDirection: 'asc' })
+  const suppliers = useInfiniteSupplierOptions(
+    { search: supplierSearch, pageSize: 50 },
+    filtersOpen && supplierPickerOpen,
+  )
+  const supplierOptions = useMemo<SearchableSelectOption[]>(
+    () =>
+      (suppliers.data?.pages.flatMap((supplierPage) => supplierPage.items) ?? []).map((supplier) => ({
+        value: supplier.id,
+        label: supplier.name,
+        description: supplier.code,
+      })),
+    [suppliers.data],
+  )
   const data = contracts.data
-  const supplierItems = suppliers.data?.items ?? []
-  const selectedSupplier = supplierItems.find((item) => item.id === supplierId)
-  const selectedDraftSupplier = supplierItems.find((item) => item.id === draftFilters.supplierId)
   const activeFilterCount = countContractFilters({
     status,
     supplierId,
@@ -183,6 +198,8 @@ export function ContractsPage() {
     setStartTo(undefined)
     setEndFrom(undefined)
     setEndTo(undefined)
+    setSelectedSupplierOption(null)
+    setDraftSupplierOption(null)
     setDraftFilters({ ...EMPTY_CONTRACT_FILTERS })
     resetPage()
   }
@@ -200,6 +217,7 @@ export function ContractsPage() {
       endFrom,
       endTo,
     })
+    setDraftSupplierOption(selectedSupplierOption)
     setFiltersOpen(true)
   }
 
@@ -214,6 +232,7 @@ export function ContractsPage() {
     setStartTo(draftFilters.startTo)
     setEndFrom(draftFilters.endFrom)
     setEndTo(draftFilters.endTo)
+    setSelectedSupplierOption(draftSupplierOption)
     resetPage()
     setFiltersOpen(false)
   }
@@ -227,11 +246,14 @@ export function ContractsPage() {
       label: t(`contracts.status.${status}`),
       onRemove: () => setStatus(undefined),
     })
-  if (selectedSupplier)
+  if (supplierId && selectedSupplierOption)
     activeChips.push({
       key: 'supplier',
-      label: selectedSupplier.name,
-      onRemove: () => setSupplierId(undefined),
+      label: selectedSupplierOption.label,
+      onRemove: () => {
+        setSupplierId(undefined)
+        setSelectedSupplierOption(null)
+      },
     })
   if (autoRenewal !== undefined)
     activeChips.push({
@@ -502,47 +524,33 @@ export function ContractsPage() {
                       </FilterField>
 
                       <FilterField label={t('contracts.supplier')}>
-                        <Select
-                          value={draftFilters.supplierId ? String(draftFilters.supplierId) : 'ALL'}
-                          onValueChange={(value) =>
+                        <SearchableMultiSelect
+                          value={draftFilters.supplierId ?? null}
+                          options={supplierOptions}
+                          selectedOptions={draftSupplierOption ? [draftSupplierOption] : []}
+                          searchValue={supplierSearch}
+                          onSearchChange={setSupplierSearch}
+                          onOpenChange={setSupplierPickerOpen}
+                          onChange={(value) => {
+                            const nextId = value === null ? undefined : Number(value)
+                            const nextOption = nextId === undefined
+                              ? null
+                              : supplierOptions.find((option) => Number(option.value) === nextId) ?? null
                             setDraftFilters((current) => ({
                               ...current,
-                              supplierId: value === 'ALL' ? undefined : Number(value),
+                              supplierId: nextId,
                             }))
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue>
-                              <span className="inline-flex min-w-0 items-center gap-2">
-                                <span className="bg-primary/10 text-primary grid size-6 shrink-0 place-items-center rounded-md">
-                                  <Building2 aria-hidden="true" className="size-3.5" />
-                                </span>
-                                <span className="truncate">
-                                  {selectedDraftSupplier?.name ?? t('contracts.filters.allSuppliers')}
-                                </span>
-                              </span>
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="ALL">
-                              <span className="inline-flex items-center gap-2">
-                                <Building2
-                                  aria-hidden="true"
-                                  className="text-muted-foreground size-4"
-                                />
-                                {t('contracts.filters.allSuppliers')}
-                              </span>
-                            </SelectItem>
-                            {supplierItems.map((supplier) => (
-                              <SelectItem key={supplier.id} value={String(supplier.id)}>
-                                <span className="inline-flex items-center gap-2">
-                                  <Building2 aria-hidden="true" className="text-primary size-4" />
-                                  {supplier.name}
-                                </span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                            setDraftSupplierOption(nextOption)
+                          }}
+                          onLoadMore={() => { void suppliers.fetchNextPage() }}
+                          hasMore={Boolean(suppliers.hasNextPage)}
+                          loading={suppliers.isPending}
+                          loadingMore={suppliers.isFetchingNextPage}
+                          placeholder={t('contracts.filters.allSuppliers')}
+                          searchPlaceholder={t('suppliers.searchPlaceholder')}
+                          noResultsText={t('suppliers.noResults')}
+                          ariaLabel={t('contracts.supplier')}
+                        />
                       </FilterField>
 
                       <FilterField label={t('contracts.renewal')}>

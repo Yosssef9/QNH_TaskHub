@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { SearchableMultiSelect, type SearchableSelectOption, type SelectValue } from '@/components/shared/SearchableMultiSelect'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { useSuppliers } from '@/features/suppliers/hooks/use-suppliers'
+import { useInfiniteSupplierOptions } from '@/features/suppliers/hooks/use-suppliers'
 import type { ProcurementPricePeriod } from '../types/item.types'
 
 const PERIODS: ProcurementPricePeriod[] = ['1M', '3M', '6M', '1Y', 'ALL']
@@ -32,9 +32,17 @@ export function ItemPriceFilters({
   const { t } = useTranslation()
   const [supplierSearch, setSupplierSearch] = useState('')
   const [supplierPickerOpen, setSupplierPickerOpen] = useState(false)
-  const suppliers = useSuppliers({ search: supplierSearch, page: 1, pageSize: 50, sortBy: 'name', sortDirection: 'asc' }, supplierPickerOpen)
+  const suppliers = useInfiniteSupplierOptions(
+    { search: supplierSearch, pageSize: 50 },
+    supplierPickerOpen,
+  )
   const options = useMemo<SearchableSelectOption[]>(
-    () => (suppliers.data?.items ?? []).map((supplier) => ({ value: supplier.id, label: supplier.name, description: supplier.code })),
+    () =>
+      (suppliers.data?.pages.flatMap((page) => page.items) ?? []).map((supplier) => ({
+        value: supplier.id,
+        label: supplier.name,
+        description: supplier.code,
+      })),
     [suppliers.data],
   )
 
@@ -72,7 +80,10 @@ export function ItemPriceFilters({
             onSearchChange={setSupplierSearch}
             onOpenChange={setSupplierPickerOpen}
             onChange={changeSuppliers}
-            loading={suppliers.isFetching}
+            loading={suppliers.isPending}
+            loadingMore={suppliers.isFetchingNextPage}
+            hasMore={Boolean(suppliers.hasNextPage)}
+            onLoadMore={() => { void suppliers.fetchNextPage() }}
             placeholder={t('items.analytics.allSuppliers')}
             searchPlaceholder={t('suppliers.searchPlaceholder')}
             ariaLabel={t('items.analytics.suppliersFilter')}

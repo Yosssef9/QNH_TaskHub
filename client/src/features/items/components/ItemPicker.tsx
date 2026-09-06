@@ -1,11 +1,11 @@
-import { Check, ChevronsUpDown, PackageSearch } from 'lucide-react'
-import { useState } from 'react'
+import { Check, ChevronsUpDown, Loader2, PackageSearch } from 'lucide-react'
+import { useMemo, useState, type UIEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SearchInput } from '@/components/shared/SearchInput'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/cn'
-import { useItemOptions } from '../hooks/use-items'
+import { useInfiniteItemOptions } from '../hooks/use-items'
 import type { ItemOption } from '../types/item.types'
 
 export function ItemPicker({
@@ -22,8 +22,20 @@ export function ItemPicker({
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
-  const items = useItemOptions({ search, page: 1, pageSize: 50 }, open)
-  const selected = items.data?.items.find((item) => item.id === value)
+  const items = useInfiniteItemOptions({ search, pageSize: 50 }, open)
+  const itemOptions = useMemo(
+    () => items.data?.pages.flatMap((page) => page.items) ?? [],
+    [items.data],
+  )
+  const selected = itemOptions.find((item) => item.id === value)
+
+  function handleScroll(event: UIEvent<HTMLDivElement>) {
+    const element = event.currentTarget
+    const nearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 64
+    if (nearBottom && items.hasNextPage && !items.isFetchingNextPage) {
+      void items.fetchNextPage()
+    }
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -40,8 +52,8 @@ export function ItemPicker({
       </PopoverTrigger>
       <PopoverContent align="start" className="w-[min(34rem,calc(100vw-3rem))] p-3">
         <SearchInput value={search} onChange={setSearch} placeholder={t('items.searchPlaceholder')} ariaLabel={t('items.searchLabel')} />
-        <div className="mt-3 max-h-72 space-y-1 overflow-y-auto">
-          {items.data?.items.map((item) => (
+        <div className="mt-3 max-h-72 space-y-1 overflow-y-auto" onScroll={handleScroll}>
+          {itemOptions.map((item) => (
             <button
               key={item.id}
               type="button"
@@ -64,8 +76,20 @@ export function ItemPicker({
               {item.id === value ? <Check aria-hidden="true" className="size-4" /> : null}
             </button>
           ))}
-          {!items.isPending && (items.data?.items.length ?? 0) === 0 ? (
+          {items.isPending && itemOptions.length === 0 ? (
+            <div className="text-muted-foreground flex items-center justify-center gap-2 px-3 py-4 text-sm">
+              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+              {t('common.loading')}
+            </div>
+          ) : null}
+          {!items.isPending && !items.isError && itemOptions.length === 0 ? (
             <p className="text-muted-foreground px-3 py-4 text-center text-sm">{t('items.emptyTitle')}</p>
+          ) : null}
+          {items.isFetchingNextPage ? (
+            <div className="text-muted-foreground flex items-center justify-center gap-2 px-3 py-3 text-xs">
+              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+              {t('common.loading')}
+            </div>
           ) : null}
         </div>
       </PopoverContent>

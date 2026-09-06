@@ -92,6 +92,18 @@ export interface QuoteSummaryRecord {
   quotesBelowLatestActualCount: number | string;
 }
 
+export interface QuoteContextTransactionRecord {
+  supplierId: number | string;
+  unitName: string;
+  transactionDate: Date;
+  unitCost: number | string;
+}
+
+export interface QuoteContextUnitRecord {
+  unitName: string;
+  latestTransactionDate: Date;
+}
+
 interface CountRecord { total: number | string; }
 interface IdRecord { id: number | string; }
 
@@ -268,7 +280,6 @@ function bindInput(request: import("mssql").Request, input: PriceQuoteInput): vo
     .input("supplierId", sql.BigInt, input.supplierId)
     .input("quoteDate", sql.Date, input.quoteDate)
     .input("quotedUnitCost", sql.Decimal(19, 6), input.quotedUnitCost)
-    .input("currencyCode", sql.NVarChar(30), input.currencyCode)
     .input("unitName", sql.NVarChar(100), input.unitName)
     .input("quoteNumber", sql.NVarChar(120), input.quoteNumber)
     .input("notes", sql.NVarChar(2000), input.notes);
@@ -286,7 +297,7 @@ export async function createQuote(transaction: DatabaseTransaction, ownerUserId:
     OUTPUT inserted.id
     VALUES (
       @ownerUserId, @itemId, @supplierId, @quoteDate, @quotedUnitCost,
-      @currencyCode, @unitName, @quoteNumber, @notes, 1,
+      N'SAR', @unitName, @quoteNumber, @notes, 1,
       @ownerUserId, @ownerUserId
     );
   `);
@@ -313,7 +324,7 @@ export async function updateQuote(
         supplier_id = @supplierId,
         quote_date = @quoteDate,
         quoted_unit_cost = @quotedUnitCost,
-        currency_code = @currencyCode,
+        currency_code = N'SAR',
         unit_name = @unitName,
         quote_number = @quoteNumber,
         notes = @notes,
@@ -621,6 +632,68 @@ export async function getSummary(ownerUserId: number, input: PriceQuoteSummaryIn
   return result.recordset[0] ?? { activeQuoteCount: 0, quotedItemCount: 0, quotesBelowLatestActualCount: 0 };
 }
 
+export async function getQuoteContextTransactions(
+  itemId: number,
+  supplierId?: number,
+): Promise<{ defaultTransaction: QuoteContextTransactionRecord | null; units: QuoteContextUnitRecord[] }> {
+  const pool = await getDatabasePool();
+  const bind = (request: import("mssql").Request) => request
+    .input("itemId", sql.BigInt, itemId)
+    .input("supplierId", sql.BigInt, supplierId ?? null);
+
+  const historyWhere = `
+    TRY_CONVERT(BIGINT, tx.ITEM_NO) = @itemId
+    AND TRY_CONVERT(BIGINT, tx.SUPPLIER_ID) IS NOT NULL
+    AND TRY_CONVERT(DATE, tx.DELIVERY_NOTE_DATE) IS NOT NULL
+    AND TRY_CONVERT(DECIMAL(19,6), tx.UNIT_COST) IS NOT NULL
+    AND UPPER(LTRIM(RTRIM(CONVERT(NVARCHAR(30), tx.CURRENCY_CODE)))) = N'SAR'
+    AND NULLIF(LTRIM(RTRIM(CONVERT(NVARCHAR(100), tx.UNIT_NAME_EN))), N'') IS NOT NULL
+  `;
+
+  const [defaultResult, unitsResult] = await Promise.all([
+    bind(pool.request()).query<QuoteContextTransactionRecord>(`
+      SELECT TOP (1)
+        TRY_CONVERT(BIGINT, tx.SUPPLIER_ID) AS supplierId,
+        LTRIM(RTRIM(CONVERT(NVARCHAR(100), tx.UNIT_NAME_EN))) AS unitName,
+        TRY_CONVERT(DATE, tx.DELIVERY_NOTE_DATE) AS transactionDate,
+        TRY_CONVERT(DECIMAL(19,6), tx.UNIT_COST) AS unitCost
+      FROM ${transactionsTable} AS tx
+      WHERE ${historyWhere}
+      ORDER BY
+        CASE WHEN @supplierId IS NOT NULL AND TRY_CONVERT(BIGINT, tx.SUPPLIER_ID) = @supplierId THEN 0 ELSE 1 END,
+        TRY_CONVERT(DATE, tx.DELIVERY_NOTE_DATE) DESC,
+        TRY_CONVERT(DATETIME2(3), tx.CONFIRM_DATE) DESC,
+        TRY_CONVERT(DATE, tx.VENDOR_INVOICE_DATE) DESC,
+        TRY_CONVERT(DATE, tx.BILL_DATE) DESC,
+        CONVERT(NVARCHAR(120), tx.INVOICE_NO) DESC,
+        CONVERT(NVARCHAR(120), tx.INV_VOUCHER_NO) DESC,
+        CONVERT(NVARCHAR(120), tx.ORDER_ID) DESC,
+        CONVERT(NVARCHAR(120), tx.BILL_NO) DESC,
+        CONVERT(NVARCHAR(120), tx.VENDOR_INVOICE_NO) DESC,
+        CONVERT(NVARCHAR(120), tx.LOT_NO) DESC,
+        TRY_CONVERT(DECIMAL(19,6), tx.UNIT_COST) DESC,
+        TRY_CONVERT(DECIMAL(19,6), tx.QTY) DESC,
+        TRY_CONVERT(DECIMAL(19,6), tx.BONUS_QTY) DESC,
+        CONVERT(NVARCHAR(120), tx.SOURCE_ROWID) DESC;
+    `),
+    bind(pool.request()).query<QuoteContextUnitRecord>(`
+      SELECT
+        LTRIM(RTRIM(CONVERT(NVARCHAR(100), tx.UNIT_NAME_EN))) AS unitName,
+        MAX(TRY_CONVERT(DATE, tx.DELIVERY_NOTE_DATE)) AS latestTransactionDate
+      FROM ${transactionsTable} AS tx
+      WHERE ${historyWhere}
+      GROUP BY LTRIM(RTRIM(CONVERT(NVARCHAR(100), tx.UNIT_NAME_EN)))
+      ORDER BY MAX(TRY_CONVERT(DATE, tx.DELIVERY_NOTE_DATE)) DESC,
+               LTRIM(RTRIM(CONVERT(NVARCHAR(100), tx.UNIT_NAME_EN))) ASC;
+    `),
+  ]);
+
+  return {
+    defaultTransaction: defaultResult.recordset[0] ?? null,
+    units: unitsResult.recordset,
+  };
+}
+
 export const priceQuotesRepository = {
   listQuotes,
   findQuote,
@@ -631,4 +704,5 @@ export const priceQuotesRepository = {
   listActivity,
   getAnalytics,
   getSummary,
+  getQuoteContextTransactions,
 };

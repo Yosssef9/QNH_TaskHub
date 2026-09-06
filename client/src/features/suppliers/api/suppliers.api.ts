@@ -10,11 +10,20 @@ import type {
   SupplierItemPriceListQuery,
   SupplierList,
   SupplierListQuery,
+  SupplierOptionList,
+  SupplierOptionQuery,
   SupplierPriceAnalytics,
 } from '../types/supplier.types'
 
 export async function getSuppliers(query: SupplierListQuery): Promise<SupplierList> {
   const response = await apiClient.get<ApiSuccessResponse<SupplierList>>('/suppliers', {
+    params: query,
+  })
+  return response.data.data
+}
+
+export async function getSupplierOptions(query: SupplierOptionQuery): Promise<SupplierOptionList> {
+  const response = await apiClient.get<ApiSuccessResponse<SupplierOptionList>>('/suppliers/options', {
     params: query,
   })
   return response.data.data

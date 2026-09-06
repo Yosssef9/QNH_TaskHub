@@ -5,6 +5,7 @@ import type {
   PriceQuoteActivity,
   PriceQuoteAnalytics,
   PriceQuoteAnalyticsQuery,
+  PriceQuoteContext,
   PriceQuoteInput,
   PriceQuoteList,
   PriceQuoteListQuery,
@@ -22,6 +23,14 @@ export async function getPriceQuotes(query: PriceQuoteListQuery): Promise<PriceQ
   const response = await apiClient.get<ApiSuccessResponse<PriceQuoteList>>('/price-quotes', { params: { ...rest, ...(supplierIds?.length ? { supplierIds: supplierIds.join(',') } : {}) } })
   return response.data.data
 }
+
+export async function getPriceQuoteContext(itemId: number, supplierId?: number): Promise<PriceQuoteContext> {
+  const response = await apiClient.get<ApiSuccessResponse<PriceQuoteContext>>('/price-quotes/context', {
+    params: { itemId, ...(supplierId ? { supplierId } : {}) },
+  })
+  return response.data.data
+}
+
 export async function getPriceQuote(id: number): Promise<PriceQuote> {
   const response = await apiClient.get<ApiSuccessResponse<PriceQuote>>(`/price-quotes/${id}`)
   return response.data.data

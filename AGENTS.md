@@ -1,6 +1,6 @@
 # AGENTS.md — QNH TaskHub
 
-> Persistent project context for Codex. Project context last aligned: 2026-09-03.
+> Persistent project context for Codex. Project context last aligned: 2026-09-06.
 
 ## 1. Mission
 
@@ -92,6 +92,7 @@ Procurement is an optional first-class domain gated by `procurement_enabled = 1`
 - Phase 3 treats each Item + Supplier as a historical time series: repeated Transactions remain separate even on the same date. `DELIVERY_NOTE_DATE` is the primary timeline date and `UNIT_COST` is the only actual purchase price used in analytics.
 - Item analytics expose latest/previous/lowest/highest/average actual Unit Cost, change amount/percent, Supplier count, Transaction count, and last purchase date. Supplier comparison exposes the same statistics per Supplier.
 - Currency/UOM compatibility is enforced by a comparison scope. When no explicit scope filter is supplied, the latest eligible Transaction determines the default currency + UOM scope; previous/min/max/average and Supplier comparisons are calculated only inside that scope.
+- TaskHub-owned Price Quotes are SAR-only. Do not expose a Quote Currency input or trust a client-supplied Quote currency; the server writes `SAR` and SQL Server enforces it. Quote UOM is selected from the Item's historical SAR transaction UOMs plus Item master Unit/Piece Unit fallbacks, defaults to the latest matching Item+Supplier UOM when available, and is validated server-side. Quoted Unit Cost uses the shared grouped-money input and preserves up to six decimal places.
 - Actual purchase Transaction APIs are read-only. Server-side filtering, sorting, pagination, and SQL window functions handle history; no browser-side loading of the global transaction table is allowed.
 - Phase 4 Items UX stays scalable: the landing table is one Item-level summary row (Latest/Low/High/Change/Supplier Count/Last Purchase), not an all-Items × all-Suppliers matrix. Item Details provides summary cards, a vertical Supplier comparison, a focused 2–5 Supplier matrix only when explicitly selected, a lightweight price-history chart, and exact read-only Transaction drill-down.
 - Item-list price summaries and overview cards are computed server-side in one paginated/aggregated query path rather than issuing one analytics request per visible Item. Saved View Supplier/period filters drive those live calculations immediately.
@@ -230,6 +231,8 @@ Template changes affect future instances only and must never silently rewrite ex
 - Directional UI icons must follow the active writing direction. In Arabic RTL, previous/back points right and next/forward points left; use shared direction-aware components instead of fixed arrows.
 - Portal-based overlays such as toasts, dialogs, popovers, and tooltips must receive the active `dir`; Arabic content is right-aligned and its layout order must be verified in RTL.
 - Keep screens simple, readable, responsive, and usable without training.
+- Large server-backed searchable pickers must be lazy and paginated: opening loads the first 50 options, scrolling near the end loads the next 50 while preserving prior options, and server-side search starts a new paginated result chain. Do not cap a large picker at its first page or preload the entire dataset. Small fixed-value selects are excluded.
+- Normal date-only form fields must reuse the shared `DatePicker` component instead of introducing native `<input type="date">` controls unless a specific documented requirement needs native browser behavior.
 - Use progressive disclosure in KPI setup so users see only fields relevant to the selected calculation method.
 - The supplied Arabic dashboard image is visual inspiration only; do not copy its obsolete modules or workflows.
 - Use React Hot Toast for short success/error feedback when notification UI is implemented.
@@ -395,4 +398,5 @@ If documentation and implementation conflict on privacy, security, ownership, or
 - Quote mutations use `ROWVERSION` stale-write detection and immutable `TM_procurement_activity` history.
 - Procurement UI is decision-first: keep the Items landing page compact, Item Details hierarchy focused on Latest/Change, Supplier landing purchasing-activity-first, and use existing TaskHub shared sorting/pagination/search patterns.
 - Do not expose another user's Quotes through list, analytics, summary, Item/Supplier integration, Saved Views, or history.
+
 

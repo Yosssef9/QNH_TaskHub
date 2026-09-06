@@ -1,7 +1,7 @@
 import type { DatabaseTransaction } from "../../database/types.js";
 import { getDatabasePool, sql } from "../../database/sql.js";
 import { PROCUREMENT_DB_OBJECTS } from "../procurement/procurement.config.js";
-import type { SupplierInput, SupplierListQuery } from "./suppliers.types.js";
+import type { SupplierInput, SupplierListQuery, SupplierOptionQuery } from "./suppliers.types.js";
 
 const suppliersTable = PROCUREMENT_DB_OBJECTS.suppliersTable;
 const transactionsTable = PROCUREMENT_DB_OBJECTS.transactionsTable;
@@ -51,6 +51,12 @@ export interface SupplierIdentityRecord {
   id: number | string;
   name: string;
   code: string;
+}
+
+export interface SupplierOptionRecord {
+  id: number | string;
+  code: string;
+  name: string;
 }
 
 function sourceSql(alias = "supplier"): string {
@@ -175,6 +181,74 @@ export async function listSuppliers(
     .request()
     .input("search", sql.NVarChar(100), search)
     .input("source", sql.VarChar(10), source).query<CountRecord>(`
+      SELECT COUNT_BIG(1) AS total
+      FROM ${suppliersTable} AS supplier
+      WHERE (
+        @search IS NULL
+        OR CONVERT(NVARCHAR(100), supplier.SUPPLIER_CODE) LIKE N'%' + @search + N'%'
+        OR CONVERT(NVARCHAR(250), supplier.SUPPLIER_NAME) LIKE N'%' + @search + N'%'
+        OR CONVERT(NVARCHAR(250), supplier.SUPPLIER_NAME_S) LIKE N'%' + @search + N'%'
+        OR CONVERT(NVARCHAR(100), supplier.TAX_REGISTRATION_NO) LIKE N'%' + @search + N'%'
+        OR CONVERT(NVARCHAR(320), supplier.EMAIL) LIKE N'%' + @search + N'%'
+      )
+      AND (
+        @source IS NULL
+        OR @source = ${sourceSql()}
+      );
+    `);
+
+  return {
+    records: records.recordset,
+    total: Number(count.recordset[0]?.total ?? 0),
+  };
+}
+
+
+export async function listSupplierOptions(
+  query: SupplierOptionQuery,
+): Promise<{ records: SupplierOptionRecord[]; total: number }> {
+  const pool = await getDatabasePool();
+  const offset = (query.page - 1) * query.pageSize;
+  const search = query.search?.trim() || null;
+  const source = query.source ?? null;
+
+  const request = pool
+    .request()
+    .input("search", sql.NVarChar(100), search)
+    .input("source", sql.VarChar(10), source)
+    .input("offset", sql.Int, offset)
+    .input("pageSize", sql.Int, query.pageSize);
+
+  const records = await request.query<SupplierOptionRecord>(`
+    SELECT
+      CONVERT(BIGINT, supplier.SUPPLIER_ID) AS id,
+      CONVERT(NVARCHAR(100), supplier.SUPPLIER_CODE) AS code,
+      CONVERT(NVARCHAR(250), supplier.SUPPLIER_NAME) AS name
+    FROM ${suppliersTable} AS supplier
+    WHERE (
+      @search IS NULL
+      OR CONVERT(NVARCHAR(100), supplier.SUPPLIER_CODE) LIKE N'%' + @search + N'%'
+      OR CONVERT(NVARCHAR(250), supplier.SUPPLIER_NAME) LIKE N'%' + @search + N'%'
+      OR CONVERT(NVARCHAR(250), supplier.SUPPLIER_NAME_S) LIKE N'%' + @search + N'%'
+      OR CONVERT(NVARCHAR(100), supplier.TAX_REGISTRATION_NO) LIKE N'%' + @search + N'%'
+      OR CONVERT(NVARCHAR(320), supplier.EMAIL) LIKE N'%' + @search + N'%'
+    )
+    AND (
+      @source IS NULL
+      OR @source = ${sourceSql()}
+    )
+    ORDER BY
+      supplier.SUPPLIER_NAME ASC,
+      supplier.SUPPLIER_CODE ASC,
+      CONVERT(BIGINT, supplier.SUPPLIER_ID) ASC
+    OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;
+  `);
+
+  const count = await pool
+    .request()
+    .input("search", sql.NVarChar(100), search)
+    .input("source", sql.VarChar(10), source)
+    .query<CountRecord>(`
       SELECT COUNT_BIG(1) AS total
       FROM ${suppliersTable} AS supplier
       WHERE (

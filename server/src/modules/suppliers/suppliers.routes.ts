@@ -10,6 +10,7 @@ import {
   getSupplierAnalytics,
   listSupplierActivity,
   listSupplierItems,
+  listSupplierOptions,
   listSuppliers,
   updateSupplier,
 } from "./suppliers.controller.js";
@@ -21,6 +22,7 @@ import {
   createSupplierBodySchema,
   supplierIdParamsSchema,
   supplierListQuerySchema,
+  supplierOptionsQuerySchema,
   updateSupplierBodySchema,
 } from "./suppliers.schemas.js";
 
@@ -29,6 +31,7 @@ export const suppliersRouter: ExpressRouter = Router();
 suppliersRouter.use(verifyPortalJwt, resolveTaskHubAccess, requireProcurementAccess);
 
 suppliersRouter.get("/", validateRequest({ query: supplierListQuerySchema }), listSuppliers);
+suppliersRouter.get("/options", validateRequest({ query: supplierOptionsQuerySchema }), listSupplierOptions);
 suppliersRouter.post("/", validateRequest({ body: createSupplierBodySchema }), createSupplier);
 suppliersRouter.get(
   "/:supplierId/analytics",

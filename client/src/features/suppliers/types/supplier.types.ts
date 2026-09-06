@@ -57,6 +57,26 @@ export interface SupplierList {
   total: number
 }
 
+export interface SupplierOption {
+  id: number
+  code: string
+  name: string
+}
+
+export interface SupplierOptionQuery {
+  search?: string | undefined
+  page: number
+  pageSize: number
+  source?: SupplierSource | undefined
+}
+
+export interface SupplierOptionList {
+  items: SupplierOption[]
+  page: number
+  pageSize: number
+  total: number
+}
+
 export interface SupplierActivity {
   id: number
   type: ProcurementActivityType

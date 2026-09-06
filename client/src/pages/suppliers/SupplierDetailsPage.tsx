@@ -96,10 +96,12 @@ export function SupplierDetailsPage() {
         }
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-3">
+      <div className="bg-card flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3">
         <div>
           <p className="text-sm font-semibold">{t('suppliers.intelligence.periodTitle')}</p>
-          <p className="text-muted-foreground mt-0.5 text-xs">{t('suppliers.intelligence.periodDescription')}</p>
+          <p className="text-muted-foreground mt-0.5 text-xs">
+            {t('suppliers.intelligence.periodDescription')}
+          </p>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {PERIODS.map((value) => (
@@ -110,7 +112,7 @@ export function SupplierDetailsPage() {
               variant={period === value ? 'default' : 'outline'}
               onClick={() => changePeriod(value)}
             >
-              {t(`items.analytics.periods.${value}`)}
+              {t(`savedViews.periods.${value}`)}
             </Button>
           ))}
         </div>
@@ -124,19 +126,43 @@ export function SupplierDetailsPage() {
         <SupplierIntelligenceCards analytics={analytics.data} />
       )}
 
-      <div className="sticky top-3 z-20 flex flex-wrap gap-1.5 rounded-xl border bg-background/95 p-2 shadow-sm backdrop-blur">
-        <Button variant="ghost" size="sm" onClick={() => document.getElementById('items-prices')?.scrollIntoView({ behavior: 'smooth' })}>
+      <div className="bg-background/95 sticky top-3 z-20 flex flex-wrap gap-1.5 rounded-xl border p-2 shadow-sm backdrop-blur">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() =>
+            document.getElementById('items-prices')?.scrollIntoView({ behavior: 'smooth' })
+          }
+        >
           <ShoppingCart aria-hidden="true" className="size-4" />
           {t('suppliers.intelligence.itemsAndPrices')}
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => document.getElementById('my-quotes')?.scrollIntoView({ behavior: 'smooth' })}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() =>
+            document.getElementById('my-quotes')?.scrollIntoView({ behavior: 'smooth' })
+          }
+        >
           {t('priceQuotes.myQuotes')}
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => document.getElementById('my-contracts')?.scrollIntoView({ behavior: 'smooth' })}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() =>
+            document.getElementById('my-contracts')?.scrollIntoView({ behavior: 'smooth' })
+          }
+        >
           <FileText aria-hidden="true" className="size-4" />
           {t('suppliers.myContracts')}
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => document.getElementById('activity')?.scrollIntoView({ behavior: 'smooth' })}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() =>
+            document.getElementById('activity')?.scrollIntoView({ behavior: 'smooth' })
+          }
+        >
           <Activity aria-hidden="true" className="size-4" />
           {t('suppliers.activity')}
         </Button>
@@ -188,14 +214,24 @@ export function SupplierDetailsPage() {
             <InfoField label={t('suppliers.code')} value={supplier.code} dir="ltr" />
             <div>
               <p className="text-muted-foreground text-xs font-medium">{t('suppliers.source')}</p>
-              <div className="mt-1"><SupplierSourceBadge source={supplier.source} /></div>
+              <div className="mt-1">
+                <SupplierSourceBadge source={supplier.source} />
+              </div>
             </div>
             <InfoField label={t('suppliers.manualFileNo')} value={supplier.manualFileNo} />
-            <InfoField label={t('suppliers.taxRegistrationNo')} value={supplier.taxRegistrationNo} dir="ltr" />
+            <InfoField
+              label={t('suppliers.taxRegistrationNo')}
+              value={supplier.taxRegistrationNo}
+              dir="ltr"
+            />
             <InfoField label={t('suppliers.country')} value={supplier.countryName} />
             <InfoField label={t('suppliers.city')} value={supplier.cityName} />
             <InfoField label={t('suppliers.currency')} value={supplier.currency} dir="ltr" />
-            <InfoField label={t('suppliers.contactJobTel')} value={supplier.contactJobTel} dir="ltr" />
+            <InfoField
+              label={t('suppliers.contactJobTel')}
+              value={supplier.contactJobTel}
+              dir="ltr"
+            />
             <InfoField label={t('suppliers.extensionNo')} value={supplier.extensionNo} dir="ltr" />
             <InfoField label={t('suppliers.mobileNo')} value={supplier.mobileNo} dir="ltr" />
             <InfoField label={t('suppliers.homePhone')} value={supplier.homePhone} dir="ltr" />
@@ -204,13 +240,20 @@ export function SupplierDetailsPage() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle>{t('suppliers.myContracts')}</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>{t('suppliers.myContracts')}</CardTitle>
+          </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-3">
               <Stat label={t('suppliers.currentContracts')} value={supplier.currentContractCount} />
-              <Stat label={t('suppliers.expiringSoon')} value={supplier.expiringSoonContractCount} />
+              <Stat
+                label={t('suppliers.expiringSoon')}
+                value={supplier.expiringSoonContractCount}
+              />
             </div>
-            <p className="text-muted-foreground mt-4 text-xs leading-5">{t('suppliers.privateContractsHint')}</p>
+            <p className="text-muted-foreground mt-4 text-xs leading-5">
+              {t('suppliers.privateContractsHint')}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -226,7 +269,10 @@ export function SupplierDetailsPage() {
           {contracts.isPending ? (
             <LoadingState className="rounded-none border-0" />
           ) : contracts.isError || !contracts.data ? (
-            <ErrorState className="rounded-none border-0" onRetry={() => void contracts.refetch()} />
+            <ErrorState
+              className="rounded-none border-0"
+              onRetry={() => void contracts.refetch()}
+            />
           ) : contracts.data.items.length === 0 ? (
             <EmptyState
               className="rounded-none border-0"
@@ -245,7 +291,8 @@ export function SupplierDetailsPage() {
                   <div className="min-w-0">
                     <p className="truncate font-semibold">{contract.title}</p>
                     <p className="text-muted-foreground mt-1 text-xs">
-                      {contract.contractNumber ?? '—'} · {displayDate(contract.endDate, i18n.language)}
+                      {contract.contractNumber ?? '—'} ·{' '}
+                      {displayDate(contract.endDate, i18n.language)}
                     </p>
                   </div>
                   <ContractStatusBadge state={contract.trackingState} />
@@ -277,16 +324,23 @@ export function SupplierDetailsPage() {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="font-medium">{t(`suppliers.activityTypes.${entry.type}`)}</p>
                     <time className="text-muted-foreground text-xs">
-                      {new Intl.DateTimeFormat(i18n.language, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(entry.createdAtUtc))}
+                      {new Intl.DateTimeFormat(i18n.language, {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                      }).format(new Date(entry.createdAtUtc))}
                     </time>
                   </div>
                   <p className="text-muted-foreground mt-1 text-xs">{entry.actorName}</p>
                   {entry.changes ? (
                     <div className="mt-3 grid gap-2 sm:grid-cols-2">
                       {Object.entries(entry.changes).map(([field, change]) => (
-                        <div key={field} className="rounded-lg border bg-background p-2.5 text-xs">
-                          <p className="font-medium">{t(`suppliers.fields.${field}`, { defaultValue: field })}</p>
-                          <p className="text-muted-foreground mt-1 break-words">{String(change.from ?? '—')} → {String(change.to ?? '—')}</p>
+                        <div key={field} className="bg-background rounded-lg border p-2.5 text-xs">
+                          <p className="font-medium">
+                            {t(`suppliers.fields.${field}`, { defaultValue: field })}
+                          </p>
+                          <p className="text-muted-foreground mt-1 break-words">
+                            {String(change.from ?? '—')} → {String(change.to ?? '—')}
+                          </p>
                         </div>
                       ))}
                     </div>
@@ -303,11 +357,21 @@ export function SupplierDetailsPage() {
   )
 }
 
-function InfoField({ label, value, dir }: { label: string; value: string | null; dir?: 'ltr' | 'rtl' }) {
+function InfoField({
+  label,
+  value,
+  dir,
+}: {
+  label: string
+  value: string | null
+  dir?: 'ltr' | 'rtl'
+}) {
   return (
     <div>
       <p className="text-muted-foreground text-xs font-medium">{label}</p>
-      <p dir={dir} className="mt-1 break-words text-sm font-medium">{value || '—'}</p>
+      <p dir={dir} className="mt-1 text-sm font-medium break-words">
+        {value || '—'}
+      </p>
     </div>
   )
 }
@@ -320,4 +384,3 @@ function Stat({ label, value }: { label: string; value: number }) {
     </div>
   )
 }
-

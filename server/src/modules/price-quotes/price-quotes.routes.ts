@@ -7,6 +7,7 @@ import {
   createPriceQuote,
   deactivatePriceQuote,
   getPriceQuote,
+  getPriceQuoteContext,
   getPriceQuoteAnalytics,
   getPriceQuoteSummary,
   listPriceQuoteActivity,
@@ -18,6 +19,7 @@ import {
   createPriceQuoteBodySchema,
   lifecyclePriceQuoteBodySchema,
   priceQuoteAnalyticsQuerySchema,
+  priceQuoteContextQuerySchema,
   priceQuoteIdParamsSchema,
   priceQuoteListQuerySchema,
   priceQuoteSummaryBodySchema,
@@ -29,6 +31,7 @@ priceQuotesRouter.use(verifyPortalJwt, resolveTaskHubAccess, requireProcurementA
 
 priceQuotesRouter.get("/", validateRequest({ query: priceQuoteListQuerySchema }), listPriceQuotes);
 priceQuotesRouter.post("/", validateRequest({ body: createPriceQuoteBodySchema }), createPriceQuote);
+priceQuotesRouter.get("/context", validateRequest({ query: priceQuoteContextQuerySchema }), getPriceQuoteContext);
 priceQuotesRouter.get("/analytics", validateRequest({ query: priceQuoteAnalyticsQuerySchema }), getPriceQuoteAnalytics);
 priceQuotesRouter.post("/summary", validateRequest({ body: priceQuoteSummaryBodySchema }), getPriceQuoteSummary);
 priceQuotesRouter.get("/:quoteId/activity", validateRequest({ params: priceQuoteIdParamsSchema }), listPriceQuoteActivity);

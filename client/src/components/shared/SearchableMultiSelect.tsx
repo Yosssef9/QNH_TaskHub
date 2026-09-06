@@ -1,5 +1,6 @@
 import { Check, ChevronsUpDown, Loader2, X } from 'lucide-react'
 import { useId, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -38,6 +39,7 @@ interface CommonSearchableSelectProps {
   onLoadMore?: () => void
   hasMore?: boolean
   loading?: boolean
+  loadingMore?: boolean
   className?: string
   ariaLabel?: string
 }
@@ -61,6 +63,7 @@ function valueKey(value: SelectValue): string {
 }
 
 export function SearchableMultiSelect(props: SearchableMultiSelectProps) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [localSearch, setLocalSearch] = useState('')
   const errorId = `${useId()}-error`
@@ -165,13 +168,13 @@ export function SearchableMultiSelect(props: SearchableMultiSelectProps) {
                 const element = event.currentTarget
                 const nearBottom =
                   element.scrollHeight - element.scrollTop - element.clientHeight < 64
-                if (nearBottom && props.hasMore && !props.loading) props.onLoadMore?.()
+                if (nearBottom && props.hasMore && !props.loading && !props.loadingMore) props.onLoadMore?.()
               }}
             >
-              {props.loading ? (
+              {props.loading && props.options.length === 0 ? (
                 <CommandLoading className="text-muted-foreground flex items-center justify-center gap-2 py-4 text-sm">
                   <Loader2 aria-hidden="true" className="size-4 animate-spin" />
-                  Loading…
+                  {t('common.loading')}
                 </CommandLoading>
               ) : null}
               {!props.loading ? (
@@ -212,10 +215,11 @@ export function SearchableMultiSelect(props: SearchableMultiSelectProps) {
                   </CommandItem>
                 )
               })}
-              {props.hasMore && !props.loading ? (
-                <p className="text-muted-foreground px-3 py-2 text-center text-xs">
-                  Scroll to load more
-                </p>
+              {props.loadingMore ? (
+                <div className="text-muted-foreground flex items-center justify-center gap-2 px-3 py-3 text-xs">
+                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                  {t('common.loading')}
+                </div>
               ) : null}
             </CommandList>
             {selectedValues.length > 0 && !props.disableClear ? (

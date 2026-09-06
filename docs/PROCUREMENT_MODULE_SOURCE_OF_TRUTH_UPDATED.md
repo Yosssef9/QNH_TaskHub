@@ -1,8 +1,8 @@
 # QNH TaskHub — Procurement Module Source of Truth
 
 > **Status:** Approved implementation baseline  
-> **Last aligned:** 2026-09-05  
-> **Revision note:** Production source tables/procedures are finalized; added `SOURCE_ROWID` deterministic ordering, production deployment validation, and the approved Items Performance V2 fast-data foundation while preserving Saved Views, Quote time-series, and Procurement UI rules.  
+> **Last aligned:** 2026-09-06  
+> **Revision note:** Production source tables/procedures are finalized; preserves `SOURCE_ROWID` deterministic ordering, production deployment validation, and Items Performance V2; Price Quote entry now enforces SAR, uses a formatted money input, and derives selectable/default UOMs from compatible purchase history with Item-master fallbacks while preserving Quote time-series behavior.  
 > **Purpose:** Persistent, portable source of truth for all future Procurement-module design, implementation, review, and ZIP-patch requests.  
 > **Project:** QNH TaskHub  
 > **Primary audience:** ChatGPT/Codex/engineers implementing or reviewing Procurement work.
@@ -1162,7 +1162,6 @@ Supplier
 Item
 Quote Date
 Quoted Price
-Currency
 UOM
 ```
 
@@ -1173,9 +1172,30 @@ Quote / Reference No.
 Notes
 ```
 
-Supplier and Item must use shared searchable pickers.
+Supplier and Item must use shared searchable pickers. The user should not manually type Supplier/Item identity keys. Quote Date must reuse TaskHub's shared `DatePicker`; do not use a native browser `input[type="date"]` in this form.
 
-The user should not manually type Supplier/Item identity keys.
+### 17.4.1 Quote currency is always SAR — hard invariant
+
+TaskHub Price Quotes are SAR-only. Currency is not a user-entered field. The frontend must not ask for Currency, the backend must assign `SAR`, and the database must reject non-SAR Quote rows. Actual purchase Transactions retain their source Currency values; Quote-vs-actual comparison is therefore possible only against compatible SAR Transactions with the same UOM.
+
+### 17.4.2 Quoted price input
+
+Quoted Unit Cost uses the shared formatted money-input behavior rather than a browser `type=number` spinner. It displays thousands grouping (for example `10,000`) with an inline `SAR` suffix and preserves up to six decimal places because Quote storage uses `DECIMAL(19,6)`.
+
+### 17.4.3 Quote UOM is selected, not free text
+
+The Quote form must not accept arbitrary UOM text. For the selected Item, TaskHub exposes a dropdown containing distinct historical `UNIT_NAME_EN` values from SAR purchase Transactions plus the Item master `UNIT` and `ITEM_PIECE_UNIT` fallbacks where present.
+
+Default UOM priority is:
+
+```text
+1. Latest SAR Transaction UOM for selected Item + selected Supplier
+2. Latest SAR Transaction UOM for selected Item across any Supplier
+3. Item master UNIT
+4. Item master ITEM_PIECE_UNIT
+```
+
+If no valid UOM exists, the Quote cannot be saved until the Item master is corrected. The backend must validate that the submitted UOM belongs to the allowed Item UOM set; the dropdown is UX, not the sole data-integrity control.
 
 ## 17.5 Quote lifecycle
 
@@ -3526,7 +3546,18 @@ For `latest`, `lowest`, `highest`, `change`, `suppliers`, and `lastPurchase`, th
 
 ## 61.4 Lightweight picker endpoints and lazy dialogs
 
-Item selectors use the dedicated lightweight Item-options endpoint and must not execute purchase-price analytics. Closed Item/Supplier pickers and closed Saved View/Price Quote dialogs must not issue lookup requests. Queries are enabled only when the corresponding picker/dialog is actually needed.
+Item selectors use the dedicated lightweight Item-options endpoint and must not execute purchase-price analytics. Supplier selectors use an equivalent lightweight Supplier-options endpoint that returns identity/display fields only and must not execute Contract or purchase-intelligence aggregates. Closed Item/Supplier pickers and closed Saved View/Price Quote dialogs must not issue lookup requests. Queries are enabled only when the corresponding picker/dialog is actually needed.
+
+All large server-backed searchable pickers use the same progressive pagination behavior:
+
+```text
+open picker → load first 50
+scroll near bottom → load next 50
+repeat until the server-reported total is loaded
+search changes → start a new page-1 chain for that server-side search
+```
+
+Already loaded options remain visible while the next page is fetched. Do not force the user to know/search an option merely because it is beyond the first page, and do not preload thousands of options into the browser. Small fixed enumerations remain normal selects.
 
 ## 61.5 Retry and failure isolation
 
@@ -3563,4 +3594,6 @@ with core price-context fields as included columns. It remains an operations/set
 ## 61.8 No summary/cache tables yet
 
 Do not introduce precomputed Item/Supplier price-summary tables unless measured performance remains inadequate after the fast master path, visible-row batching, lazy queries, no-retry behavior, and targeted source index are deployed and measured.
+
+
 

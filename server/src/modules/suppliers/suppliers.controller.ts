@@ -15,10 +15,11 @@ import type {
   CreateSupplierBody,
   SupplierIdParams,
   SupplierListQueryInput,
+  SupplierOptionsQueryInput,
   UpdateSupplierBody,
 } from "./suppliers.schemas.js";
 import { suppliersService } from "./suppliers.service.js";
-import type { Supplier, SupplierActivity, SupplierList } from "./suppliers.types.js";
+import type { Supplier, SupplierActivity, SupplierList, SupplierOptionList } from "./suppliers.types.js";
 
 function userId(req: Request): number {
   const value = req.authContext?.user.userId;
@@ -36,6 +37,13 @@ export const listSuppliers: RequestHandler = async (req, res) => {
   const query = getValidatedRequestPart<SupplierListQueryInput>(req, "query");
   const data = await suppliersService.listSuppliers(userId(req), query);
   const body: ApiSuccessResponse<SupplierList> = { success: true, data };
+  res.status(200).json(body);
+};
+
+export const listSupplierOptions: RequestHandler = async (req, res) => {
+  const query = getValidatedRequestPart<SupplierOptionsQueryInput>(req, "query");
+  const data = await suppliersService.listOptions(query);
+  const body: ApiSuccessResponse<SupplierOptionList> = { success: true, data };
   res.status(200).json(body);
 };
 

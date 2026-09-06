@@ -235,6 +235,7 @@ Phase 6 completes the planned Procurement module:
 
 - Private `TM_price_quotes` records are owner-scoped and support unlimited repeated dated Quotes for the same Item + Supplier, including multiple Quotes on the same date. Quotes use optimistic `ROWVERSION` concurrency, retain activity history, and use deactivate/reactivate rather than ordinary hard deletion.
 - Price Quote comparisons remain separate from actual purchase analytics. Quote-vs-actual differences use the latest compatible actual `UNIT_COST` only when both Currency and UOM match.
+- TaskHub Price Quotes are SAR-only: the UI does not ask for Currency, the backend assigns `SAR`, and SQL Server rejects non-SAR Quote rows. Quoted Unit Cost uses the shared formatted SAR input with thousands grouping and up to six decimals. Quote UOM is a controlled dropdown sourced from distinct SAR transaction `UNIT_NAME_EN` values for the Item plus Item master Unit/Piece Unit fallbacks; default priority is latest Item+Supplier SAR transaction, then latest Item SAR transaction, then master Unit, then Piece Unit. The backend validates the selected UOM.
 - Price Quotes integrate into Item Details, Supplier Details, Saved View/Items attention metrics, and a dedicated My Price Quotes page. Other users' Quotes must never appear in list, analytics, counts, or history responses.
 - Procurement UI polish prioritizes decision-making information: Item Details gives Latest Actual + Latest Change stronger hierarchy, uses sticky section navigation, and keeps Supplier/Transaction drill-downs progressively disclosed.
 - The Suppliers landing page becomes purchasing-activity-first by surfacing purchased Item count, Transaction count, and last purchase before secondary master-data fields.
@@ -408,6 +409,7 @@ User-authored email templates are not planned. Users customize delivery preferen
 - Meetings Phase 6 notification/email/reminder schema is introduced by migration 020; applying it is a separate manual database step.
 - Structured Meeting Agenda items are introduced by migration 021; applying it is a separate manual database step. Existing Meetings remain valid with an empty Agenda.
 - Expanded Meeting reschedule lifecycle notification/email event types are introduced by migration 022; applying it is a separate manual database step after 021.
+- Price Quote SAR-only enforcement is introduced by migration 031; applying it is a separate manual database step after the Procurement Price Quote table exists.
 
 
 

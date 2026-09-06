@@ -2,13 +2,13 @@ export type QuoteSortBy = "quoteDate" | "item" | "supplier" | "quotedUnitCost" |
 export type SortDirection = "asc" | "desc";
 export type QuoteStatusFilter = "ALL" | "ACTIVE" | "INACTIVE";
 export type ProcurementPricePeriod = "1M" | "3M" | "6M" | "1Y" | "ALL";
+export type PriceQuoteUnitSource = "SUPPLIER_HISTORY" | "ITEM_HISTORY" | "ITEM_MASTER" | "ITEM_PIECE_UNIT" | null;
 
 export interface PriceQuoteInput {
   itemId: number;
   supplierId: number;
   quoteDate: string;
   quotedUnitCost: number;
-  currencyCode: string;
   unitName: string;
   quoteNumber: string | null;
   notes: string | null;
@@ -20,6 +20,7 @@ export interface PriceQuote extends PriceQuoteInput {
   itemName: string;
   supplierCode: string | null;
   supplierName: string;
+  currencyCode: string;
   isActive: boolean;
   latestActualUnitCost: number | null;
   latestActualDate: string | null;
@@ -28,6 +29,15 @@ export interface PriceQuote extends PriceQuoteInput {
   createdAtUtc: string;
   updatedAtUtc: string;
   rowVersion: string;
+}
+
+export interface PriceQuoteContext {
+  currencyCode: "SAR";
+  defaultUnit: string | null;
+  defaultUnitSource: PriceQuoteUnitSource;
+  unitOptions: string[];
+  latestActualUnitCost: number | null;
+  latestActualDate: string | null;
 }
 
 export interface PriceQuoteListQuery {

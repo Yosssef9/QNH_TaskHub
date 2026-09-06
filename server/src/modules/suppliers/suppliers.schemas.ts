@@ -19,6 +19,13 @@ export const supplierListQuerySchema = z.object({
   sortDirection: z.enum(["asc", "desc"]).default("asc"),
 });
 
+export const supplierOptionsQuerySchema = z.object({
+  search: z.string().trim().max(100).optional(),
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(50),
+  source: z.enum(["ORACLE", "MANUAL"]).optional(),
+});
+
 const supplierFields = {
   manualFileNo: nullableTrimmed(100),
   name: z.string().trim().min(1).max(250),
@@ -39,6 +46,7 @@ export const updateSupplierBodySchema = z.object(supplierFields);
 
 export type SupplierIdParams = z.infer<typeof supplierIdParamsSchema>;
 export type SupplierListQueryInput = z.infer<typeof supplierListQuerySchema>;
+export type SupplierOptionsQueryInput = z.infer<typeof supplierOptionsQuerySchema>;
 export type CreateSupplierBody = z.infer<typeof createSupplierBodySchema>;
 export type UpdateSupplierBody = z.infer<typeof updateSupplierBodySchema>;
 

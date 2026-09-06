@@ -1,5 +1,5 @@
-import { Building2, Check, ChevronsUpDown, Plus } from 'lucide-react'
-import { useState } from 'react'
+import { Building2, Check, ChevronsUpDown, Loader2, Plus } from 'lucide-react'
+import { useMemo, useState, type UIEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SearchInput } from '@/components/shared/SearchInput'
@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/cn'
 
-import { useSuppliers } from '../hooks/use-suppliers'
-import type { Supplier } from '../types/supplier.types'
+import { useInfiniteSupplierOptions } from '../hooks/use-suppliers'
+import type { SupplierOption } from '../types/supplier.types'
 import { SupplierEditorDialog } from './SupplierEditorDialog'
 
 export function SupplierPicker({
@@ -19,21 +19,30 @@ export function SupplierPicker({
 }: {
   value: number
   selectedName?: string | undefined
-  onChange: (supplier: Supplier) => void
+  onChange: (supplier: SupplierOption) => void
   disabled?: boolean
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
-  const suppliers = useSuppliers({
+  const suppliers = useInfiniteSupplierOptions({
     search,
-    page: 1,
     pageSize: 50,
-    sortBy: 'name',
-    sortDirection: 'asc',
   }, open)
-  const selected = suppliers.data?.items.find((item) => item.id === value)
+  const supplierOptions = useMemo(
+    () => suppliers.data?.pages.flatMap((page) => page.items) ?? [],
+    [suppliers.data],
+  )
+  const selected = supplierOptions.find((item) => item.id === value)
+
+  function handleScroll(event: UIEvent<HTMLDivElement>) {
+    const element = event.currentTarget
+    const nearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 64
+    if (nearBottom && suppliers.hasNextPage && !suppliers.isFetchingNextPage) {
+      void suppliers.fetchNextPage()
+    }
+  }
 
   return (
     <>
@@ -51,8 +60,8 @@ export function SupplierPicker({
         </PopoverTrigger>
         <PopoverContent align="start" className="w-[min(30rem,calc(100vw-3rem))] p-3">
           <SearchInput value={search} onChange={setSearch} placeholder={t('suppliers.searchPlaceholder')} ariaLabel={t('suppliers.searchLabel')} />
-          <div className="mt-3 max-h-60 space-y-1 overflow-y-auto">
-            {suppliers.data?.items.map((supplier) => (
+          <div className="mt-3 max-h-60 space-y-1 overflow-y-auto" onScroll={handleScroll}>
+            {supplierOptions.map((supplier) => (
               <button
                 key={supplier.id}
                 type="button"
@@ -70,8 +79,20 @@ export function SupplierPicker({
                 {supplier.id === value ? <Check aria-hidden="true" className="size-4" /> : null}
               </button>
             ))}
-            {!suppliers.isPending && (suppliers.data?.items.length ?? 0) === 0 ? (
+            {suppliers.isPending && supplierOptions.length === 0 ? (
+              <div className="text-muted-foreground flex items-center justify-center gap-2 px-3 py-4 text-sm">
+                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                {t('common.loading')}
+              </div>
+            ) : null}
+            {!suppliers.isPending && !suppliers.isError && supplierOptions.length === 0 ? (
               <p className="text-muted-foreground px-3 py-4 text-center text-sm">{t('suppliers.noResults')}</p>
+            ) : null}
+            {suppliers.isFetchingNextPage ? (
+              <div className="text-muted-foreground flex items-center justify-center gap-2 px-3 py-3 text-xs">
+                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                {t('common.loading')}
+              </div>
             ) : null}
           </div>
           <Button variant="ghost" className="mt-2 w-full justify-start" onClick={() => { setOpen(false); setCreateOpen(true) }}>

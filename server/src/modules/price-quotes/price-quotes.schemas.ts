@@ -12,7 +12,6 @@ export const priceQuoteInputSchema = z.object({
   supplierId: nonZeroId,
   quoteDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   quotedUnitCost: z.coerce.number().positive().max(9999999999999),
-  currencyCode: z.string().trim().min(1).max(30),
   unitName: z.string().trim().min(1).max(100),
   quoteNumber: z.string().trim().max(120).nullable().default(null),
   notes: z.string().trim().max(2000).nullable().default(null),
@@ -24,6 +23,12 @@ export const updatePriceQuoteBodySchema = priceQuoteInputSchema.extend({
 });
 export const lifecyclePriceQuoteBodySchema = z.object({
   rowVersion: z.string().trim().min(1).max(64),
+});
+
+
+export const priceQuoteContextQuerySchema = z.object({
+  itemId: nonZeroId,
+  supplierId: nonZeroId.optional(),
 });
 
 export const priceQuoteListQuerySchema = z.object({
@@ -63,6 +68,7 @@ export type PriceQuoteIdParams = z.infer<typeof priceQuoteIdParamsSchema>;
 export type CreatePriceQuoteBody = z.infer<typeof createPriceQuoteBodySchema>;
 export type UpdatePriceQuoteBody = z.infer<typeof updatePriceQuoteBodySchema>;
 export type LifecyclePriceQuoteBody = z.infer<typeof lifecyclePriceQuoteBodySchema>;
+export type PriceQuoteContextQueryInput = z.infer<typeof priceQuoteContextQuerySchema>;
 export type PriceQuoteListQueryInput = z.infer<typeof priceQuoteListQuerySchema>;
 export type PriceQuoteAnalyticsQueryInput = z.infer<typeof priceQuoteAnalyticsQuerySchema>;
 export type PriceQuoteSummaryBody = z.infer<typeof priceQuoteSummaryBodySchema>;

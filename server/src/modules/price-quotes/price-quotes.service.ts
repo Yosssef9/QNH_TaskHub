@@ -8,6 +8,7 @@ import type {
   PriceQuote,
   PriceQuoteActivity,
   PriceQuoteAnalytics,
+  PriceQuoteContext,
   PriceQuoteAnalyticsQuery,
   PriceQuoteInput,
   PriceQuoteList,
@@ -25,7 +26,6 @@ function stale(): AppError {
 function normalize(input: PriceQuoteInput): PriceQuoteInput {
   return {
     ...input,
-    currencyCode: input.currencyCode.trim(),
     unitName: input.unitName.trim(),
     quoteNumber: input.quoteNumber?.trim() || null,
     notes: input.notes?.trim() || null,
@@ -37,21 +37,76 @@ function snapshot(input: PriceQuote | PriceQuoteInput, active?: boolean): Record
     supplierId: input.supplierId,
     quoteDate: input.quoteDate,
     quotedUnitCost: input.quotedUnitCost,
-    currencyCode: input.currencyCode,
+    currencyCode: "currencyCode" in input ? input.currencyCode : "SAR",
     unitName: input.unitName,
     quoteNumber: input.quoteNumber,
     notes: input.notes,
     ...(active === undefined ? {} : { isActive: active }),
   };
 }
+function cleanUnit(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const unit = value.trim();
+  return unit || null;
+}
+
+function uniqueUnits(values: Array<string | null>): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    result.push(value);
+  }
+  return result;
+}
+
+function buildContext(
+  item: { unit: unknown; pieceUnit: unknown },
+  history: Awaited<ReturnType<typeof repository.getQuoteContextTransactions>>,
+  supplierId?: number,
+): PriceQuoteContext {
+  const defaultTransaction = history.defaultTransaction;
+  const masterUnit = cleanUnit(item.unit);
+  const pieceUnit = cleanUnit(item.pieceUnit);
+  const historicalUnits = history.units.map((row) => cleanUnit(row.unitName)).filter((value): value is string => value !== null);
+  const defaultHistoricalUnit = cleanUnit(defaultTransaction?.unitName);
+  const defaultUnit = defaultHistoricalUnit ?? masterUnit ?? pieceUnit;
+  const defaultUnitSource = defaultHistoricalUnit
+    ? supplierId !== undefined && Number(defaultTransaction?.supplierId) === supplierId
+      ? "SUPPLIER_HISTORY"
+      : "ITEM_HISTORY"
+    : masterUnit
+      ? "ITEM_MASTER"
+      : pieceUnit
+        ? "ITEM_PIECE_UNIT"
+        : null;
+
+  return {
+    currencyCode: "SAR",
+    defaultUnit,
+    defaultUnitSource,
+    unitOptions: uniqueUnits([defaultUnit, ...historicalUnits, masterUnit, pieceUnit]),
+    latestActualUnitCost: defaultTransaction ? Number(defaultTransaction.unitCost) : null,
+    latestActualDate: defaultTransaction?.transactionDate.toISOString().slice(0, 10) ?? null,
+  };
+}
+
 async function assertReferences(input: PriceQuoteInput): Promise<void> {
-  const [item, supplier] = await Promise.all([
+  const [item, supplier, history] = await Promise.all([
     itemsRepository.findItem(input.itemId),
     suppliersRepository.findSupplierIdentity(input.supplierId),
+    repository.getQuoteContextTransactions(input.itemId, input.supplierId),
   ]);
   if (!item) throw new AppError({ statusCode: 400, code: "PRICE_QUOTE_ITEM_NOT_FOUND", message: "Selected Item does not exist." });
   if (!supplier) throw new AppError({ statusCode: 400, code: "PRICE_QUOTE_SUPPLIER_NOT_FOUND", message: "Selected Supplier does not exist." });
+
+  const context = buildContext(item, history, input.supplierId);
+  if (!context.unitOptions.includes(input.unitName.trim())) {
+    throw new AppError({ statusCode: 400, code: "PRICE_QUOTE_UNIT_INVALID", message: "Selected UOM is not valid for this Item." });
+  }
 }
+
 
 export const priceQuotesService = {
   async list(ownerUserId: number, query: PriceQuoteListQuery): Promise<PriceQuoteList> {
@@ -63,6 +118,17 @@ export const priceQuotesService = {
     const row = await repository.findQuote(ownerUserId, quoteId);
     if (!row) throw notFound();
     return mapQuote(row);
+  },
+
+  async context(itemId: number, supplierId?: number): Promise<PriceQuoteContext> {
+    const [item, history] = await Promise.all([
+      itemsRepository.findItem(itemId),
+      repository.getQuoteContextTransactions(itemId, supplierId),
+    ]);
+    if (!item) {
+      throw new AppError({ statusCode: 404, code: "PRICE_QUOTE_ITEM_NOT_FOUND", message: "Selected Item does not exist." });
+    }
+    return buildContext(item, history, supplierId);
   },
 
   async create(ownerUserId: number, input: PriceQuoteInput): Promise<PriceQuote> {

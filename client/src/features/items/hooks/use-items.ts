@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createItem,
   getItem,
@@ -48,6 +48,43 @@ export function useItemOptions(query: ItemOptionQuery, enabled = true) {
     queryFn: () => getItemOptions(query),
     enabled,
     placeholderData: keepPreviousData,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  })
+}
+
+export function useInfiniteItemOptions(
+  query: Omit<ItemOptionQuery, 'page'>,
+  enabled = true,
+) {
+  const normalizedSearch = query.search?.trim() || undefined
+  const baseQuery = {
+    pageSize: query.pageSize,
+    ...(query.source ? { source: query.source } : {}),
+  }
+
+  return useInfiniteQuery({
+    queryKey: [
+      ...itemOptionsQueryKey,
+      'infinite',
+      {
+        search: normalizedSearch ?? '',
+        source: query.source ?? 'ALL',
+        pageSize: query.pageSize,
+      },
+    ],
+    queryFn: ({ pageParam }) =>
+      getItemOptions({
+        ...baseQuery,
+        ...(normalizedSearch ? { search: normalizedSearch } : {}),
+        page: pageParam,
+      }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) =>
+      lastPage.page * lastPage.pageSize < lastPage.total
+        ? lastPage.page + 1
+        : undefined,
+    enabled,
     staleTime: 5 * 60 * 1000,
     retry: false,
   })

@@ -8,7 +8,7 @@ import type {
   SupplierPriceAnalytics,
   SupplierPriceFilter,
 } from "../procurement-transactions/procurement-transactions.types.js";
-import { mapSupplier, mapSupplierActivity } from "./suppliers.mapper.js";
+import { mapSupplier, mapSupplierActivity, mapSupplierOption } from "./suppliers.mapper.js";
 import { suppliersRepository } from "./suppliers.repository.js";
 import type {
   Supplier,
@@ -16,6 +16,8 @@ import type {
   SupplierInput,
   SupplierList,
   SupplierListQuery,
+  SupplierOptionList,
+  SupplierOptionQuery,
 } from "./suppliers.types.js";
 
 function notFound(): AppError {
@@ -95,6 +97,16 @@ export const suppliersService = {
     );
     return {
       items: page.records.map(mapSupplier),
+      page: query.page,
+      pageSize: query.pageSize,
+      total: page.total,
+    };
+  },
+
+  async listOptions(query: SupplierOptionQuery): Promise<SupplierOptionList> {
+    const page = await suppliersRepository.listSupplierOptions(query);
+    return {
+      items: page.records.map(mapSupplierOption),
       page: query.page,
       pageSize: query.pageSize,
       total: page.total,

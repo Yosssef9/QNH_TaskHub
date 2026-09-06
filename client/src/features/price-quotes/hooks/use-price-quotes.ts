@@ -3,6 +3,7 @@ import {
   createPriceQuote,
   getPriceQuote,
   getPriceQuoteActivity,
+  getPriceQuoteContext,
   getPriceQuoteAnalytics,
   getPriceQuotes,
   getPriceQuoteSummary,
@@ -24,6 +25,14 @@ export function usePriceQuotes(query: PriceQuoteListQuery) {
 }
 export function usePriceQuote(id: number | null) {
   return useQuery({ queryKey: [...priceQuotesQueryKey, 'detail', id], queryFn: () => getPriceQuote(id as number), enabled: id !== null })
+}
+export function usePriceQuoteContext(itemId: number | null, supplierId: number | null) {
+  return useQuery({
+    queryKey: [...priceQuotesQueryKey, 'context', itemId, supplierId],
+    queryFn: () => getPriceQuoteContext(itemId as number, supplierId ?? undefined),
+    enabled: itemId !== null,
+    retry: false,
+  })
 }
 export function usePriceQuoteActivity(id: number | null) {
   return useQuery({ queryKey: [...priceQuotesQueryKey, 'activity', id], queryFn: () => getPriceQuoteActivity(id as number), enabled: id !== null })
