@@ -53,6 +53,14 @@ export interface ItemPriceSummaryRecord {
   latestSupplierId: number | string | null;
   latestSupplierCode: string | null;
   latestSupplierName: string | null;
+  lowestTransactionDate: Date | null;
+  lowestSupplierId: number | string | null;
+  lowestSupplierCode: string | null;
+  lowestSupplierName: string | null;
+  highestTransactionDate: Date | null;
+  highestSupplierId: number | string | null;
+  highestSupplierCode: string | null;
+  highestSupplierName: string | null;
 }
 
 export interface ItemSupplierMatrixRecord {
@@ -156,7 +164,15 @@ function itemListSelectSql(): string {
     price.lastPurchaseDate,
     price.latestSupplierId,
     price.latestSupplierCode,
-    price.latestSupplierName
+    price.latestSupplierName,
+    price.lowestTransactionDate,
+    price.lowestSupplierId,
+    price.lowestSupplierCode,
+    price.lowestSupplierName,
+    price.highestTransactionDate,
+    price.highestSupplierId,
+    price.highestSupplierCode,
+    price.highestSupplierName
   `;
 }
 
@@ -178,7 +194,15 @@ function nullPriceSelectSql(alias = "item"): string {
     CAST(NULL AS DATE) AS lastPurchaseDate,
     CAST(NULL AS BIGINT) AS latestSupplierId,
     CAST(NULL AS NVARCHAR(100)) AS latestSupplierCode,
-    CAST(NULL AS NVARCHAR(500)) AS latestSupplierName
+    CAST(NULL AS NVARCHAR(500)) AS latestSupplierName,
+    CAST(NULL AS DATE) AS lowestTransactionDate,
+    CAST(NULL AS BIGINT) AS lowestSupplierId,
+    CAST(NULL AS NVARCHAR(100)) AS lowestSupplierCode,
+    CAST(NULL AS NVARCHAR(500)) AS lowestSupplierName,
+    CAST(NULL AS DATE) AS highestTransactionDate,
+    CAST(NULL AS BIGINT) AS highestSupplierId,
+    CAST(NULL AS NVARCHAR(100)) AS highestSupplierCode,
+    CAST(NULL AS NVARCHAR(500)) AS highestSupplierName
   `;
 }
 
@@ -199,7 +223,15 @@ function priceSummarySelectSql(alias = "price"): string {
     ${alias}.lastPurchaseDate,
     ${alias}.latestSupplierId,
     ${alias}.latestSupplierCode,
-    ${alias}.latestSupplierName
+    ${alias}.latestSupplierName,
+    ${alias}.lowestTransactionDate,
+    ${alias}.lowestSupplierId,
+    ${alias}.lowestSupplierCode,
+    ${alias}.lowestSupplierName,
+    ${alias}.highestTransactionDate,
+    ${alias}.highestSupplierId,
+    ${alias}.highestSupplierCode,
+    ${alias}.highestSupplierName
   `;
 }
 
@@ -467,6 +499,14 @@ function priceAnalyticsCte(filteredItemsSql?: string): string {
         latest.supplierId AS latestSupplierId,
         latest.supplierCode AS latestSupplierCode,
         latest.supplierName AS latestSupplierName,
+        lowest.transactionDate AS lowestTransactionDate,
+        lowest.supplierId AS lowestSupplierId,
+        lowest.supplierCode AS lowestSupplierCode,
+        lowest.supplierName AS lowestSupplierName,
+        highest.transactionDate AS highestTransactionDate,
+        highest.supplierId AS highestSupplierId,
+        highest.supplierCode AS highestSupplierCode,
+        highest.supplierName AS highestSupplierName,
         CASE
           WHEN previous.unitCost IS NULL THEN NULL
           ELSE CONVERT(DECIMAL(19,6), latest.unitCost - previous.unitCost)

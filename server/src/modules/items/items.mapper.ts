@@ -111,6 +111,8 @@ export function mapItemPriceSummary(record: ItemPriceSummaryRecord): ItemListPri
   const highestUnitCost = numberOrNull(record.highestUnitCost);
   const averageUnitCost = numberOrNull(record.averageUnitCost);
   const latestSupplierId = numberOrNull(record.latestSupplierId);
+  const lowestSupplierId = numberOrNull(record.lowestSupplierId);
+  const highestSupplierId = numberOrNull(record.highestSupplierId);
   const transactionCount = Number(record.transactionCount ?? 0);
   const supplierCount = Number(record.supplierCount ?? 0);
 
@@ -120,8 +122,14 @@ export function mapItemPriceSummary(record: ItemPriceSummaryRecord): ItemListPri
     || highestUnitCost === null
     || averageUnitCost === null
     || latestSupplierId === null
+    || lowestSupplierId === null
+    || highestSupplierId === null
     || !record.latestSupplierName
+    || !record.lowestSupplierName
+    || !record.highestSupplierName
     || !record.lastPurchaseDate
+    || !record.lowestTransactionDate
+    || !record.highestTransactionDate
     || transactionCount <= 0
   ) {
     return null;
@@ -143,6 +151,14 @@ export function mapItemPriceSummary(record: ItemPriceSummaryRecord): ItemListPri
     latestSupplierId,
     latestSupplierCode: record.latestSupplierCode,
     latestSupplierName: record.latestSupplierName,
+    lowestTransactionDate: record.lowestTransactionDate.toISOString().slice(0, 10),
+    lowestSupplierId,
+    lowestSupplierCode: record.lowestSupplierCode,
+    lowestSupplierName: record.lowestSupplierName,
+    highestTransactionDate: record.highestTransactionDate.toISOString().slice(0, 10),
+    highestSupplierId,
+    highestSupplierCode: record.highestSupplierCode,
+    highestSupplierName: record.highestSupplierName,
   };
 }
 

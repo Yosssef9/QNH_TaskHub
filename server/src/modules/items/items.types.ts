@@ -161,6 +161,14 @@ export interface ItemListPriceSummary {
   latestSupplierId: number;
   latestSupplierCode: string | null;
   latestSupplierName: string;
+  lowestTransactionDate: string;
+  lowestSupplierId: number;
+  lowestSupplierCode: string | null;
+  lowestSupplierName: string;
+  highestTransactionDate: string;
+  highestSupplierId: number;
+  highestSupplierCode: string | null;
+  highestSupplierName: string;
 }
 
 export interface ItemListItem extends Item {

@@ -342,12 +342,12 @@ export function ItemsPage() {
           />
         ) : <>
           <div className="hidden max-h-[68vh] overflow-auto md:block">
-            <table className="w-full min-w-[82rem] table-fixed text-sm">
+            <table className="w-full min-w-[92rem] table-fixed text-sm">
               <colgroup>
                 <col className="w-[22rem]" />
                 <col className="w-[16rem]" />
-                <col className="w-[11rem]" />
-                <col className="w-[11rem]" />
+                <col className="w-[16rem]" />
+                <col className="w-[16rem]" />
                 <col className="w-[13rem]" />
                 <col className="w-[9rem]" />
                 <col className="w-[11rem]" />
@@ -396,9 +396,9 @@ export function ItemsPage() {
                   return (
                     <tr
                       key={item.id}
-                      className="border-b transition-colors even:bg-muted/10 hover:bg-primary/[0.035] last:border-b-0"
+                      className="group border-b transition-colors even:bg-muted/10 hover:bg-primary/[0.035] last:border-b-0"
                     >
-                      <td className="sticky start-0 z-10 border-e bg-inherit px-4 py-3.5 align-middle">
+                      <td className="sticky start-0 z-10 border-e bg-card px-4 py-3.5 align-middle transition-colors group-hover:bg-accent">
                         <TableEntityLink
                           kind="item"
                           id={item.id}
@@ -433,6 +433,9 @@ export function ItemsPage() {
                               compact
                               className="max-w-[13rem]"
                             />
+                            <span className="text-muted-foreground text-xs tabular-nums">
+                              {formatDateOnly(item.price.lastPurchaseDate, locale)}
+                            </span>
                           </div>
                         ) : (
                           <span className="text-muted-foreground inline-flex rounded-md bg-muted px-2.5 py-1.5 text-xs font-medium">
@@ -443,25 +446,51 @@ export function ItemsPage() {
 
                       <td className="px-4 py-3.5 text-center align-middle">
                         {visiblePricesLoading ? (
-                          <PriceCellSkeleton />
+                          <PriceCellSkeleton wide />
+                        ) : item.price ? (
+                          <div className="flex flex-col items-center gap-2">
+                            <span dir="ltr" className="inline-block font-medium tabular-nums">
+                              {formatUnitCost(item.price.lowestUnitCost, locale, item.price.currencyCode, item.price.unitName)}
+                            </span>
+                            <TableEntityLink
+                              kind="supplier"
+                              id={item.price.lowestSupplierId}
+                              name={item.price.lowestSupplierName}
+                              code={item.price.lowestSupplierCode}
+                              compact
+                              className="max-w-[13rem]"
+                            />
+                            <span className="text-muted-foreground text-xs tabular-nums">
+                              {formatDateOnly(item.price.lowestTransactionDate, locale)}
+                            </span>
+                          </div>
                         ) : (
-                          <span dir="ltr" className="inline-block font-medium tabular-nums">
-                            {hasPurchaseHistory
-                              ? formatUnitCost(item.price?.lowestUnitCost ?? null, locale, item.price?.currencyCode, item.price?.unitName)
-                              : '—'}
-                          </span>
+                          <span className="text-muted-foreground">—</span>
                         )}
                       </td>
 
                       <td className="px-4 py-3.5 text-center align-middle">
                         {visiblePricesLoading ? (
-                          <PriceCellSkeleton />
+                          <PriceCellSkeleton wide />
+                        ) : item.price ? (
+                          <div className="flex flex-col items-center gap-2">
+                            <span dir="ltr" className="inline-block font-medium tabular-nums">
+                              {formatUnitCost(item.price.highestUnitCost, locale, item.price.currencyCode, item.price.unitName)}
+                            </span>
+                            <TableEntityLink
+                              kind="supplier"
+                              id={item.price.highestSupplierId}
+                              name={item.price.highestSupplierName}
+                              code={item.price.highestSupplierCode}
+                              compact
+                              className="max-w-[13rem]"
+                            />
+                            <span className="text-muted-foreground text-xs tabular-nums">
+                              {formatDateOnly(item.price.highestTransactionDate, locale)}
+                            </span>
+                          </div>
                         ) : (
-                          <span dir="ltr" className="inline-block font-medium tabular-nums">
-                            {hasPurchaseHistory
-                              ? formatUnitCost(item.price?.highestUnitCost ?? null, locale, item.price?.currencyCode, item.price?.unitName)
-                              : '—'}
-                          </span>
+                          <span className="text-muted-foreground">—</span>
                         )}
                       </td>
 
