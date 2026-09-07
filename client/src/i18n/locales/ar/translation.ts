@@ -632,7 +632,7 @@ export const arTranslation = {
     importExcel: {
       button: 'استيراد Excel',
       title: 'استيراد الأصناف والموردين وعروض الأسعار',
-      description: 'تحقق من مصفوفة عروض الأسعار في Excel ثم أضف الأصناف والموردين المطابقين إلى عرض محفوظ وأنشئ سجل عروض أسعار خاص بالريال السعودي.',
+      description: 'تحقق من مصفوفة عروض الأسعار في Excel. يمكن أن يكون عنوان عمود المورد كود المورد المطابق تماماً أو اسمه الإنجليزي/العربي المطابق تماماً، ثم تُضاف الأصناف والموردون المطابقون إلى عرض محفوظ مع سجل عروض أسعار خاص بالريال السعودي.',
       steps: { '1': 'رفع الملف', '2': 'المراجعة', '3': 'الوجهة' },
       analyzing: 'جارٍ تحليل ملف Excel…',
       chooseFile: 'اختر ملف Excel',
@@ -670,7 +670,7 @@ export const arTranslation = {
       matchStatus: {
         MATCHED: 'مطابق',
         NOT_FOUND: 'غير موجود',
-        AMBIGUOUS: 'الكود غير فريد',
+        AMBIGUOUS: 'المطابقة غير فريدة',
       },
       quoteStatus: {
         NEW_QUOTE: 'عرض سعر جديد',
@@ -681,7 +681,7 @@ export const arTranslation = {
         ITEM_NOT_FOUND: 'الصنف غير موجود',
         ITEM_AMBIGUOUS: 'كود الصنف غير فريد',
         SUPPLIER_NOT_FOUND: 'المورد غير موجود',
-        SUPPLIER_AMBIGUOUS: 'كود المورد غير فريد',
+        SUPPLIER_AMBIGUOUS: 'مطابقة المورد غير فريدة',
         UOM_MISSING: 'وحدة القياس مفقودة',
         UOM_INVALID: 'وحدة القياس غير صالحة',
         DUPLICATE_ITEM_ROW: 'صف صنف مكرر',
@@ -697,9 +697,9 @@ export const arTranslation = {
         suppliersMatched: 'الموردون المطابقون',
         quotesToCreate: 'عروض سيتم إنشاؤها',
         skipped: 'خلايا عروض سيتم تجاوزها',
-        allMatched: 'جميع الأكواد مطابقة',
+        allMatched: 'جميع أكواد الأصناف ومراجع الموردين مطابقة',
         itemsProblems: '{{count}} مشكلة في أكواد الأصناف',
-        supplierProblems: '{{count}} مشكلة في أكواد الموردين',
+        supplierProblems: '{{count}} مشكلة في مراجع الموردين',
         changedBreakdown: '{{changed}} سعر متغير · {{repeated}} نفس السعر بتاريخ جديد',
         skippedBreakdown: '{{duplicate}} مكرر في نفس اليوم · {{invalid}} غير صالح',
       },
@@ -738,7 +738,7 @@ export const arTranslation = {
     statusAll: 'كل الحالات', statusActive: 'الحالة 1', statusInactive: 'الحالة 0', information: 'بيانات الصنف',
     activity: 'سجل التغييرات', noActivity: 'لم يتم تسجيل تغييرات على الصنف حتى الآن.', discardTitle: 'تجاهل تغييرات الصنف غير المحفوظة؟', discardDescription: 'سيتم فقد تغييرات الصنف التي لم يتم حفظها.', discard: 'تجاهل التغييرات', keepEditing: 'متابعة التعديل',
     analytics: {
-      totalItems: 'إجمالي الأصناف', purchasedItems: 'أصناف تم شراؤها', suppliers: 'الموردون', priceIncreases: 'أصناف ارتفع سعرها', priceDecreases: 'أصناف انخفض سعرها', latestAtHistoricalHigh: 'أصناف عند أعلى سعر تاريخي', needsAttention: 'تحتاج إلى المتابعة',
+      totalItems: 'إجمالي الأصناف', purchasedItems: 'أصناف تم شراؤها', suppliers: 'الموردون', suppliersWithPurchases: 'الموردون الذين لديهم مشتريات', priceIncreases: 'أصناف ارتفع سعرها', priceDecreases: 'أصناف انخفض سعرها', latestAtHistoricalHigh: 'أصناف عند أعلى سعر تاريخي', needsAttention: 'تحتاج إلى المتابعة',
       visiblePricesLoading: 'جارٍ تحميل تحليلات الأسعار للأصناف الظاهرة…', visiblePricesUnavailable: 'تعذر تحميل تحليلات الأسعار. لا تزال قائمة الأصناف متاحة.',
       analysisScope: 'نطاق تحليل الأسعار', savedViewContext: 'العرض المحفوظ: {{name}}', historyPeriod: 'فترة السجل', allSuppliers: 'كل الموردين', suppliersFilter: 'فلتر الموردين', resetScope: 'إعادة ضبط', suppliersSelected: '{{count}} مورد محدد', supplierFallback: 'المورد {{id}}', selectedSuppliersGroup: 'الموردون المحددون', otherSuppliersGroup: 'موردون آخرون',
       latest: 'آخر سعر', lowest: 'الأقل', highest: 'الأعلى', average: 'المتوسط', lastPurchase: 'آخر شراء', latestActual: 'آخر سعر شراء فعلي', previousActual: 'سعر الشراء السابق', latestChange: 'آخر تغير',
@@ -2344,3 +2344,4 @@ export const arTranslation = {
     backHome: 'العودة إلى الرئيسية',
   },
 } as const
+

@@ -15,7 +15,7 @@ export function ItemsOverviewCards({
   const primary = [
     { key: 'totalItems', label: t('items.analytics.totalItems'), value: overview.totalItems, icon: PackageSearch },
     { key: 'purchasedItems', label: t('items.analytics.purchasedItems'), value: overview.purchasedItems, icon: PackageSearch },
-    { key: 'suppliers', label: t('items.analytics.suppliers'), value: overview.supplierCount, icon: Building2 },
+    { key: 'suppliers', label: t('items.analytics.suppliersWithPurchases'), value: overview.supplierCount, icon: Building2 },
   ] as const
 
   return (
@@ -50,3 +50,4 @@ function Attention({ label, value, icon: Icon, tone }: { label: string; value: n
   const toneClass = tone === 'good' ? 'text-success bg-success/10' : tone === 'bad' ? 'text-destructive bg-destructive/10' : 'text-warning-foreground bg-warning/10'
   return <div className="flex items-center gap-3 p-4"><span className={`${toneClass} grid size-9 shrink-0 place-items-center rounded-lg`}><Icon className="size-4" /></span><div><p className="text-muted-foreground text-xs">{label}</p><p className="mt-0.5 text-xl font-semibold tabular-nums">{value.toLocaleString()}</p></div></div>
 }
+

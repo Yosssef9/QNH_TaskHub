@@ -1,6 +1,6 @@
 # QNH TaskHub — Current Product Requirements
 
-> Status: planning baseline. Last aligned: 2026-09-03.
+> Status: planning baseline. Last aligned: 2026-09-07.
 
 ## Product summary
 
@@ -243,12 +243,12 @@ Phase 6 completes the planned Procurement module:
 - Private Quote history tables must keep Quote identity fields visually separate from comparison fields. Use grouped headers, predictable column widths, clear column separators, stacked price/UOM formatting, readable zebra/hover rows, and explanatory empty states instead of ambiguous adjacent dashes.
 - Procurement UI polish prioritizes decision-making information: Item Details gives Latest Actual + Latest Change stronger hierarchy, uses sticky section navigation, and keeps Supplier/Transaction drill-downs progressively disclosed.
 - The Suppliers landing page becomes purchasing-activity-first by surfacing purchased Item count, Transaction count, and last purchase before secondary master-data fields.
-- The Items landing page includes a compact Needs Attention area for increases, decreases, historical highs, and private Quotes below latest actual.
+- The Items landing page includes a compact Needs Attention area for increases, decreases, historical highs, and private Quotes below latest actual. Its Supplier KPI is purchase-history scoped and is labeled **Suppliers with Purchases / الموردون الذين لديهم مشتريات**; the shared Supplier-master total remains the Suppliers-page metric.
 - Arabic/English, RTL/LTR, light/dark behavior, existing shared sorting/pagination/search controls, and mobile fallbacks remain mandatory.
 
 Procurement Excel Quote Import extends Phase 6 without changing Actual purchase history:
 
-- An `.xlsx` workbook represents Item rows, Supplier-code columns, and private SAR Price Quote cells. Item identity first resolves by exact normalized `ITEM_CODE`; when that exact Item lookup has no match and the Excel Item Code is digits-only without a leading zero, the importer retries exactly once with one leading `0` to recover an Excel-stripped leading zero. Supplier identity remains exact normalized `SUPPLIER_CODE` only. No repeated zero-padding, partial matching, or name fallback is allowed.
+- An `.xlsx` workbook represents Item rows, Supplier-reference columns, and private SAR Price Quote cells. Item identity first resolves by exact normalized `ITEM_CODE`; when that exact Item lookup has no match and the Excel Item Code is digits-only without a leading zero, the importer retries exactly once with one leading `0` to recover an Excel-stripped leading zero. Supplier identity resolves by exact normalized `SUPPLIER_CODE` first; only when no Supplier Code matches, the same header may resolve by exact normalized `SUPPLIER_NAME` or `SUPPLIER_NAME_S`. A unique exact name match is accepted, multiple exact name matches are ambiguous, and partial matching is never allowed. The Item leading-zero fallback never applies to Suppliers.
 - Blank Supplier-price cells create no Quote. Positive numeric cells are Quote candidates. Zero/negative/non-numeric values are invalid. The Quote date defaults to the current TaskHub application date (`APP_TIME_ZONE`), Currency is always SAR, and the row UOM must match the Item's existing controlled Quote UOM options.
 - Preview must classify matched/unmatched/ambiguous Items and Suppliers, duplicate Item rows/Supplier columns, invalid UOM/prices, new Quotes, repeated-price new-date Quotes, changed-price Quotes, and exact same-day duplicates before any write occurs.
 - Exact same-day duplicate means the same owner + Item + Supplier + UOM + SAR price + Quote date already exists; it is skipped. The same price on an older date and any changed price are preserved as new Quote-history candidates. Existing Quote rows are never overwritten by import.
@@ -426,3 +426,4 @@ User-authored email templates are not planned. Users customize delivery preferen
 - Expanded Meeting reschedule lifecycle notification/email event types are introduced by migration 022; applying it is a separate manual database step after 021.
 - Price Quote SAR-only enforcement is introduced by migration 031; applying it is a separate manual database step after the Procurement Price Quote table exists.
 - Procurement Excel Import audit/link foundation is introduced by migration 032; applying it is a separate manual database step after migrations 028/029/031. It creates import-batch audit storage and the nullable Price Quote import-batch link used by the completed Excel Import Apply workflow; Preview itself performs no writes.
+

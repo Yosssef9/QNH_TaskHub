@@ -638,7 +638,7 @@ export const enTranslation = {
     importExcel: {
       button: 'Import Excel',
       title: 'Import Items, Suppliers & Quotes',
-      description: 'Validate an Excel quotation matrix, then merge matched Items and Suppliers into a Saved View and create private SAR Quote history.',
+      description: 'Validate an Excel quotation matrix. Supplier headers may use an exact Supplier Code or exact English/Arabic Supplier Name. Matched Items and Suppliers can then be merged into a Saved View with private SAR Quote history.',
       steps: { '1': 'Upload', '2': 'Review', '3': 'Destination' },
       analyzing: 'Analyzing workbook…',
       chooseFile: 'Choose an Excel workbook',
@@ -676,7 +676,7 @@ export const enTranslation = {
       matchStatus: {
         MATCHED: 'Matched',
         NOT_FOUND: 'Not found',
-        AMBIGUOUS: 'Ambiguous code',
+        AMBIGUOUS: 'Ambiguous match',
       },
       quoteStatus: {
         NEW_QUOTE: 'New Quote',
@@ -687,7 +687,7 @@ export const enTranslation = {
         ITEM_NOT_FOUND: 'Item not found',
         ITEM_AMBIGUOUS: 'Item code ambiguous',
         SUPPLIER_NOT_FOUND: 'Supplier not found',
-        SUPPLIER_AMBIGUOUS: 'Supplier code ambiguous',
+        SUPPLIER_AMBIGUOUS: 'Supplier match ambiguous',
         UOM_MISSING: 'UOM missing',
         UOM_INVALID: 'UOM invalid',
         DUPLICATE_ITEM_ROW: 'Duplicate Item row',
@@ -703,9 +703,9 @@ export const enTranslation = {
         suppliersMatched: 'Suppliers matched',
         quotesToCreate: 'Quotes to create',
         skipped: 'Skipped Quote cells',
-        allMatched: 'All codes matched',
+        allMatched: 'All Item codes and Supplier references matched',
         itemsProblems: '{{count}} Item code issue(s)',
-        supplierProblems: '{{count}} Supplier code issue(s)',
+        supplierProblems: '{{count}} Supplier reference issue(s)',
         changedBreakdown: '{{changed}} changed price · {{repeated}} repeated price on a new date',
         skippedBreakdown: '{{duplicate}} same-day duplicate · {{invalid}} invalid',
       },
@@ -744,7 +744,7 @@ export const enTranslation = {
     statusAll: 'All statuses', statusActive: 'Status 1', statusInactive: 'Status 0', information: 'Item Information',
     activity: 'Activity', noActivity: 'No Item changes have been recorded yet.', discardTitle: 'Discard unsaved Item changes?', discardDescription: 'Unsaved Item changes will be lost.', discard: 'Discard changes', keepEditing: 'Keep editing',
     analytics: {
-      totalItems: 'Total Items', purchasedItems: 'Purchased Items', suppliers: 'Suppliers', priceIncreases: 'Price Increases', priceDecreases: 'Price Decreases', latestAtHistoricalHigh: 'At Historical High', needsAttention: 'Needs Attention',
+      totalItems: 'Total Items', purchasedItems: 'Purchased Items', suppliers: 'Suppliers', suppliersWithPurchases: 'Suppliers with Purchases', priceIncreases: 'Price Increases', priceDecreases: 'Price Decreases', latestAtHistoricalHigh: 'At Historical High', needsAttention: 'Needs Attention',
       visiblePricesLoading: 'Loading price analytics for the visible Items…', visiblePricesUnavailable: 'Price analytics could not be loaded. The Item list is still available.',
       analysisScope: 'Price analysis scope', savedViewContext: 'Saved View: {{name}}', historyPeriod: 'History period', allSuppliers: 'All Suppliers', suppliersFilter: 'Filter Suppliers', resetScope: 'Reset', suppliersSelected: '{{count}} Suppliers selected', supplierFallback: 'Supplier {{id}}', selectedSuppliersGroup: 'Selected Suppliers', otherSuppliersGroup: 'Other Suppliers',
       latest: 'Latest', lowest: 'Lowest', highest: 'Highest', average: 'Average', lastPurchase: 'Last Purchase', latestActual: 'Latest Actual Purchase', previousActual: 'Previous Actual Purchase', latestChange: 'Latest Change',
@@ -2346,3 +2346,4 @@ export const enTranslation = {
     backHome: 'Back to home',
   },
 } as const
+

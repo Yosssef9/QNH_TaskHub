@@ -11,6 +11,7 @@ import type {
   ImportMasterRecord,
   ImportQuoteCandidate,
   ImportQuoteHistoryRecord,
+  ImportSupplierNameMatchRecord,
   ProcurementImportApplyInput,
   ProcurementImportApplyResult,
   ProcurementImportedQuoteCandidate,
@@ -218,7 +219,7 @@ function chooseLayout(sheets: ParsedExcelSheet[], requestedSheetName?: string): 
     if (!layout || layout.supplierColumns.length === 0 || layout.dataRows === 0) {
       throw importError(
         "PROCUREMENT_IMPORT_SHEET_NOT_IMPORTABLE",
-        "The selected worksheet must contain an Item Code column, at least one Supplier-code column, and Item rows.",
+        "The selected worksheet must contain an Item Code column, at least one Supplier-reference column, and Item rows.",
       );
     }
     return { layout, availableSheets };
@@ -237,7 +238,7 @@ function chooseLayout(sheets: ParsedExcelSheet[], requestedSheetName?: string): 
   if (!layout) {
     throw importError(
       "PROCUREMENT_IMPORT_NO_IMPORTABLE_SHEET",
-      "No worksheet contains an Item Code column, Supplier-code columns, and Item rows.",
+      "No worksheet contains an Item Code column, Supplier-reference columns, and Item rows.",
       { availableSheets },
     );
   }
@@ -248,6 +249,17 @@ function groupMatches(records: ImportMasterRecord[]): Map<string, ImportMasterRe
   const grouped = new Map<string, ImportMasterRecord[]>();
   for (const record of records) {
     const key = normalizeCode(record.code);
+    const current = grouped.get(key) ?? [];
+    current.push(record);
+    grouped.set(key, current);
+  }
+  return grouped;
+}
+
+function groupSupplierNameMatches(records: ImportSupplierNameMatchRecord[]): Map<string, ImportMasterRecord[]> {
+  const grouped = new Map<string, ImportMasterRecord[]>();
+  for (const record of records) {
+    const key = normalizeCode(record.requestedName);
     const current = grouped.get(key) ?? [];
     current.push(record);
     grouped.set(key, current);
@@ -536,13 +548,19 @@ export const procurementImportsService = {
       const fallbackCode = oneLeadingZeroItemCodeFallback(exactCode);
       return fallbackCode ? [exactCode, fallbackCode] : [exactCode];
     }))];
-    const supplierCodes = [...new Set(layout.supplierColumns.map((supplier) => normalizeCode(supplier.code)))];
-    const [itemRecords, supplierRecords] = await Promise.all([
+    const supplierReferences = [...new Set(layout.supplierColumns.map((supplier) => normalizeCode(supplier.code)))];
+    const [itemRecords, supplierCodeRecords] = await Promise.all([
       repository.resolveItemsByCodes(itemCodes),
-      repository.resolveSuppliersByCodes(supplierCodes),
+      repository.resolveSuppliersByCodes(supplierReferences),
     ]);
     const itemMatches = groupMatches(itemRecords);
-    const supplierMatches = groupMatches(supplierRecords);
+    const supplierCodeMatches = groupMatches(supplierCodeRecords);
+    const unresolvedSupplierReferences = supplierReferences.filter(
+      (reference) => (supplierCodeMatches.get(reference) ?? []).length === 0,
+    );
+    const supplierNameMatches = groupSupplierNameMatches(
+      await repository.resolveSuppliersByNames(unresolvedSupplierReferences),
+    );
 
     const items = rawRows.map((row) => {
       const exactCode = normalizeCode(row.code);
@@ -565,16 +583,20 @@ export const procurementImportsService = {
         matches,
       );
     });
-    const seenSupplierCodes = new Set<string>();
+    const seenSupplierReferences = new Set<string>();
     const suppliers = layout.supplierColumns.map((supplier) => {
       const key = normalizeCode(supplier.code);
-      const duplicateInFile = seenSupplierCodes.has(key);
-      seenSupplierCodes.add(key);
+      const duplicateInFile = seenSupplierReferences.has(key);
+      seenSupplierReferences.add(key);
+      const exactCodeMatches = supplierCodeMatches.get(key) ?? [];
+      const matches = exactCodeMatches.length > 0
+        ? exactCodeMatches
+        : (supplierNameMatches.get(key) ?? []);
       return matchedSupplier(
         supplier.index,
         supplier.code,
         duplicateInFile,
-        supplierMatches.get(key) ?? [],
+        matches,
       );
     });
 
@@ -735,7 +757,7 @@ export const procurementImportsService = {
     if (importedItemIds.length === 0 && importedSupplierIds.length === 0) {
       throw importError(
         "PROCUREMENT_IMPORT_NOTHING_TO_APPLY",
-        "No Item or Supplier codes in this workbook matched TaskHub master data.",
+        "No Item codes or Supplier references in this workbook matched TaskHub master data.",
       );
     }
 
@@ -878,3 +900,4 @@ export const procurementImportsService = {
     });
   },
 };
+

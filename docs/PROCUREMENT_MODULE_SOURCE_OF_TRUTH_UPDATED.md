@@ -1,8 +1,8 @@
 # QNH TaskHub — Procurement Module Source of Truth
 
 > **Status:** Approved implementation baseline  
-> **Last aligned:** 2026-09-06  
-> **Revision note:** Excel Quote Import Phase 2 completes the Items-page upload/review/destination workflow with server-authoritative revalidation, transactional Saved View merge/create, private SAR Quote creation, same-day duplicate skipping, and import-batch audit linkage; Production source tables/procedures are finalized; preserves `SOURCE_ROWID` deterministic ordering, production deployment validation, and Items Performance V2; Price Quote entry enforces SAR and controlled UOMs; Saved View Supplier Comparison supports persisted Actual Purchases / My Quotes / Compare price-source modes with Latest / Previous / Lowest / Highest / Average metrics while preserving Actual-vs-Quote separation; Price History uses one shared accessible interactive SVG design across Item Details and Item+Supplier drill-downs; private Quote history tables use grouped Quote-information / Price-comparison headers, predictable column geometry, explicit separators, stacked price/UOM values, and explanatory comparison empty states; Item Details Supplier filters keep selected Suppliers pinned and synchronize ordinary URL scope with repeated `supplier=` parameters and true default Reset behavior.  
+> **Last aligned:** 2026-09-07  
+> **Revision note:** Excel Quote Import Supplier headers now resolve by exact Supplier Code first with exact English/Arabic Supplier Name fallback and ambiguity protection; the Items Supplier KPI is explicitly purchase-history scoped; Excel Quote Import Phase 2 completes the Items-page upload/review/destination workflow with server-authoritative revalidation, transactional Saved View merge/create, private SAR Quote creation, same-day duplicate skipping, and import-batch audit linkage; Production source tables/procedures are finalized; preserves `SOURCE_ROWID` deterministic ordering, production deployment validation, and Items Performance V2; Price Quote entry enforces SAR and controlled UOMs; Saved View Supplier Comparison supports persisted Actual Purchases / My Quotes / Compare price-source modes with Latest / Previous / Lowest / Highest / Average metrics while preserving Actual-vs-Quote separation; Price History uses one shared accessible interactive SVG design across Item Details and Item+Supplier drill-downs; private Quote history tables use grouped Quote-information / Price-comparison headers, predictable column geometry, explicit separators, stacked price/UOM values, and explanatory comparison empty states; Item Details Supplier filters keep selected Suppliers pinned and synchronize ordinary URL scope with repeated `supplier=` parameters and true default Reset behavior.  
 > **Purpose:** Persistent, portable source of truth for all future Procurement-module design, implementation, review, and ZIP-patch requests.  
 > **Project:** QNH TaskHub  
 > **Primary audience:** ChatGPT/Codex/engineers implementing or reviewing Procurement work.
@@ -61,6 +61,8 @@ The primary questions the module should answer are:
 - Can users recognize and open Supplier, Item, and Contract identities directly from Procurement tables through the same soft-blue rounded entity-link treatment, without underlines or row-wide navigation?
 - Can the Items landing table be scanned quickly with a sticky compact Item identity, grouped Price Intelligence / Purchase Activity headers, aligned numeric values, semantic change/supplier indicators, and an explicit no-purchase-history state?
 
+The Items landing-page Supplier KPI is purchase-history scoped: it counts distinct Suppliers present in the current Actual-purchase analytics scope and must be labeled **Suppliers with Purchases / الموردون الذين لديهم مشتريات**. It is not the shared Supplier-master total shown on the Suppliers page.
+
 The module is a **price-intelligence and comparison experience**, not merely a CRUD interface over database tables.
 
 ---
@@ -83,7 +85,8 @@ Excel Quote Import is an Items-page workflow for turning a controlled `.xlsx` qu
 
 Approved rules:
 
-- Match Item rows by exact normalized `ITEM_CODE` first. If and only if the exact Item lookup returns no match and the Excel Item Code is digits-only without a leading zero, retry exactly once with one leading `0` to recover a leading zero stripped by Excel. Do not keep adding zeros, use partial matching, or fall back to Item names. Supplier columns remain exact normalized `SUPPLIER_CODE` only; do not apply the Item leading-zero fallback to Suppliers and do not create missing master Items/Suppliers from an import.
+- Match Item rows by exact normalized `ITEM_CODE` first. If and only if the exact Item lookup returns no match and the Excel Item Code is digits-only without a leading zero, retry exactly once with one leading `0` to recover a leading zero stripped by Excel. Do not keep adding zeros, use partial matching, or fall back to Item names.
+- Treat each Supplier header as a Supplier reference. Resolve it by exact normalized `SUPPLIER_CODE` first. Only when no Supplier Code matches, retry the same header against exact normalized `SUPPLIER_NAME` and `SUPPLIER_NAME_S`. A unique exact name match is accepted; multiple exact name matches are `AMBIGUOUS`; no match is `NOT_FOUND`. Never use partial/contains matching, never apply the Item leading-zero fallback to Suppliers, and never create missing master Items/Suppliers from an import.
 - Supplier headers define Saved View Supplier membership even when all cells under that Supplier are blank. Item rows define Saved View Item membership even when they contain no Quote prices.
 - Every non-empty positive numeric Supplier-price cell is a private Quote candidate. Blank/dash cells create no Quote; zero, negative, non-numeric, or out-of-range values are invalid.
 - Imported Quote Currency is always SAR. Quote Date defaults to the current application date in `APP_TIME_ZONE`. The Excel UOM must exactly match an Item-approved controlled Quote UOM after whitespace/case normalization; no automatic EA/PCS/EACH alias conversion is approved in Phase 1.
@@ -93,3 +96,4 @@ Approved rules:
 - Preview remains read-only. Final Apply re-uploads and fully revalidates the workbook server-side, then performs Saved View + Quote changes in one SQL transaction; client preview data is never trusted as write input.
 - Import audit foundation uses `dbo.TM_procurement_import_batches`. Imported Quotes link through nullable `TM_price_quotes.import_batch_id`; a null link continues to identify manual/non-imported Quote history.
 - Final Apply merges matched Item/Supplier IDs into an existing private Saved View without changing its other configuration, or creates a new private Saved View with the approved 1Y / Actual / Latest defaults.
+

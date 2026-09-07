@@ -6,6 +6,7 @@ import type {
   ImportMasterRecord,
   ImportQuoteCandidate,
   ImportQuoteHistoryRecord,
+  ImportSupplierNameMatchRecord,
   ProcurementImportBatchInput,
   ProcurementImportedQuoteCandidate,
 } from "./procurement-imports.types.js";
@@ -50,6 +51,37 @@ export async function resolveSuppliersByCodes(codes: string[]): Promise<ImportMa
          = UPPER(LTRIM(RTRIM(requested.code))) COLLATE DATABASE_DEFAULT
       WHERE NULLIF(LTRIM(RTRIM(CONVERT(NVARCHAR(100), supplier.SUPPLIER_CODE))), N'') IS NOT NULL
       ORDER BY supplier.SUPPLIER_CODE, supplier.SUPPLIER_ID;
+    `);
+  return result.recordset;
+}
+
+export async function resolveSuppliersByNames(names: string[]): Promise<ImportSupplierNameMatchRecord[]> {
+  if (names.length === 0) return [];
+  const pool = await getDatabasePool();
+  const result = await pool.request()
+    .input("namesJson", sql.NVarChar(sql.MAX), JSON.stringify(names))
+    .query<ImportSupplierNameMatchRecord>(`
+      SELECT
+        LTRIM(RTRIM(requested.name)) AS requestedName,
+        CONVERT(BIGINT, supplier.SUPPLIER_ID) AS id,
+        LTRIM(RTRIM(CONVERT(NVARCHAR(100), supplier.SUPPLIER_CODE))) AS code,
+        COALESCE(
+          NULLIF(LTRIM(RTRIM(CONVERT(NVARCHAR(250), supplier.SUPPLIER_NAME))), N''),
+          NULLIF(LTRIM(RTRIM(CONVERT(NVARCHAR(250), supplier.SUPPLIER_NAME_S))), N''),
+          N'—'
+        ) AS name
+      FROM ${suppliersTable} AS supplier
+      INNER JOIN OPENJSON(@namesJson) WITH (name NVARCHAR(250) '$') AS requested
+        ON (
+          UPPER(LTRIM(RTRIM(CONVERT(NVARCHAR(250), supplier.SUPPLIER_NAME)))) COLLATE DATABASE_DEFAULT
+           = UPPER(LTRIM(RTRIM(requested.name))) COLLATE DATABASE_DEFAULT
+          OR UPPER(LTRIM(RTRIM(CONVERT(NVARCHAR(250), supplier.SUPPLIER_NAME_S)))) COLLATE DATABASE_DEFAULT
+           = UPPER(LTRIM(RTRIM(requested.name))) COLLATE DATABASE_DEFAULT
+        )
+      WHERE
+        NULLIF(LTRIM(RTRIM(CONVERT(NVARCHAR(250), supplier.SUPPLIER_NAME))), N'') IS NOT NULL
+        OR NULLIF(LTRIM(RTRIM(CONVERT(NVARCHAR(250), supplier.SUPPLIER_NAME_S))), N'') IS NOT NULL
+      ORDER BY requested.name, supplier.SUPPLIER_ID;
     `);
   return result.recordset;
 }
@@ -381,6 +413,7 @@ export async function updateImportBatchCounts(
 export const procurementImportsRepository = {
   resolveItemsByCodes,
   resolveSuppliersByCodes,
+  resolveSuppliersByNames,
   listAllowedUnits,
   inspectQuoteHistory,
   isApplyFoundationReady,
@@ -388,3 +421,4 @@ export const procurementImportsRepository = {
   createImportedQuotes,
   updateImportBatchCounts,
 };
+
