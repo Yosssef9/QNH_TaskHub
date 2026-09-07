@@ -246,6 +246,16 @@ Phase 6 completes the planned Procurement module:
 - The Items landing page includes a compact Needs Attention area for increases, decreases, historical highs, and private Quotes below latest actual.
 - Arabic/English, RTL/LTR, light/dark behavior, existing shared sorting/pagination/search controls, and mobile fallbacks remain mandatory.
 
+Procurement Excel Quote Import extends Phase 6 without changing Actual purchase history:
+
+- An `.xlsx` workbook represents Item rows, Supplier-code columns, and private SAR Price Quote cells. Item identity is resolved only by exact normalized `ITEM_CODE`; Supplier identity is resolved only by exact normalized `SUPPLIER_CODE`. Names are display context, never an import identity fallback.
+- Blank Supplier-price cells create no Quote. Positive numeric cells are Quote candidates. Zero/negative/non-numeric values are invalid. The Quote date defaults to the current TaskHub application date (`APP_TIME_ZONE`), Currency is always SAR, and the row UOM must match the Item's existing controlled Quote UOM options.
+- Preview must classify matched/unmatched/ambiguous Items and Suppliers, duplicate Item rows/Supplier columns, invalid UOM/prices, new Quotes, repeated-price new-date Quotes, changed-price Quotes, and exact same-day duplicates before any write occurs.
+- Exact same-day duplicate means the same owner + Item + Supplier + UOM + SAR price + Quote date already exists; it is skipped. The same price on an older date and any changed price are preserved as new Quote-history candidates. Existing Quote rows are never overwritten by import.
+- Saved View membership and Quote creation are separate: every matched Item row and matched Supplier header belongs to the import selection even if its price cells are blank. Final Apply merges those IDs into an existing private Saved View or creates a new private Saved View while preserving all unrelated View configuration.
+- Import is server-authoritative. Preview makes no business-data changes. Final Apply re-parses and revalidates the uploaded workbook at confirmation, then applies Saved View + Quote changes transactionally; exact same-day duplicates are skipped and imported Quotes are linked to the applied import batch.
+- `dbo.TM_procurement_import_batches` stores applied-import audit metadata (file name/hash/size, sheet, destination View snapshot, Quote date and result counts). Imported Quotes use nullable `TM_price_quotes.import_batch_id`; null continues to mean a manual/non-imported Quote.
+
 The authoritative Procurement pricing, time-series, Saved Views, and later Price Quotes rules are maintained in `docs/PROCUREMENT_MODULE_SOURCE_OF_TRUTH_UPDATED.md`.
 
 ## Meetings
@@ -415,6 +425,8 @@ User-authored email templates are not planned. Users customize delivery preferen
 - Structured Meeting Agenda items are introduced by migration 021; applying it is a separate manual database step. Existing Meetings remain valid with an empty Agenda.
 - Expanded Meeting reschedule lifecycle notification/email event types are introduced by migration 022; applying it is a separate manual database step after 021.
 - Price Quote SAR-only enforcement is introduced by migration 031; applying it is a separate manual database step after the Procurement Price Quote table exists.
+- Procurement Excel Import audit/link foundation is introduced by migration 032; applying it is a separate manual database step after migrations 028/029/031. It creates import-batch audit storage and the nullable Price Quote import-batch link used by the completed Excel Import Apply workflow; Preview itself performs no writes.
+
 
 
 

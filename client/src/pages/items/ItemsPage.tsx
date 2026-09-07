@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Building2, Columns3, List, Minus, PackageSearch, Plus, SearchX } from 'lucide-react'
+import { ArrowDown, ArrowUp, Building2, Columns3, FileUp, List, Minus, PackageSearch, Plus, SearchX } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ItemEditorDialog } from '@/features/items/components/ItemEditorDialog'
+import { ProcurementImportDialog } from '@/features/procurement-imports/components/ProcurementImportDialog'
 import { ItemPriceFilters } from '@/features/items/components/ItemPriceFilters'
 import { formatDateOnly, formatPercent, formatUnitCost } from '@/features/items/components/item-price-format'
 import { ItemsOverviewCards } from '@/features/items/components/ItemsOverviewCards'
@@ -51,6 +52,7 @@ export function ItemsPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
   const [createOpen, setCreateOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [activeViewId, setActiveViewId] = useState<number | null>(Number.isSafeInteger(initialView) && initialView > 0 ? initialView : null)
   const [displayMode, setDisplayMode] = useState<SavedViewDisplayMode>('summary')
   const [matrixSupplierIds, setMatrixSupplierIds] = useState<number[]>([])
@@ -285,7 +287,23 @@ export function ItemsPage() {
   }
 
   return <div className="space-y-6">
-    <PageHeader eyebrow={t('procurement.title')} title={t('items.pageTitle')} description={t('items.pageDescription')} actions={<Button onClick={() => setCreateOpen(true)}><Plus className="size-4" />{t('items.create')}</Button>} />
+    <PageHeader
+      eyebrow={t('procurement.title')}
+      title={t('items.pageTitle')}
+      description={t('items.pageDescription')}
+      actions={
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <FileUp className="size-4" />
+            {t('items.importExcel.button')}
+          </Button>
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="size-4" />
+            {t('items.create')}
+          </Button>
+        </div>
+      }
+    />
 
     <Card className="p-4"><ProcurementSavedViewsBar activeId={activeViewId} onActiveChange={changeView} /></Card>
 
@@ -640,6 +658,12 @@ export function ItemsPage() {
       </>}
     </Card>
     <ItemEditorDialog open={createOpen} onOpenChange={setCreateOpen} />
+    <ProcurementImportDialog
+      open={importOpen}
+      activeViewId={activeViewId}
+      onOpenChange={setImportOpen}
+      onApplied={(savedViewId) => changeView(savedViewId)}
+    />
   </div>
 }
 
