@@ -83,7 +83,7 @@ Excel Quote Import is an Items-page workflow for turning a controlled `.xlsx` qu
 
 Approved rules:
 
-- Match Item rows only by exact normalized `ITEM_CODE` and Supplier columns only by exact normalized `SUPPLIER_CODE`. Do not fuzzy-match names and do not create missing master Items/Suppliers from an import.
+- Match Item rows by exact normalized `ITEM_CODE` first. If and only if the exact Item lookup returns no match and the Excel Item Code is digits-only without a leading zero, retry exactly once with one leading `0` to recover a leading zero stripped by Excel. Do not keep adding zeros, use partial matching, or fall back to Item names. Supplier columns remain exact normalized `SUPPLIER_CODE` only; do not apply the Item leading-zero fallback to Suppliers and do not create missing master Items/Suppliers from an import.
 - Supplier headers define Saved View Supplier membership even when all cells under that Supplier are blank. Item rows define Saved View Item membership even when they contain no Quote prices.
 - Every non-empty positive numeric Supplier-price cell is a private Quote candidate. Blank/dash cells create no Quote; zero, negative, non-numeric, or out-of-range values are invalid.
 - Imported Quote Currency is always SAR. Quote Date defaults to the current application date in `APP_TIME_ZONE`. The Excel UOM must exactly match an Item-approved controlled Quote UOM after whitespace/case normalization; no automatic EA/PCS/EACH alias conversion is approved in Phase 1.

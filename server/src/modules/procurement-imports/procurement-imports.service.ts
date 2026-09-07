@@ -86,6 +86,12 @@ function normalizeCode(value: string): string {
   return normalizeWhitespace(value).toUpperCase();
 }
 
+function oneLeadingZeroItemCodeFallback(value: string): string | null {
+  const normalized = normalizeCode(value);
+  if (!/^\d+$/.test(normalized) || normalized.startsWith("0")) return null;
+  return `0${normalized}`;
+}
+
 function codeFromCell(cell: ParsedExcelCell | undefined): string | null {
   const text = cellText(cell?.value ?? null);
   if (!text) return null;
@@ -525,7 +531,11 @@ export const procurementImportsService = {
       });
     }
 
-    const itemCodes = [...new Set(rawRows.map((row) => normalizeCode(row.code)))];
+    const itemCodes = [...new Set(rawRows.flatMap((row) => {
+      const exactCode = normalizeCode(row.code);
+      const fallbackCode = oneLeadingZeroItemCodeFallback(exactCode);
+      return fallbackCode ? [exactCode, fallbackCode] : [exactCode];
+    }))];
     const supplierCodes = [...new Set(layout.supplierColumns.map((supplier) => normalizeCode(supplier.code)))];
     const [itemRecords, supplierRecords] = await Promise.all([
       repository.resolveItemsByCodes(itemCodes),
@@ -534,14 +544,27 @@ export const procurementImportsService = {
     const itemMatches = groupMatches(itemRecords);
     const supplierMatches = groupMatches(supplierRecords);
 
-    const items = rawRows.map((row) => matchedItem(
-      row.rowNumber,
-      row.code,
-      row.excelName,
-      row.excelUnit,
-      row.duplicateInFile,
-      itemMatches.get(normalizeCode(row.code)) ?? [],
-    ));
+    const items = rawRows.map((row) => {
+      const exactCode = normalizeCode(row.code);
+      const exactMatches = itemMatches.get(exactCode) ?? [];
+      const fallbackCode = exactMatches.length === 0
+        ? oneLeadingZeroItemCodeFallback(exactCode)
+        : null;
+      const matches = exactMatches.length > 0
+        ? exactMatches
+        : fallbackCode
+          ? (itemMatches.get(fallbackCode) ?? [])
+          : [];
+
+      return matchedItem(
+        row.rowNumber,
+        row.code,
+        row.excelName,
+        row.excelUnit,
+        row.duplicateInFile,
+        matches,
+      );
+    });
     const seenSupplierCodes = new Set<string>();
     const suppliers = layout.supplierColumns.map((supplier) => {
       const key = normalizeCode(supplier.code);

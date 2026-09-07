@@ -25,7 +25,7 @@ interface MeetingDurationPickerProps {
   stepMinutes?: number
   title?: string
   description?: string
-  error?: string
+  error?: string | undefined
   focusRequestId?: number
   onChange: (minutes: number) => void
 }
@@ -63,9 +63,7 @@ export function MeetingDurationPicker({
       return
     }
     setCustomMode(
-      !DEFAULT_DURATION_PRESETS.includes(
-        boundedValue as (typeof DEFAULT_DURATION_PRESETS)[number],
-      ),
+      !DEFAULT_DURATION_PRESETS.includes(boundedValue as (typeof DEFAULT_DURATION_PRESETS)[number]),
     )
   }, [boundedValue])
 
@@ -104,10 +102,7 @@ export function MeetingDurationPicker({
 
   return (
     <div
-      className={cn(
-        'space-y-3 rounded-xl border bg-background p-4',
-        error && 'border-destructive',
-      )}
+      className={cn('bg-background space-y-3 rounded-xl border p-4', error && 'border-destructive')}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-2">
