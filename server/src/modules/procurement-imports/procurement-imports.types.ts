@@ -105,10 +105,6 @@ export interface ImportMasterRecord {
   name: string;
 }
 
-export interface ImportSupplierNameMatchRecord extends ImportMasterRecord {
-  requestedName: string;
-}
-
 export interface ImportAllowedUnitRecord {
   itemId: number | string;
   unitName: string;
