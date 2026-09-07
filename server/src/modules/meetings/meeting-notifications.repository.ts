@@ -219,11 +219,14 @@ export const meetingNotificationsRepository = {
     const result = await pool.request().input("meetingId", sql.BigInt, meetingId).query<NumberRecord>(`
       SELECT DISTINCT attendee.attendee_user_id AS value
       FROM dbo.TM_meeting_attendees AS attendee
+      INNER JOIN dbo.TM_meetings AS meeting
+        ON meeting.id = attendee.meeting_id
       INNER JOIN dbo.TM_user_access AS access
         ON access.portal_user_id = attendee.attendee_user_id AND access.is_active = 1
       INNER JOIN dbo.users AS portal
         ON portal.USER_ID = attendee.attendee_user_id AND portal.IS_ACTIVE = 1
-      WHERE attendee.meeting_id = @meetingId;
+      WHERE attendee.meeting_id = @meetingId
+        AND attendee.attendee_user_id <> meeting.organizer_user_id;
     `);
     return result.recordset.map((row) => Number(row.value));
   },
@@ -300,6 +303,12 @@ export const meetingNotificationsRepository = {
           COALESCE(settings.meeting_start_reminder_enabled, 1) = 0
           OR meeting.status <> 'SCHEDULED'
           OR meeting.current_revision_id <> reminder.meeting_revision_id
+          OR NOT EXISTS (
+            SELECT 1
+            FROM dbo.TM_meeting_attendees AS attendee
+            WHERE attendee.meeting_id = reminder.meeting_id
+              AND attendee.attendee_user_id = reminder.owner_user_id
+          )
         );
 
       MERGE dbo.TM_notifications WITH (HOLDLOCK) AS target
@@ -321,12 +330,11 @@ export const meetingNotificationsRepository = {
           AND settings.meeting_start_reminder_enabled = 1
           AND revision.start_at_utc > SYSUTCDATETIME()
           AND revision.start_at_utc <= DATEADD(MINUTE, 15, SYSUTCDATETIME())
-          AND (
-            meeting.organizer_user_id = @owner
-            OR EXISTS (
-              SELECT 1 FROM dbo.TM_meeting_attendees AS attendee
-              WHERE attendee.meeting_id = meeting.id AND attendee.attendee_user_id = @owner
-            )
+          AND EXISTS (
+            SELECT 1
+            FROM dbo.TM_meeting_attendees AS attendee
+            WHERE attendee.meeting_id = meeting.id
+              AND attendee.attendee_user_id = @owner
           )
       ) AS source
         ON target.owner_user_id = source.ownerUserId AND target.dedupe_key = source.dedupeKey
@@ -426,4 +434,5 @@ export const meetingNotificationsRepository = {
     };
   },
 };
+
 

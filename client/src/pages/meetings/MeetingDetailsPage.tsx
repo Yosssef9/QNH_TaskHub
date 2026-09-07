@@ -770,9 +770,21 @@ export function MeetingDetailsPage() {
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="truncate text-sm font-semibold">{participant.userName}</p>
                           {organizer ? (
-                            <Badge variant="secondary" className="text-[10px]">
-                              {t('meetings.organizer')}
-                            </Badge>
+                            <>
+                              <Badge variant="secondary" className="text-[10px]">
+                                {t('meetings.organizer')}
+                              </Badge>
+                              <Badge
+                                variant={meeting.organizerAttending ? 'success' : 'secondary'}
+                                className="text-[10px]"
+                              >
+                                {t(
+                                  meeting.organizerAttending
+                                    ? 'meetings.workspace.organizerAttending'
+                                    : 'meetings.workspace.organizerNotAttending',
+                                )}
+                              </Badge>
+                            </>
                           ) : null}
                         </div>
                         <p className="text-muted-foreground mt-0.5 text-xs">{participant.userCode}</p>
@@ -1139,6 +1151,7 @@ export function MeetingDetailsPage() {
             title: meeting.title,
             description: meeting.description,
             roomId: meeting.room.id,
+            organizerAttending: meeting.organizerAttending,
             attendeeUserIds: meeting.attendees.map((item) => item.userId),
             attendees: meeting.attendees,
             durationMinutes,
@@ -1258,4 +1271,3 @@ export function MeetingDetailsPage() {
     </div>
   )
 }
-

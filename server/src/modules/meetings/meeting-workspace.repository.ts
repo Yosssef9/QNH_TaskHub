@@ -100,6 +100,7 @@ interface TemplateRecord extends Partial<MeetingRoomRecord> {
   templateDescription: string | null;
   durationMinutes: number | string;
   defaultRoomId: number | string | null;
+  organizerAttending: boolean | number;
   attendeesJson: string | null;
   templateRowVersion: unknown;
 }
@@ -240,6 +241,7 @@ function mapTemplate(record: TemplateRecord): MeetingTemplate | null {
     description: record.templateDescription,
     durationMinutes: Number(record.durationMinutes),
     defaultRoom,
+    organizerAttending: Boolean(record.organizerAttending),
     attendees: parseParticipants(record.attendeesJson),
     rowVersion,
   };
@@ -271,6 +273,13 @@ const templateFields = `
   room.equipment_notes AS equipmentNotes,
   CAST(room.is_active AS BIT) AS isActive,
   room.row_version AS rowVersion,
+  CAST(CASE WHEN EXISTS (
+    SELECT 1
+    FROM dbo.TM_meeting_template_attendees AS organizerAttendance
+    WHERE organizerAttendance.template_id = template.id
+      AND organizerAttendance.owner_user_id = template.owner_user_id
+      AND organizerAttendance.attendee_user_id = template.owner_user_id
+  ) THEN 1 ELSE 0 END AS BIT) AS organizerAttending,
   COALESCE((
     SELECT
       portal.USER_ID AS userId,
@@ -282,6 +291,7 @@ const templateFields = `
      AND portal.IS_ACTIVE = 1
     WHERE attendee.template_id = template.id
       AND attendee.owner_user_id = template.owner_user_id
+      AND attendee.attendee_user_id <> template.owner_user_id
     ORDER BY portal.USER_NAME, portal.USER_ID
     FOR JSON PATH
   ), N'[]') AS attendeesJson
@@ -1067,5 +1077,3 @@ export const meetingWorkspaceRepository = {
 export function mapMeetingAttachmentRecord(record: MeetingAttachmentRecord): MeetingAttachment {
   return mapAttachment(record);
 }
-
-

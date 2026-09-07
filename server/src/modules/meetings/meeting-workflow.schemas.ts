@@ -48,6 +48,7 @@ const meetingContentFields = {
   roomId: z.coerce.number().int().positive(),
   startAtUtc: utcDateTimeSchema,
   endAtUtc: utcDateTimeSchema,
+  organizerAttending: z.boolean(),
   attendeeUserIds: z.array(z.coerce.number().int().positive()).max(500).default([]),
   agendaItems: z.array(meetingAgendaItemSchema).max(50).default([]),
 };
@@ -119,3 +120,4 @@ export type UpdateMeetingScheduleBody = z.infer<typeof updateMeetingScheduleBody
 export type DecideMeetingRequestBody = z.infer<typeof decideMeetingRequestBodySchema>;
 export type RejectMeetingRequestBody = z.infer<typeof rejectMeetingRequestBodySchema>;
 export type MeetingScheduleQuery = z.infer<typeof meetingScheduleQuerySchema>;
+

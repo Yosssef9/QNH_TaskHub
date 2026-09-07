@@ -142,6 +142,7 @@ export interface MeetingTemplate {
   description: string | null;
   durationMinutes: number;
   defaultRoom: MeetingRoom | null;
+  organizerAttending: boolean;
   attendees: MeetingParticipant[];
   rowVersion: string;
 }
@@ -152,6 +153,7 @@ export interface SaveMeetingTemplateInput {
   description?: string | null;
   durationMinutes: number;
   defaultRoomId?: number | null;
+  organizerAttending: boolean;
   attendeeUserIds: number[];
 }
 

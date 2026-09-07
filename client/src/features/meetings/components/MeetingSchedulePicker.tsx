@@ -13,13 +13,10 @@ import {
   MapPin,
   Maximize2,
   Minimize2,
-  Minus,
-  Plus,
   UserRound,
   UsersRound,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { TFunction } from 'i18next'
 import type { CSSProperties } from 'react'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
@@ -35,13 +32,13 @@ import { getMeetingRoomAccent } from '@/features/meetings/meeting-room-colors'
 import { useTimeFormatPreference } from '@/features/preferences/hooks/use-time-format'
 
 import { MeetingAgendaDisplay } from './MeetingAgendaDisplay'
+import { MeetingDurationPicker, formatMeetingDuration } from './MeetingDurationPicker'
 import { useMeetingDetail, useMeetingSchedule } from '../hooks/use-meetings'
 import type { MeetingRoom, MeetingScheduleEntry } from '../types/meeting.types'
 
 const SLOT_MINUTES = 30
 const VISIBLE_OPTION_COUNT = 6
 const WINDOW_STEP_SLOTS = 4
-const DURATION_PRESETS = [30, 60, 90, 120] as const
 const ROOM_REQUIRED_TOAST_ID = 'meeting-room-required-before-time'
 
 export type MeetingScheduleFocusField = 'date' | 'room' | 'capacity' | 'duration' | 'time' | null
@@ -134,16 +131,6 @@ function formatDateLabel(date: string, locale: string, options?: Intl.DateTimeFo
     ...options,
   }).format(dateOnlyToUtcDate(date))
 }
-
-function formatDuration(minutes: number, t: TFunction): string {
-  if (minutes < 60) return t('meetings.create.durationMinutes', { count: minutes })
-  if (minutes % 60 === 0) return t('meetings.create.durationHours', { count: minutes / 60 })
-  return t('meetings.create.durationHoursMinutes', {
-    hours: Math.floor(minutes / 60),
-    minutes: minutes % 60,
-  })
-}
-
 
 function personInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -462,15 +449,7 @@ export function MeetingSchedulePicker({
   const NextIcon = rtl ? ChevronLeft : ChevronRight
 
   const selectedDuration = durationBetween(startTime, endTime)
-  const isPresetDuration = DURATION_PRESETS.includes(
-    selectedDuration as (typeof DURATION_PRESETS)[number],
-  )
-  const [customDuration, setCustomDuration] = useState(
-    isPresetDuration ? 60 : selectedDuration,
-  )
-  const [useCustomDuration, setUseCustomDuration] = useState(!isPresetDuration)
   const [roomPromptedByTime, setRoomPromptedByTime] = useState(false)
-  const durationChangeSource = useRef<'PRESET' | 'CUSTOM' | null>(null)
   const selectedStartMinutes = timeToMinutes(startTime)
   const selectedEndMinutes = timeToMinutes(endTime)
   const selectedSlotIndex = Math.floor(selectedStartMinutes / SLOT_MINUTES)
@@ -511,23 +490,6 @@ export function MeetingSchedulePicker({
     )
     setWindowStartSlot(nextStart)
   }, [date, roomId, selectedSlotIndex])
-
-  useEffect(() => {
-    const source = durationChangeSource.current
-    durationChangeSource.current = null
-    setCustomDuration(selectedDuration)
-    if (source === 'CUSTOM') {
-      setUseCustomDuration(true)
-      return
-    }
-    if (source === 'PRESET') {
-      setUseCustomDuration(false)
-      return
-    }
-    setUseCustomDuration(
-      !DURATION_PRESETS.includes(selectedDuration as (typeof DURATION_PRESETS)[number]),
-    )
-  }, [selectedDuration])
 
   const scheduleInput = useMemo(() => {
     if (!date || !roomId) return null
@@ -575,7 +537,7 @@ export function MeetingSchedulePicker({
     [date],
   )
   const today = formatRiyadhDateInput(new Date())
-  const activeDuration = useCustomDuration ? customDuration : selectedDuration
+  const activeDuration = selectedDuration
 
   const visibleOptions = Array.from({ length: VISIBLE_OPTION_COUNT }, (_, offset) => {
     const index = windowStartSlot + offset
@@ -586,37 +548,6 @@ export function MeetingSchedulePicker({
       end: start + activeDuration,
     }
   })
-
-  function applyDuration(minutes: number) {
-    const startMinutes = timeToMinutes(startTime)
-    const maxDuration = Math.max(SLOT_MINUTES, 1440 - startMinutes)
-    const nextDuration = Math.max(SLOT_MINUTES, Math.min(minutes, maxDuration))
-    durationChangeSource.current = 'PRESET'
-    setUseCustomDuration(false)
-    onValidationClear?.('duration')
-    onValidationClear?.('time')
-    onTimeChange(startTime, minutesToTime(startMinutes + nextDuration))
-  }
-
-  function enableCustomDuration() {
-    setCustomDuration(selectedDuration)
-    setUseCustomDuration(true)
-  }
-
-  function adjustCustomDuration(delta: number) {
-    const startMinutes = timeToMinutes(startTime)
-    const maxDuration = Math.max(SLOT_MINUTES, 1440 - startMinutes)
-    const next = Math.max(
-      SLOT_MINUTES,
-      Math.min(customDuration + delta, maxDuration),
-    )
-    durationChangeSource.current = 'CUSTOM'
-    setCustomDuration(next)
-    setUseCustomDuration(true)
-    onValidationClear?.('duration')
-    onValidationClear?.('time')
-    onTimeChange(startTime, minutesToTime(startMinutes + next))
-  }
 
   function chooseTime(optionStart: number, optionEnd: number, isBusy: boolean) {
     if (optionEnd > 1440) return
@@ -921,80 +852,18 @@ export function MeetingSchedulePicker({
         ) : null}
       </div>
 
-      <div className={cn('space-y-3 rounded-xl border bg-background p-4', validationErrors.duration && 'border-destructive')}>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex items-start gap-2">
-            <Clock3 aria-hidden="true" className="text-primary mt-0.5 size-4" />
-            <div>
-              <p className="text-sm font-semibold">{t('meetings.create.howLong')}</p>
-              <p className="text-muted-foreground mt-0.5 text-xs">
-                {t('meetings.create.howLongHint')}
-              </p>
-            </div>
-          </div>
-          <span className="bg-primary/10 text-primary rounded-full px-2.5 py-1 text-xs font-semibold">
-            {formatDuration(selectedDuration, t)}
-          </span>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {DURATION_PRESETS.map((minutes) => (
-            <Button
-              key={minutes}
-              ref={!useCustomDuration && selectedDuration === minutes ? durationFocusRef : undefined}
-              size="sm"
-              variant={!useCustomDuration && selectedDuration === minutes ? 'default' : 'outline'}
-              disabled={disabled}
-              onClick={() => applyDuration(minutes)}
-            >
-              {formatDuration(minutes, t)}
-            </Button>
-          ))}
-          <Button
-            ref={useCustomDuration ? durationFocusRef : undefined}
-            size="sm"
-            variant={useCustomDuration ? 'default' : 'outline'}
-            disabled={disabled}
-            onClick={enableCustomDuration}
-          >
-            {t('meetings.create.customDuration')}
-          </Button>
-        </div>
-
-        {useCustomDuration ? (
-          <div className="bg-muted/30 flex flex-wrap items-center gap-3 rounded-lg border p-3">
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label={t('meetings.create.decreaseDuration')}
-              disabled={disabled || customDuration <= SLOT_MINUTES}
-              onClick={() => adjustCustomDuration(-SLOT_MINUTES)}
-            >
-              <Minus aria-hidden="true" className="size-4" />
-            </Button>
-            <div className="min-w-32 text-center">
-              <p className="font-semibold">{formatDuration(customDuration, t)}</p>
-              <p className="text-muted-foreground text-[11px]">
-                {t('meetings.create.adjustDurationHint')}
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label={t('meetings.create.increaseDuration')}
-              disabled={disabled || selectedStartMinutes + customDuration + SLOT_MINUTES > 1440}
-              onClick={() => adjustCustomDuration(SLOT_MINUTES)}
-            >
-              <Plus aria-hidden="true" className="size-4" />
-            </Button>
-          </div>
-        ) : null}
-        {validationErrors.duration ? (
-          <p role="alert" className="text-destructive text-xs font-medium">
-            {validationErrors.duration}
-          </p>
-        ) : null}
-      </div>
+      <MeetingDurationPicker
+        valueMinutes={selectedDuration}
+        maxMinutes={Math.max(SLOT_MINUTES, 1440 - selectedStartMinutes)}
+        disabled={disabled}
+        error={validationErrors.duration}
+        focusRequestId={focusField === 'duration' ? focusRequestId : 0}
+        onChange={(minutes) => {
+          onValidationClear?.('duration')
+          onValidationClear?.('time')
+          onTimeChange(startTime, minutesToTime(selectedStartMinutes + minutes))
+        }}
+      />
 
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1100,7 +969,7 @@ export function MeetingSchedulePicker({
             <p className="text-sm font-semibold">{t('meetings.create.chooseTime')}</p>
             <p className="text-muted-foreground text-xs">
               {roomId
-                ? t('meetings.create.chooseTimeHint', { duration: formatDuration(activeDuration, t) })
+                ? t('meetings.create.chooseTimeHint', { duration: formatMeetingDuration(activeDuration, t) })
                 : t('meetings.create.chooseRoomToSeeAvailability')}
             </p>
           </div>
@@ -1267,6 +1136,3 @@ export function MeetingSchedulePicker({
     </section>
   )
 }
-
-
-

@@ -61,6 +61,11 @@ function includesNormalized(haystack: string, needle: string): boolean {
   return haystack.toLocaleLowerCase().includes(needle.toLocaleLowerCase())
 }
 
+function isUserAttending(meeting: MeetingSummary, userId: number): boolean {
+  if (meeting.organizer.userId === userId) return meeting.organizerAttending
+  return meeting.attendees.some((attendee) => attendee.userId === userId)
+}
+
 function meetingRoomSurface(meeting: MeetingSummary): CSSProperties {
   const accent = getMeetingRoomAccent(meeting.room.colorKey)
   return {
@@ -177,12 +182,16 @@ export function MyMeetingsDashboard({
   const nextMeeting = useMemo(
     () =>
       meetings
-        .filter((meeting) => new Date(meeting.endAtUtc).getTime() >= now.getTime())
+        .filter(
+          (meeting) =>
+            isUserAttending(meeting, currentUserId) &&
+            new Date(meeting.endAtUtc).getTime() >= now.getTime(),
+        )
         .sort(
           (left, right) =>
             new Date(left.startAtUtc).getTime() - new Date(right.startAtUtc).getTime(),
         )[0] ?? null,
-    [meetings, now],
+    [currentUserId, meetings, now],
   )
 
   const filteredMeetings = useMemo(() => {
@@ -202,7 +211,7 @@ export function MyMeetingsDashboard({
 
       if (roomFilter !== 'ALL' && meeting.room.id !== Number(roomFilter)) return false
       if (roleFilter === 'ORGANIZER' && meeting.organizer.userId !== currentUserId) return false
-      if (roleFilter === 'PARTICIPANT' && meeting.organizer.userId === currentUserId) return false
+      if (roleFilter === 'PARTICIPANT' && !isUserAttending(meeting, currentUserId)) return false
 
       if (!needle) return true
       const searchable = [
@@ -736,3 +745,4 @@ function MeetingListRow({
     </button>
   )
 }
+

@@ -2,7 +2,7 @@ import { withTransaction } from "../../database/transaction.js";
 import type { DatabaseTransaction } from "../../database/types.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import type { TaskHubAccess } from "../auth/auth.types.js";
-import { assertScheduleWindow } from "./meeting-scheduling.policy.js";
+import { assertParticipantCount, assertScheduleWindow } from "./meeting-scheduling.policy.js";
 import { meetingSchedulingRepository } from "./meeting-scheduling.repository.js";
 import { meetingSchedulingService } from "./meeting-scheduling.service.js";
 import { meetingWorkflowRepository } from "./meeting-workflow.repository.js";
@@ -32,7 +32,7 @@ function invalidAgendaPresenter(): AppError {
   return new AppError({
     statusCode: 400,
     code: "INVALID_MEETING_AGENDA_PRESENTER",
-    message: "Agenda presenters must be the Meeting Organizer or one of the selected attendees.",
+    message: "Agenda presenters must be people who are attending the Meeting.",
   });
 }
 
@@ -77,11 +77,10 @@ async function assertActivePortalAttendees(
 }
 
 function normalizeAgendaItems(
-  actorUserId: number,
   attendeeUserIds: readonly number[],
   agendaItems: readonly MeetingAgendaItemInput[],
 ): MeetingAgendaItemInput[] {
-  const allowedPresenterIds = new Set([actorUserId, ...attendeeUserIds]);
+  const allowedPresenterIds = new Set(attendeeUserIds);
 
   return agendaItems.map((item) => {
     const topic = item.topic.trim();
@@ -167,12 +166,16 @@ async function createPendingMeetingInTransaction(
   const endAtUtc = new Date(input.endAtUtc);
   assertScheduleWindow(startAtUtc, endAtUtc);
   await assertActiveRequestedRoom(transaction, input.roomId);
-  const attendeeUserIds = await assertActivePortalAttendees(
+  const selectedAttendeeUserIds = await assertActivePortalAttendees(
     transaction,
     actorUserId,
     input.attendeeUserIds,
   );
-  const agendaItems = normalizeAgendaItems(actorUserId, attendeeUserIds, input.agendaItems);
+  const attendeeUserIds = input.organizerAttending
+    ? [actorUserId, ...selectedAttendeeUserIds]
+    : selectedAttendeeUserIds;
+  assertParticipantCount(attendeeUserIds.length);
+  const agendaItems = normalizeAgendaItems(attendeeUserIds, input.agendaItems);
 
   const meeting = await meetingWorkflowRepository.createMeeting(transaction, actorUserId, input);
   if (!meeting) throw meetingCreateFailed();
@@ -208,7 +211,9 @@ async function createPendingMeetingInTransaction(
       roomId: input.roomId,
       startAtUtc: startAtUtc.toISOString(),
       endAtUtc: endAtUtc.toISOString(),
-      attendeeUserIds,
+      organizerAttending: input.organizerAttending,
+      attendeeUserIds: selectedAttendeeUserIds,
+      participantCount: attendeeUserIds.length,
       agendaItemCount: agendaItems.length,
     },
   );
@@ -658,4 +663,5 @@ export const meetingWorkflowService = {
     });
   },
 };
+
 

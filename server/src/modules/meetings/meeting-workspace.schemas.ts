@@ -104,8 +104,9 @@ const meetingTemplateFields = {
   name: z.string().trim().min(1).max(150),
   title: z.string().trim().min(1).max(250),
   description: nullableTrimmed(10000),
-  durationMinutes: z.coerce.number().int().min(1).max(1440),
+  durationMinutes: z.coerce.number().int().min(30).max(1440),
   defaultRoomId: z.coerce.number().int().positive().nullable().optional(),
+  organizerAttending: z.boolean(),
   attendeeUserIds: z.array(z.coerce.number().int().positive()).max(500).default([]),
 };
 

@@ -52,6 +52,7 @@ interface MeetingSummaryRecord {
   endAtUtc: Date;
   schedulingNotes: string | null;
   participantCount: number | string;
+  organizerAttending: boolean | number;
   attendeesJson: string | null;
   hasPendingReschedule: boolean | number;
   revisionId: number | string;
@@ -182,6 +183,7 @@ function mapMeetingSummary(record: MeetingSummaryRecord): MeetingSummary | null 
     endAtUtc: record.endAtUtc.toISOString(),
     schedulingNotes: record.schedulingNotes,
     participantCount: Number(record.participantCount),
+    organizerAttending: Boolean(record.organizerAttending),
     attendees: parseAttendees(record.attendeesJson),
     hasPendingReschedule: Boolean(record.hasPendingReschedule),
     revisionId: Number(record.revisionId),
@@ -212,15 +214,17 @@ const meetingSummaryFields = `
   selectedRevision.start_at_utc AS startAtUtc,
   selectedRevision.end_at_utc AS endAtUtc,
   selectedRevision.scheduling_notes AS schedulingNotes,
-  CAST(
-    1 + (
-      SELECT COUNT_BIG(1)
-      FROM dbo.TM_meeting_attendees AS participantCountAttendee
-      WHERE participantCountAttendee.meeting_id = m.id
-        AND participantCountAttendee.attendee_user_id <> m.organizer_user_id
-    )
-    AS BIGINT
-  ) AS participantCount,
+  CAST((
+    SELECT COUNT_BIG(1)
+    FROM dbo.TM_meeting_attendees AS participantCountAttendee
+    WHERE participantCountAttendee.meeting_id = m.id
+  ) AS BIGINT) AS participantCount,
+  CAST(CASE WHEN EXISTS (
+    SELECT 1
+    FROM dbo.TM_meeting_attendees AS organizerAttendance
+    WHERE organizerAttendance.meeting_id = m.id
+      AND organizerAttendance.attendee_user_id = m.organizer_user_id
+  ) THEN 1 ELSE 0 END AS BIT) AS organizerAttending,
   COALESCE((
     SELECT
       attendeeUser.USER_ID AS userId,
@@ -728,15 +732,11 @@ export const meetingWorkflowRepository = {
             WHERE attendee.meeting_id = m.id
               AND attendee.attendee_user_id = @userId
           ) THEN 1 ELSE 0 END AS BIT) AS isAttendee,
-          CAST(
-            1 + (
-              SELECT COUNT_BIG(1)
-              FROM dbo.TM_meeting_attendees AS participantAttendee
-              WHERE participantAttendee.meeting_id = m.id
-                AND participantAttendee.attendee_user_id <> m.organizer_user_id
-            )
-            AS BIGINT
-          ) AS participantCount,
+          CAST((
+            SELECT COUNT_BIG(1)
+            FROM dbo.TM_meeting_attendees AS participantAttendee
+            WHERE participantAttendee.meeting_id = m.id
+          ) AS BIGINT) AS participantCount,
           CAST((
             SELECT COUNT_BIG(1)
             FROM dbo.TM_meeting_agenda_items AS agendaItem
@@ -797,5 +797,6 @@ export const meetingWorkflowRepository = {
     }));
   },
 };
+
 
 

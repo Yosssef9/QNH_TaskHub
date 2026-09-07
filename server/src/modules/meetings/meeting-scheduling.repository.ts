@@ -262,14 +262,9 @@ export const meetingSchedulingRepository = {
       .request()
       .input("meetingId", sql.BigInt, meetingId)
       .query<ParticipantRecord>(`
-        SELECT
-          CAST(1 + COUNT_BIG(a.attendee_user_id) AS BIGINT) AS participantCount
-        FROM dbo.TM_meetings AS m
-        LEFT JOIN dbo.TM_meeting_attendees AS a
-          ON a.meeting_id = m.id
-         AND a.attendee_user_id <> m.organizer_user_id
-        WHERE m.id = @meetingId
-        GROUP BY m.id;
+        SELECT CAST(COUNT_BIG(1) AS BIGINT) AS participantCount
+        FROM dbo.TM_meeting_attendees AS attendee
+        WHERE attendee.meeting_id = @meetingId;
       `);
 
     return Number(result.recordset[0]?.participantCount ?? 0);
@@ -287,14 +282,13 @@ export const meetingSchedulingRepository = {
         FROM (
           SELECT
             m.id,
-            CAST(1 + COUNT_BIG(a.attendee_user_id) AS BIGINT) AS participantCount
+            CAST(COUNT_BIG(a.attendee_user_id) AS BIGINT) AS participantCount
           FROM dbo.TM_meetings AS m
           INNER JOIN dbo.TM_meeting_revisions AS r
             ON r.id = m.current_revision_id
            AND r.meeting_id = m.id
           LEFT JOIN dbo.TM_meeting_attendees AS a
             ON a.meeting_id = m.id
-           AND a.attendee_user_id <> m.organizer_user_id
           WHERE m.status = 'SCHEDULED'
             AND r.revision_status = 'APPROVED'
             AND r.room_id = @roomId
@@ -395,4 +389,5 @@ export const meetingSchedulingRepository = {
       `);
   },
 };
+
 

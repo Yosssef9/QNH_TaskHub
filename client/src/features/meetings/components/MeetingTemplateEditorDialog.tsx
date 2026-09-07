@@ -1,11 +1,11 @@
 import {
-  Clock3,
   DoorOpen,
   FileText,
   Info,
   LayoutTemplate,
   Save,
   Settings2,
+  UserRound,
   UsersRound,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
@@ -19,15 +19,9 @@ import {
 } from '@/components/shared/SearchableMultiSelect'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { toApiClientError } from '@/lib/api-error'
+import { cn } from '@/lib/cn'
 
 import { useActiveMeetingRooms } from '../hooks/use-meeting-rooms'
 import {
@@ -36,10 +30,8 @@ import {
   useUpdateMeetingTemplate,
 } from '../hooks/use-meetings'
 import type { MeetingParticipant, MeetingTemplate } from '../types/meeting.types'
+import { MeetingDurationPicker, formatMeetingDuration } from './MeetingDurationPicker'
 import { MeetingParticipantPicker } from './MeetingParticipantPicker'
-
-const DURATION_PRESETS = [15, 30, 45, 60, 90, 120, 150, 180] as const
-const CUSTOM_DURATION_VALUE = 'CUSTOM'
 
 function participantOption(participant: MeetingParticipant): SearchableSelectOption {
   return {
@@ -47,13 +39,6 @@ function participantOption(participant: MeetingParticipant): SearchableSelectOpt
     label: participant.userName,
     description: participant.userCode,
   }
-}
-
-function durationChoiceFor(value: string): string {
-  const numeric = Number(value)
-  return DURATION_PRESETS.includes(numeric as (typeof DURATION_PRESETS)[number])
-    ? String(numeric)
-    : CUSTOM_DURATION_VALUE
 }
 
 export function MeetingTemplateEditorDialog({
@@ -67,6 +52,7 @@ export function MeetingTemplateEditorDialog({
     title: string
     description: string | null
     roomId: number
+    organizerAttending: boolean
     attendeeUserIds: number[]
     attendees?: MeetingParticipant[]
     durationMinutes: number
@@ -80,22 +66,21 @@ export function MeetingTemplateEditorDialog({
   const createMutation = useCreateMeetingTemplate()
   const updateMutation = useUpdateMeetingTemplate()
 
-  const initialDuration = String(
-    template?.durationMinutes ?? initialMeeting?.durationMinutes ?? 60,
-  )
   const [name, setName] = useState(template?.name ?? initialMeeting?.title ?? '')
   const [title, setTitle] = useState(template?.title ?? initialMeeting?.title ?? '')
   const [description, setDescription] = useState(
     template?.description ?? initialMeeting?.description ?? '',
   )
-  const [durationMinutes, setDurationMinutes] = useState(initialDuration)
-  const [durationChoice, setDurationChoice] = useState(() =>
-    durationChoiceFor(initialDuration),
+  const [durationMinutes, setDurationMinutes] = useState(
+    template?.durationMinutes ?? initialMeeting?.durationMinutes ?? 60,
   )
   const [roomId, setRoomId] = useState<number | null>(
     template?.defaultRoom?.isActive
       ? template.defaultRoom.id
       : initialMeeting?.roomId ?? null,
+  )
+  const [organizerAttending, setOrganizerAttending] = useState(
+    template?.organizerAttending ?? initialMeeting?.organizerAttending ?? true,
   )
   const initialAttendees = template?.attendees ?? initialMeeting?.attendees ?? []
   const [attendeeUserIds, setAttendeeUserIds] = useState<number[]>(
@@ -143,23 +128,17 @@ export function MeetingTemplateEditorDialog({
   )
 
   const pending = createMutation.isPending || updateMutation.isPending
-  const duration = Number(durationMinutes)
   const durationValid =
-    Number.isInteger(duration) && duration >= 1 && duration <= 1440
+    Number.isInteger(durationMinutes) && durationMinutes >= 30 && durationMinutes <= 1440
   const selectedRoom = (rooms.data ?? []).find((room) => room.id === roomId) ?? null
   const selectedRoomName = selectedRoom
     ? i18n.language.startsWith('ar')
       ? selectedRoom.nameAr
       : selectedRoom.nameEn
     : null
-  const participantCount = 1 + attendeeUserIds.length
+  const participantCount = attendeeUserIds.length + (organizerAttending ? 1 : 0)
   const canSave =
     !pending && Boolean(name.trim()) && Boolean(title.trim()) && durationValid
-
-  function updateDurationChoice(value: string) {
-    setDurationChoice(value)
-    if (value !== CUSTOM_DURATION_VALUE) setDurationMinutes(value)
-  }
 
   async function save() {
     if (!canSave) return
@@ -168,8 +147,9 @@ export function MeetingTemplateEditorDialog({
       name: name.trim(),
       title: title.trim(),
       description: description.trim() || null,
-      durationMinutes: duration,
+      durationMinutes,
       defaultRoomId: roomId,
+      organizerAttending,
       attendeeUserIds,
     }
 
@@ -207,7 +187,7 @@ export function MeetingTemplateEditorDialog({
       <DialogContent
         variant="modal"
         closeLabel={t('common.close')}
-        className="max-h-[94vh] w-[min(50rem,calc(100vw-1rem))] overflow-hidden p-0"
+        className="max-h-[94vh] w-[min(64rem,calc(100vw-1rem))] p-0"
       >
         <header className="border-b px-5 py-5 pe-14 sm:px-6 sm:py-6 sm:pe-16">
           <div className="flex items-start gap-3">
@@ -215,14 +195,19 @@ export function MeetingTemplateEditorDialog({
               <LayoutTemplate aria-hidden="true" className="size-5" />
             </span>
             <div className="min-w-0">
-              <DialogTitle className="text-xl font-semibold">
-                {t(
-                  template
-                    ? 'meetings.templates.editTitle'
-                    : 'meetings.templates.createTitle',
-                )}
-              </DialogTitle>
-              <DialogDescription className="text-muted-foreground mt-1 max-w-2xl text-sm leading-6">
+              <div className="flex flex-wrap items-center gap-2">
+                <DialogTitle className="text-xl font-semibold sm:text-2xl">
+                  {t(
+                    template
+                      ? 'meetings.templates.editTitle'
+                      : 'meetings.templates.createTitle',
+                  )}
+                </DialogTitle>
+                <span className="bg-muted text-muted-foreground rounded-full px-2.5 py-1 text-[11px] font-semibold">
+                  {t('meetings.templates.personalBadge')}
+                </span>
+              </div>
+              <DialogDescription className="text-muted-foreground mt-1 max-w-3xl text-sm leading-6">
                 {t('meetings.templates.editorDescription')}
               </DialogDescription>
             </div>
@@ -230,8 +215,8 @@ export function MeetingTemplateEditorDialog({
         </header>
 
         <div className="space-y-5 px-5 py-5 sm:px-6 sm:py-6">
-          <section className="rounded-xl border bg-card">
-            <div className="flex items-start gap-3 border-b px-4 py-4 sm:px-5">
+          <section className="overflow-hidden rounded-2xl border bg-card shadow-xs">
+            <div className="flex items-start gap-3 border-b bg-muted/15 px-4 py-4 sm:px-5">
               <span className="bg-primary/8 text-primary grid size-9 shrink-0 place-items-center rounded-lg">
                 <FileText aria-hidden="true" className="size-4" />
               </span>
@@ -245,7 +230,7 @@ export function MeetingTemplateEditorDialog({
               </div>
             </div>
 
-            <div className="space-y-4 p-4 sm:p-5">
+            <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-2">
               <div>
                 <InputField
                   required
@@ -272,17 +257,19 @@ export function MeetingTemplateEditorDialog({
                 </p>
               </div>
 
-              <TextareaField
-                label={t('meetings.fields.descriptionPurpose')}
-                value={description}
-                maxLength={10000}
-                onChange={(event) => setDescription(event.target.value)}
-              />
+              <div className="lg:col-span-2">
+                <TextareaField
+                  label={t('meetings.fields.descriptionPurpose')}
+                  value={description}
+                  maxLength={10000}
+                  onChange={(event) => setDescription(event.target.value)}
+                />
+              </div>
             </div>
           </section>
 
-          <section className="rounded-xl border bg-card">
-            <div className="flex items-start gap-3 border-b px-4 py-4 sm:px-5">
+          <section className="overflow-visible rounded-2xl border bg-card shadow-xs">
+            <div className="flex items-start gap-3 border-b bg-muted/15 px-4 py-4 sm:px-5">
               <span className="bg-primary/8 text-primary grid size-9 shrink-0 place-items-center rounded-lg">
                 <Settings2 aria-hidden="true" className="size-4" />
               </span>
@@ -297,86 +284,30 @@ export function MeetingTemplateEditorDialog({
             </div>
 
             <div className="space-y-5 p-4 sm:p-5">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1.5 flex items-center gap-2 text-sm font-medium">
-                    <Clock3
-                      aria-hidden="true"
-                      className="text-muted-foreground size-4"
-                    />
-                    {t('meetings.templates.durationLabel')}
-                    <span className="text-destructive">*</span>
-                  </label>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <MeetingDurationPicker
+                  valueMinutes={durationMinutes}
+                  disabled={pending}
+                  title={t('meetings.templates.defaultDuration')}
+                  description={t('meetings.templates.defaultDurationHint')}
+                  error={
+                    durationValid ? undefined : t('meetings.templates.durationInvalid')
+                  }
+                  onChange={setDurationMinutes}
+                />
 
-                  <Select
-                    value={durationChoice}
-                    disabled={pending}
-                    onValueChange={updateDurationChoice}
-                  >
-                    <SelectTrigger>
-                      <Clock3
-                        aria-hidden="true"
-                        className="text-muted-foreground size-4 shrink-0"
-                      />
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DURATION_PRESETS.map((minutes) => (
-                        <SelectItem key={minutes} value={String(minutes)}>
-                          <span className="flex items-center gap-2">
-                            <Clock3
-                              aria-hidden="true"
-                              className="text-muted-foreground size-3.5"
-                            />
-                            {t('meetings.templates.durationOption', {
-                              count: minutes,
-                            })}
-                          </span>
-                        </SelectItem>
-                      ))}
-                      <SelectItem value={CUSTOM_DURATION_VALUE}>
-                        <span className="flex items-center gap-2">
-                          <Settings2
-                            aria-hidden="true"
-                            className="text-muted-foreground size-3.5"
-                          />
-                          {t('meetings.templates.customDuration')}
-                        </span>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  {durationChoice === CUSTOM_DURATION_VALUE ? (
-                    <div className="mt-3">
-                      <InputField
-                        required
-                        type="number"
-                        min={1}
-                        max={1440}
-                        label={t('meetings.templates.customDurationMinutes')}
-                        value={durationMinutes}
-                        error={
-                          durationMinutes && !durationValid
-                            ? t('meetings.templates.durationInvalid')
-                            : undefined
-                        }
-                        onChange={(event) => setDurationMinutes(event.target.value)}
-                      />
-                      <p className="text-muted-foreground mt-1.5 text-xs leading-5">
-                        {t('meetings.templates.customDurationHint')}
+                <div className="rounded-xl border bg-background p-4">
+                  <div className="mb-3 flex items-start gap-2">
+                    <DoorOpen aria-hidden="true" className="text-primary mt-0.5 size-4" />
+                    <div>
+                      <p className="text-sm font-semibold">
+                        {t('meetings.templates.defaultRoom')}
+                      </p>
+                      <p className="text-muted-foreground mt-0.5 text-xs">
+                        {t('meetings.templates.defaultRoomHint')}
                       </p>
                     </div>
-                  ) : null}
-                </div>
-
-                <div>
-                  <label className="mb-1.5 flex items-center gap-2 text-sm font-medium">
-                    <DoorOpen
-                      aria-hidden="true"
-                      className="text-muted-foreground size-4"
-                    />
-                    {t('meetings.templates.defaultRoom')}
-                  </label>
+                  </div>
                   <SearchableMultiSelect
                     value={roomId}
                     options={roomOptions}
@@ -387,45 +318,103 @@ export function MeetingTemplateEditorDialog({
                       setRoomId(value === null ? null : Number(value))
                     }
                   />
-                  <p className="text-muted-foreground mt-1.5 text-xs leading-5">
-                    {t('meetings.templates.defaultRoomHint')}
-                  </p>
                 </div>
               </div>
 
-              <div>
-                <label className="mb-1.5 flex items-center gap-2 text-sm font-medium">
-                  <UsersRound
-                    aria-hidden="true"
-                    className="text-muted-foreground size-4"
+              <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+                <div className="rounded-xl border bg-background p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="bg-primary/10 text-primary grid size-9 shrink-0 place-items-center rounded-full">
+                      <UserRound aria-hidden="true" className="size-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate text-sm font-semibold">
+                          {currentUser.data?.user.userName ??
+                            t('meetings.create.organizerAttendance.you')}
+                        </p>
+                        <span
+                          className={cn(
+                            'inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium',
+                            organizerAttending
+                              ? 'bg-primary/10 text-primary'
+                              : 'bg-muted text-muted-foreground',
+                          )}
+                        >
+                          {t(
+                            organizerAttending
+                              ? 'meetings.create.organizerAttendance.attending'
+                              : 'meetings.create.organizerAttendance.notAttending',
+                          )}
+                        </span>
+                      </div>
+                      <p className="text-muted-foreground mt-0.5 text-xs">
+                        {t('meetings.templates.organizerAttendanceHint')}
+                      </p>
+                    </div>
+                  </div>
+
+                  <label className="bg-muted/20 mt-3 flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5">
+                    <input
+                      type="checkbox"
+                      checked={organizerAttending}
+                      disabled={pending}
+                      className="accent-primary mt-0.5 size-4 shrink-0"
+                      onChange={(event) => setOrganizerAttending(event.target.checked)}
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium">
+                        {t('meetings.create.organizerAttendance.willAttend')}
+                      </span>
+                      <span className="text-muted-foreground mt-0.5 block text-xs leading-5">
+                        {t('meetings.templates.organizerAttendanceDefault')}
+                      </span>
+                    </span>
+                  </label>
+                </div>
+
+                <div className="rounded-xl border bg-background p-4">
+                  <div className="mb-3 flex items-start gap-2">
+                    <UsersRound aria-hidden="true" className="text-primary mt-0.5 size-4" />
+                    <div>
+                      <p className="text-sm font-semibold">
+                        {t('meetings.templates.defaultParticipants')}
+                      </p>
+                      <p className="text-muted-foreground mt-0.5 text-xs">
+                        {t('meetings.templates.defaultParticipantsHint')}
+                      </p>
+                    </div>
+                  </div>
+
+                  <MeetingParticipantPicker
+                    values={attendeeUserIds}
+                    options={participantOptions}
+                    selectedOptions={selectedOptions}
+                    searchValue={search}
+                    participantCount={participantCount}
+                    roomCapacity={selectedRoom?.capacity ?? null}
+                    loading={participants.isPending}
+                    loadingMore={participants.isFetchingNextPage}
+                    hasMore={participants.hasNextPage}
+                    disabled={pending}
+                    onSearchChange={setSearch}
+                    onLoadMore={() => {
+                      void participants.fetchNextPage()
+                    }}
+                    onChange={(values) => setAttendeeUserIds(values)}
                   />
-                  {t('meetings.templates.defaultParticipants')}
-                </label>
-                <MeetingParticipantPicker
-                  values={attendeeUserIds}
-                  options={participantOptions}
-                  selectedOptions={selectedOptions}
-                  searchValue={search}
-                  participantCount={participantCount}
-                  roomCapacity={selectedRoom?.capacity ?? null}
-                  loading={participants.isPending}
-                  loadingMore={participants.isFetchingNextPage}
-                  hasMore={participants.hasNextPage}
-                  disabled={pending}
-                  onSearchChange={setSearch}
-                  onLoadMore={() => {
-                    void participants.fetchNextPage()
-                  }}
-                  onChange={(values) => setAttendeeUserIds(values)}
-                />
-                <p className="text-muted-foreground mt-1.5 text-xs leading-5">
-                  {t('meetings.templates.defaultParticipantsHint')}
-                </p>
+
+                  <p className="text-muted-foreground mt-2 text-xs leading-5">
+                    {t('meetings.templates.participantTotalHint', {
+                      count: participantCount,
+                    })}
+                  </p>
+                </div>
               </div>
             </div>
           </section>
 
-          <section className="border-primary/20 bg-primary/[0.045] rounded-xl border px-4 py-4 sm:px-5">
+          <section className="border-primary/20 bg-primary/[0.045] rounded-2xl border px-4 py-4 sm:px-5">
             <div className="flex items-start gap-3">
               <span className="bg-primary/10 text-primary grid size-9 shrink-0 place-items-center rounded-lg">
                 <Info aria-hidden="true" className="size-4" />
@@ -440,10 +429,7 @@ export function MeetingTemplateEditorDialog({
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   <span className="bg-background/80 inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium">
-                    <Clock3 aria-hidden="true" className="text-muted-foreground size-3.5" />
-                    {durationValid
-                      ? t('meetings.templates.durationValue', { count: duration })
-                      : t('meetings.templates.durationNotSet')}
+                    {formatMeetingDuration(durationMinutes, t)}
                   </span>
 
                   <span className="bg-background/80 inline-flex min-w-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium">
@@ -456,8 +442,17 @@ export function MeetingTemplateEditorDialog({
                   <span className="bg-background/80 inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium">
                     <UsersRound aria-hidden="true" className="text-muted-foreground size-3.5" />
                     {t('meetings.templates.participantsSummary', {
-                      count: attendeeUserIds.length,
+                      count: participantCount,
                     })}
+                  </span>
+
+                  <span className="bg-background/80 inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium">
+                    <UserRound aria-hidden="true" className="text-muted-foreground size-3.5" />
+                    {t(
+                      organizerAttending
+                        ? 'meetings.create.organizerAttendance.organizerAttendingSummary'
+                        : 'meetings.create.organizerAttendance.organizerNotAttendingSummary',
+                    )}
                   </span>
                 </div>
               </div>

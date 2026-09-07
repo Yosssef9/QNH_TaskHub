@@ -43,8 +43,8 @@ export function MeetingAgendaWorkspace({
   const updateAgenda = useUpdateMeetingAgenda()
   const meeting = detail.meeting
   const participants = useMemo<MeetingParticipant[]>(
-    () => [meeting.organizer, ...meeting.attendees],
-    [meeting.attendees, meeting.organizer],
+    () => (meeting.organizerAttending ? [meeting.organizer, ...meeting.attendees] : meeting.attendees),
+    [meeting.attendees, meeting.organizer, meeting.organizerAttending],
   )
   const serverDrafts = useMemo(() => detail.agendaItems.map(toDraft), [detail.agendaItems])
   const [items, setItems] = useState<MeetingAgendaDraftItem[]>(serverDrafts)
@@ -122,3 +122,4 @@ export function MeetingAgendaWorkspace({
     </div>
   )
 }
+

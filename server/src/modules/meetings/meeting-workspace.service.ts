@@ -288,11 +288,14 @@ async function validateTemplateInput(
 ): Promise<number[]> {
   await assertEffectiveOrganizerPermission(transaction, ownerUserId);
   if (input.defaultRoomId) await assertActiveRoom(transaction, input.defaultRoomId);
-  const attendeeUserIds = await normalizedActivePortalAttendees(
+  const selectedAttendeeUserIds = await normalizedActivePortalAttendees(
     transaction,
     ownerUserId,
     input.attendeeUserIds,
   );
+  const attendeeUserIds = input.organizerAttending
+    ? [ownerUserId, ...selectedAttendeeUserIds]
+    : selectedAttendeeUserIds;
   if (
     await meetingWorkspaceRepository.activeTemplateNameExists(
       transaction,
@@ -358,7 +361,7 @@ export const meetingWorkspaceService = {
         transaction,
         meetingId,
       );
-      const allowedPresenterIds = new Set([actorUserId, ...attendeeUserIds]);
+      const allowedPresenterIds = new Set(attendeeUserIds);
       const agendaItems = input.agendaItems.map((item) => {
         const topic = item.topic.trim();
         if (!topic) {
@@ -373,7 +376,7 @@ export const meetingWorkspaceService = {
           throw new AppError({
             statusCode: 400,
             code: "INVALID_MEETING_AGENDA_PRESENTER",
-            message: "Agenda presenters must be the Organizer or a Meeting attendee.",
+            message: "Agenda presenters must be people who are attending the Meeting.",
           });
         }
         return {

@@ -45,6 +45,7 @@ describe("Meeting workspace schemas", () => {
       description: "Reusable agenda",
       durationMinutes: 60,
       defaultRoomId: 4,
+      organizerAttending: true,
       attendeeUserIds: [11, 12],
     };
     expect(createMeetingTemplateBodySchema.safeParse(values).success).toBe(true);
@@ -55,5 +56,6 @@ describe("Meeting workspace schemas", () => {
       }).success,
     ).toBe(true);
     expect(createMeetingTemplateBodySchema.safeParse({ ...values, durationMinutes: 0 }).success).toBe(false);
+    expect(createMeetingTemplateBodySchema.safeParse({ ...values, organizerAttending: undefined }).success).toBe(false);
   });
 });

@@ -54,6 +54,7 @@ export interface MeetingSummary {
   endAtUtc: string
   schedulingNotes: string | null
   participantCount: number
+  organizerAttending: boolean
   attendees: MeetingParticipant[]
   hasPendingReschedule: boolean
   revisionId: number
@@ -104,6 +105,7 @@ export interface SaveMeetingInput {
   roomId: number
   startAtUtc: string
   endAtUtc: string
+  organizerAttending: boolean
   attendeeUserIds: number[]
   agendaItems: MeetingAgendaItemInput[]
 }
@@ -292,6 +294,7 @@ export interface MeetingTemplate {
   description: string | null
   durationMinutes: number
   defaultRoom: MeetingRoom | null
+  organizerAttending: boolean
   attendees: MeetingParticipant[]
   rowVersion: string
 }
@@ -302,6 +305,7 @@ export interface SaveMeetingTemplateInput {
   description: string | null
   durationMinutes: number
   defaultRoomId: number | null
+  organizerAttending: boolean
   attendeeUserIds: number[]
 }
 
@@ -309,5 +313,3 @@ export interface UpdateMeetingTemplateInput extends SaveMeetingTemplateInput {
   templateId: number
   rowVersion: string
 }
-
-

@@ -15,10 +15,12 @@ describe("Meeting workflow schemas", () => {
       roomId: 3,
       startAtUtc: "2026-09-03T06:00:00.000Z",
       endAtUtc: "2026-09-03T07:00:00.000Z",
+      organizerAttending: true,
       attendeeUserIds: [11, 12],
     });
 
     expect(parsed.title).toBe("Operations review");
+    expect(parsed.organizerAttending).toBe(true);
     expect(parsed.attendeeUserIds).toEqual([11, 12]);
   });
 
@@ -28,10 +30,23 @@ describe("Meeting workflow schemas", () => {
       roomId: 3,
       startAtUtc: "2026-09-03T07:00:00.000Z",
       endAtUtc: "2026-09-03T07:00:00.000Z",
+      organizerAttending: false,
       attendeeUserIds: [],
     });
 
     expect(parsed.success).toBe(false);
+  });
+
+  it("requires the Organizer attendance choice on Meeting creation", () => {
+    expect(
+      createMeetingBodySchema.safeParse({
+        title: "Missing attendance choice",
+        roomId: 3,
+        startAtUtc: "2026-09-03T06:00:00.000Z",
+        endAtUtc: "2026-09-03T07:00:00.000Z",
+        attendeeUserIds: [11],
+      }).success,
+    ).toBe(false);
   });
 
   it("requires row-version concurrency tokens for Coordinator changes", () => {
@@ -62,3 +77,4 @@ describe("Meeting workflow schemas", () => {
     ).toBe(false);
   });
 });
+

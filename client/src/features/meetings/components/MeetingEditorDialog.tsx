@@ -9,6 +9,7 @@ import {
   Minimize2,
   Paperclip,
   Sparkles,
+  UserRound,
   UsersRound,
   X,
 } from 'lucide-react'
@@ -65,6 +66,7 @@ type MeetingEditorFocusMode = 'NONE' | 'DETAILS' | 'SCHEDULE'
 
 interface MeetingEditorValidationErrors extends MeetingScheduleValidationErrors {
   title?: string
+  attendees?: string
 }
 
 export interface MeetingEditorInitialSchedule {
@@ -118,7 +120,15 @@ function buildAvailabilityInput(input: {
   endTime: string
   participantCount: number
 }): MeetingAvailabilityInput | null {
-  if (!input.roomId || !input.date || !input.startTime || !input.endTime) return null
+  if (
+    !input.roomId ||
+    !input.date ||
+    !input.startTime ||
+    !input.endTime ||
+    input.participantCount < 1
+  ) {
+    return null
+  }
 
   try {
     const startAtUtc = riyadhLocalDateTimeToUtcIso(input.date, input.startTime)
@@ -185,6 +195,9 @@ export function MeetingEditorDialog({
   const [roomId, setRoomId] = useState<number | null>(() =>
     initialSchedule?.roomId ?? (template?.defaultRoom?.isActive ? template.defaultRoom.id : null),
   )
+  const [organizerAttending, setOrganizerAttending] = useState(
+    template?.organizerAttending ?? (mode === 'REQUEST'),
+  )
   const [attendeeUserIds, setAttendeeUserIds] = useState<number[]>(() =>
     template?.attendees.map((attendee) => attendee.userId) ?? [],
   )
@@ -219,7 +232,7 @@ export function MeetingEditorDialog({
   const agendaParticipants = useMemo<MeetingParticipant[]>(() => {
     const values: MeetingParticipant[] = []
     const user = currentUser.data?.user
-    if (user) {
+    if (organizerAttending && user) {
       values.push({
         userId: user.userId,
         userCode: user.userCode,
@@ -236,7 +249,7 @@ export function MeetingEditorDialog({
     }
 
     return values
-  }, [currentUser.data?.user, selectedAttendeeOptions])
+  }, [currentUser.data?.user, organizerAttending, selectedAttendeeOptions])
 
   const templateOptions = useMemo<SearchableSelectOption[]>(
     () =>
@@ -248,7 +261,7 @@ export function MeetingEditorDialog({
     [t, templates.data],
   )
 
-  const participantCount = 1 + attendeeUserIds.length
+  const participantCount = attendeeUserIds.length + (organizerAttending ? 1 : 0)
   const meetingDurationMinutes = durationBetweenTimes(startTime, endTime)
   const selectedRoom = (rooms.data ?? []).find((room) => room.id === roomId) ?? null
   const roomName = selectedRoom
@@ -285,6 +298,7 @@ export function MeetingEditorDialog({
     setAgendaItems([])
     setAgendaErrors({})
     setRoomId(selected.defaultRoom?.isActive ? selected.defaultRoom.id : null)
+    setOrganizerAttending(selected.organizerAttending)
     setAttendeeUserIds(selected.attendees.map((attendee) => attendee.userId))
     setSelectedParticipantOptions(selected.attendees.map(participantOption))
     setEndTime(addMinutes(startTime, selected.durationMinutes))
@@ -298,6 +312,7 @@ export function MeetingEditorDialog({
     })
     const ids = values.map(Number)
     setAttendeeUserIds(ids)
+    if (ids.length > 0 || organizerAttending) clearValidationError('attendees')
     setSelectedParticipantOptions((current) => {
       const byValue = new Map(current.map((option) => [String(option.value), option]))
       participantOptions.forEach((option) => byValue.set(String(option.value), option))
@@ -305,6 +320,24 @@ export function MeetingEditorDialog({
         .map((id) => byValue.get(String(id)))
         .filter((option): option is SearchableSelectOption => Boolean(option))
     })
+  }
+
+  function updateOrganizerAttendance(nextAttending: boolean) {
+    setOrganizerAttending(nextAttending)
+    if (nextAttending) {
+      clearValidationError('attendees')
+      return
+    }
+
+    if (currentUserId) {
+      setAgendaItems((current) =>
+        current.map((item) =>
+          item.presenterUserId === currentUserId
+            ? { ...item, presenterUserId: null }
+            : item,
+        ),
+      )
+    }
   }
 
   function addPendingFiles(files: FileList | null) {
@@ -390,6 +423,9 @@ export function MeetingEditorDialog({
     )
     setAgendaErrors(nextAgendaErrors)
 
+    if (participantCount < 1) {
+      nextErrors.attendees = t('meetings.create.validation.attendeeRequired')
+    }
     if (!date) nextErrors.date = t('meetings.create.validation.dateRequired')
     if (!roomId) nextErrors.room = t('meetings.create.validation.roomRequired')
 
@@ -397,7 +433,7 @@ export function MeetingEditorDialog({
     const endMinutes = Number(endTime.slice(0, 2)) * 60 + Number(endTime.slice(3, 5))
     if (!startTime || !endTime || endMinutes <= startMinutes) {
       nextErrors.duration = t('meetings.create.validation.durationRequired')
-    } else if (roomId && !availabilityInput) {
+    } else if (roomId && participantCount > 0 && !availabilityInput) {
       nextErrors.time = t('meetings.create.validation.timeRequired')
     }
 
@@ -426,8 +462,9 @@ export function MeetingEditorDialog({
     }
 
     setValidationErrors(nextErrors)
-    const order: Array<'title' | Exclude<MeetingScheduleFocusField, null>> = [
+    const order: Array<'title' | 'attendees' | Exclude<MeetingScheduleFocusField, null>> = [
       'title',
+      'attendees',
       'date',
       'room',
       'capacity',
@@ -452,6 +489,8 @@ export function MeetingEditorDialog({
 
     if (firstFieldError === 'title') {
       focusValidationError('title')
+    } else if (firstFieldError === 'attendees') {
+      setFocusMode('DETAILS')
     } else if (firstAgendaError) {
       focusAgendaError(firstAgendaError.clientId)
     } else if (firstFieldError) {
@@ -470,6 +509,7 @@ export function MeetingEditorDialog({
         roomId: availabilityInput.roomId,
         startAtUtc: availabilityInput.startAtUtc,
         endAtUtc: availabilityInput.endAtUtc,
+        organizerAttending,
         attendeeUserIds,
         agendaItems: agendaItems.map((item) => ({
           topic: item.topic.trim(),
@@ -544,7 +584,7 @@ export function MeetingEditorDialog({
       <DialogContent
         variant="modal"
         closeLabel={t('common.close')}
-        className="max-h-[96vh] w-[min(88rem,calc(100vw-1rem))] overflow-hidden p-0"
+        className="max-h-[96vh] w-[min(88rem,calc(100vw-1rem))] p-0"
       >
         <div className="min-h-0">
           <header className="border-b px-5 py-5 pe-14 sm:px-6 sm:py-6 sm:pe-16">
@@ -682,6 +722,64 @@ export function MeetingEditorDialog({
 
               <div>
                 <label className="mb-1.5 block text-sm font-medium">
+                  {t('meetings.create.participantsTitle')}
+                </label>
+
+                <div className="bg-muted/20 mb-3 rounded-xl border p-3">
+                  <div className="flex items-start gap-3">
+                    <span className="bg-primary/10 text-primary grid size-9 shrink-0 place-items-center rounded-full">
+                      <UserRound aria-hidden="true" className="size-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate text-sm font-semibold">
+                          {currentUser.data?.user.userName ?? t('meetings.create.organizerAttendance.you')}
+                        </p>
+                        <span
+                          className={cn(
+                            'inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium',
+                            organizerAttending
+                              ? 'bg-primary/10 text-primary'
+                              : 'bg-muted text-muted-foreground',
+                          )}
+                        >
+                          {t(
+                            organizerAttending
+                              ? 'meetings.create.organizerAttendance.attending'
+                              : 'meetings.create.organizerAttendance.notAttending',
+                          )}
+                        </span>
+                      </div>
+                      <p className="text-muted-foreground mt-0.5 text-xs">
+                        {t(
+                          mode === 'DIRECT'
+                            ? 'meetings.create.organizerAttendance.coordinatorRole'
+                            : 'meetings.create.organizerAttendance.organizerRole',
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                  <label className="bg-background mt-3 flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5">
+                    <input
+                      type="checkbox"
+                      checked={organizerAttending}
+                      disabled={isSaving}
+                      className="accent-primary mt-0.5 size-4 shrink-0"
+                      onChange={(event) => updateOrganizerAttendance(event.target.checked)}
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium">
+                        {t('meetings.create.organizerAttendance.willAttend')}
+                      </span>
+                      <span className="text-muted-foreground mt-0.5 block text-xs leading-5">
+                        {t('meetings.create.organizerAttendance.remainsOrganizer')}
+                      </span>
+                    </span>
+                  </label>
+                </div>
+
+                <label className="mb-1.5 block text-sm font-medium">
                   {t('meetings.fields.attendees')}
                 </label>
                 <MeetingParticipantPicker
@@ -701,9 +799,17 @@ export function MeetingEditorDialog({
                   }}
                   onChange={updateAttendees}
                 />
-                <p className="text-muted-foreground mt-2 text-xs leading-5">
-                  {t('meetings.create.organizerCounts')}
-                </p>
+                {validationErrors.attendees ? (
+                  <p role="alert" className="text-destructive mt-2 text-xs font-medium">
+                    {validationErrors.attendees}
+                  </p>
+                ) : (
+                  <p className="text-muted-foreground mt-2 text-xs leading-5">
+                    {t('meetings.create.organizerAttendance.summary', {
+                      count: participantCount,
+                    })}
+                  </p>
+                )}
               </div>
 
               <MeetingAgendaEditor
@@ -903,6 +1009,14 @@ export function MeetingEditorDialog({
                       <span>{roomName}</span>
                       <span className="text-muted-foreground">•</span>
                       <span>{t('meetings.participantCount', { count: participantCount })}</span>
+                      <span className="text-muted-foreground">•</span>
+                      <span>
+                        {t(
+                          organizerAttending
+                            ? 'meetings.create.organizerAttendance.organizerAttendingSummary'
+                            : 'meetings.create.organizerAttendance.organizerNotAttendingSummary',
+                        )}
+                      </span>
                     </>
                   ) : (
                     <span className="text-muted-foreground">
@@ -972,5 +1086,3 @@ export function MeetingEditorDialog({
     </Dialog>
   )
 }
-
-

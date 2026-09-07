@@ -50,6 +50,12 @@ export function MeetingSummaryCard({
           <h3 className="text-base font-semibold leading-6">{meeting.title}</h3>
           <p className="text-muted-foreground mt-1 text-xs">
             {t('meetings.organizedBy', { name: meeting.organizer.userName })}
+            {' · '}
+            {t(
+              meeting.organizerAttending
+                ? 'meetings.workspace.organizerAttending'
+                : 'meetings.workspace.organizerNotAttending',
+            )}
           </p>
         </div>
         <Badge variant={statusVariant(meeting.status)}>
@@ -126,5 +132,6 @@ export function MeetingSummaryCard({
     </Card>
   )
 }
+
 
 

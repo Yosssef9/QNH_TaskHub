@@ -227,13 +227,17 @@ export function MeetingParticipantPicker({
       <PopoverContent
         dir={i18n.dir()}
         align="start"
+        side="bottom"
         sideOffset={8}
-        className="max-h-[78vh] w-[min(56rem,calc(100vw-2rem))] overflow-y-auto p-0 lg:overflow-hidden"
+        collisionPadding={16}
+        sticky="always"
+        hideWhenDetached
+        className="z-[70] flex h-[min(36rem,var(--radix-popover-content-available-height))] max-h-[calc(100vh-2rem)] w-[min(56rem,calc(100vw-2rem))] overflow-hidden p-0"
       >
         <Command
           label={t('meetings.fields.attendees')}
           shouldFilter={false}
-          className="min-h-0"
+          className="min-h-0 flex-1"
         >
           <CommandInput
             value={searchValue}
@@ -241,9 +245,9 @@ export function MeetingParticipantPicker({
             onValueChange={onSearchChange}
           />
 
-          <div className="grid min-h-0 lg:grid-cols-2">
-            <section className="min-w-0">
-              <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+          <div className="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-2 lg:overflow-hidden">
+            <section className="min-w-0 lg:flex lg:min-h-0 lg:flex-col">
+              <div className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3">
                 <p className="text-sm font-semibold">
                   {t('meetings.participantPicker.allActivePortalUsers')}
                 </p>
@@ -255,7 +259,7 @@ export function MeetingParticipantPicker({
               <CommandList
                 id={listId}
                 label={t('meetings.participantPicker.allActivePortalUsers')}
-                className="max-h-64 p-2 lg:max-h-[24rem]"
+                className="max-h-64 overscroll-contain p-2 lg:min-h-0 lg:max-h-none lg:flex-1"
                 onScroll={(event) => {
                   const element = event.currentTarget
                   const nearBottom =
@@ -338,8 +342,8 @@ export function MeetingParticipantPicker({
               </CommandList>
             </section>
 
-            <section className="min-w-0 border-t lg:border-t-0 lg:border-s">
-              <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+            <section className="min-w-0 border-t lg:flex lg:min-h-0 lg:flex-col lg:border-t-0 lg:border-s">
+              <div className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3">
                 <p className="text-sm font-semibold">
                   {t('meetings.participantPicker.selectedParticipants', {
                     count: selectedOptions.length,
@@ -347,7 +351,7 @@ export function MeetingParticipantPicker({
                 </p>
               </div>
 
-              <div className="max-h-52 overflow-y-auto p-2 lg:max-h-[24rem]">
+              <div className="max-h-52 overflow-y-auto overscroll-contain p-2 lg:min-h-0 lg:max-h-none lg:flex-1">
                 {selectedOptions.length === 0 ? (
                   <div className="text-muted-foreground px-4 py-10 text-center text-sm">
                     {t('meetings.participantPicker.noSelected')}
@@ -395,7 +399,7 @@ export function MeetingParticipantPicker({
             </section>
           </div>
 
-          <div className="flex flex-col-reverse gap-2 border-t p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex shrink-0 flex-col-reverse gap-2 border-t p-3 sm:flex-row sm:items-center sm:justify-between">
             <Button
               type="button"
               variant="outline"
@@ -415,3 +419,4 @@ export function MeetingParticipantPicker({
     </Popover>
   )
 }
+

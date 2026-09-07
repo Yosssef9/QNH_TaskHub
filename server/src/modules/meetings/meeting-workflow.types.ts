@@ -28,6 +28,7 @@ export interface MeetingSummary {
   endAtUtc: string;
   schedulingNotes: string | null;
   participantCount: number;
+  organizerAttending: boolean;
   attendees: MeetingParticipant[];
   hasPendingReschedule: boolean;
   revisionId: number;
@@ -48,6 +49,7 @@ export interface CreateMeetingInput {
   roomId: number;
   startAtUtc: string;
   endAtUtc: string;
+  organizerAttending: boolean;
   attendeeUserIds: number[];
   agendaItems: MeetingAgendaItemInput[];
 }
@@ -108,5 +110,6 @@ export type MeetingScheduleEntry =
   | MeetingScheduleFullEntry
   | MeetingSchedulePreviewEntry
   | MeetingScheduleBusyEntry;
+
 
 
