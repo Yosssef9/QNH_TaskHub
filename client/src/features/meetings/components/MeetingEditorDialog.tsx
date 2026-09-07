@@ -669,7 +669,7 @@ export function MeetingEditorDialog({
                 </Button>
               </div>
 
-              {templateOptions.length > 0 || templates.isFetching ? (
+              {templateOptions.length > 0 || templates.isPending ? (
                 <div className="bg-muted/30 rounded-xl border p-4">
                   <div className="mb-3 flex items-center gap-2">
                     <Sparkles aria-hidden="true" className="text-primary size-4" />
@@ -686,7 +686,7 @@ export function MeetingEditorDialog({
                     placeholder={t('meetings.create.templatePlaceholder')}
                     searchPlaceholder={t('meetings.create.templateSearch')}
                     noResultsText={t('meetings.create.noTemplates')}
-                    loading={templates.isFetching}
+                    loading={templates.isPending}
                     onChange={(value) => {
                       if (value === null) {
                         setSelectedTemplateId(null)

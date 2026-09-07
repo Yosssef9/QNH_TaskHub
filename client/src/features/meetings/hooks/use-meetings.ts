@@ -81,7 +81,6 @@ export function useMeetingParticipants(search: string, enabled: boolean) {
         ? lastPage.page + 1
         : undefined,
     enabled,
-    staleTime: 60_000,
   })
 }
 

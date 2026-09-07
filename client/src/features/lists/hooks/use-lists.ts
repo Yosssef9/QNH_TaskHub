@@ -9,7 +9,6 @@ export function useLists() {
   return useQuery({
     queryKey: listsQueryKey,
     queryFn: getLists,
-    staleTime: 60_000,
   })
 }
 

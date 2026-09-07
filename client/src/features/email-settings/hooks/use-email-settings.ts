@@ -17,7 +17,6 @@ export function useEmailSettings() {
   return useQuery({
     queryKey: emailSettingsQueryKey,
     queryFn: getEmailSettings,
-    staleTime: 30_000,
   })
 }
 

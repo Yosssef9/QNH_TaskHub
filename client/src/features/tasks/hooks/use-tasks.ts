@@ -40,7 +40,6 @@ export function allKpiTasksQueryOptions(
   return {
     queryKey: [...taskQueryRoot, { allKpis: true as const }, filters] as const,
     queryFn: () => getAllKpiTasks(filters),
-    staleTime: 30_000,
   }
 }
 
@@ -68,7 +67,6 @@ export function useTasks(
           return getAllKpiTasks(filters)
         },
     placeholderData: keepPreviousData,
-    ...(globalOptions ? { staleTime: globalOptions.staleTime } : {}),
   })
 }
 

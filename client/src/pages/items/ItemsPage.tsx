@@ -194,7 +194,7 @@ export function ItemsPage() {
     displayMode === 'summary'
     && !usesAnalyticsSort
     && visibleItemIds.length > 0
-    && (priceSummaries.isPending || priceSummaries.isFetching)
+    && priceSummaries.isPending
   const visiblePricesUnavailable = displayMode === 'summary' && !usesAnalyticsSort && priceSummaries.isError
   const primaryPriceIntelligenceSettled = displayMode === 'supplierComparison'
     ? matrixSupplierIds.length === 0 || supplierMatrix.isSuccess || supplierMatrix.isError
@@ -347,7 +347,7 @@ export function ItemsPage() {
             suppliers={selectedSuppliers}
             period={period}
             matrixData={supplierMatrix.data}
-            matrixLoading={supplierMatrix.isPending || supplierMatrix.isFetching}
+            matrixLoading={supplierMatrix.isPending}
             matrixError={supplierMatrix.isError}
             visibleSupplierIds={matrixSupplierIds}
             priceSource={matrixPriceSource}

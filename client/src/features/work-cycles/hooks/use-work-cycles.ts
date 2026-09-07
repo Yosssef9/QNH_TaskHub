@@ -19,7 +19,7 @@ import type { WorkCycle } from '../types/work-cycle.types'
 export const workCyclesQueryKey = ['work-cycles'] as const
 
 export function useWorkCycles() {
-  return useQuery({ queryKey: workCyclesQueryKey, queryFn: getWorkCycles, staleTime: 30_000 })
+  return useQuery({ queryKey: workCyclesQueryKey, queryFn: getWorkCycles })
 }
 
 export function useWorkCycle(cycleId: number | null) {
