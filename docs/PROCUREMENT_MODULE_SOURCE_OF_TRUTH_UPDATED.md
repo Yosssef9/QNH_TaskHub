@@ -97,3 +97,19 @@ Approved rules:
 - Import audit foundation uses `dbo.TM_procurement_import_batches`. Imported Quotes link through nullable `TM_price_quotes.import_batch_id`; a null link continues to identify manual/non-imported Quote history.
 - Final Apply merges matched Item/Supplier IDs into an existing private Saved View without changing its other configuration, or creates a new private Saved View with the approved 1Y / Actual / Latest defaults.
 
+# 5. Procurement source synchronization
+
+Procurement source refresh is a backend operational concern and must not be owned by browser startup or by an individual user session.
+
+Approved rules:
+
+- The TaskHub backend runs an in-process Procurement synchronization worker, consistent with the modular-monolith approach already used for background email delivery.
+- The worker executes the production import chain sequentially: Suppliers → Items → Transactions.
+- Production procedure names remain centralized in Procurement configuration: `QNHDB.dbo.SP_Import_APS_SUPPLIERS`, `QNHDB.dbo.SP_Import_INV_Items_All`, and `QNHDB.dbo.SP_Import_Purchase_Invoices_All`.
+- Synchronization cadence, run-on-start behavior, and the long-running import request timeout are server environment configuration. Normal API-query timeout settings are not widened just to accommodate imports.
+- A SQL Server application lock protects the whole import run across TaskHub backend processes/instances. If another instance already owns the lock, the competing run skips rather than waiting and starting a duplicate import.
+- Synchronization attempts are persisted in `dbo.TM_procurement_sync_runs`, including trigger, start/end timestamps, status, last completed step, failed step, duration, and diagnostic error details.
+- The freshness shown to users is the timestamp of the most recent fully `COMPLETED` synchronization. A later partial/failed run must never make stale data look fresh.
+- Existing SQL Server Procurement data remains usable after a synchronization failure.
+- Procurement-enabled users may read synchronization freshness. A manual refresh is restricted to an `ADMIN` who also has Procurement access and starts the same locked background path without keeping the HTTP request open while the Stored Procedures execute.
+- The frontend observes synchronization state and may invalidate affected cached Procurement queries after a newly completed run; it never executes the source Stored Procedures itself.

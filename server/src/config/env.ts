@@ -43,7 +43,10 @@ const envSchema = z
 
     ATTACHMENT_STORAGE_PATH: z.string().trim().min(1).default("storage/attachments"),
 
-    PROCUREMENT_STARTUP_SYNC_ENABLED: booleanString.prefault("false"),
+    PROCUREMENT_SYNC_ENABLED: booleanString.prefault("false"),
+    PROCUREMENT_SYNC_INTERVAL_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
+    PROCUREMENT_SYNC_RUN_ON_START: booleanString.prefault("true"),
+    PROCUREMENT_SYNC_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(60_000).max(3_600_000).default(600_000),
 
     EMAIL_ENABLED: booleanString.prefault("false"),
     EMAIL_PROVIDER: z.enum(["SMTP"]).default("SMTP"),

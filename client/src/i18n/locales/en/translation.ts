@@ -625,8 +625,27 @@ export const enTranslation = {
       priceQuotes: 'Price Quotes',
       comingSoon: 'Soon',
     },
-    syncFailed: 'Procurement source synchronization failed. Existing data is still available.',
-    syncSkipped: 'Procurement source synchronization is currently disabled. Existing SQL Server data is being used.',
+    syncStatus: {
+      loading: 'Checking data freshness…',
+      unavailable: 'Sync status unavailable',
+      disabled: 'Background sync disabled',
+      updating: 'Updating Procurement data…',
+      updatingWithLastSuccess: 'Updating · last success {{time}}',
+      lastSuccessful: 'Updated {{time}}',
+      failedUsingPrevious: 'Latest update failed · data from {{time}}',
+      failedNoPrevious: 'Latest update failed · no successful sync yet',
+      never: 'No successful sync yet',
+      failedStep: 'Latest sync failed at {{step}}.',
+      refreshNow: 'Refresh Procurement data now',
+      refreshRequested: 'Procurement refresh started.',
+      alreadyRunning: 'A Procurement refresh is already running.',
+      refreshFailed: 'The Procurement refresh could not be started.',
+      steps: {
+        SUPPLIERS: 'Suppliers',
+        ITEMS: 'Items',
+        TRANSACTIONS: 'Transactions',
+      },
+    },
   },
   items: {
     pageTitle: 'Items',
@@ -2346,4 +2365,3 @@ export const enTranslation = {
     backHome: 'Back to home',
   },
 } as const
-

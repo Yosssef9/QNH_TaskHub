@@ -185,7 +185,7 @@ Phase 1 establishes the Procurement foundation and shared Supplier master:
 - My Contracts, Contract Details, reminders, files, activity, owner authorization, archive/restore, and Contract settings remain private and continue to behave as before.
 - Supplier detail may show **My Contracts** for the authenticated user only; sharing a Supplier never exposes another user's Contracts.
 
-Phase 2 adds the shared Item master, Saved Views foundation, and startup source synchronization:
+Phase 2 adds the shared Item master, Saved Views foundation, and Procurement source synchronization:
 
 - Items use the externally managed `QNHDB.dbo.TM_INV_Items_Import` table with the approved Oracle/CarWare Item columns. `ITEM_NO` / `ITEM_CODE` are system identity and are not user-editable.
 - Procurement users may create manual shared Items. TaskHub assigns a reserved negative identity and protected `USR-ITEM-...` Item Code so manual Items cannot be confused with source records.
@@ -194,8 +194,12 @@ Phase 2 adds the shared Item master, Saved Views foundation, and startup source 
 - Phase 2 intentionally shows master-data Item fields only. Actual latest/lowest/highest/average price analytics and Item × Supplier time-series calculations are added in Phase 3.
 - Saved Views are private per user and stored in `dbo.TM_procurement_saved_views`. A Saved View stores selected Item/Supplier IDs plus filter/sort/display configuration, never calculated prices.
 - Saved Views support create/edit/rename, duplicate, delete, and one optional default view. Opening a Saved View filters the current Items experience; supplier/time-series analytics are connected in the analytics phases.
-- On a Procurement-enabled application session, TaskHub calls the configured Supplier → Item → Transaction import procedures sequentially. Procedure/table names remain centralized placeholders and may be changed later without changing UI/business logic.
-- Startup sync failure leaves existing SQL Server data available and does not make TaskHub unusable.
+- TaskHub's backend owns Procurement source synchronization through an in-process background worker. Browser/application-session startup never executes the import procedures.
+- The worker runs the configured Supplier → Item → Transaction procedures sequentially, optionally on backend startup and then on a configurable interval. The production procedure/table names remain centralized in Procurement configuration.
+- A SQL Server application lock prevents overlapping imports across multiple TaskHub backend processes/instances. The synchronization request timeout is configured separately from normal API-query timeouts because the Oracle/linked-server imports may be long-running.
+- Synchronization attempts are recorded in `dbo.TM_procurement_sync_runs` with trigger, timestamps, status, last completed/failed step, duration, and diagnostic error details. The UI's freshness timestamp always comes from the most recent fully successful run.
+- Procurement-enabled users can see whether synchronization is running and how old the last successful data refresh is. Administrators with Procurement access may request a manual refresh; that request uses the same locked background path and does not keep the HTTP request open until all Stored Procedures finish.
+- A failed or partial synchronization leaves existing SQL Server data available and does not make TaskHub unusable. A failed latest attempt is shown separately from the last successful data timestamp.
 - Price Quotes remain private per user and are implemented in a later Procurement phase.
 
 Phase 3 adds the read-only actual purchase Transaction and price analytics engine:
@@ -427,4 +431,3 @@ User-authored email templates are not planned. Users customize delivery preferen
 - Expanded Meeting reschedule lifecycle notification/email event types are introduced by migration 022; applying it is a separate manual database step after 021.
 - Price Quote SAR-only enforcement is introduced by migration 031; applying it is a separate manual database step after the Procurement Price Quote table exists.
 - Procurement Excel Import audit/link foundation is introduced by migration 032; applying it is a separate manual database step after migrations 028/029/031. It creates import-batch audit storage and the nullable Price Quote import-batch link used by the completed Excel Import Apply workflow; Preview itself performs no writes.
-

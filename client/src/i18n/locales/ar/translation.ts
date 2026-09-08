@@ -619,8 +619,27 @@ export const arTranslation = {
       priceQuotes: 'عروض الأسعار',
       comingSoon: 'قريباً',
     },
-    syncFailed: 'تعذر تحديث بيانات المشتريات من المصدر. ستظل البيانات الحالية متاحة.',
-    syncSkipped: 'مزامنة بيانات المشتريات مع المصدر متوقفة حالياً. يتم استخدام البيانات الحالية من SQL Server.',
+    syncStatus: {
+      loading: 'جارٍ التحقق من حداثة البيانات…',
+      unavailable: 'حالة المزامنة غير متاحة',
+      disabled: 'المزامنة الخلفية متوقفة',
+      updating: 'جارٍ تحديث بيانات المشتريات…',
+      updatingWithLastSuccess: 'جارٍ التحديث · آخر نجاح {{time}}',
+      lastSuccessful: 'آخر تحديث ناجح {{time}}',
+      failedUsingPrevious: 'فشل آخر تحديث · البيانات من {{time}}',
+      failedNoPrevious: 'فشل آخر تحديث · لا توجد مزامنة ناجحة سابقة',
+      never: 'لا توجد مزامنة ناجحة حتى الآن',
+      failedStep: 'فشلت آخر مزامنة عند خطوة {{step}}.',
+      refreshNow: 'تحديث بيانات المشتريات الآن',
+      refreshRequested: 'بدأ تحديث بيانات المشتريات.',
+      alreadyRunning: 'يوجد تحديث لبيانات المشتريات قيد التنفيذ بالفعل.',
+      refreshFailed: 'تعذر بدء تحديث بيانات المشتريات.',
+      steps: {
+        SUPPLIERS: 'الموردون',
+        ITEMS: 'الأصناف',
+        TRANSACTIONS: 'حركات الشراء',
+      },
+    },
   },
   items: {
     pageTitle: 'الأصناف',
@@ -2344,4 +2363,3 @@ export const arTranslation = {
     backHome: 'العودة إلى الرئيسية',
   },
 } as const
-

@@ -5,7 +5,7 @@ import { Outlet, useNavigation } from 'react-router'
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { useAutoExpandSidebar } from '@/hooks/use-auto-expand-sidebar'
-import { ProcurementStartupSync } from '@/features/procurement/components/ProcurementStartupSync'
+import { ProcurementSyncObserver } from '@/features/procurement/components/ProcurementSyncObserver'
 import { cn } from '@/lib/cn'
 
 import { AppHeader } from './AppHeader'
@@ -20,7 +20,7 @@ export function AppShell() {
 
   return (
     <div className="bg-background text-foreground flex min-h-screen">
-      <ProcurementStartupSync />
+      <ProcurementSyncObserver />
       <div
         className={cn(
           'relative hidden shrink-0 transition-[width] duration-200 ease-out will-change-[width] lg:block',
@@ -90,4 +90,3 @@ export function AppShell() {
     </div>
   )
 }
-
