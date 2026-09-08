@@ -1,6 +1,6 @@
 # QNH TaskHub — Current Product Requirements
 
-> Status: planning baseline. Last aligned: 2026-09-07.
+> Status: planning baseline. Last aligned: 2026-09-08.
 
 ## Product summary
 
@@ -242,7 +242,7 @@ Phase 6 completes the planned Procurement module:
 
 - Private `TM_price_quotes` records are owner-scoped and support unlimited repeated dated Quotes for the same Item + Supplier, including multiple Quotes on the same date. Quotes use optimistic `ROWVERSION` concurrency, retain activity history, and use deactivate/reactivate rather than ordinary hard deletion.
 - Price Quote comparisons remain separate from actual purchase analytics. Quote-vs-actual differences use the latest compatible actual `UNIT_COST` only when both Currency and UOM match.
-- Saved View Supplier Comparison **Compare** mode uses an effective comparison price for the selected metric: prefer the compatible private Quote metric; otherwise fall back to the Actual Purchase metric. If Actual history exists and Quote Currency/UOM is incompatible with that Actual scope, the Quote is ineligible and Actual is used. The lowest effective price wins only among Suppliers sharing the same Currency/UOM scope; exact ties remain co-winners. Quote-vs-actual percentage is informational and does not choose the winner.
+- Saved View Supplier Comparison **Compare** mode uses an effective comparison price for the selected metric: when compatible Actual Purchase and private Quote values both exist, use the lower value; when only one usable source exists, use that source. If Actual history exists and Quote Currency/UOM is incompatible with that Actual scope, the Quote is ineligible and the compatible Actual metric is used when available. The lowest effective price wins only among Suppliers sharing the same Currency/UOM scope; exact ties remain co-winners. Quote-vs-actual percentage is informational and does not choose the winner.
 - TaskHub Price Quotes are SAR-only: the UI does not ask for Currency, the backend assigns `SAR`, and SQL Server rejects non-SAR Quote rows. Quoted Unit Cost uses the shared formatted SAR input with thousands grouping and up to six decimals. Quote UOM is a controlled dropdown sourced from distinct SAR transaction `UNIT_NAME_EN` values for the Item plus Item master Unit/Piece Unit fallbacks; default priority is latest Item+Supplier SAR transaction, then latest Item SAR transaction, then master Unit, then Piece Unit. The backend validates the selected UOM.
 - Price Quotes integrate into Item Details, Supplier Details, Saved View/Items attention metrics, and a dedicated My Price Quotes page. Other users' Quotes must never appear in list, analytics, counts, or history responses.
 - Private Quote history tables must keep Quote identity fields visually separate from comparison fields. Use grouped headers, predictable column widths, clear column separators, stacked price/UOM formatting, readable zebra/hover rows, and explanatory empty states instead of ambiguous adjacent dashes.
@@ -432,3 +432,4 @@ User-authored email templates are not planned. Users customize delivery preferen
 - Expanded Meeting reschedule lifecycle notification/email event types are introduced by migration 022; applying it is a separate manual database step after 021.
 - Price Quote SAR-only enforcement is introduced by migration 031; applying it is a separate manual database step after the Procurement Price Quote table exists.
 - Procurement Excel Import audit/link foundation is introduced by migration 032; applying it is a separate manual database step after migrations 028/029/031. It creates import-batch audit storage and the nullable Price Quote import-batch link used by the completed Excel Import Apply workflow; Preview itself performs no writes.
+

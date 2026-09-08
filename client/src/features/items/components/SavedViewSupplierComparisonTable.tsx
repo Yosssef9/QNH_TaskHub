@@ -153,7 +153,7 @@ export function SavedViewSupplierComparisonTable({
               <div
                 role="group"
                 aria-label={t('items.matrix.priceSourceLabel')}
-                className="flex rounded-lg border bg-background p-1"
+                className="bg-background flex rounded-lg border p-1"
               >
                 {(['actual', 'quote', 'compare'] as const).map((source) => (
                   <Button
@@ -165,7 +165,11 @@ export function SavedViewSupplierComparisonTable({
                     className="h-8"
                     onClick={() => onPriceSourceChange(source)}
                   >
-                    {source === 'actual' ? <ReceiptText className="size-3.5" /> : <Tags className="size-3.5" />}
+                    {source === 'actual' ? (
+                      <ReceiptText className="size-3.5" />
+                    ) : (
+                      <Tags className="size-3.5" />
+                    )}
                     {t(`items.matrix.priceSources.${source}`)}
                   </Button>
                 ))}
@@ -206,7 +210,9 @@ export function SavedViewSupplierComparisonTable({
                 </Button>
               </PopoverTrigger>
               <PopoverContent align="end" className="w-[min(22rem,calc(100vw-2rem))] p-2">
-                <p className="px-2 py-1 text-sm font-semibold">{t('items.matrix.chooseSuppliers')}</p>
+                <p className="px-2 py-1 text-sm font-semibold">
+                  {t('items.matrix.chooseSuppliers')}
+                </p>
                 <p className="text-muted-foreground px-2 pb-2 text-xs">
                   {t('items.matrix.chooseSuppliersHint', { max: MAX_VISIBLE_SUPPLIERS })}
                 </p>
@@ -255,7 +261,9 @@ export function SavedViewSupplierComparisonTable({
         </div>
 
         <p className="text-muted-foreground text-[11px]">
-          {settingsSaving ? t('items.matrix.savingViewSettings') : t('items.matrix.settingsSavedWithView')}
+          {settingsSaving
+            ? t('items.matrix.savingViewSettings')
+            : t('items.matrix.settingsSavedWithView')}
         </p>
       </div>
 
@@ -276,7 +284,7 @@ export function SavedViewSupplierComparisonTable({
           <table className="w-full min-w-max border-separate border-spacing-0 text-sm">
             <thead className="sticky top-0 z-20">
               <tr>
-                <th className="bg-accent sticky start-0 z-30 min-w-[18rem] border-e border-b px-4 py-3 text-start text-xs font-semibold">
+                <th className="bg-accent sticky start-0 z-40 min-w-[18rem] border-e border-b px-4 py-3 text-start text-xs font-semibold">
                   {t('items.name')}
                 </th>
                 {visibleSuppliers.map((supplier) => {
@@ -287,7 +295,14 @@ export function SavedViewSupplierComparisonTable({
                       className="bg-accent min-w-[16rem] border-e border-b px-4 py-3 text-start align-top text-xs font-semibold"
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <TableEntityLink kind="supplier" id={supplierId} name={supplier.label} code={supplier.description ?? null} compact className="min-w-0 max-w-[13rem]" />
+                        <TableEntityLink
+                          kind="supplier"
+                          id={supplierId}
+                          name={supplier.label}
+                          code={supplier.description ?? null}
+                          compact
+                          className="max-w-[13rem] min-w-0"
+                        />
                         <Button
                           type="button"
                           variant="ghost"
@@ -331,20 +346,27 @@ export function SavedViewSupplierComparisonTable({
                   singleSource && scopeGroups.size === 1
                     ? singleComparableBest(visibleCells, metric, singleSource)
                     : null
-                const compareGroups = priceSource === 'compare'
-                  ? effectiveComparisonGroups(visibleCells, metric)
-                  : []
-                const compareWinners = priceSource === 'compare'
-                  ? singleEffectiveComparisonWinners(visibleCells, metric)
-                  : null
+                const compareGroups =
+                  priceSource === 'compare' ? effectiveComparisonGroups(visibleCells, metric) : []
+                const compareWinners =
+                  priceSource === 'compare'
+                    ? singleEffectiveComparisonWinners(visibleCells, metric)
+                    : null
                 const compareWinnerIds = new Set(
                   (compareWinners ?? []).map((entry) => entry.cell.supplierId),
                 )
 
                 return (
                   <tr key={item.id} className="group">
-                    <th className="bg-background group-hover:bg-muted sticky start-0 z-10 border-e border-b px-4 py-3 text-start align-top">
-                      <TableEntityLink kind="item" id={item.id} name={item.name} code={item.code} to={`/items/${item.id}?view=${savedViewId}&period=${period}`} className="max-w-[22rem]" />
+                    <th className="bg-card group-hover:bg-accent sticky start-0 isolate z-30 overflow-hidden border-e border-b px-4 py-3 text-start align-top">
+                      <TableEntityLink
+                        kind="item"
+                        id={item.id}
+                        name={item.name}
+                        code={item.code}
+                        to={`/items/${item.id}?view=${savedViewId}&period=${period}`}
+                        className="max-w-[22rem]"
+                      />
                       {item.categoryName ? (
                         <p className="text-muted-foreground mt-1 max-w-[20rem] truncate text-xs">
                           {item.categoryName}
@@ -363,7 +385,7 @@ export function SavedViewSupplierComparisonTable({
                         <td
                           key={supplierId}
                           className={cn(
-                            'group-hover:bg-primary/[0.015] relative border-e border-b p-2 align-top',
+                            'group-hover:bg-primary/[0.015] relative z-0 overflow-hidden border-e border-b p-2 align-top',
                             isBest &&
                               'before:border-success/30 before:bg-success/[0.055] before:pointer-events-none before:absolute before:inset-2 before:z-0 before:rounded-lg before:border',
                           )}
@@ -381,7 +403,7 @@ export function SavedViewSupplierComparisonTable({
                       )
                     })}
 
-                    <td className="group-hover:bg-primary/[0.015] border-b px-4 py-3 align-top">
+                    <td className="group-hover:bg-primary/[0.015] relative z-0 overflow-hidden border-e border-b p-2 align-top">
                       {priceSource === 'compare' ? (
                         compareWinners ? (
                           <CompareResult winners={compareWinners} metric={metric} locale={locale} />
@@ -460,10 +482,12 @@ function SourceBlock({
 
   return (
     <div>
-      <p className={cn(
-        'flex items-center gap-1 text-[11px] font-semibold',
-        isQuote ? 'text-primary' : 'text-foreground',
-      )}>
+      <p
+        className={cn(
+          'flex items-center gap-1 text-[11px] font-semibold',
+          isQuote ? 'text-primary' : 'text-foreground',
+        )}
+      >
         {isQuote ? <Tags className="size-3" /> : <ReceiptText className="size-3" />}
         {t(isQuote ? 'items.matrix.myQuote' : 'items.matrix.actualPurchase')}
       </p>
@@ -484,7 +508,9 @@ function SourceBlock({
       ) : null}
       {metric === 'average' && count > 0 ? (
         <p className="text-muted-foreground mt-1 text-[11px]">
-          {t(isQuote ? 'items.matrix.quoteCountValue' : 'items.analytics.transactionCountValue', { count })}
+          {t(isQuote ? 'items.matrix.quoteCountValue' : 'items.analytics.transactionCountValue', {
+            count,
+          })}
         </p>
       ) : null}
     </div>
@@ -519,7 +545,9 @@ function MatrixCell({
       : priceSource === 'quote'
         ? hasQuote
         : hasActual || hasQuote
-  const canOpen = Boolean(cell && (cell.latestUnitCost !== null || cell.latestQuoteUnitCost !== null))
+  const canOpen = Boolean(
+    cell && (cell.latestUnitCost !== null || cell.latestQuoteUnitCost !== null),
+  )
 
   if (!cell || !hasRelevant) {
     const emptyKey =
@@ -564,7 +592,7 @@ function MatrixCell({
 
           {priceSource === 'compare' && hasActual && hasQuote ? (
             scopesMatch(cell) ? (
-              <div className="rounded-md bg-muted/45 px-2 py-1.5">
+              <div className="bg-muted/45 rounded-md px-2 py-1.5">
                 <p className="text-muted-foreground text-[10px] font-medium">
                   {t('items.matrix.quoteVsActualMetric', {
                     metric: t(`items.matrix.metrics.${metric}`),
@@ -643,11 +671,7 @@ function ChangeValue({
       className={cn(
         'inline-flex items-center gap-1 font-semibold',
         compact ? 'mt-0.5 text-xs' : 'mt-1 text-xs',
-        value > 0
-          ? 'text-destructive'
-          : value < 0
-            ? 'text-success'
-            : 'text-muted-foreground',
+        value > 0 ? 'text-destructive' : value < 0 ? 'text-success' : 'text-muted-foreground',
       )}
     >
       {value > 0 ? (
@@ -680,7 +704,13 @@ function SingleSourceResult({
     <div>
       <div className="flex items-center gap-1.5">
         <Trophy className="text-success size-4 shrink-0" />
-        <TableEntityLink kind="supplier" id={cell.supplierId} name={cell.supplierName} code={cell.supplierCode} compact />
+        <TableEntityLink
+          kind="supplier"
+          id={cell.supplierId}
+          name={cell.supplierName}
+          code={cell.supplierCode}
+          compact
+        />
       </div>
       <p dir="ltr" className="mt-1 text-sm font-semibold tabular-nums">
         {formatUnitCost(
@@ -691,9 +721,14 @@ function SingleSourceResult({
         )}
       </p>
       <p className="text-muted-foreground mt-1 text-xs">
-        {t(isQuote ? 'items.matrix.lowestQuoteBasedOnMetric' : 'items.matrix.lowestActualBasedOnMetric', {
-          metric: t(`items.matrix.metrics.${metric}`),
-        })}
+        {t(
+          isQuote
+            ? 'items.matrix.lowestQuoteBasedOnMetric'
+            : 'items.matrix.lowestActualBasedOnMetric',
+          {
+            metric: t(`items.matrix.metrics.${metric}`),
+          },
+        )}
       </p>
     </div>
   )
@@ -716,13 +751,23 @@ function CompareResult({
           <div key={cell.supplierId} className={cn(index > 0 && 'border-t pt-3')}>
             <div className="flex items-center gap-1.5">
               <Trophy className="text-success size-4 shrink-0" />
-              <TableEntityLink kind="supplier" id={cell.supplierId} name={cell.supplierName} code={cell.supplierCode} compact />
+              <TableEntityLink
+                kind="supplier"
+                id={cell.supplierId}
+                name={cell.supplierName}
+                code={cell.supplierCode}
+                compact
+              />
             </div>
             <p dir="ltr" className="mt-1 text-sm font-semibold tabular-nums">
               {formatUnitCost(price.value, locale, price.currencyCode, price.unitName)}
             </p>
             <p className="text-muted-foreground mt-1 text-xs">
-              {t(price.source === 'quote' ? 'items.matrix.comparisonUsesQuote' : 'items.matrix.comparisonUsesActual')}
+              {t(
+                price.source === 'quote'
+                  ? 'items.matrix.comparisonUsesQuote'
+                  : 'items.matrix.comparisonUsesActual',
+              )}
             </p>
           </div>
         ))}
@@ -737,4 +782,3 @@ function CompareResult({
     </div>
   )
 }
-

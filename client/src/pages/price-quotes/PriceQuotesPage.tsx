@@ -51,7 +51,7 @@ export function PriceQuotesPage() {
   const [period, setPeriod] = useState<ProcurementPricePeriod>('1Y')
   const [status, setStatus] = useState<QuoteStatusFilter>('ALL')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(25)
+  const [pageSize, setPageSize] = useState(100)
   const [createOpen, setCreateOpen] = useState(false)
   const [editing, setEditing] = useState<PriceQuote | null>(null)
   const [history, setHistory] = useState<PriceQuote | null>(null)

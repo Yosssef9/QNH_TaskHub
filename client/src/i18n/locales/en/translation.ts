@@ -788,7 +788,7 @@ export const enTranslation = {
       lowestActual: 'Lowest Actual', lowestQuote: 'Lowest Quote', bestChoice: 'Best Choice',
       lowestActualBasedOnMetric: 'Lowest compatible {{metric}} actual value',
       lowestQuoteBasedOnMetric: 'Lowest compatible {{metric}} Quote value',
-      bestChoiceHint: 'Lowest compatible {{metric}} comparison price. A compatible Quote is preferred; otherwise Actual Purchase is used.',
+      bestChoiceHint: 'Lowest compatible {{metric}} comparison price. When compatible Actual Purchase and Quote values both exist, the lower one is used; otherwise the available source is used.',
       bestChoiceTieHint: '{{count}} Suppliers share the lowest compatible comparison price.',
       bestPriceBadge: 'Best price',
       priceUsedForComparison: 'Price used for comparison',
@@ -2369,3 +2369,4 @@ export const enTranslation = {
     backHome: 'Back to home',
   },
 } as const
+

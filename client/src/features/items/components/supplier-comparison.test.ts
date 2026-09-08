@@ -51,7 +51,7 @@ function cell(
 }
 
 describe('Supplier Compare effective price', () => {
-  it('prefers the selected compatible Quote metric over Actual Purchase', () => {
+  it('uses the compatible Quote when it is lower than Actual Purchase', () => {
     const result = effectiveComparisonPrice(
       cell(1, {
         latestQuoteUnitCost: 1_850,
@@ -64,6 +64,39 @@ describe('Supplier Compare effective price', () => {
     )
 
     expect(result).toMatchObject({ value: 1_850, source: 'quote', currencyCode: 'SAR', unitName: 'EACH' })
+  })
+
+  it('uses Actual Purchase when a compatible Quote exists but is more expensive', () => {
+    const result = effectiveComparisonPrice(
+      cell(6, {
+        latestUnitCost: 2.7,
+        latestTransactionDate: '2026-08-26',
+        latestQuoteUnitCost: 6.375,
+        latestQuoteDate: '2026-09-07',
+        quoteCount: 1,
+        quoteCurrencyCode: 'SAR',
+        quoteUnitName: 'EACH',
+      }),
+      'latest',
+    )
+
+    expect(result).toMatchObject({ value: 2.7, source: 'actual', currencyCode: 'SAR', unitName: 'EACH' })
+  })
+
+  it('uses Quote as the deterministic source when compatible Actual and Quote values are equal', () => {
+    const result = effectiveComparisonPrice(
+      cell(7, {
+        latestUnitCost: 2_000,
+        latestQuoteUnitCost: 2_000,
+        latestQuoteDate: '2026-09-08',
+        quoteCount: 1,
+        quoteCurrencyCode: 'SAR',
+        quoteUnitName: 'EACH',
+      }),
+      'latest',
+    )
+
+    expect(result).toMatchObject({ value: 2_000, source: 'quote' })
   })
 
   it('falls back to Actual Purchase when the selected Quote metric is unavailable', () => {
@@ -130,14 +163,14 @@ describe('Supplier Compare effective price', () => {
     const cells = [
       cell(1, { latestUnitCost: 2_000, latestQuoteUnitCost: 1_850, quoteCount: 1, quoteCurrencyCode: 'SAR', quoteUnitName: 'EACH' }),
       cell(2, { latestUnitCost: 1_900 }),
-      cell(3, { latestUnitCost: 3_000, latestQuoteUnitCost: 2_750, quoteCount: 1, quoteCurrencyCode: 'SAR', quoteUnitName: 'EACH' }),
+      cell(3, { latestUnitCost: 1_750, latestQuoteUnitCost: 2_750, quoteCount: 1, quoteCurrencyCode: 'SAR', quoteUnitName: 'EACH' }),
       cell(4, { latestUnitCost: 1_800 }),
-      cell(5, { latestUnitCost: 2_200, latestQuoteUnitCost: 1_800, quoteCount: 1, quoteCurrencyCode: 'SAR', quoteUnitName: 'EACH' }),
+      cell(5, { latestUnitCost: 2_200, latestQuoteUnitCost: 1_750, quoteCount: 1, quoteCurrencyCode: 'SAR', quoteUnitName: 'EACH' }),
     ]
 
     const winners = singleEffectiveComparisonWinners(cells, 'latest')
 
-    expect(winners?.map((entry) => entry.cell.supplierId)).toEqual([4, 5])
+    expect(winners?.map((entry) => entry.cell.supplierId)).toEqual([3, 5])
     expect(winners?.map((entry) => entry.price.source)).toEqual(['actual', 'quote'])
   })
 
@@ -151,3 +184,4 @@ describe('Supplier Compare effective price', () => {
     expect(singleEffectiveComparisonWinners(groups.flatMap((group) => group.entries.map((entry) => entry.cell)), 'latest')).toBeNull()
   })
 })
+

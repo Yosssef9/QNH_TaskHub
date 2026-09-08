@@ -139,10 +139,11 @@ export function singleComparableBest(
 
 /**
  * Compare mode business rule:
- * - use the selected Quote metric when a Quote exists and it is compatible with the Actual scope;
+ * - when compatible Actual Purchase and Quote values both exist for the selected metric, use the lower value;
  * - if no Actual history exists, a Quote can establish the comparison scope by itself;
- * - otherwise fall back to the selected Actual Purchase metric;
- * - never use an incompatible Quote to outrank a compatible Actual Purchase.
+ * - if only one usable source exists, use that source;
+ * - never use an incompatible Quote to outrank a compatible Actual Purchase;
+ * - on an exact Actual/Quote tie, keep Quote as the deterministic displayed source.
  */
 export function effectiveComparisonPrice(
   cell: ItemSupplierMatrixCell | undefined,
@@ -153,8 +154,29 @@ export function effectiveComparisonPrice(
   const quote = metricValue(cell, metric, 'quote')
   const actual = metricValue(cell, metric, 'actual')
   const hasActualHistory = cell.transactionCount > 0
+  const quoteIsUsable = quote.value !== null && (!hasActualHistory || scopesMatch(cell))
 
-  if (quote.value !== null && (!hasActualHistory || scopesMatch(cell))) {
+  if (actual.value !== null && quoteIsUsable && quote.value !== null) {
+    if (actual.value < quote.value) {
+      return {
+        value: actual.value,
+        date: actual.date,
+        source: 'actual',
+        currencyCode: cell.currencyCode,
+        unitName: cell.unitName,
+      }
+    }
+
+    return {
+      value: quote.value,
+      date: quote.date,
+      source: 'quote',
+      currencyCode: cell.quoteCurrencyCode,
+      unitName: cell.quoteUnitName,
+    }
+  }
+
+  if (quoteIsUsable && quote.value !== null) {
     return {
       value: quote.value,
       date: quote.date,
@@ -212,3 +234,4 @@ export function singleEffectiveComparisonWinners(
   const lowest = Math.min(...entries.map((entry) => entry.price.value))
   return entries.filter((entry) => entry.price.value === lowest)
 }
+

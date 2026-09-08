@@ -50,7 +50,7 @@ export function ItemsPage() {
   const [supplierIds, setSupplierIds] = useState<number[]>([])
   const [selectedSuppliers, setSelectedSuppliers] = useState<SearchableSelectOption[]>([])
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(25)
+  const [pageSize, setPageSize] = useState(100)
   const [createOpen, setCreateOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [activeViewId, setActiveViewId] = useState<number | null>(Number.isSafeInteger(initialView) && initialView > 0 ? initialView : null)

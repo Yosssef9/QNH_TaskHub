@@ -782,7 +782,7 @@ export const arTranslation = {
       lowestActual: 'أقل سعر فعلي', lowestQuote: 'أقل عرض سعر', bestChoice: 'أفضل اختيار',
       lowestActualBasedOnMetric: 'أقل قيمة فعلية متوافقة لمؤشر {{metric}}',
       lowestQuoteBasedOnMetric: 'أقل قيمة عرض سعر متوافقة لمؤشر {{metric}}',
-      bestChoiceHint: 'أقل سعر مقارنة متوافق لمؤشر {{metric}}. يُستخدم عرض السعر المتوافق عند توفره، وإلا يُستخدم الشراء الفعلي.',
+      bestChoiceHint: 'أقل سعر مقارنة متوافق لمؤشر {{metric}}. عند توفر شراء فعلي وعرض سعر متوافقين، يُستخدم الأقل بينهما؛ وإذا توفر مصدر واحد فقط فيُستخدم هو.',
       bestChoiceTieHint: '{{count}} موردين يشتركون في أقل سعر مقارنة متوافق.',
       bestPriceBadge: 'أفضل سعر',
       priceUsedForComparison: 'السعر المستخدم للمقارنة',
@@ -2367,3 +2367,4 @@ export const arTranslation = {
     backHome: 'العودة إلى الرئيسية',
   },
 } as const
+

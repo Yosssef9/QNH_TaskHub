@@ -103,7 +103,7 @@ export function ContractsPage() {
   const reduceMotion = useReducedMotion()
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(25)
+  const [pageSize, setPageSize] = useState(100)
   const [archived, setArchived] = useState(false)
   const [status, setStatus] = useState<ContractTrackingState | undefined>()
   const [supplierId, setSupplierId] = useState<number | undefined>()
