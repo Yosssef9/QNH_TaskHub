@@ -566,6 +566,7 @@ function MatrixCell({
 
   const difference = comparisonPercent(cell, metric)
   const effective = priceSource === 'compare' ? effectiveComparisonPrice(cell, metric) : null
+  const showComparisonChoice = priceSource === 'compare' && hasActual && hasQuote
 
   return (
     <button
@@ -607,7 +608,7 @@ function MatrixCell({
             )
           ) : null}
 
-          {priceSource === 'compare' ? (
+          {showComparisonChoice ? (
             <div className="border-t pt-3">
               <p className="text-muted-foreground text-[10px] font-semibold">
                 {t('items.matrix.priceUsedForComparison')}
@@ -782,3 +783,4 @@ function CompareResult({
     </div>
   )
 }
+
