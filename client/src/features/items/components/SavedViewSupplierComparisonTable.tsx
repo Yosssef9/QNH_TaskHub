@@ -282,9 +282,9 @@ export function SavedViewSupplierComparisonTable({
       ) : (
         <div className="max-h-[68vh] overflow-auto">
           <table className="w-full min-w-max border-separate border-spacing-0 text-sm">
-            <thead className="sticky top-0 z-20">
+            <thead>
               <tr>
-                <th className="bg-accent sticky start-0 z-40 min-w-[18rem] border-e border-b px-4 py-3 text-start text-xs font-semibold">
+                <th className="bg-accent sticky top-0 start-0 z-50 min-w-[18rem] border-e border-b px-4 py-3 text-start text-xs font-semibold">
                   {t('items.name')}
                 </th>
                 {visibleSuppliers.map((supplier) => {
@@ -292,7 +292,7 @@ export function SavedViewSupplierComparisonTable({
                   return (
                     <th
                       key={supplierId}
-                      className="bg-accent min-w-[16rem] border-e border-b px-4 py-3 text-start align-top text-xs font-semibold"
+                      className="bg-accent sticky top-0 z-40 min-w-[16rem] border-e border-b px-4 py-3 text-start align-top text-xs font-semibold"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <TableEntityLink
@@ -318,7 +318,7 @@ export function SavedViewSupplierComparisonTable({
                     </th>
                   )
                 })}
-                <th className="bg-accent min-w-[15rem] border-b px-4 py-3 text-start text-xs font-semibold">
+                <th className="bg-accent sticky top-0 z-40 min-w-[15rem] border-b px-4 py-3 text-start text-xs font-semibold">
                   {resultHeader}
                 </th>
               </tr>
