@@ -468,11 +468,13 @@ function SourceBlock({
   metric,
   source,
   locale,
+  compact = false,
 }: {
   cell: ItemSupplierMatrixCell
   metric: ItemSupplierMatrixMetric
   source: SinglePriceSource
   locale: string
+  compact?: boolean
 }) {
   const { t } = useTranslation()
   const data = metricValue(cell, metric, source)
@@ -481,17 +483,24 @@ function SourceBlock({
   const count = isQuote ? cell.quoteCount : cell.transactionCount
 
   return (
-    <div>
+    <div className={cn(compact && 'min-w-0 text-center')}>
       <p
         className={cn(
-          'flex items-center gap-1 text-[11px] font-semibold',
+          'flex items-center gap-1 font-semibold',
+          compact ? 'justify-center text-[10px]' : 'text-[11px]',
           isQuote ? 'text-primary' : 'text-foreground',
         )}
       >
         {isQuote ? <Tags className="size-3" /> : <ReceiptText className="size-3" />}
         {t(isQuote ? 'items.matrix.myQuote' : 'items.matrix.actualPurchase')}
       </p>
-      <p dir="ltr" className="mt-1 text-base font-semibold tabular-nums">
+      <p
+        dir="ltr"
+        className={cn(
+          'mt-1 font-semibold tabular-nums',
+          compact ? 'text-sm' : 'text-base',
+        )}
+      >
         {formatUnitCost(
           data.value,
           locale,
@@ -499,14 +508,16 @@ function SourceBlock({
           isQuote ? cell.quoteUnitName : cell.unitName,
         )}
       </p>
-      <p className="text-muted-foreground mt-0.5 text-[11px]">{scopeLabel(cell, source)}</p>
+      {!compact ? (
+        <p className="text-muted-foreground mt-0.5 text-[11px]">{scopeLabel(cell, source)}</p>
+      ) : null}
       {data.date ? (
         <p className="text-muted-foreground mt-1 text-xs">{formatDateOnly(data.date, locale)}</p>
       ) : null}
-      {metric === 'latest' && change !== null ? (
+      {!compact && metric === 'latest' && change !== null ? (
         <ChangeValue value={change} locale={locale} />
       ) : null}
-      {metric === 'average' && count > 0 ? (
+      {!compact && metric === 'average' && count > 0 ? (
         <p className="text-muted-foreground mt-1 text-[11px]">
           {t(isQuote ? 'items.matrix.quoteCountValue' : 'items.analytics.transactionCountValue', {
             count,
@@ -573,83 +584,117 @@ function MatrixCell({
       type="button"
       disabled={!canOpen}
       className={cn(
-        'focus-visible:ring-ring relative z-10 min-h-24 w-full rounded-lg border border-transparent bg-transparent p-3 text-start outline-none focus-visible:ring-2',
+        'focus-visible:ring-ring relative z-10 min-h-24 w-full rounded-lg border border-transparent bg-transparent p-2.5 text-start outline-none focus-visible:ring-2',
         canOpen ? 'hover:bg-muted/45' : 'cursor-default',
       )}
       aria-label={t('items.matrix.openDetails', { supplier: supplierName })}
       onClick={onOpen}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1 space-y-3">
-          {priceSource !== 'quote' && hasActual ? (
-            <SourceBlock cell={cell} metric={metric} source="actual" locale={locale} />
-          ) : null}
+      <div className="space-y-2.5">
+        {isBest ? (
+          <div className="flex justify-end">
+            <Badge variant="success" className="shrink-0">
+              <Trophy className="me-1 size-3" />
+              {priceSource === 'compare'
+                ? t('items.matrix.bestPriceBadge')
+                : t('items.matrix.bestInScope')}
+            </Badge>
+          </div>
+        ) : null}
 
-          {priceSource === 'compare' && hasActual && hasQuote ? <div className="border-t" /> : null}
-
-          {priceSource !== 'actual' && hasQuote ? (
-            <SourceBlock cell={cell} metric={metric} source="quote" locale={locale} />
-          ) : null}
-
-          {priceSource === 'compare' && hasActual && hasQuote ? (
-            scopesMatch(cell) ? (
-              <div className="bg-muted/45 rounded-md px-2 py-1.5">
-                <p className="text-muted-foreground text-[10px] font-medium">
-                  {t('items.matrix.quoteVsActualMetric', {
-                    metric: t(`items.matrix.metrics.${metric}`),
-                  })}
-                </p>
-                <ChangeValue value={difference} locale={locale} compact />
+        {priceSource === 'compare' ? (
+          hasActual && hasQuote ? (
+            <div className="bg-muted/20 grid grid-cols-2 overflow-hidden rounded-lg border">
+              <div className="min-w-0 p-2.5">
+                <SourceBlock
+                  cell={cell}
+                  metric={metric}
+                  source="actual"
+                  locale={locale}
+                  compact
+                />
               </div>
-            ) : (
+              <div className="min-w-0 border-s p-2.5">
+                <SourceBlock
+                  cell={cell}
+                  metric={metric}
+                  source="quote"
+                  locale={locale}
+                  compact
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="bg-muted/20 rounded-lg px-3 py-2.5">
+              <SourceBlock
+                cell={cell}
+                metric={metric}
+                source={hasActual ? 'actual' : 'quote'}
+                locale={locale}
+                compact
+              />
+            </div>
+          )
+        ) : (
+          <SourceBlock
+            cell={cell}
+            metric={metric}
+            source={priceSource}
+            locale={locale}
+          />
+        )}
+
+        {priceSource === 'compare' && hasActual && hasQuote ? (
+          scopesMatch(cell) ? (
+            <div className="bg-muted/45 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 rounded-md px-2.5 py-1.5">
+              <p className="text-muted-foreground text-[10px] font-medium">
+                {t('items.matrix.quoteVsActualMetric', {
+                  metric: t(`items.matrix.metrics.${metric}`),
+                })}
+              </p>
+              <ChangeValue value={difference} locale={locale} compact />
+            </div>
+          ) : (
+            <div className="bg-muted/45 rounded-md px-2.5 py-1.5">
               <p className="text-warning-foreground text-[11px]">
                 {t('items.matrix.quoteDifferentScope')}
               </p>
-            )
-          ) : null}
-
-          {showComparisonChoice ? (
-            <div className="border-t pt-3">
-              <p className="text-muted-foreground text-[10px] font-semibold">
-                {t('items.matrix.priceUsedForComparison')}
-              </p>
-              {effective ? (
-                <>
-                  <p dir="ltr" className="mt-1 text-base font-bold tabular-nums">
-                    {formatUnitCost(
-                      effective.value,
-                      locale,
-                      effective.currencyCode,
-                      effective.unitName,
-                    )}
-                  </p>
-                  <p className="text-muted-foreground mt-1 text-[11px]">
-                    {t(
-                      effective.source === 'quote'
-                        ? 'items.matrix.comparisonUsesQuote'
-                        : 'items.matrix.comparisonUsesActual',
-                    )}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-muted-foreground mt-1 text-lg">—</p>
-                  <p className="text-muted-foreground mt-1 text-[11px]">
-                    {t('items.matrix.noComparisonPrice')}
-                  </p>
-                </>
-              )}
             </div>
-          ) : null}
-        </div>
+          )
+        ) : null}
 
-        {isBest ? (
-          <Badge variant="success" className="shrink-0">
-            <Trophy className="me-1 size-3" />
-            {priceSource === 'compare'
-              ? t('items.matrix.bestPriceBadge')
-              : t('items.matrix.bestInScope')}
-          </Badge>
+        {showComparisonChoice ? (
+          <div className="bg-muted/30 rounded-md px-2.5 py-2">
+            <p className="text-muted-foreground text-[10px] font-semibold">
+              {t('items.matrix.priceUsedForComparison')}
+            </p>
+            {effective ? (
+              <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+                <p dir="ltr" className="text-sm font-bold tabular-nums">
+                  {formatUnitCost(
+                    effective.value,
+                    locale,
+                    effective.currencyCode,
+                    effective.unitName,
+                  )}
+                </p>
+                <p className="text-muted-foreground text-[11px]">
+                  {t(
+                    effective.source === 'quote'
+                      ? 'items.matrix.comparisonUsesQuote'
+                      : 'items.matrix.comparisonUsesActual',
+                  )}
+                </p>
+              </div>
+            ) : (
+              <div className="mt-1">
+                <p className="text-muted-foreground text-lg">—</p>
+                <p className="text-muted-foreground text-[11px]">
+                  {t('items.matrix.noComparisonPrice')}
+                </p>
+              </div>
+            )}
+          </div>
         ) : null}
       </div>
     </button>
