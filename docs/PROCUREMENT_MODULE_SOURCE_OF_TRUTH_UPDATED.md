@@ -1,8 +1,8 @@
 # QNH TaskHub — Procurement Module Source of Truth
 
 > **Status:** Approved implementation baseline  
-> **Last aligned:** 2026-09-07  
-> **Revision note:** Excel Quote Import now treats Supplier Code as the only Supplier identity, supports two-row RFQ headers where the code sits directly above the Supplier display name, and never matches by Supplier name; the Items Supplier KPI is explicitly purchase-history scoped; Excel Quote Import Phase 2 completes the Items-page upload/review/destination workflow with server-authoritative revalidation, transactional Saved View merge/create, private SAR Quote creation, same-day duplicate skipping, and import-batch audit linkage; Production source tables/procedures are finalized; preserves `SOURCE_ROWID` deterministic ordering, production deployment validation, and Items Performance V2; Price Quote entry enforces SAR and controlled UOMs; Saved View Supplier Comparison supports persisted Actual Purchases / My Quotes / Compare price-source modes with Latest / Previous / Lowest / Highest / Average metrics while preserving Actual-vs-Quote separation; Price History uses one shared accessible interactive SVG design across Item Details and Item+Supplier drill-downs; private Quote history tables use grouped Quote-information / Price-comparison headers, predictable column geometry, explicit separators, stacked price/UOM values, and explanatory comparison empty states; Item Details Supplier filters keep selected Suppliers pinned and synchronize ordinary URL scope with repeated `supplier=` parameters and true default Reset behavior.  
+> **Last aligned:** 2026-09-08  
+> **Revision note:** Excel Quote Import now treats Supplier Code as the only Supplier identity, supports two-row RFQ headers where the code sits directly above the Supplier display name, and never matches by Supplier name; the Items Supplier KPI is explicitly purchase-history scoped; Excel Quote Import Phase 2 completes the Items-page upload/review/destination workflow with server-authoritative revalidation, transactional Saved View merge/create, private SAR Quote creation, same-day duplicate skipping, and import-batch audit linkage; Production source tables/procedures are finalized; preserves `SOURCE_ROWID` deterministic ordering, production deployment validation, and Items Performance V2; Price Quote entry enforces SAR and controlled UOMs; Saved View Supplier Comparison supports persisted Actual Purchases / My Quotes / Compare price-source modes with Latest / Previous / Lowest / Highest / Average metrics while preserving Actual-vs-Quote separation, and Compare-mode Best Choice now uses Quote-first effective pricing with Actual fallback inside compatible Currency/UOM scope; Price History uses one shared accessible interactive SVG design across Item Details and Item+Supplier drill-downs; private Quote history tables use grouped Quote-information / Price-comparison headers, predictable column geometry, explicit separators, stacked price/UOM values, and explanatory comparison empty states; Item Details Supplier filters keep selected Suppliers pinned and synchronize ordinary URL scope with repeated `supplier=` parameters and true default Reset behavior.  
 > **Purpose:** Persistent, portable source of truth for all future Procurement-module design, implementation, review, and ZIP-patch requests.  
 > **Project:** QNH TaskHub  
 > **Primary audience:** ChatGPT/Codex/engineers implementing or reviewing Procurement work.
@@ -113,3 +113,19 @@ Approved rules:
 - Existing SQL Server Procurement data remains usable after a synchronization failure.
 - Procurement-enabled users may read synchronization freshness. A manual refresh is restricted to an `ADMIN` who also has Procurement access and starts the same locked background path without keeping the HTTP request open while the Stored Procedures execute.
 - The frontend observes synchronization state and may invalidate affected cached Procurement queries after a newly completed run; it never executes the source Stored Procedures itself.
+
+# 6. Supplier Comparison Best Choice
+
+Saved View Supplier Comparison keeps **Actual Purchases**, **My Quotes**, and **Compare** as separate display modes. The selected metric (Latest / Previous / Lowest / Highest / Average) remains independent and continues to be Saved View configuration.
+
+Approved Compare-mode decision rule:
+
+- For each Item + Supplier, calculate one **effective comparison price** for the selected metric.
+- If a private Quote value exists for that metric and is compatible with the Supplier's Actual Currency/UOM scope, use the Quote value.
+- If the Supplier has no Actual purchase history, a Quote may establish its own comparison scope.
+- If no usable Quote metric exists, use the Actual Purchase metric.
+- If Actual history exists but the Quote Currency/UOM differs from the Actual scope, do not use that Quote for Best Choice; fall back to the compatible Actual metric.
+- Compare Suppliers only when their resulting effective prices share the same Currency and UOM. Never rank unlike scopes against each other.
+- The lowest effective comparison price is the **Best Choice**. Exact equal lowest prices are co-winners rather than being broken arbitrarily.
+- Quote-vs-Actual percentage remains useful informational context but must not determine the Best Choice.
+- The matrix must show which source was used for each effective comparison price: **Quote** or **Actual Purchase**.

@@ -34,6 +34,20 @@ import type {
   ProcurementPricePeriod,
 } from '../types/item.types'
 import { formatDateOnly, formatPercent, formatUnitCost } from './item-price-format'
+import {
+  bestSupplierIds,
+  comparisonPercent,
+  effectiveComparisonGroups,
+  effectiveComparisonPrice,
+  metricValue,
+  scopeKey,
+  scopeLabel,
+  scopesMatch,
+  singleComparableBest,
+  singleEffectiveComparisonWinners,
+  type EffectiveComparisonEntry,
+  type SinglePriceSource,
+} from './supplier-comparison'
 import { SupplierPriceDetailDrawer } from './SupplierPriceDetailDrawer'
 
 const MAX_VISIBLE_SUPPLIERS = 5
@@ -41,136 +55,6 @@ const MAX_VISIBLE_SUPPLIERS = 5
 interface SelectedPair {
   item: ItemListItem
   supplier: SearchableSelectOption
-}
-
-interface MetricValue {
-  value: number | null
-  date: string | null
-}
-
-type SinglePriceSource = Exclude<ItemSupplierMatrixPriceSource, 'compare'>
-
-function metricValue(
-  cell: ItemSupplierMatrixCell | undefined,
-  metric: ItemSupplierMatrixMetric,
-  source: SinglePriceSource,
-): MetricValue {
-  if (!cell) return { value: null, date: null }
-
-  if (source === 'quote') {
-    if (metric === 'latest') return { value: cell.latestQuoteUnitCost, date: cell.latestQuoteDate }
-    if (metric === 'previous') return { value: cell.previousQuoteUnitCost, date: cell.previousQuoteDate }
-    if (metric === 'lowest') return { value: cell.lowestQuoteUnitCost, date: cell.lowestQuoteDate }
-    if (metric === 'highest') return { value: cell.highestQuoteUnitCost, date: cell.highestQuoteDate }
-    return { value: cell.averageQuoteUnitCost, date: cell.lastQuoteDate }
-  }
-
-  if (metric === 'latest') return { value: cell.latestUnitCost, date: cell.latestTransactionDate }
-  if (metric === 'previous') return { value: cell.previousUnitCost, date: cell.previousTransactionDate }
-  if (metric === 'lowest') return { value: cell.lowestUnitCost, date: cell.lowestTransactionDate }
-  if (metric === 'highest') return { value: cell.highestUnitCost, date: cell.highestTransactionDate }
-  return { value: cell.averageUnitCost, date: cell.lastPurchaseDate }
-}
-
-function scopeKey(cell: ItemSupplierMatrixCell, source: SinglePriceSource): string {
-  return source === 'quote'
-    ? `${cell.quoteCurrencyCode ?? ''}\u0000${cell.quoteUnitName ?? ''}`
-    : `${cell.currencyCode ?? ''}\u0000${cell.unitName ?? ''}`
-}
-
-function scopeLabel(cell: ItemSupplierMatrixCell, source: SinglePriceSource): string {
-  const values = source === 'quote'
-    ? [cell.quoteCurrencyCode, cell.quoteUnitName]
-    : [cell.currencyCode, cell.unitName]
-  return values.filter(Boolean).join(' / ') || '—'
-}
-
-function scopesMatch(cell: ItemSupplierMatrixCell): boolean {
-  return (
-    (cell.quoteCurrencyCode ?? '') === (cell.currencyCode ?? '')
-    && (cell.quoteUnitName ?? '') === (cell.unitName ?? '')
-  )
-}
-
-function comparisonPercent(
-  cell: ItemSupplierMatrixCell | undefined,
-  metric: ItemSupplierMatrixMetric,
-): number | null {
-  if (!cell || !scopesMatch(cell)) return null
-  const actual = metricValue(cell, metric, 'actual').value
-  const quote = metricValue(cell, metric, 'quote').value
-  if (actual === null || quote === null || actual === 0) return null
-  return ((quote - actual) / actual) * 100
-}
-
-function bestSupplierIds(
-  cells: ItemSupplierMatrixCell[],
-  metric: ItemSupplierMatrixMetric,
-  source: SinglePriceSource,
-): Set<number> {
-  const groups = new Map<string, Array<{ supplierId: number; value: number }>>()
-  for (const cell of cells) {
-    const value = metricValue(cell, metric, source).value
-    if (value === null) continue
-    const key = scopeKey(cell, source)
-    const current = groups.get(key) ?? []
-    current.push({ supplierId: cell.supplierId, value })
-    groups.set(key, current)
-  }
-
-  const result = new Set<number>()
-  for (const group of groups.values()) {
-    if (group.length < 2) continue
-    const lowest = Math.min(...group.map((entry) => entry.value))
-    for (const entry of group) {
-      if (entry.value === lowest) result.add(entry.supplierId)
-    }
-  }
-  return result
-}
-
-function singleComparableBest(
-  cells: ItemSupplierMatrixCell[],
-  metric: ItemSupplierMatrixMetric,
-  source: SinglePriceSource,
-): ItemSupplierMatrixCell | null {
-  const groups = new Map<string, ItemSupplierMatrixCell[]>()
-  for (const cell of cells) {
-    if (metricValue(cell, metric, source).value === null) continue
-    const key = scopeKey(cell, source)
-    const current = groups.get(key) ?? []
-    current.push(cell)
-    groups.set(key, current)
-  }
-  const comparableGroups = [...groups.values()].filter((group) => group.length >= 2)
-  if (comparableGroups.length !== 1) return null
-  const comparableGroup = comparableGroups[0]
-  if (!comparableGroup) return null
-
-  return (
-    comparableGroup
-      .slice()
-      .sort(
-        (left, right) =>
-          (metricValue(left, metric, source).value ?? Number.POSITIVE_INFINITY)
-          - (metricValue(right, metric, source).value ?? Number.POSITIVE_INFINITY),
-      )[0] ?? null
-  )
-}
-
-function bestCompareCell(
-  cells: ItemSupplierMatrixCell[],
-  metric: ItemSupplierMatrixMetric,
-): ItemSupplierMatrixCell | null {
-  return (
-    cells
-      .map((cell) => ({ cell, difference: comparisonPercent(cell, metric) }))
-      .filter(
-        (entry): entry is { cell: ItemSupplierMatrixCell; difference: number } =>
-          entry.difference !== null,
-      )
-      .sort((left, right) => left.difference - right.difference)[0]?.cell ?? null
-  )
 }
 
 export function SavedViewSupplierComparisonTable({
@@ -237,7 +121,7 @@ export function SavedViewSupplierComparisonTable({
       ? t('items.matrix.lowestActual')
       : priceSource === 'quote'
         ? t('items.matrix.lowestQuote')
-        : t('items.matrix.bestQuoteVsActual')
+        : t('items.matrix.bestChoice')
 
   if (suppliers.length === 0) {
     return (
@@ -447,7 +331,15 @@ export function SavedViewSupplierComparisonTable({
                   singleSource && scopeGroups.size === 1
                     ? singleComparableBest(visibleCells, metric, singleSource)
                     : null
-                const compareBest = priceSource === 'compare' ? bestCompareCell(visibleCells, metric) : null
+                const compareGroups = priceSource === 'compare'
+                  ? effectiveComparisonGroups(visibleCells, metric)
+                  : []
+                const compareWinners = priceSource === 'compare'
+                  ? singleEffectiveComparisonWinners(visibleCells, metric)
+                  : null
+                const compareWinnerIds = new Set(
+                  (compareWinners ?? []).map((entry) => entry.cell.supplierId),
+                )
 
                 return (
                   <tr key={item.id} className="group">
@@ -465,7 +357,7 @@ export function SavedViewSupplierComparisonTable({
                       const cell = cellBySupplier.get(supplierId)
                       const isBest =
                         priceSource === 'compare'
-                          ? compareBest?.supplierId === supplierId
+                          ? compareWinnerIds.has(supplierId)
                           : Boolean(cell && bestIds.has(cell.supplierId))
                       return (
                         <td
@@ -487,11 +379,18 @@ export function SavedViewSupplierComparisonTable({
 
                     <td className="group-hover:bg-primary/[0.015] border-b px-4 py-3 align-top">
                       {priceSource === 'compare' ? (
-                        compareBest ? (
-                          <CompareResult cell={compareBest} metric={metric} locale={locale} />
+                        compareWinners ? (
+                          <CompareResult winners={compareWinners} metric={metric} locale={locale} />
+                        ) : compareGroups.length > 1 ? (
+                          <div>
+                            <p className="font-medium">{t('items.matrix.multipleScopes')}</p>
+                            <p className="text-muted-foreground mt-1 text-xs">
+                              {t('items.matrix.multipleScopesHint')}
+                            </p>
+                          </div>
                         ) : (
                           <span className="text-muted-foreground text-xs">
-                            {t('items.matrix.noComparableQuoteActual')}
+                            {t('items.matrix.noComparableBest')}
                           </span>
                         )
                       ) : singleBest ? (
@@ -634,6 +533,7 @@ function MatrixCell({
   }
 
   const difference = comparisonPercent(cell, metric)
+  const effective = priceSource === 'compare' ? effectiveComparisonPrice(cell, metric) : null
 
   return (
     <button
@@ -675,13 +575,47 @@ function MatrixCell({
               </p>
             )
           ) : null}
+
+          {priceSource === 'compare' ? (
+            <div className="border-t pt-3">
+              <p className="text-muted-foreground text-[10px] font-semibold">
+                {t('items.matrix.priceUsedForComparison')}
+              </p>
+              {effective ? (
+                <>
+                  <p dir="ltr" className="mt-1 text-base font-bold tabular-nums">
+                    {formatUnitCost(
+                      effective.value,
+                      locale,
+                      effective.currencyCode,
+                      effective.unitName,
+                    )}
+                  </p>
+                  <p className="text-muted-foreground mt-1 text-[11px]">
+                    {t(
+                      effective.source === 'quote'
+                        ? 'items.matrix.comparisonUsesQuote'
+                        : 'items.matrix.comparisonUsesActual',
+                    )}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-muted-foreground mt-1 text-lg">—</p>
+                  <p className="text-muted-foreground mt-1 text-[11px]">
+                    {t('items.matrix.noComparisonPrice')}
+                  </p>
+                </>
+              )}
+            </div>
+          ) : null}
         </div>
 
         {isBest ? (
           <Badge variant="success" className="shrink-0">
             <Trophy className="me-1 size-3" />
             {priceSource === 'compare'
-              ? t('items.matrix.bestQuoteVsActualBadge')
+              ? t('items.matrix.bestPriceBadge')
               : t('items.matrix.bestInScope')}
           </Badge>
         ) : null}
@@ -763,27 +697,39 @@ function SingleSourceResult({
 }
 
 function CompareResult({
-  cell,
+  winners,
   metric,
   locale,
 }: {
-  cell: ItemSupplierMatrixCell
+  winners: EffectiveComparisonEntry[]
   metric: ItemSupplierMatrixMetric
   locale: string
 }) {
   const { t } = useTranslation()
-  const difference = comparisonPercent(cell, metric)
   return (
     <div>
-      <div className="flex items-center gap-1.5">
-        <Trophy className="text-success size-4 shrink-0" />
-        <TableEntityLink kind="supplier" id={cell.supplierId} name={cell.supplierName} code={cell.supplierCode} compact />
+      <div className="space-y-3">
+        {winners.map(({ cell, price }, index) => (
+          <div key={cell.supplierId} className={cn(index > 0 && 'border-t pt-3')}>
+            <div className="flex items-center gap-1.5">
+              <Trophy className="text-success size-4 shrink-0" />
+              <TableEntityLink kind="supplier" id={cell.supplierId} name={cell.supplierName} code={cell.supplierCode} compact />
+            </div>
+            <p dir="ltr" className="mt-1 text-sm font-semibold tabular-nums">
+              {formatUnitCost(price.value, locale, price.currencyCode, price.unitName)}
+            </p>
+            <p className="text-muted-foreground mt-1 text-xs">
+              {t(price.source === 'quote' ? 'items.matrix.comparisonUsesQuote' : 'items.matrix.comparisonUsesActual')}
+            </p>
+          </div>
+        ))}
       </div>
-      <ChangeValue value={difference} locale={locale} />
-      <p className="text-muted-foreground mt-1 text-xs">
-        {t('items.matrix.bestQuoteVsActualHint', {
-          metric: t(`items.matrix.metrics.${metric}`),
-        })}
+      <p className="text-muted-foreground mt-2 text-xs">
+        {winners.length > 1
+          ? t('items.matrix.bestChoiceTieHint', { count: winners.length })
+          : t('items.matrix.bestChoiceHint', {
+              metric: t(`items.matrix.metrics.${metric}`),
+            })}
       </p>
     </div>
   )
