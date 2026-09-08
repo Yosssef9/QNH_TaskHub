@@ -362,7 +362,11 @@ export function SavedViewSupplierComparisonTable({
                       return (
                         <td
                           key={supplierId}
-                          className="group-hover:bg-primary/[0.015] border-e border-b p-2 align-top"
+                          className={cn(
+                            'group-hover:bg-primary/[0.015] relative border-e border-b p-2 align-top',
+                            isBest &&
+                              'before:border-success/30 before:bg-success/[0.055] before:pointer-events-none before:absolute before:inset-2 before:z-0 before:rounded-lg before:border',
+                          )}
                         >
                           <MatrixCell
                             cell={cell}
@@ -540,9 +544,8 @@ function MatrixCell({
       type="button"
       disabled={!canOpen}
       className={cn(
-        'focus-visible:ring-ring min-h-24 w-full rounded-lg border p-3 text-start outline-none focus-visible:ring-2',
+        'focus-visible:ring-ring relative z-10 min-h-24 w-full rounded-lg border border-transparent bg-transparent p-3 text-start outline-none focus-visible:ring-2',
         canOpen ? 'hover:bg-muted/45' : 'cursor-default',
-        isBest ? 'border-success/30 bg-success/[0.055]' : 'border-transparent',
       )}
       aria-label={t('items.matrix.openDetails', { supplier: supplierName })}
       onClick={onOpen}
@@ -734,3 +737,4 @@ function CompareResult({
     </div>
   )
 }
+
