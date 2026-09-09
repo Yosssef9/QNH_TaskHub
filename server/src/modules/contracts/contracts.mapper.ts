@@ -21,7 +21,6 @@ function dateTime(value: Date | null): string | null {
   return value?.toISOString() ?? null;
 }
 
-
 function rowVersion(value: unknown): string {
   const normalized = normalizeSqlRowVersion(value);
   if (normalized) return normalized;
@@ -53,7 +52,12 @@ function activityType(value: string): ContractActivityType {
 
 export function mapContract(
   record: ContractRecord,
-  context: { ownerUserId: number; ownerUserName: string; isOwner: boolean; canManageAttachments: boolean },
+  context: {
+    ownerUserId: number;
+    ownerUserName: string;
+    isOwner: boolean;
+    canManageAttachments: boolean;
+  },
 ): Contract {
   return {
     id: Number(record.id),
@@ -103,7 +107,6 @@ export function mapContractAttachment(record: ContractAttachmentRecord): Contrac
   };
 }
 
-
 export function mapSummary(record: {
   total: number | string;
   active: number | string;
@@ -131,12 +134,6 @@ export function mapActivity(record: ActivityRecord): ContractActivity {
 
   return {
     id: Number(record.id),
-    ownerUserId: context.ownerUserId,
-    ownerUserName: context.ownerUserName,
-    access: {
-      isOwner: context.isOwner,
-      canManageAttachments: context.canManageAttachments,
-    },
     type: activityType(record.activityType),
     changes,
     actorUserId: record.actorUserId,
@@ -144,4 +141,3 @@ export function mapActivity(record: ActivityRecord): ContractActivity {
     createdAtUtc: record.createdAtUtc.toISOString(),
   };
 }
-
