@@ -23,7 +23,7 @@ function createProfile(roleCode: "USER" | "ADMIN"): AuthMeData {
       userName: "Admin User",
       email: null,
     },
-    access: { roleCode, procurementEnabled: false },
+    access: { roleCode, permissions: [] },
     preferences: {
       languageCode: "AR",
       theme: "SYSTEM",

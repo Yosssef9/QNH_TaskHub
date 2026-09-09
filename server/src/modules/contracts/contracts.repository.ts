@@ -47,6 +47,13 @@ export interface ContractAttachmentRecord {
   fileExtension: string;
   sizeBytes: number | string;
   createdAtUtc: Date;
+  uploadedByUserId: number;
+  uploadedByUserName: string;
+}
+
+export interface ContractOwnerRecord {
+  ownerUserId: number;
+  ownerUserName: string;
 }
 
 export interface ActivityRecord {
@@ -285,6 +292,36 @@ export async function getContractSummary(
   );
 }
 
+export async function findContractOwner(
+  contractId: number,
+  transaction?: DatabaseTransaction,
+): Promise<ContractOwnerRecord | null> {
+  const request = transaction ? transaction.request() : (await getDatabasePool()).request();
+  const result = await request.input("contractId", sql.BigInt, contractId).query<ContractOwnerRecord>(`
+    SELECT TOP (1)
+      contract.owner_user_id AS ownerUserId,
+      owner.USER_NAME AS ownerUserName
+    FROM dbo.TM_contracts AS contract
+    INNER JOIN dbo.users AS owner ON owner.USER_ID = contract.owner_user_id
+    WHERE contract.id = @contractId;
+  `);
+  return result.recordset[0] ?? null;
+}
+
+export async function findContractOwnerIdentity(
+  ownerUserId: number,
+): Promise<ContractOwnerRecord | null> {
+  const pool = await getDatabasePool();
+  const result = await pool.request().input("ownerUserId", sql.Int, ownerUserId).query<ContractOwnerRecord>(`
+    SELECT TOP (1)
+      USER_ID AS ownerUserId,
+      USER_NAME AS ownerUserName
+    FROM dbo.users
+    WHERE USER_ID = @ownerUserId;
+  `);
+  return result.recordset[0] ?? null;
+}
+
 export async function findOwnedContract(
   ownerUserId: number,
   contractId: number,
@@ -462,6 +499,7 @@ export async function addContractActivity(
   ownerUserId: number,
   contractId: number,
   activityType: string,
+  actorUserId: number,
   changes?: Record<string, { from: unknown; to: unknown }> | null,
 ): Promise<void> {
   await transaction
@@ -469,6 +507,7 @@ export async function addContractActivity(
     .input("ownerUserId", sql.Int, ownerUserId)
     .input("contractId", sql.BigInt, contractId)
     .input("activityType", sql.VarChar(30), activityType)
+    .input("actorUserId", sql.Int, actorUserId)
     .input("changesJson", sql.NVarChar(sql.MAX), changes ? JSON.stringify(changes) : null)
     .query(`
       INSERT INTO dbo.TM_contract_activity (
@@ -478,7 +517,7 @@ export async function addContractActivity(
         changes_json,
         actor_user_id
       )
-      VALUES (@ownerUserId, @contractId, @activityType, @changesJson, @ownerUserId);
+      VALUES (@ownerUserId, @contractId, @activityType, @changesJson, @actorUserId);
     `);
 }
 
@@ -626,8 +665,11 @@ export async function listContractAttachments(
         attachment.mime_type AS mimeType,
         attachment.file_extension AS fileExtension,
         attachment.size_bytes AS sizeBytes,
-        attachment.created_at_utc AS createdAtUtc
+        attachment.created_at_utc AS createdAtUtc,
+        attachment.uploaded_by_user_id AS uploadedByUserId,
+        uploader.USER_NAME AS uploadedByUserName
       FROM dbo.TM_contract_attachments AS attachment
+      INNER JOIN dbo.users AS uploader ON uploader.USER_ID = attachment.uploaded_by_user_id
       INNER JOIN dbo.TM_contracts AS contract
         ON contract.id = attachment.contract_id
         AND contract.owner_user_id = attachment.owner_user_id
@@ -649,6 +691,7 @@ export async function createContractAttachment(
     mimeType: string;
     fileExtension: string;
     sizeBytes: number;
+    uploadedByUserId: number;
   },
 ): Promise<ContractAttachmentRecord | null> {
   const result = await transaction
@@ -660,7 +703,10 @@ export async function createContractAttachment(
     .input("mimeType", sql.VarChar(255), values.mimeType)
     .input("fileExtension", sql.VarChar(20), values.fileExtension)
     .input("sizeBytes", sql.BigInt, values.sizeBytes)
+    .input("uploadedByUserId", sql.Int, values.uploadedByUserId)
     .query<ContractAttachmentRecord>(`
+      DECLARE @created TABLE (id UNIQUEIDENTIFIER NOT NULL);
+
       INSERT INTO dbo.TM_contract_attachments (
         owner_user_id,
         contract_id,
@@ -671,15 +717,7 @@ export async function createContractAttachment(
         size_bytes,
         uploaded_by_user_id
       )
-      OUTPUT
-        inserted.id,
-        inserted.contract_id AS contractId,
-        inserted.original_file_name AS originalFileName,
-        inserted.storage_key AS storageKey,
-        inserted.mime_type AS mimeType,
-        inserted.file_extension AS fileExtension,
-        inserted.size_bytes AS sizeBytes,
-        inserted.created_at_utc AS createdAtUtc
+      OUTPUT inserted.id INTO @created (id)
       VALUES (
         @ownerUserId,
         @contractId,
@@ -688,10 +726,44 @@ export async function createContractAttachment(
         @mimeType,
         @fileExtension,
         @sizeBytes,
-        @ownerUserId
+        @uploadedByUserId
       );
+
+      SELECT
+        attachment.id,
+        attachment.contract_id AS contractId,
+        attachment.original_file_name AS originalFileName,
+        attachment.storage_key AS storageKey,
+        attachment.mime_type AS mimeType,
+        attachment.file_extension AS fileExtension,
+        attachment.size_bytes AS sizeBytes,
+        attachment.created_at_utc AS createdAtUtc,
+        attachment.uploaded_by_user_id AS uploadedByUserId,
+        uploader.USER_NAME AS uploadedByUserName
+      FROM @created AS created
+      INNER JOIN dbo.TM_contract_attachments AS attachment ON attachment.id = created.id
+      INNER JOIN dbo.users AS uploader ON uploader.USER_ID = attachment.uploaded_by_user_id;
     `);
   return result.recordset[0] ?? null;
+}
+
+export async function findContractAttachmentOwner(
+  attachmentId: string,
+  transaction?: DatabaseTransaction,
+): Promise<{ ownerUserId: number; contractId: number } | null> {
+  const request = transaction ? transaction.request() : (await getDatabasePool()).request();
+  const result = await request
+    .input("attachmentId", sql.UniqueIdentifier, attachmentId)
+    .query<{ ownerUserId: number; contractId: number | string }>(`
+      SELECT TOP (1)
+        attachment.owner_user_id AS ownerUserId,
+        attachment.contract_id AS contractId
+      FROM dbo.TM_contract_attachments AS attachment
+      WHERE attachment.id = @attachmentId
+        AND attachment.is_active = 1;
+    `);
+  const row = result.recordset[0];
+  return row ? { ownerUserId: Number(row.ownerUserId), contractId: Number(row.contractId) } : null;
 }
 
 export async function findOwnedContractAttachment(
@@ -712,8 +784,11 @@ export async function findOwnedContractAttachment(
         attachment.mime_type AS mimeType,
         attachment.file_extension AS fileExtension,
         attachment.size_bytes AS sizeBytes,
-        attachment.created_at_utc AS createdAtUtc
+        attachment.created_at_utc AS createdAtUtc,
+        attachment.uploaded_by_user_id AS uploadedByUserId,
+        uploader.USER_NAME AS uploadedByUserName
       FROM dbo.TM_contract_attachments AS attachment
+      INNER JOIN dbo.users AS uploader ON uploader.USER_ID = attachment.uploaded_by_user_id
       INNER JOIN dbo.TM_contracts AS contract
         ON contract.id = attachment.contract_id
         AND contract.owner_user_id = attachment.owner_user_id
@@ -746,6 +821,8 @@ export async function deactivateContractAttachment(
 
 export const contractsRepository = {
   listContracts,
+  findContractOwner,
+  findContractOwnerIdentity,
   getContractSummary,
   findOwnedContract,
   findOwnedContractForUpdate,
@@ -757,6 +834,7 @@ export const contractsRepository = {
   countActiveContractAttachments,
   listContractAttachments,
   createContractAttachment,
+  findContractAttachmentOwner,
   findOwnedContractAttachment,
   deactivateContractAttachment,
   ensureContractSettings,

@@ -1,3 +1,4 @@
+import type { ProcurementAccessState } from "../access-permissions/access-permissions.types.js";
 import type { TaskHubRoleCode } from "../auth/auth.types.js";
 
 export interface AccessUser {
@@ -8,7 +9,7 @@ export interface AccessUser {
   portalIsActive: boolean;
   roleCode: TaskHubRoleCode | null;
   accessIsActive: boolean;
-  procurementEnabled: boolean;
+  procurementAccess: ProcurementAccessState;
   meetingOrganizeEnabled?: boolean;
   meetingCoordinateEnabled?: boolean;
 }
@@ -30,7 +31,7 @@ export interface UpdateAccessInput {
   userId: number;
   roleCode: TaskHubRoleCode;
   isActive: boolean;
-  procurementEnabled?: boolean | undefined;
+  procurementAccess: ProcurementAccessState;
   meetingOrganizeEnabled?: boolean | undefined;
   meetingCoordinateEnabled?: boolean | undefined;
 }
@@ -38,8 +39,11 @@ export interface UpdateAccessInput {
 export interface CurrentAccessRecord {
   roleCode: TaskHubRoleCode;
   isActive: boolean;
-  procurementEnabled: boolean;
   meetingOrganizeEnabled?: boolean;
   meetingCoordinateEnabled?: boolean;
 }
 
+export interface DelegationParticipantRecord {
+  userId: number;
+  contractsAccess: boolean;
+}

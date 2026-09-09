@@ -3,6 +3,7 @@ import type { ApiSuccessResponse } from '@/types/api.types'
 
 import type {
   Contract,
+  ContractAccessScope,
   ContractActivity,
   ContractAttachment,
   ContractInput,
@@ -16,6 +17,14 @@ export async function getContracts(query: ContractListQuery): Promise<ContractLi
     params: query,
   })
   return response.data.data
+}
+
+
+export async function getContractAccessScopes(): Promise<ContractAccessScope[]> {
+  const response = await apiClient.get<ApiSuccessResponse<{ items: ContractAccessScope[] }>>(
+    '/contracts/access-scopes',
+  )
+  return response.data.data.items
 }
 
 export async function getContract(contractId: number): Promise<Contract> {

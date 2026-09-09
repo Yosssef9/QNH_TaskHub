@@ -15,8 +15,16 @@ export type ContractActivityType =
   | "ATTACHMENT_ADDED"
   | "ATTACHMENT_REMOVED";
 
+export interface ContractResourceAccess {
+  isOwner: boolean;
+  canManageAttachments: boolean;
+}
+
 export interface Contract {
   id: number;
+  ownerUserId: number;
+  ownerUserName: string;
+  access: ContractResourceAccess;
   supplierId: number;
   supplierName: string;
   contractNumber: string | null;
@@ -50,6 +58,15 @@ export interface ContractAttachment {
   fileExtension: string;
   sizeBytes: number;
   createdAtUtc: string;
+  uploadedByUserId: number;
+  uploadedByUserName: string;
+}
+
+export interface ContractScope {
+  ownerUserId: number;
+  ownerUserName: string;
+  isOwn: boolean;
+  canManageAttachments: boolean;
 }
 
 export interface ContractSummary {
@@ -61,6 +78,7 @@ export interface ContractSummary {
 }
 
 export interface ContractList {
+  scope: ContractScope;
   items: Contract[];
   page: number;
   pageSize: number;
@@ -87,6 +105,7 @@ export interface ContractUserSettings {
 }
 
 export interface ContractListQuery {
+  ownerUserId?: number | undefined;
   search?: string | undefined;
   page: number;
   pageSize: number;

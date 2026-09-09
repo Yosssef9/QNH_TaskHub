@@ -9,7 +9,7 @@ const authenticatedUserResponse = {
       userName: 'مستخدم تجريبي',
       email: 'test@qnhospital.com',
     },
-    access: { roleCode: 'ADMIN', procurementEnabled: false },
+    access: { roleCode: 'ADMIN', permissions: [] },
     preferences: {
       languageCode: 'AR',
       theme: 'SYSTEM',
@@ -231,7 +231,7 @@ test('allows an administrator to grant TaskHub access with a role', async ({ pag
               portalIsActive: true,
               roleCode: null,
               accessIsActive: false,
-              procurementEnabled: false,
+              procurementAccess: { contracts: false, items: false, suppliers: false, priceQuotes: false },
             },
           ],
           page: 1,
@@ -255,7 +255,7 @@ test('allows an administrator to grant TaskHub access with a role', async ({ pag
             portalIsActive: true,
             roleCode: 'ADMIN',
             accessIsActive: true,
-            procurementEnabled: false,
+            procurementAccess: { contracts: false, items: false, suppliers: false, priceQuotes: false },
           },
         },
       },
@@ -270,7 +270,13 @@ test('allows an administrator to grant TaskHub access with a role', async ({ pag
   await page.getByRole('option', { name: 'مسؤول النظام' }).click()
   await page.getByRole('button', { name: 'حفظ' }).click()
 
-  await expect.poll(() => savedInput).toEqual({ roleCode: 'ADMIN', isActive: true, procurementEnabled: false })
+  await expect.poll(() => savedInput).toEqual({
+      roleCode: 'ADMIN',
+      isActive: true,
+      procurementAccess: { contracts: false, items: false, suppliers: false, priceQuotes: false },
+      meetingOrganizeEnabled: false,
+      meetingCoordinateEnabled: false,
+    })
   await expect(page.getByText('تم حفظ إعدادات الوصول.')).toBeVisible()
 })
 

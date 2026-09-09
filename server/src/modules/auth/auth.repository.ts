@@ -1,6 +1,8 @@
 import type { DatabaseTransaction } from "../../database/types.js";
 import { getDatabasePool, sql } from "../../database/sql.js";
 import { withTransaction } from "../../database/transaction.js";
+import { accessPermissionsRepository } from "../access-permissions/access-permissions.repository.js";
+import type { AccessPermission } from "../access-permissions/access-permissions.types.js";
 
 export interface PortalUserRecord {
   userId: number;
@@ -13,7 +15,6 @@ export interface PortalUserRecord {
 export interface AccessProfileRecord {
   roleCode: string;
   isActive: boolean;
-  procurementEnabled: boolean;
   meetingOrganizeEnabled?: boolean;
   meetingCoordinateEnabled?: boolean;
   languageCode: string | null;
@@ -30,6 +31,7 @@ export interface AuthRepository {
   findPortalUserByCode(userCode: string): Promise<PortalUserRecord | null>;
   findAccessProfile(userId: number): Promise<AccessProfileRecord | null>;
   ensureUserFoundation(userId: number): Promise<void>;
+  listAccessPermissions(userId: number): Promise<AccessPermission[]>;
 }
 
 export async function findPortalUserByCode(userCode: string): Promise<PortalUserRecord | null> {
@@ -55,7 +57,6 @@ export async function findAccessProfile(userId: number): Promise<AccessProfileRe
       SELECT
         access.role_code AS roleCode,
         access.is_active AS isActive,
-        CAST(access.procurement_enabled AS BIT) AS procurementEnabled,
         CAST(
           CASE WHEN EXISTS (
             SELECT 1
@@ -154,6 +155,7 @@ export const authRepository: AuthRepository = {
   findPortalUserByCode,
   findAccessProfile,
   ensureUserFoundation,
+  listAccessPermissions: accessPermissionsRepository.listUserPermissions,
 };
 
 

@@ -1,3 +1,5 @@
+import type { AccessPermission } from "../access-permissions/access-permissions.types.js";
+
 export type TaskHubRoleCode = "USER" | "ADMIN";
 export type LanguageCode = "AR" | "EN";
 export type ThemePreference = "LIGHT" | "DARK" | "SYSTEM";
@@ -16,7 +18,7 @@ export interface PortalUser {
 
 export interface TaskHubAccess {
   roleCode: TaskHubRoleCode;
-  procurementEnabled: boolean;
+  permissions: AccessPermission[];
   meetingOrganizeEnabled?: boolean;
   meetingCoordinateEnabled?: boolean;
 }
@@ -36,6 +38,3 @@ export interface AuthMeData {
   access: TaskHubAccess;
   preferences: UserPreferences;
 }
-
-
-

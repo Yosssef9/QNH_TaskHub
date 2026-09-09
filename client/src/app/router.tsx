@@ -3,7 +3,7 @@ import { createBrowserRouter } from 'react-router'
 import App from '@/App'
 import { RequireAuth } from '@/features/auth/components/RequireAuth'
 import { RequireMeetingAccess } from '@/features/meetings/components/RequireMeetingAccess'
-import { RequireProcurementAccess } from '@/features/procurement/components/RequireProcurementAccess'
+import { RequireAccessPermission } from '@/features/auth/components/RequireAccessPermission'
 import { AdminAccessRoute } from '@/pages/admin/AdminAccessRoute'
 import { AdminHolidaysRoute } from '@/pages/admin/AdminHolidaysRoute'
 import { AdminMeetingRoomsRoute } from '@/pages/admin/AdminMeetingRoomsRoute'
@@ -132,81 +132,81 @@ export const router = createBrowserRouter(
         {
           path: 'contracts',
           element: (
-            <RequireProcurementAccess>
+            <RequireAccessPermission entity="CONTRACTS">
               <ContractsPage />
-            </RequireProcurementAccess>
+            </RequireAccessPermission>
           ),
         },
 
         {
           path: 'items',
           element: (
-            <RequireProcurementAccess>
+            <RequireAccessPermission entity="ITEMS">
               <ItemsPage />
-            </RequireProcurementAccess>
+            </RequireAccessPermission>
           ),
         },
 
         {
           path: 'items/:itemId',
           element: (
-            <RequireProcurementAccess>
+            <RequireAccessPermission entity="ITEMS">
               <ItemDetailsPage />
-            </RequireProcurementAccess>
+            </RequireAccessPermission>
           ),
         },
 
         {
           path: 'suppliers',
           element: (
-            <RequireProcurementAccess>
+            <RequireAccessPermission entity="SUPPLIERS">
               <SuppliersPage />
-            </RequireProcurementAccess>
+            </RequireAccessPermission>
           ),
         },
 
         {
           path: 'suppliers/:supplierId',
           element: (
-            <RequireProcurementAccess>
+            <RequireAccessPermission entity="SUPPLIERS">
               <SupplierDetailsPage />
-            </RequireProcurementAccess>
+            </RequireAccessPermission>
           ),
         },
 
         {
           path: 'price-quotes',
           element: (
-            <RequireProcurementAccess>
+            <RequireAccessPermission entity="PRICE_QUOTES">
               <PriceQuotesPage />
-            </RequireProcurementAccess>
+            </RequireAccessPermission>
           ),
         },
 
         {
           path: 'contracts/suppliers',
           element: (
-            <RequireProcurementAccess>
+            <RequireAccessPermission entity="SUPPLIERS">
               <SuppliersPage />
-            </RequireProcurementAccess>
+            </RequireAccessPermission>
           ),
         },
 
         {
           path: 'contracts/suppliers/:supplierId',
           element: (
-            <RequireProcurementAccess>
+            <RequireAccessPermission entity="SUPPLIERS">
               <SupplierDetailsPage />
-            </RequireProcurementAccess>
+            </RequireAccessPermission>
           ),
         },
 
         {
           path: 'contracts/:contractId',
           element: (
-            <RequireProcurementAccess>
+            <RequireAccessPermission entity="CONTRACTS">
               <ContractDetailsPage />
-            </RequireProcurementAccess>
+            </RequireAccessPermission>
           ),
         },
 

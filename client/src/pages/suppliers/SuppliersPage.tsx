@@ -19,6 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { hasAccessPermission } from '@/features/auth/access-permissions'
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { formatDateOnly } from '@/features/items/components/item-price-format'
 import { SupplierEditorDialog } from '@/features/suppliers/components/SupplierEditorDialog'
 import { SupplierSourceBadge } from '@/features/suppliers/components/SupplierSourceBadge'
@@ -28,6 +30,8 @@ import { useSortState } from '@/hooks/use-sort-state'
 
 export function SuppliersPage() {
   const { i18n, t } = useTranslation()
+  const currentUser = useCurrentUser()
+  const canAccessContracts = hasAccessPermission(currentUser.data?.access, 'CONTRACTS')
   const [search, setSearch] = useState('')
   const [source, setSource] = useState<SupplierSource | 'ALL'>('ALL')
   const [page, setPage] = useState(1)
@@ -197,14 +201,14 @@ export function SuppliersPage() {
                       onSort={onSort}
                       tone="soft-primary"
                     />
-                    <SortableHeader
+                    {canAccessContracts ? <SortableHeader
                       label={t('suppliers.myContracts')}
                       column="contracts"
                       sortColumn={sort.sortColumn}
                       sortDirection={sort.sortDirection}
                       onSort={onSort}
                       tone="soft-primary"
-                    />
+                    /> : null}
                     <th className="border-primary/20 bg-accent border-b-2 px-4 py-4 text-start text-xs font-semibold">
                       {t('suppliers.source')}
                     </th>
@@ -239,7 +243,7 @@ export function SuppliersPage() {
                       <td className="px-4 py-4">
                         {formatDateOnly(supplier.lastPurchaseDate, i18n.language)}
                       </td>
-                      <td className="px-4 py-4">
+                      {canAccessContracts ? <td className="px-4 py-4">
                         <span className="font-semibold">{supplier.currentContractCount}</span>
                         {supplier.expiringSoonContractCount > 0 ? (
                           <p className="text-warning-foreground mt-1 text-xs">
@@ -248,7 +252,7 @@ export function SuppliersPage() {
                             })}
                           </p>
                         ) : null}
-                      </td>
+                      </td> : null}
                       <td className="px-4 py-4">
                         <SupplierSourceBadge source={supplier.source} />
                       </td>

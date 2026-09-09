@@ -1,6 +1,9 @@
 import { Router, type Router as ExpressRouter } from "express";
 
-import { requireProcurementAccess } from "../../middleware/requireProcurementAccess.middleware.js";
+import {
+  requireAnyProcurementAccess,
+  requireProcurementEntityAccess,
+} from "../../middleware/requireAccessPermission.middleware.js";
 import { requireRole } from "../../middleware/requireRole.middleware.js";
 import { resolveTaskHubAccess } from "../../middleware/resolveTaskHubAccess.middleware.js";
 import { verifyPortalJwt } from "../../middleware/verifyPortalJwt.middleware.js";
@@ -13,10 +16,19 @@ import {
 
 export const procurementRouter: ExpressRouter = Router();
 
-procurementRouter.use(verifyPortalJwt, resolveTaskHubAccess, requireProcurementAccess);
+procurementRouter.use(verifyPortalJwt, resolveTaskHubAccess, requireAnyProcurementAccess);
 
 procurementRouter.get("/sync-status", getProcurementSyncStatus);
 procurementRouter.post("/sync", requireRole("ADMIN"), syncProcurement);
 
-procurementRouter.use("/imports", procurementImportsRouter);
-procurementRouter.use("/saved-views", procurementSavedViewsRouter);
+procurementRouter.use(
+  "/imports",
+  requireProcurementEntityAccess("ITEMS"),
+  requireProcurementEntityAccess("PRICE_QUOTES"),
+  procurementImportsRouter,
+);
+procurementRouter.use(
+  "/saved-views",
+  requireProcurementEntityAccess("ITEMS"),
+  procurementSavedViewsRouter,
+);

@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { hasAccessPermission } from '@/features/auth/access-permissions'
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { ContractSettingsPanel } from '@/features/contracts/components/ContractSettingsPanel'
 import { EmailSettingsPanel } from '@/features/email-settings/components/EmailSettingsPanel'
@@ -19,12 +20,12 @@ export function SettingsPage() {
   const { t } = useTranslation()
   const emailQuery = useEmailSettings()
   const currentUser = useCurrentUser()
-  const procurementEnabled = Boolean(currentUser.data?.access.procurementEnabled)
+  const canAccessContracts = hasAccessPermission(currentUser.data?.access, 'CONTRACTS')
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
 
   useEffect(() => {
-    if (!procurementEnabled && activeTab === 'contracts') setActiveTab('general')
-  }, [activeTab, procurementEnabled])
+    if (!canAccessContracts && activeTab === 'contracts') setActiveTab('general')
+  }, [activeTab, canAccessContracts])
 
   const emailDependentTab = activeTab === 'email' || activeTab === 'contracts'
 
@@ -75,7 +76,7 @@ export function SettingsPage() {
                 description={t('settings.emailSectionDescription')}
                 onClick={() => setActiveTab('email')}
               />
-              {procurementEnabled ? (
+              {canAccessContracts ? (
                 <SettingsTabButton
                   active={activeTab === 'contracts'}
                   icon={FileText}

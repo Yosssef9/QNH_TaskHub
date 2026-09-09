@@ -19,7 +19,6 @@ const portalUser: PortalUserRecord = {
 const accessProfile: AccessProfileRecord = {
   roleCode: "USER",
   isActive: true,
-  procurementEnabled: false,
   languageCode: "AR",
   theme: "SYSTEM",
   sidebarCollapsed: false,
@@ -34,6 +33,7 @@ function createRepository(overrides: Partial<AuthRepository> = {}): AuthReposito
     findPortalUserByCode: vi.fn().mockResolvedValue(portalUser),
     findAccessProfile: vi.fn().mockResolvedValue(accessProfile),
     ensureUserFoundation: vi.fn().mockResolvedValue(undefined),
+    listAccessPermissions: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
 }

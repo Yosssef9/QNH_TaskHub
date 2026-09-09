@@ -1,5 +1,5 @@
 import { Router, type Router as ExpressRouter } from "express";
-import { requireProcurementAccess } from "../../middleware/requireProcurementAccess.middleware.js";
+import { requireProcurementEntityAccess } from "../../middleware/requireAccessPermission.middleware.js";
 import { resolveTaskHubAccess } from "../../middleware/resolveTaskHubAccess.middleware.js";
 import { validateRequest } from "../../middleware/validate.middleware.js";
 import { verifyPortalJwt } from "../../middleware/verifyPortalJwt.middleware.js";
@@ -27,7 +27,7 @@ import {
 } from "./price-quotes.schemas.js";
 
 export const priceQuotesRouter: ExpressRouter = Router();
-priceQuotesRouter.use(verifyPortalJwt, resolveTaskHubAccess, requireProcurementAccess);
+priceQuotesRouter.use(verifyPortalJwt, resolveTaskHubAccess, requireProcurementEntityAccess("PRICE_QUOTES"));
 
 priceQuotesRouter.get("/", validateRequest({ query: priceQuoteListQuerySchema }), listPriceQuotes);
 priceQuotesRouter.post("/", validateRequest({ body: createPriceQuoteBodySchema }), createPriceQuote);

@@ -67,6 +67,17 @@ The module is a **price-intelligence and comparison experience**, not merely a C
 
 ---
 
+
+## Procurement access and delegated Contracts
+
+- Procurement navigation is permission-based: Contracts, Items, Suppliers, and Price Quotes each require their own `PROCUREMENT / <ENTITY> / ACCESS` row in `dbo.TM_access_permissions`. `ADMIN` does not imply these business permissions.
+- `dbo.TM_user_access` remains TaskHub membership/role/activation only; the legacy `procurement_enabled` and `contracts_enabled` runtime columns are removed by migration 034 after preserving existing Procurement users as four submodule `ACCESS` grants.
+- Contracts remain owner-private by default. Explicit owner-scoped `VIEW` allows a grantee to read one owner's Contracts, history, and files. `MANAGE_ATTACHMENTS` implies `VIEW` and permits upload/removal only while the Contract is active.
+- Delegated users cannot edit Contract fields, archive/restore Contracts, or change the owner's Contract settings. Archived Contracts remain fully read-only. Attachment rows and Contract activity store the actual uploader/actor.
+- Granting a Contract delegation automatically enables the grantee's Contracts submodule access. Removing Contracts submodule access revokes owner-scoped Contract delegations to and from that user.
+- Workspace permissions gate destinations and full business APIs. Narrow reference lookups may remain available to dependent authorized workflows without granting the referenced workspace: Supplier options support Contracts/Items/Price Quotes, and Item options support Items/Price Quotes.
+- Excel Quote Import is an Items-page workflow that writes private Price Quote history, so using it requires both `ITEMS / ACCESS` and `PRICE_QUOTES / ACCESS`; Items-only access cannot invoke the import write path.
+
 # 3. Core scope
 
 The Procurement area contains exactly these primary navigation destinations:

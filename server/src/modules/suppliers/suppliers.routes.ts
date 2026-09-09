@@ -1,6 +1,9 @@
 import { Router, type Router as ExpressRouter } from "express";
 
-import { requireProcurementAccess } from "../../middleware/requireProcurementAccess.middleware.js";
+import {
+  requireProcurementEntityAccess,
+  requireSupplierOptionsAccess,
+} from "../../middleware/requireAccessPermission.middleware.js";
 import { resolveTaskHubAccess } from "../../middleware/resolveTaskHubAccess.middleware.js";
 import { validateRequest } from "../../middleware/validate.middleware.js";
 import { verifyPortalJwt } from "../../middleware/verifyPortalJwt.middleware.js";
@@ -28,10 +31,17 @@ import {
 
 export const suppliersRouter: ExpressRouter = Router();
 
-suppliersRouter.use(verifyPortalJwt, resolveTaskHubAccess, requireProcurementAccess);
+suppliersRouter.use(verifyPortalJwt, resolveTaskHubAccess);
+
+suppliersRouter.get(
+  "/options",
+  requireSupplierOptionsAccess,
+  validateRequest({ query: supplierOptionsQuerySchema }),
+  listSupplierOptions,
+);
+suppliersRouter.use(requireProcurementEntityAccess("SUPPLIERS"));
 
 suppliersRouter.get("/", validateRequest({ query: supplierListQuerySchema }), listSuppliers);
-suppliersRouter.get("/options", validateRequest({ query: supplierOptionsQuerySchema }), listSupplierOptions);
 suppliersRouter.post("/", validateRequest({ body: createSupplierBodySchema }), createSupplier);
 suppliersRouter.get(
   "/:supplierId/analytics",

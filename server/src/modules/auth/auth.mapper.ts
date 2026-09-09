@@ -1,4 +1,5 @@
 import { AppError } from "../../shared/errors/app-error.js";
+import type { AccessPermission } from "../access-permissions/access-permissions.types.js";
 import type { AuthMeData, LanguageCode, TaskHubRoleCode, ThemePreference, TimeFormatPreference } from "./auth.types.js";
 import type { AccessProfileRecord, PortalUserRecord } from "./auth.repository.js";
 
@@ -54,6 +55,7 @@ function toTimeFormat(value: string | null): TimeFormatPreference {
 export function mapAuthMeData(
   portalUser: PortalUserRecord,
   access: AccessProfileRecord,
+  permissions: AccessPermission[],
 ): AuthMeData {
   if (
     access.sidebarCollapsed === null ||
@@ -78,7 +80,7 @@ export function mapAuthMeData(
     },
     access: {
       roleCode: toRoleCode(access.roleCode),
-      procurementEnabled: access.procurementEnabled,
+      permissions,
       meetingOrganizeEnabled: access.meetingOrganizeEnabled ?? false,
       meetingCoordinateEnabled: access.meetingCoordinateEnabled ?? false,
     },

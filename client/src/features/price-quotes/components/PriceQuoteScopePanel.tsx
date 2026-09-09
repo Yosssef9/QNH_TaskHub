@@ -5,6 +5,8 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { TableEntityLink } from '@/components/shared/TableEntityLink'
+import { hasAccessPermission } from '@/features/auth/access-permissions'
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDateOnly, formatPercent, formatProcurementNumber, formatUnitCost } from '@/features/items/components/item-price-format'
@@ -25,6 +27,9 @@ export function PriceQuoteScopePanel({
 }) {
   const { i18n, t } = useTranslation()
   const locale = i18n.language
+  const currentUser = useCurrentUser()
+  const canAccessItems = hasAccessPermission(currentUser.data?.access, 'ITEMS')
+  const canAccessSuppliers = hasAccessPermission(currentUser.data?.access, 'SUPPLIERS')
   const [createOpen, setCreateOpen] = useState(false)
   const analyticsQuery = useMemo(() => ({
     ...(item ? { itemId: item.id } : {}),
@@ -122,8 +127,24 @@ export function PriceQuoteScopePanel({
                 <tbody>{list.data.items.map((quote) => (
                   <tr key={quote.id} className="border-t transition-colors even:bg-muted/20 hover:bg-accent/35">
                     <td className="px-4 py-4 text-center font-medium tabular-nums">{formatDateOnly(quote.quoteDate, locale)}</td>
-                    {!supplier ? <td className="border-s px-4 py-4"><TableEntityLink kind="supplier" id={quote.supplierId} name={quote.supplierName} code={quote.supplierCode} compact /></td> : null}
-                    {!item ? <td className="border-s px-4 py-4"><TableEntityLink kind="item" id={quote.itemId} name={quote.itemName} code={quote.itemCode} compact /></td> : null}
+                    {!supplier ? (
+                      <td className="border-s px-4 py-4">
+                        {canAccessSuppliers ? (
+                          <TableEntityLink kind="supplier" id={quote.supplierId} name={quote.supplierName} code={quote.supplierCode} compact />
+                        ) : (
+                          <EntityIdentity name={quote.supplierName} code={quote.supplierCode} />
+                        )}
+                      </td>
+                    ) : null}
+                    {!item ? (
+                      <td className="border-s px-4 py-4">
+                        {canAccessItems ? (
+                          <TableEntityLink kind="item" id={quote.itemId} name={quote.itemName} code={quote.itemCode} compact />
+                        ) : (
+                          <EntityIdentity name={quote.itemName} code={quote.itemCode} />
+                        )}
+                      </td>
+                    ) : null}
                     <td className="border-s px-4 py-4 text-center">
                       <PriceValue
                         value={quote.quotedUnitCost}
@@ -153,6 +174,15 @@ export function PriceQuoteScopePanel({
       </CardContent>
       <PriceQuoteEditorDialog open={createOpen} initialItem={item} initialSupplier={supplier} onOpenChange={setCreateOpen} />
     </Card>
+  )
+}
+
+function EntityIdentity({ name, code }: { name: string; code: string | null }) {
+  return (
+    <div className="min-w-0">
+      <p className="truncate font-medium">{name}</p>
+      {code ? <p dir="ltr" className="text-muted-foreground mt-0.5 truncate font-mono text-xs">{code}</p> : null}
+    </div>
   )
 }
 

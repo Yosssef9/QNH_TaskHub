@@ -31,12 +31,17 @@ import type {
   ProcurementPricePeriod,
 } from '@/features/items/types/item.types'
 import { useProcurementSavedView } from '@/features/procurement-saved-views/hooks/use-procurement-saved-views'
+import { hasAccessPermission } from '@/features/auth/access-permissions'
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { PriceQuoteScopePanel } from '@/features/price-quotes/components/PriceQuoteScopePanel'
 import { useSupplier } from '@/features/suppliers/hooks/use-suppliers'
 import { useSortState } from '@/hooks/use-sort-state'
 
 export function ItemDetailsPage() {
   const { t, i18n } = useTranslation()
+  const currentUser = useCurrentUser()
+  const canAccessSuppliers = hasAccessPermission(currentUser.data?.access, 'SUPPLIERS')
+  const canAccessPriceQuotes = hasAccessPermission(currentUser.data?.access, 'PRICE_QUOTES')
   const params = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const rawId = Number(params.itemId)
@@ -66,7 +71,7 @@ export function ItemDetailsPage() {
       : '1Y'
   const savedView = useProcurementSavedView(savedViewId)
   const routePrimarySupplierId = savedViewId ? null : (routeSupplierIds[0] ?? null)
-  const routeSupplier = useSupplier(routePrimarySupplierId)
+  const routeSupplier = useSupplier(canAccessSuppliers ? routePrimarySupplierId : null)
   const itemQuery = useItem(itemId)
   const activity = useItemActivity(itemId)
   const [editOpen, setEditOpen] = useState(false)
@@ -222,7 +227,7 @@ export function ItemDetailsPage() {
     <div className="sticky top-3 z-20 flex flex-wrap gap-1.5 rounded-xl border bg-background/95 p-2 shadow-sm backdrop-blur">
       <Button variant="ghost" size="sm" onClick={() => document.getElementById('supplier-comparison')?.scrollIntoView({ behavior: 'smooth' })}>{t('items.analytics.supplierComparison')}</Button>
       <Button variant="ghost" size="sm" onClick={() => document.getElementById('price-history')?.scrollIntoView({ behavior: 'smooth' })}>{t('items.analytics.priceHistory')}</Button>
-      <Button variant="ghost" size="sm" onClick={() => document.getElementById('my-quotes')?.scrollIntoView({ behavior: 'smooth' })}>{t('priceQuotes.myQuotes')}</Button>
+      {canAccessPriceQuotes ? <Button variant="ghost" size="sm" onClick={() => document.getElementById('my-quotes')?.scrollIntoView({ behavior: 'smooth' })}>{t('priceQuotes.myQuotes')}</Button> : null}
       <Button variant="ghost" size="sm" onClick={() => document.getElementById('transactions')?.scrollIntoView({ behavior: 'smooth' })}>{t('items.analytics.transactions')}</Button>
       <Button variant="ghost" size="sm" onClick={() => document.getElementById('activity')?.scrollIntoView({ behavior: 'smooth' })}>{t('items.activity')}</Button>
     </div>
@@ -231,6 +236,7 @@ export function ItemDetailsPage() {
       {supplierComparison.isPending ? <LoadingState /> : supplierComparison.isError || !supplierComparison.data ? <ErrorState onRetry={() => void supplierComparison.refetch()} /> : <ItemSupplierComparisonTable
         data={supplierComparison.data}
         selectedSupplierCount={supplierIds.length}
+        canOpenSuppliers={canAccessSuppliers}
         page={supplierPage}
         pageSize={supplierIds.length >= 2 && supplierIds.length <= 5 ? Math.max(5, supplierIds.length) : supplierPageSize}
         sortColumn={supplierSort.sortColumn}
@@ -245,17 +251,18 @@ export function ItemDetailsPage() {
       {history.isPending ? <LoadingState /> : history.isError || !history.data ? <ErrorState onRetry={() => void history.refetch()} /> : <ItemPriceHistoryChart history={history.data} />}
     </section>
 
-    <section id="my-quotes" className="scroll-mt-24">
+    {canAccessPriceQuotes ? <section id="my-quotes" className="scroll-mt-24">
       <PriceQuoteScopePanel
         item={{ id: item.id, name: item.name, unit: item.unit }}
         supplierIds={supplierIds}
         period={period}
       />
-    </section>
+    </section> : null}
 
     <section id="transactions" className="scroll-mt-24">
       {transactions.isPending ? <LoadingState /> : transactions.isError || !transactions.data ? <ErrorState onRetry={() => void transactions.refetch()} /> : <ItemTransactionsTable
         data={transactions.data}
+        canOpenSuppliers={canAccessSuppliers}
         page={transactionPage}
         pageSize={transactionPageSize}
         sortColumn={transactionSort.sortColumn}

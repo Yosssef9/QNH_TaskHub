@@ -14,7 +14,7 @@ const authProfile: AuthMeData = {
     userName: "TaskHub Test User",
     email: "test@qnhospital.com",
   },
-  access: { roleCode: "USER", procurementEnabled: false },
+  access: { roleCode: "USER", permissions: [] },
   preferences: {
     languageCode: "AR",
     theme: "SYSTEM",

@@ -1,6 +1,9 @@
 import { Router, type Router as ExpressRouter } from "express";
 
-import { requireProcurementAccess } from "../../middleware/requireProcurementAccess.middleware.js";
+import {
+  requireItemOptionsAccess,
+  requireProcurementEntityAccess,
+} from "../../middleware/requireAccessPermission.middleware.js";
 import { resolveTaskHubAccess } from "../../middleware/resolveTaskHubAccess.middleware.js";
 import { validateRequest } from "../../middleware/validate.middleware.js";
 import { verifyPortalJwt } from "../../middleware/verifyPortalJwt.middleware.js";
@@ -37,9 +40,15 @@ import {
 } from "../procurement-transactions/procurement-transactions.schemas.js";
 
 export const itemsRouter: ExpressRouter = Router();
-itemsRouter.use(verifyPortalJwt, resolveTaskHubAccess, requireProcurementAccess);
+itemsRouter.use(verifyPortalJwt, resolveTaskHubAccess);
+itemsRouter.get(
+  "/options",
+  requireItemOptionsAccess,
+  validateRequest({ query: itemOptionsQuerySchema }),
+  listItemOptions,
+);
+itemsRouter.use(requireProcurementEntityAccess("ITEMS"));
 itemsRouter.get("/", validateRequest({ query: itemListQuerySchema }), listItems);
-itemsRouter.get("/options", validateRequest({ query: itemOptionsQuerySchema }), listItemOptions);
 itemsRouter.get("/price-summaries", validateRequest({ query: itemPriceSummariesQuerySchema }), getItemPriceSummaries);
 itemsRouter.get("/supplier-matrix", validateRequest({ query: itemSupplierMatrixQuerySchema }), getItemSupplierMatrix);
 itemsRouter.get("/overview", validateRequest({ query: itemOverviewQuerySchema }), getItemsOverview);

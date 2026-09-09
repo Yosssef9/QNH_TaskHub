@@ -24,6 +24,7 @@ export function SupplierItemsPriceTable({
   supplierId,
   data,
   period,
+  canOpenItems = true,
   page,
   pageSize,
   sortColumn,
@@ -35,6 +36,7 @@ export function SupplierItemsPriceTable({
   supplierId: number
   data: SupplierItemPriceList
   period: string
+  canOpenItems?: boolean
   page: number
   pageSize: number
   sortColumn: SupplierItemPriceSortBy | null
@@ -89,7 +91,7 @@ export function SupplierItemsPriceTable({
                     return (
                       <tr key={item.itemId} className="hover:bg-primary/[0.035] border-b last:border-b-0">
                         <td className="px-4 py-3">
-                          <TableEntityLink kind="item" id={item.itemId} name={item.itemName} code={item.itemCode} to={detailsPath} className="max-w-[22rem]" />
+                          {canOpenItems ? <TableEntityLink kind="item" id={item.itemId} name={item.itemName} code={item.itemCode} to={detailsPath} className="max-w-[22rem]" /> : <div className="max-w-[22rem]"><p className="truncate font-semibold">{item.itemName}</p>{item.itemCode ? <p dir="ltr" className="text-muted-foreground mt-0.5 truncate text-xs">{item.itemCode}</p> : null}</div>}
                           <div className="mt-1 flex flex-wrap items-center gap-2">
                             {item.categoryName ? <span className="text-muted-foreground text-xs">{item.categoryName}</span> : null}
                             {item.isCurrentLowest ? <Badge variant="success"><Trophy aria-hidden="true" className="me-1 size-3" />{t('suppliers.intelligence.cheapest')}</Badge> : null}
@@ -122,8 +124,8 @@ export function SupplierItemsPriceTable({
             </div>
 
             <div className="divide-y md:hidden">
-              {data.items.map((item) => (
-                <Link key={item.itemId} to={`/items/${item.itemId}?supplier=${supplierId}&period=${period}`} className="hover:bg-primary/[0.035] block p-4">
+              {data.items.map((item) => {
+                const content = <>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate font-semibold">{item.itemName}</p>
@@ -137,8 +139,13 @@ export function SupplierItemsPriceTable({
                     <div><p className="text-muted-foreground">{t('suppliers.intelligence.difference')}</p><p dir="ltr" className="mt-1 font-semibold">{item.marketSupplierCount > 1 ? formatPercent(item.differenceFromLowestPercent, locale) : '—'}</p></div>
                     <div><p className="text-muted-foreground">{t('suppliers.intelligence.transactions')}</p><p className="mt-1 font-semibold">{formatProcurementNumber(item.transactionCount, locale, 0)}</p></div>
                   </div>
-                </Link>
-              ))}
+                </>
+                return canOpenItems ? (
+                  <Link key={item.itemId} to={`/items/${item.itemId}?supplier=${supplierId}&period=${period}`} className="hover:bg-primary/[0.035] block p-4">{content}</Link>
+                ) : (
+                  <div key={item.itemId} className="block p-4">{content}</div>
+                )
+              })}
             </div>
 
             <TablePagination

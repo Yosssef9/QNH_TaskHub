@@ -14,9 +14,9 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useNavigate } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 
 import { DatePicker } from '@/components/shared/DatePicker'
 import { EmptyState } from '@/components/shared/EmptyState'
@@ -38,6 +38,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { hasAccessPermission } from '@/features/auth/access-permissions'
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { ContractEditorDialog } from '@/features/contracts/components/ContractEditorDialog'
 import {
   ContractStatusIndicator,
@@ -100,7 +102,12 @@ function countContractFilters(filters: ContractFilterDraft): number {
 export function ContractsPage() {
   const { i18n, t } = useTranslation()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const currentUser = useCurrentUser()
   const reduceMotion = useReducedMotion()
+  const ownerParam = Number(searchParams.get('ownerUserId'))
+  const ownerUserId = Number.isSafeInteger(ownerParam) && ownerParam > 0 ? ownerParam : undefined
+  const canOpenSuppliers = hasAccessPermission(currentUser.data?.access, 'SUPPLIERS')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(100)
@@ -127,6 +134,7 @@ export function ContractsPage() {
 
   const queryInput: ContractListQuery = {
     search,
+    ownerUserId,
     page,
     pageSize,
     archived,
@@ -158,6 +166,12 @@ export function ContractsPage() {
     [suppliers.data],
   )
   const data = contracts.data
+  const isOwnScope = data?.scope.isOwn ?? ownerUserId === undefined
+
+  useEffect(() => {
+    setPage(1)
+  }, [ownerUserId])
+
   const activeFilterCount = countContractFilters({
     status,
     supplierId,
@@ -299,21 +313,50 @@ export function ContractsPage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow={t('contracts.eyebrow')}
-        title={t('contracts.pageTitle')}
-        description={t('contracts.pageDescription')}
+        title={
+          data && !data.scope.isOwn
+            ? t('contracts.sharedPageTitle', { name: data.scope.ownerUserName })
+            : t('contracts.pageTitle')
+        }
+        description={
+          data && !data.scope.isOwn
+            ? t(
+                data.scope.canManageAttachments
+                  ? 'contracts.sharedPageDescriptionManageFiles'
+                  : 'contracts.sharedPageDescription',
+              )
+            : t('contracts.pageDescription')
+        }
         actions={
-          <>
-            <Button variant="outline" onClick={() => navigate('/suppliers')}>
-              <Building2 aria-hidden="true" className="size-4" />
-              {t('procurement.navigation.suppliers')}
-            </Button>
-            <Button onClick={() => setCreateOpen(true)}>
-              <FilePlus2 aria-hidden="true" className="size-4" />
-              {t('contracts.create')}
-            </Button>
-          </>
+          isOwnScope ? (
+            <>
+              {canOpenSuppliers ? (
+                <Button variant="outline" onClick={() => navigate('/suppliers')}>
+                  <Building2 aria-hidden="true" className="size-4" />
+                  {t('procurement.navigation.suppliers')}
+                </Button>
+              ) : null}
+              <Button onClick={() => setCreateOpen(true)}>
+                <FilePlus2 aria-hidden="true" className="size-4" />
+                {t('contracts.create')}
+              </Button>
+            </>
+          ) : undefined
         }
       />
+
+      {data && !data.scope.isOwn ? (
+        <div className="bg-primary/5 border-primary/20 rounded-xl border p-4 text-sm">
+          <p className="font-semibold">{t('contracts.sharedAccessTitle', { name: data.scope.ownerUserName })}</p>
+          <p className="text-muted-foreground mt-1">
+            {t(
+              data.scope.canManageAttachments
+                ? 'contracts.sharedAccessManageFiles'
+                : 'contracts.sharedAccessReadOnly',
+            )}
+          </p>
+        </div>
+      ) : null}
 
       {!archived && data ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -790,7 +833,13 @@ export function ContractsPage() {
             className="rounded-none border-0"
             icon={SearchX}
             title={t(archived ? 'contracts.emptyArchived' : 'contracts.emptyTitle')}
-            description={t(hasFilters ? 'contracts.emptyFiltered' : 'contracts.emptyDescription')}
+            description={t(
+              hasFilters
+                ? 'contracts.emptyFiltered'
+                : data.scope.isOwn
+                  ? 'contracts.emptyDescription'
+                  : 'contracts.sharedEmptyDescription',
+            )}
           />
         ) : (
           <>
@@ -847,7 +896,7 @@ export function ContractsPage() {
                         <ContractLink contract={contract} />
                       </td>
                       <td className="px-4 py-4">
-                        <SupplierLink contract={contract} />
+                        <SupplierLink contract={contract} canNavigate={canOpenSuppliers} />
                       </td>
                       <td className="px-4 py-4 tabular-nums">
                         {contract.endDate
@@ -907,7 +956,7 @@ export function ContractsPage() {
                     <div className="min-w-0">
                       <ContractLink contract={contract} />
                       <div className="mt-2">
-                        <SupplierLink contract={contract} />
+                        <SupplierLink contract={contract} canNavigate={canOpenSuppliers} />
                       </div>
                     </div>
                     <ContractStatusBadge state={contract.trackingState} />
@@ -969,11 +1018,13 @@ export function ContractsPage() {
         )}
       </Card>
 
-      <ContractEditorDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        onSaved={(contract) => navigate(`/contracts/${contract.id}`)}
-      />
+      {isOwnScope ? (
+        <ContractEditorDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          onSaved={(contract) => navigate(`/contracts/${contract.id}`)}
+        />
+      ) : null}
     </div>
   )
 }
@@ -982,7 +1033,8 @@ function ContractLink({ contract }: { contract: Contract }) {
   return <TableEntityLink kind="contract" id={contract.id} name={contract.title} code={contract.contractNumber} className="max-w-[22rem]" />
 }
 
-function SupplierLink({ contract }: { contract: Contract }) {
+function SupplierLink({ contract, canNavigate }: { contract: Contract; canNavigate: boolean }) {
+  if (!canNavigate) return <span className="font-medium">{contract.supplierName}</span>
   return <TableEntityLink kind="supplier" id={contract.supplierId} name={contract.supplierName} compact className="max-w-56" />
 }
 

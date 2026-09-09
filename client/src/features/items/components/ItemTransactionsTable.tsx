@@ -15,6 +15,7 @@ import { formatDateOnly, formatProcurementNumber, formatUnitCost } from './item-
 
 export function ItemTransactionsTable({
   data,
+  canOpenSuppliers = true,
   page,
   pageSize,
   sortColumn,
@@ -24,6 +25,7 @@ export function ItemTransactionsTable({
   onPageSizeChange,
 }: {
   data: ItemTransactionList
+  canOpenSuppliers?: boolean
   page: number
   pageSize: number
   sortColumn: ItemTransactionSortBy | null
@@ -68,7 +70,7 @@ export function ItemTransactionsTable({
                     <tr key={`${transaction.transactionDate}-${transaction.invoiceNo ?? 'invoice'}-${transaction.supplierId}-${index}`} className="hover:bg-primary/[0.035] border-b last:border-b-0">
                       <td className="px-4 py-3">{formatDateOnly(transaction.transactionDate, locale)}</td>
                       <td className="px-4 py-3">
-                        <TableEntityLink kind="supplier" id={transaction.supplierId} name={transaction.supplierName} code={transaction.supplierCode} compact />
+                        <TableEntityLink kind="supplier" id={transaction.supplierId} name={transaction.supplierName} code={transaction.supplierCode} compact enabled={canOpenSuppliers} />
                       </td>
                       <td dir="ltr" className="px-4 py-3 font-semibold tabular-nums">{formatUnitCost(transaction.unitCost, locale, transaction.currencyCode, transaction.unitName)}</td>
                       <td dir="ltr" className="px-4 py-3 tabular-nums">{formatProcurementNumber(transaction.quantity, locale)}</td>

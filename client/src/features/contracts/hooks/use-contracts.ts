@@ -5,6 +5,7 @@ import {
   createContract,
   downloadContractAttachment,
   getContract,
+  getContractAccessScopes,
   getContractActivity,
   getContractAttachments,
   getContracts,
@@ -25,14 +26,24 @@ import type {
 export const contractsQueryKey = ['contracts'] as const
 export const contractSettingsQueryKey = ['contract-settings'] as const
 export const contractAttachmentsQueryKey = ['contract-attachments'] as const
+export const contractAccessScopesQueryKey = ['contract-access-scopes'] as const
 
 const contractListsQueryKey = [...contractsQueryKey, 'list'] as const
 
-export function useContracts(query: ContractListQuery) {
+export function useContracts(query: ContractListQuery, enabled = true) {
   return useQuery({
     queryKey: [...contractsQueryKey, 'list', query],
     queryFn: () => getContracts(query),
+    enabled,
     placeholderData: keepPreviousData,
+  })
+}
+
+export function useContractAccessScopes(enabled = true) {
+  return useQuery({
+    queryKey: contractAccessScopesQueryKey,
+    queryFn: getContractAccessScopes,
+    enabled,
   })
 }
 

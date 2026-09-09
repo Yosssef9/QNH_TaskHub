@@ -1,6 +1,7 @@
 import type { Request, RequestHandler } from "express";
 
 import { AppError } from "../../shared/errors/app-error.js";
+import { hasAccessPermission } from "../access-permissions/access-permissions.policy.js";
 import { getValidatedRequestPart } from "../../shared/http/validated-request.js";
 import type { ApiSuccessResponse } from "../../shared/types/result.js";
 import type {
@@ -33,9 +34,21 @@ function userId(req: Request): number {
   return value;
 }
 
+function canAccessContracts(req: Request): boolean {
+  const access = req.authContext?.access;
+  if (!access) {
+    throw new AppError({
+      statusCode: 500,
+      code: "AUTH_CONTEXT_MISSING",
+      message: "Authenticated TaskHub access was not resolved.",
+    });
+  }
+  return hasAccessPermission(access.permissions, "CONTRACTS", "ACCESS");
+}
+
 export const listSuppliers: RequestHandler = async (req, res) => {
   const query = getValidatedRequestPart<SupplierListQueryInput>(req, "query");
-  const data = await suppliersService.listSuppliers(userId(req), query);
+  const data = await suppliersService.listSuppliers(userId(req), query, canAccessContracts(req));
   const body: ApiSuccessResponse<SupplierList> = { success: true, data };
   res.status(200).json(body);
 };
@@ -49,14 +62,14 @@ export const listSupplierOptions: RequestHandler = async (req, res) => {
 
 export const getSupplier: RequestHandler = async (req, res) => {
   const params = getValidatedRequestPart<SupplierIdParams>(req, "params");
-  const data = await suppliersService.getSupplier(userId(req), params.supplierId);
+  const data = await suppliersService.getSupplier(userId(req), params.supplierId, canAccessContracts(req));
   const body: ApiSuccessResponse<Supplier> = { success: true, data };
   res.status(200).json(body);
 };
 
 export const createSupplier: RequestHandler = async (req, res) => {
   const input = getValidatedRequestPart<CreateSupplierBody>(req, "body");
-  const data = await suppliersService.createSupplier(userId(req), input);
+  const data = await suppliersService.createSupplier(userId(req), input, canAccessContracts(req));
   const body: ApiSuccessResponse<Supplier> = { success: true, data };
   res.status(201).json(body);
 };
@@ -64,7 +77,12 @@ export const createSupplier: RequestHandler = async (req, res) => {
 export const updateSupplier: RequestHandler = async (req, res) => {
   const params = getValidatedRequestPart<SupplierIdParams>(req, "params");
   const input = getValidatedRequestPart<UpdateSupplierBody>(req, "body");
-  const data = await suppliersService.updateSupplier(userId(req), params.supplierId, input);
+  const data = await suppliersService.updateSupplier(
+    userId(req),
+    params.supplierId,
+    input,
+    canAccessContracts(req),
+  );
   const body: ApiSuccessResponse<Supplier> = { success: true, data };
   res.status(200).json(body);
 };

@@ -11,6 +11,8 @@ import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { hasAccessPermission } from '@/features/auth/access-permissions'
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { ContractEditorDialog } from '@/features/contracts/components/ContractEditorDialog'
 import { ContractFilesPanel } from '@/features/contracts/components/ContractFilesPanel'
 import {
@@ -40,6 +42,8 @@ export function ContractDetailsPage() {
   const { i18n, t } = useTranslation()
   const params = useParams<{ contractId: string }>()
   const contractId = Number(params.contractId)
+  const currentUser = useCurrentUser()
+  const canOpenSuppliers = hasAccessPermission(currentUser.data?.access, 'SUPPLIERS')
   const contractQuery = useContract(Number.isSafeInteger(contractId) && contractId > 0 ? contractId : null)
   const activityQuery = useContractActivity(Number.isSafeInteger(contractId) && contractId > 0 ? contractId : null)
   const attachmentsQuery = useContractAttachments(Number.isSafeInteger(contractId) && contractId > 0 ? contractId : null)
@@ -92,7 +96,14 @@ export function ContractDetailsPage() {
     <div className="space-y-6">
       <Breadcrumbs
         items={[
-          { label: t('contracts.navigation.section'), path: '/contracts' },
+          {
+            label: contract.access.isOwner
+              ? t('contracts.navigation.section')
+              : t('contracts.navigation.ownerContracts', { name: contract.ownerUserName }),
+            path: contract.access.isOwner
+              ? '/contracts'
+              : `/contracts?ownerUserId=${contract.ownerUserId}`,
+          },
           { label: contract.title },
         ]}
       />
@@ -102,27 +113,44 @@ export function ContractDetailsPage() {
         title={contract.title}
         description={contract.supplierName}
         actions={
-          <>
-            {contract.isActive ? (
-              <Button variant="outline" onClick={() => setEditOpen(true)}>
-                <Pencil aria-hidden="true" className="size-4" />
-                {t('contracts.edit')}
-              </Button>
-            ) : null}
-            <Button
-              variant={contract.isActive ? 'outline' : 'default'}
-              onClick={() => setArchiveOpen(true)}
-            >
+          contract.access.isOwner ? (
+            <>
               {contract.isActive ? (
-                <Archive aria-hidden="true" className="size-4" />
-              ) : (
-                <RotateCcw aria-hidden="true" className="size-4" />
-              )}
-              {t(contract.isActive ? 'contracts.archive' : 'contracts.restore')}
-            </Button>
-          </>
+                <Button variant="outline" onClick={() => setEditOpen(true)}>
+                  <Pencil aria-hidden="true" className="size-4" />
+                  {t('contracts.edit')}
+                </Button>
+              ) : null}
+              <Button
+                variant={contract.isActive ? 'outline' : 'default'}
+                onClick={() => setArchiveOpen(true)}
+              >
+                {contract.isActive ? (
+                  <Archive aria-hidden="true" className="size-4" />
+                ) : (
+                  <RotateCcw aria-hidden="true" className="size-4" />
+                )}
+                {t(contract.isActive ? 'contracts.archive' : 'contracts.restore')}
+              </Button>
+            </>
+          ) : undefined
         }
       />
+
+      {!contract.access.isOwner ? (
+        <div className="bg-primary/5 border-primary/20 rounded-xl border p-4 text-sm">
+          <p className="font-semibold">
+            {t('contracts.sharedFrom', { name: contract.ownerUserName })}
+          </p>
+          <p className="text-muted-foreground mt-1">
+            {t(
+              contract.access.canManageAttachments
+                ? 'contracts.sharedDetailManageFiles'
+                : 'contracts.sharedDetailReadOnly',
+            )}
+          </p>
+        </div>
+      ) : null}
 
       {!contract.isActive ? (
         <div className="bg-muted/60 rounded-xl border p-4 text-sm">
@@ -169,7 +197,7 @@ export function ContractDetailsPage() {
       </div>
 
       {tab === 'overview' ? (
-        <Overview contract={contract} locale={i18n.language} />
+        <Overview contract={contract} locale={i18n.language} canOpenSuppliers={canOpenSuppliers} />
       ) : tab === 'files' ? (
         <ContractFilesPanel contract={contract} />
       ) : activityQuery.isPending ? (
@@ -180,7 +208,9 @@ export function ContractDetailsPage() {
         <History items={activityQuery.data ?? []} locale={i18n.language} />
       )}
 
-      <ContractEditorDialog open={editOpen} contract={contract} onOpenChange={setEditOpen} />
+      {contract.access.isOwner ? (
+        <ContractEditorDialog open={editOpen} contract={contract} onOpenChange={setEditOpen} />
+      ) : null}
 
       <ConfirmModal
         open={archiveOpen}
@@ -274,7 +304,15 @@ function NoticeDeadlineHint({ value }: { value: string }) {
   )
 }
 
-function Overview({ contract, locale }: { contract: Contract; locale: string }) {
+function Overview({
+  contract,
+  locale,
+  canOpenSuppliers,
+}: {
+  contract: Contract
+  locale: string
+  canOpenSuppliers: boolean
+}) {
   const { t } = useTranslation()
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -284,12 +322,16 @@ function Overview({ contract, locale }: { contract: Contract; locale: string }) 
           <Info
             label={t('contracts.supplier')}
             value={
-              <Link
-                className="hover:bg-primary/10 hover:text-primary focus-visible:ring-ring inline-flex items-center gap-1.5 rounded-full border bg-muted/30 px-2.5 py-1 text-xs outline-none focus-visible:ring-2"
-                to={`/suppliers/${contract.supplierId}`}
-              >
-                {contract.supplierName}
-              </Link>
+              canOpenSuppliers ? (
+                <Link
+                  className="hover:bg-primary/10 hover:text-primary focus-visible:ring-ring inline-flex items-center gap-1.5 rounded-full border bg-muted/30 px-2.5 py-1 text-xs outline-none focus-visible:ring-2"
+                  to={`/suppliers/${contract.supplierId}`}
+                >
+                  {contract.supplierName}
+                </Link>
+              ) : (
+                <span className="font-medium">{contract.supplierName}</span>
+              )
             }
           />
           <Info

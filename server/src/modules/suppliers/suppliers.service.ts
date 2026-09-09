@@ -89,11 +89,16 @@ function changed(current: Supplier, input: SupplierInput): boolean {
 }
 
 export const suppliersService = {
-  async listSuppliers(ownerUserId: number, query: SupplierListQuery): Promise<SupplierList> {
+  async listSuppliers(
+    ownerUserId: number,
+    query: SupplierListQuery,
+    includeContractStats: boolean,
+  ): Promise<SupplierList> {
     const page = await suppliersRepository.listSuppliers(
       ownerUserId,
       query,
       getCurrentDateInAppTimeZone(),
+      includeContractStats,
     );
     return {
       items: page.records.map(mapSupplier),
@@ -113,17 +118,26 @@ export const suppliersService = {
     };
   },
 
-  async getSupplier(ownerUserId: number, supplierId: number): Promise<Supplier> {
+  async getSupplier(
+    ownerUserId: number,
+    supplierId: number,
+    includeContractStats: boolean,
+  ): Promise<Supplier> {
     const row = await suppliersRepository.findSupplier(
       ownerUserId,
       supplierId,
       getCurrentDateInAppTimeZone(),
+      includeContractStats,
     );
     if (!row) throw notFound();
     return mapSupplier(row);
   },
 
-  async createSupplier(actorUserId: number, rawInput: SupplierInput): Promise<Supplier> {
+  async createSupplier(
+    actorUserId: number,
+    rawInput: SupplierInput,
+    includeContractStats: boolean,
+  ): Promise<Supplier> {
     const input = normalize(rawInput);
     const supplierId = await withTransaction(async (transaction) => {
       const id = await suppliersRepository.createManualSupplier(transaction, input);
@@ -131,6 +145,7 @@ export const suppliersService = {
         actorUserId,
         id,
         getCurrentDateInAppTimeZone(),
+        includeContractStats,
         transaction,
       );
       if (!createdRow) {
@@ -150,13 +165,14 @@ export const suppliersService = {
       });
       return id;
     });
-    return this.getSupplier(actorUserId, supplierId);
+    return this.getSupplier(actorUserId, supplierId, includeContractStats);
   },
 
   async updateSupplier(
     actorUserId: number,
     supplierId: number,
     rawInput: SupplierInput,
+    includeContractStats: boolean,
   ): Promise<Supplier> {
     const input = normalize(rawInput);
     await withTransaction(async (transaction) => {
@@ -164,6 +180,7 @@ export const suppliersService = {
         actorUserId,
         supplierId,
         getCurrentDateInAppTimeZone(),
+        includeContractStats,
         transaction,
       );
       if (!currentRow) throw notFound();
@@ -177,6 +194,7 @@ export const suppliersService = {
         actorUserId,
         supplierId,
         getCurrentDateInAppTimeZone(),
+        includeContractStats,
         transaction,
       );
       if (!nextRow) throw notFound();
@@ -190,11 +208,11 @@ export const suppliersService = {
         afterValues: supplierSnapshot(next),
       });
     });
-    return this.getSupplier(actorUserId, supplierId);
+    return this.getSupplier(actorUserId, supplierId, includeContractStats);
   },
 
   async listActivity(ownerUserId: number, supplierId: number): Promise<SupplierActivity[]> {
-    await this.getSupplier(ownerUserId, supplierId);
+    await this.getSupplier(ownerUserId, supplierId, false);
     const records = await suppliersRepository.listActivity(supplierId);
     return records.map(mapSupplierActivity);
   },
@@ -204,7 +222,7 @@ export const suppliersService = {
     supplierId: number,
     filter: SupplierPriceFilter,
   ): Promise<SupplierPriceAnalytics> {
-    await this.getSupplier(ownerUserId, supplierId);
+    await this.getSupplier(ownerUserId, supplierId, false);
     return procurementTransactionsService.getSupplierPriceAnalytics(supplierId, filter);
   },
 
@@ -213,7 +231,7 @@ export const suppliersService = {
     supplierId: number,
     query: SupplierItemPriceListQuery,
   ): Promise<SupplierItemPriceList> {
-    await this.getSupplier(ownerUserId, supplierId);
+    await this.getSupplier(ownerUserId, supplierId, false);
     return procurementTransactionsService.listSupplierItemPriceSummaries(supplierId, query);
   },
 };

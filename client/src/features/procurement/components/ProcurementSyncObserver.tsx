@@ -1,13 +1,14 @@
 import { useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 
+import { hasAnyProcurementAccess } from '@/features/auth/access-permissions'
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { useProcurementSyncStatus } from '../hooks/use-procurement-sync-status'
 
 export function ProcurementSyncObserver() {
   const currentUser = useCurrentUser()
   const queryClient = useQueryClient()
-  const enabled = currentUser.data?.access.procurementEnabled === true
+  const enabled = hasAnyProcurementAccess(currentUser.data?.access)
   const status = useProcurementSyncStatus(enabled)
   const previousSuccessfulAt = useRef<string | null | undefined>(undefined)
 

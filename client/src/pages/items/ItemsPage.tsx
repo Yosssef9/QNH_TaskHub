@@ -16,6 +16,8 @@ import { TablePagination } from '@/components/shared/TablePagination'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { hasAccessPermission } from '@/features/auth/access-permissions'
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { ItemEditorDialog } from '@/features/items/components/ItemEditorDialog'
 import { ProcurementImportDialog } from '@/features/procurement-imports/components/ProcurementImportDialog'
 import { ItemPriceFilters } from '@/features/items/components/ItemPriceFilters'
@@ -41,6 +43,9 @@ function savedViewDisplayModeKey(viewId: number): string {
 export function ItemsPage() {
   const { t, i18n } = useTranslation()
   const locale = i18n.language
+  const currentUser = useCurrentUser()
+  const canAccessPriceQuotes = hasAccessPermission(currentUser.data?.access, 'PRICE_QUOTES')
+  const canAccessSuppliers = hasAccessPermission(currentUser.data?.access, 'SUPPLIERS')
   const [urlParams, setUrlParams] = useSearchParams()
   const initialView = Number(urlParams.get('view'))
   const [search, setSearch] = useState('')
@@ -206,7 +211,7 @@ export function ItemsPage() {
     itemIds: activeView?.config.itemIds ?? [],
     supplierIds,
     period,
-  }, secondaryAnalyticsEnabled)
+  }, secondaryAnalyticsEnabled && canAccessPriceQuotes)
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / pageSize))
   const startRow = data?.total ? (page - 1) * pageSize + 1 : 0
   const endRow = Math.min(page * pageSize, data?.total ?? 0)
@@ -293,10 +298,12 @@ export function ItemsPage() {
       description={t('items.pageDescription')}
       actions={
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => setImportOpen(true)}>
-            <FileUp className="size-4" />
-            {t('items.importExcel.button')}
-          </Button>
+          {canAccessPriceQuotes ? (
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <FileUp className="size-4" />
+              {t('items.importExcel.button')}
+            </Button>
+          ) : null}
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="size-4" />
             {t('items.create')}
@@ -307,7 +314,13 @@ export function ItemsPage() {
 
     <Card className="p-4"><ProcurementSavedViewsBar activeId={activeViewId} onActiveChange={changeView} /></Card>
 
-    {overview.data ? <ItemsOverviewCards overview={overview.data} quoteSummary={quoteSummary.data} /> : null}
+    {overview.data ? (
+      <ItemsOverviewCards
+        overview={overview.data}
+        quoteSummary={quoteSummary.data}
+        showQuoteSummary={canAccessPriceQuotes}
+      />
+    ) : null}
 
     <ItemPriceFilters
       period={period}
@@ -343,6 +356,7 @@ export function ItemsPage() {
           <SavedViewSupplierComparisonTable
             savedViewId={activeView.id}
             savedViewName={activeView.name}
+            canOpenSuppliers={canAccessSuppliers}
             items={data.items}
             suppliers={selectedSuppliers}
             period={period}
@@ -445,6 +459,7 @@ export function ItemsPage() {
                             </span>
                             <TableEntityLink
                               kind="supplier"
+                              enabled={canAccessSuppliers}
                               id={item.price.latestSupplierId}
                               name={item.price.latestSupplierName}
                               code={item.price.latestSupplierCode}
@@ -472,6 +487,7 @@ export function ItemsPage() {
                             </span>
                             <TableEntityLink
                               kind="supplier"
+                              enabled={canAccessSuppliers}
                               id={item.price.lowestSupplierId}
                               name={item.price.lowestSupplierName}
                               code={item.price.lowestSupplierCode}
@@ -497,6 +513,7 @@ export function ItemsPage() {
                             </span>
                             <TableEntityLink
                               kind="supplier"
+                              enabled={canAccessSuppliers}
                               id={item.price.highestSupplierId}
                               name={item.price.highestSupplierName}
                               code={item.price.highestSupplierCode}
@@ -658,12 +675,14 @@ export function ItemsPage() {
       </>}
     </Card>
     <ItemEditorDialog open={createOpen} onOpenChange={setCreateOpen} />
-    <ProcurementImportDialog
-      open={importOpen}
-      activeViewId={activeViewId}
-      onOpenChange={setImportOpen}
-      onApplied={(savedViewId) => changeView(savedViewId)}
-    />
+    {canAccessPriceQuotes ? (
+      <ProcurementImportDialog
+        open={importOpen}
+        activeViewId={activeViewId}
+        onOpenChange={setImportOpen}
+        onApplied={(savedViewId) => changeView(savedViewId)}
+      />
+    ) : null}
   </div>
 }
 

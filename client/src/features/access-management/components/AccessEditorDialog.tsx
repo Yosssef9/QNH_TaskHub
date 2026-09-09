@@ -17,7 +17,7 @@ import type { TaskHubRoleCode } from '@/features/auth/types/auth.types'
 import { ApiClientError } from '@/lib/api-error'
 
 import { useUpdateAccess } from '../hooks/use-update-access'
-import type { AccessUser } from '../types/access.types'
+import type { AccessUser, ProcurementAccessState } from '../types/access.types'
 import { AccessRoleIndicator } from './AccessRoleIndicator'
 
 interface AccessEditorDialogProps {
@@ -25,6 +25,8 @@ interface AccessEditorDialogProps {
   open: boolean
   onClose: () => void
 }
+
+const procurementKeys = ['contracts', 'items', 'suppliers', 'priceQuotes'] as const
 
 export function AccessEditorDialog({ onClose, open, user }: AccessEditorDialogProps) {
   if (!user) return null
@@ -43,7 +45,9 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
   const updateAccess = useUpdateAccess()
   const [roleCode, setRoleCode] = useState<TaskHubRoleCode>(user.roleCode ?? 'USER')
   const [isActive, setIsActive] = useState(user.roleCode ? user.accessIsActive : true)
-  const [procurementEnabled, setProcurementEnabled] = useState(user.procurementEnabled)
+  const [procurementAccess, setProcurementAccess] = useState<ProcurementAccessState>(
+    user.procurementAccess,
+  )
   const [meetingOrganizeEnabled, setMeetingOrganizeEnabled] = useState(
     user.meetingOrganizeEnabled ?? false,
   )
@@ -51,13 +55,17 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
     user.meetingCoordinateEnabled ?? false,
   )
 
+  function setProcurementPermission(key: keyof ProcurementAccessState, enabled: boolean) {
+    setProcurementAccess((current) => ({ ...current, [key]: enabled }))
+  }
+
   function save() {
     updateAccess.mutate(
       {
         userId: user.userId,
         roleCode,
         isActive,
-        procurementEnabled,
+        procurementAccess,
         meetingOrganizeEnabled,
         meetingCoordinateEnabled,
       },
@@ -134,18 +142,30 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
             />
           </div>
 
-          <div className="bg-muted/60 flex items-center justify-between gap-4 rounded-lg border p-4">
+          <div className="space-y-3 rounded-lg border p-4">
             <div>
-              <p className="text-sm font-medium">{t('access.procurementModule')}</p>
+              <p className="text-sm font-medium">{t('access.procurementPermissions')}</p>
               <p className="text-muted-foreground mt-1 text-xs leading-5">
-                {t('access.procurementModuleDescription')}
+                {t('access.procurementPermissionsDescription')}
               </p>
             </div>
-            <Switch
-              checked={procurementEnabled}
-              aria-label={t('access.procurementModule')}
-              onCheckedChange={setProcurementEnabled}
-            />
+            <div className="grid gap-2 sm:grid-cols-2">
+              {procurementKeys.map((key) => (
+                <div
+                  key={key}
+                  className="bg-muted/60 flex items-center justify-between gap-3 rounded-lg border p-3"
+                >
+                  <span className="text-sm font-medium">
+                    {t(`access.procurement.${key}`)}
+                  </span>
+                  <Switch
+                    checked={procurementAccess[key]}
+                    aria-label={t(`access.procurement.${key}`)}
+                    onCheckedChange={(checked) => setProcurementPermission(key, checked)}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="space-y-3 rounded-lg border p-4">
@@ -186,14 +206,12 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
           </div>
         </div>
 
-        <div className="mt-7 flex justify-end gap-2">
+        <div className="mt-6 flex justify-end gap-2">
           <Button variant="outline" disabled={updateAccess.isPending} onClick={onClose}>
             {t('common.cancel')}
           </Button>
           <Button disabled={updateAccess.isPending} onClick={save}>
-            {updateAccess.isPending ? (
-              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
-            ) : null}
+            {updateAccess.isPending ? <Loader2 aria-hidden="true" className="size-4 animate-spin" /> : null}
             {t('common.save')}
           </Button>
         </div>
@@ -201,4 +219,3 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
     </Dialog>
   )
 }
-

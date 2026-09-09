@@ -117,7 +117,16 @@ export const notificationsRepository = {
                 ON user_settings.portal_user_id = contract_settings.owner_user_id
               WHERE contract_settings.owner_user_id = notification.owner_user_id
                 AND access.is_active = 1
-                AND access.procurement_enabled = 1
+                AND EXISTS (
+                  SELECT 1
+                  FROM dbo.TM_access_permissions AS contract_permission
+                  WHERE contract_permission.grantee_user_id = access.portal_user_id
+                    AND contract_permission.module_code = 'PROCUREMENT'
+                    AND contract_permission.entity_code = 'CONTRACTS'
+                    AND contract_permission.permission_code = 'ACCESS'
+                    AND contract_permission.resource_owner_user_id IS NULL
+                    AND contract_permission.is_active = 1
+                )
                 AND user_settings.email_notifications_enabled = 1
                 AND (
                   (notification.notification_type = 'CONTRACT_EXPIRATION_REMINDER'
@@ -370,7 +379,16 @@ export const notificationsRepository = {
           ON access.portal_user_id = contract.owner_user_id
         WHERE contract.owner_user_id = @owner
           AND access.is_active = 1
-          AND access.procurement_enabled = 1
+          AND EXISTS (
+            SELECT 1
+            FROM dbo.TM_access_permissions AS contract_permission
+            WHERE contract_permission.grantee_user_id = access.portal_user_id
+              AND contract_permission.module_code = 'PROCUREMENT'
+              AND contract_permission.entity_code = 'CONTRACTS'
+              AND contract_permission.permission_code = 'ACCESS'
+              AND contract_permission.resource_owner_user_id IS NULL
+              AND contract_permission.is_active = 1
+          )
           AND contract.is_active = 1
           AND contract.end_date IS NOT NULL
           AND @today BETWEEN DATEADD(DAY, -settings.expiration_reminder_lead_days, contract.end_date) AND contract.end_date
@@ -393,7 +411,16 @@ export const notificationsRepository = {
           ON access.portal_user_id = contract.owner_user_id
         WHERE contract.owner_user_id = @owner
           AND access.is_active = 1
-          AND access.procurement_enabled = 1
+          AND EXISTS (
+            SELECT 1
+            FROM dbo.TM_access_permissions AS contract_permission
+            WHERE contract_permission.grantee_user_id = access.portal_user_id
+              AND contract_permission.module_code = 'PROCUREMENT'
+              AND contract_permission.entity_code = 'CONTRACTS'
+              AND contract_permission.permission_code = 'ACCESS'
+              AND contract_permission.resource_owner_user_id IS NULL
+              AND contract_permission.is_active = 1
+          )
           AND contract.is_active = 1
           AND contract.is_auto_renewal = 1
           AND contract.end_date IS NOT NULL

@@ -41,6 +41,7 @@ export function ContractFilesPanel({ contract }: { contract: Contract }) {
 
   const attachments = query.data ?? []
   const limitReached = attachments.length >= 10
+  const canManageFiles = contract.isActive && contract.access.canManageAttachments
 
   async function download(attachment: ContractAttachment) {
     try {
@@ -74,7 +75,7 @@ export function ContractFilesPanel({ contract }: { contract: Contract }) {
               {t('contracts.files.count', { count: attachments.length })}
             </p>
           </div>
-          {contract.isActive ? (
+          {canManageFiles ? (
             <Button
               onClick={() => setUploadOpen(true)}
               disabled={limitReached}
@@ -86,7 +87,7 @@ export function ContractFilesPanel({ contract }: { contract: Contract }) {
           ) : null}
         </div>
 
-        {limitReached ? (
+        {canManageFiles && limitReached ? (
           <div className="bg-muted/50 rounded-xl border p-3 text-sm">
             {t('contracts.files.limitReached')}
           </div>
@@ -98,7 +99,7 @@ export function ContractFilesPanel({ contract }: { contract: Contract }) {
             title={t('contracts.files.emptyTitle')}
             description={t('contracts.files.emptyDescription')}
             action={
-              contract.isActive ? (
+              canManageFiles ? (
                 <Button onClick={() => setUploadOpen(true)}>
                   <Plus aria-hidden="true" className="size-4" />
                   {t('contracts.files.add')}
@@ -123,6 +124,9 @@ export function ContractFilesPanel({ contract }: { contract: Contract }) {
                         {attachment.fileExtension.slice(1).toUpperCase()} · {formatBytes(attachment.sizeBytes)} ·{' '}
                         {formatDateTime(attachment.createdAtUtc, i18n.language, timeFormat)}
                       </p>
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        {t('contracts.files.uploadedBy', { name: attachment.uploadedByUserName })}
+                      </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Button variant="outline" size="sm" onClick={() => setPreview(attachment)}>
@@ -133,7 +137,7 @@ export function ContractFilesPanel({ contract }: { contract: Contract }) {
                         <Download aria-hidden="true" className="size-4" />
                         {t('contracts.files.download')}
                       </Button>
-                      {contract.isActive ? (
+                      {canManageFiles ? (
                         <Button
                           variant="ghost"
                           size="icon"

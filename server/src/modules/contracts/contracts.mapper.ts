@@ -51,9 +51,18 @@ function activityType(value: string): ContractActivityType {
   });
 }
 
-export function mapContract(record: ContractRecord): Contract {
+export function mapContract(
+  record: ContractRecord,
+  context: { ownerUserId: number; ownerUserName: string; isOwner: boolean; canManageAttachments: boolean },
+): Contract {
   return {
     id: Number(record.id),
+    ownerUserId: context.ownerUserId,
+    ownerUserName: context.ownerUserName,
+    access: {
+      isOwner: context.isOwner,
+      canManageAttachments: context.canManageAttachments,
+    },
     supplierId: Number(record.supplierId),
     supplierName: record.supplierName,
     contractNumber: record.contractNumber,
@@ -89,6 +98,8 @@ export function mapContractAttachment(record: ContractAttachmentRecord): Contrac
     fileExtension: record.fileExtension,
     sizeBytes: Number(record.sizeBytes),
     createdAtUtc: record.createdAtUtc.toISOString(),
+    uploadedByUserId: Number(record.uploadedByUserId),
+    uploadedByUserName: record.uploadedByUserName,
   };
 }
 
@@ -120,6 +131,12 @@ export function mapActivity(record: ActivityRecord): ContractActivity {
 
   return {
     id: Number(record.id),
+    ownerUserId: context.ownerUserId,
+    ownerUserName: context.ownerUserName,
+    access: {
+      isOwner: context.isOwner,
+      canManageAttachments: context.canManageAttachments,
+    },
     type: activityType(record.activityType),
     changes,
     actorUserId: record.actorUserId,

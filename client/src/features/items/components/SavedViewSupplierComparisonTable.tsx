@@ -60,6 +60,7 @@ interface SelectedPair {
 export function SavedViewSupplierComparisonTable({
   savedViewId,
   savedViewName,
+  canOpenSuppliers = true,
   items,
   suppliers,
   period,
@@ -77,6 +78,7 @@ export function SavedViewSupplierComparisonTable({
 }: {
   savedViewId: number
   savedViewName: string
+  canOpenSuppliers?: boolean
   items: ItemListItem[]
   suppliers: SearchableSelectOption[]
   period: ProcurementPricePeriod
@@ -301,6 +303,7 @@ export function SavedViewSupplierComparisonTable({
                           name={supplier.label}
                           code={supplier.description ?? null}
                           compact
+                          enabled={canOpenSuppliers}
                           className="max-w-[13rem] min-w-0"
                         />
                         <Button
@@ -406,7 +409,7 @@ export function SavedViewSupplierComparisonTable({
                     <td className="group-hover:bg-primary/[0.015] relative z-0 overflow-hidden border-e border-b p-2 align-top">
                       {priceSource === 'compare' ? (
                         compareWinners ? (
-                          <CompareResult winners={compareWinners} metric={metric} locale={locale} />
+                          <CompareResult winners={compareWinners} metric={metric} locale={locale} canOpenSuppliers={canOpenSuppliers} />
                         ) : compareGroups.length > 1 ? (
                           <div>
                             <p className="font-medium">{t('items.matrix.multipleScopes')}</p>
@@ -425,6 +428,7 @@ export function SavedViewSupplierComparisonTable({
                           metric={metric}
                           source={priceSource}
                           locale={locale}
+                          canOpenSuppliers={canOpenSuppliers}
                         />
                       ) : scopeGroups.size > 1 ? (
                         <div>
@@ -737,11 +741,13 @@ function SingleSourceResult({
   metric,
   source,
   locale,
+  canOpenSuppliers,
 }: {
   cell: ItemSupplierMatrixCell
   metric: ItemSupplierMatrixMetric
   source: SinglePriceSource
   locale: string
+  canOpenSuppliers: boolean
 }) {
   const { t } = useTranslation()
   const data = metricValue(cell, metric, source)
@@ -756,6 +762,7 @@ function SingleSourceResult({
           name={cell.supplierName}
           code={cell.supplierCode}
           compact
+          enabled={canOpenSuppliers}
         />
       </div>
       <p dir="ltr" className="mt-1 text-sm font-semibold tabular-nums">
@@ -784,10 +791,12 @@ function CompareResult({
   winners,
   metric,
   locale,
+  canOpenSuppliers,
 }: {
   winners: EffectiveComparisonEntry[]
   metric: ItemSupplierMatrixMetric
   locale: string
+  canOpenSuppliers: boolean
 }) {
   const { t } = useTranslation()
   return (
@@ -803,6 +812,7 @@ function CompareResult({
                 name={cell.supplierName}
                 code={cell.supplierCode}
                 compact
+                enabled={canOpenSuppliers}
               />
             </div>
             <p dir="ltr" className="mt-1 text-sm font-semibold tabular-nums">

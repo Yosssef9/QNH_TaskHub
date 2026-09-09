@@ -7,6 +7,7 @@ import { ReturnToPortalButton } from '@/components/shared/ReturnToPortalButton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { navigationItems } from '@/config/navigation'
 import { cn } from '@/lib/cn'
+import { hasAnyProcurementAccess } from '@/features/auth/access-permissions'
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { ProcurementSidebarSection } from '@/features/procurement/components/ProcurementSidebarSection'
 import { ListsSidebarSection } from '@/features/lists/components/ListsSidebarSection'
@@ -34,7 +35,10 @@ export function AppSidebar({ collapsed = false, onNavigate }: AppSidebarProps) {
   >(() =>
     location.pathname.startsWith('/meetings')
       ? 'meetings'
-      : location.pathname.startsWith('/contracts') || location.pathname.startsWith('/suppliers')
+      : location.pathname.startsWith('/contracts') ||
+          location.pathname.startsWith('/items') ||
+          location.pathname.startsWith('/suppliers') ||
+          location.pathname.startsWith('/price-quotes')
         ? 'procurement'
         : location.pathname.startsWith('/work-cycles') ||
             location.pathname.startsWith('/kpi-tasks')
@@ -50,7 +54,10 @@ export function AppSidebar({ collapsed = false, onNavigate }: AppSidebarProps) {
   useEffect(() => {
     if (location.pathname.startsWith('/meetings')) {
       setOpenSection('meetings')
-    } else if (location.pathname.startsWith('/contracts') || location.pathname.startsWith('/suppliers')) {
+    } else if (location.pathname.startsWith('/contracts') ||
+          location.pathname.startsWith('/items') ||
+          location.pathname.startsWith('/suppliers') ||
+          location.pathname.startsWith('/price-quotes')) {
       setOpenSection('procurement')
     } else if (
       location.pathname.startsWith('/work-cycles') ||
@@ -228,7 +235,7 @@ export function AppSidebar({ collapsed = false, onNavigate }: AppSidebarProps) {
           onCreate={() => setCreateKpiOpen(true)}
           onNavigate={onNavigate}
         />
-        {data?.access.procurementEnabled ? (
+        {hasAnyProcurementAccess(data?.access) ? (
           <ProcurementSidebarSection
             collapsed={collapsed}
             expanded={openSection === 'procurement'}

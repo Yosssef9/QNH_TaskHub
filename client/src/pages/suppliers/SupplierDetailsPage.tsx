@@ -10,6 +10,8 @@ import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { hasAccessPermission } from '@/features/auth/access-permissions'
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { ContractStatusBadge } from '@/features/contracts/components/ContractStatusBadge'
 import { PriceQuoteScopePanel } from '@/features/price-quotes/components/PriceQuoteScopePanel'
 import { displayDate } from '@/features/contracts/components/contract-display'
@@ -34,6 +36,10 @@ const PERIODS: ProcurementPricePeriod[] = ['1M', '3M', '6M', '1Y', 'ALL']
 
 export function SupplierDetailsPage() {
   const { t, i18n } = useTranslation()
+  const currentUser = useCurrentUser()
+  const canAccessContracts = hasAccessPermission(currentUser.data?.access, 'CONTRACTS')
+  const canAccessItems = hasAccessPermission(currentUser.data?.access, 'ITEMS')
+  const canAccessPriceQuotes = hasAccessPermission(currentUser.data?.access, 'PRICE_QUOTES')
   const params = useParams()
   const rawId = Number(params.supplierId)
   const supplierId = Number.isSafeInteger(rawId) && rawId !== 0 ? rawId : null
@@ -60,7 +66,7 @@ export function SupplierDetailsPage() {
     ...(supplierId === null ? {} : { supplierId }),
     sortBy: 'endDate',
     sortDirection: 'asc',
-  })
+  }, canAccessContracts)
 
   if (supplierId === null) return <Navigate to="/suppliers" replace />
   if (supplierQuery.isPending) return <LoadingState />
@@ -137,7 +143,7 @@ export function SupplierDetailsPage() {
           <ShoppingCart aria-hidden="true" className="size-4" />
           {t('suppliers.intelligence.itemsAndPrices')}
         </Button>
-        <Button
+        {canAccessPriceQuotes ? <Button
           variant="ghost"
           size="sm"
           onClick={() =>
@@ -145,8 +151,8 @@ export function SupplierDetailsPage() {
           }
         >
           {t('priceQuotes.myQuotes')}
-        </Button>
-        <Button
+        </Button> : null}
+        {canAccessContracts ? <Button
           variant="ghost"
           size="sm"
           onClick={() =>
@@ -155,7 +161,7 @@ export function SupplierDetailsPage() {
         >
           <FileText aria-hidden="true" className="size-4" />
           {t('suppliers.myContracts')}
-        </Button>
+        </Button> : null}
         <Button
           variant="ghost"
           size="sm"
@@ -176,6 +182,7 @@ export function SupplierDetailsPage() {
         ) : (
           <SupplierItemsPriceTable
             supplierId={supplierId}
+            canOpenItems={canAccessItems}
             data={itemPrices.data}
             period={period}
             page={itemPage}
@@ -195,12 +202,12 @@ export function SupplierDetailsPage() {
         )}
       </section>
 
-      <section id="my-quotes" className="scroll-mt-24">
+      {canAccessPriceQuotes ? <section id="my-quotes" className="scroll-mt-24">
         <PriceQuoteScopePanel
           supplier={{ id: supplier.id, name: supplier.name, currency: supplier.currency }}
           period={period}
         />
-      </section>
+      </section> : null}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)]">
         <Card>
@@ -239,7 +246,7 @@ export function SupplierDetailsPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        {canAccessContracts ? <Card>
           <CardHeader>
             <CardTitle>{t('suppliers.myContracts')}</CardTitle>
           </CardHeader>
@@ -255,10 +262,10 @@ export function SupplierDetailsPage() {
               {t('suppliers.privateContractsHint')}
             </p>
           </CardContent>
-        </Card>
+        </Card> : null}
       </div>
 
-      <Card id="my-contracts" className="scroll-mt-24">
+      {canAccessContracts ? <Card id="my-contracts" className="scroll-mt-24">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText aria-hidden="true" className="size-4" />
@@ -301,7 +308,7 @@ export function SupplierDetailsPage() {
             </div>
           )}
         </CardContent>
-      </Card>
+      </Card> : null}
 
       <Card id="activity" className="scroll-mt-24">
         <CardHeader>

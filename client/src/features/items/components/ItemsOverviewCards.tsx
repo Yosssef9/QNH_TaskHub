@@ -7,9 +7,11 @@ import type { ItemsOverview } from '../types/item.types'
 export function ItemsOverviewCards({
   overview,
   quoteSummary,
+  showQuoteSummary = true,
 }: {
   overview: ItemsOverview
   quoteSummary?: PriceQuoteSummary | undefined
+  showQuoteSummary?: boolean | undefined
 }) {
   const { t } = useTranslation()
   const primary = [
@@ -35,11 +37,13 @@ export function ItemsOverviewCards({
         <div className="border-b bg-muted/25 px-4 py-3">
           <p className="flex items-center gap-2 text-sm font-semibold"><TriangleAlert className="text-warning-foreground size-4" />{t('items.analytics.needsAttention')}</p>
         </div>
-        <div className="grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">
+        <div className={`grid divide-y sm:grid-cols-2 sm:divide-x sm:divide-y-0 ${showQuoteSummary ? 'xl:grid-cols-4' : 'xl:grid-cols-3'}`}>
           <Attention label={t('items.analytics.priceIncreases')} value={overview.priceIncreases} icon={ArrowUp} tone="bad" />
           <Attention label={t('items.analytics.priceDecreases')} value={overview.priceDecreases} icon={ArrowDown} tone="good" />
           <Attention label={t('items.analytics.latestAtHistoricalHigh')} value={overview.latestAtHistoricalHigh} icon={ArrowUp} tone="warn" />
-          <Attention label={t('priceQuotes.belowActualCount')} value={quoteSummary?.quotesBelowLatestActualCount ?? 0} icon={ArrowDown} tone="good" />
+          {showQuoteSummary ? (
+            <Attention label={t('priceQuotes.belowActualCount')} value={quoteSummary?.quotesBelowLatestActualCount ?? 0} icon={ArrowDown} tone="good" />
+          ) : null}
         </div>
       </Card>
     </div>

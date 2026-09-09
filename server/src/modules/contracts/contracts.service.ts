@@ -3,14 +3,21 @@ import path from "node:path";
 import { withTransaction } from "../../database/transaction.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
-import { mapActivity, mapContract, mapContractAttachment, mapSummary } from "./contracts.mapper.js";
+import { accessPermissionsRepository } from "../access-permissions/access-permissions.repository.js";
+import type { AccessPermission, ContractAccessScope } from "../access-permissions/access-permissions.types.js";
+import { suppliersRepository } from "../suppliers/suppliers.repository.js";
 import {
   readContractAttachment,
   removeStoredContractAttachment,
   storeContractAttachment,
 } from "./contract-attachment-storage.js";
+import {
+  requireContractAttachmentManagement,
+  requireContractOwner,
+  resolveContractResourceAccess,
+} from "./contracts-access.policy.js";
+import { mapActivity, mapContract, mapContractAttachment, mapSummary } from "./contracts.mapper.js";
 import { contractsRepository } from "./contracts.repository.js";
-import { suppliersRepository } from "../suppliers/suppliers.repository.js";
 import type {
   Contract,
   ContractActivity,
@@ -18,6 +25,7 @@ import type {
   ContractInput,
   ContractList,
   ContractListQuery,
+  ContractScope,
   ContractUserSettings,
   RowVersionInput,
   UpdateContractInput,
@@ -103,7 +111,6 @@ function contractChanges(
   );
 }
 
-
 function contractAttachmentNotFound(): AppError {
   return new AppError({
     statusCode: 404,
@@ -149,8 +156,46 @@ function signatureMatches(extension: string, buffer: Buffer): boolean {
   return false;
 }
 
+async function scopeContext(
+  actorUserId: number,
+  permissions: readonly AccessPermission[],
+  ownerUserId: number,
+): Promise<ContractScope> {
+  const owner = await contractsRepository.findContractOwnerIdentity(ownerUserId);
+  if (!owner) throw notFound("Contract");
+  const access = resolveContractResourceAccess(actorUserId, permissions, ownerUserId);
+  return {
+    ownerUserId,
+    ownerUserName: owner.ownerUserName,
+    isOwn: access.isOwner,
+    canManageAttachments: access.canManageAttachments,
+  };
+}
+
+function mapWithScope(
+  row: Parameters<typeof mapContract>[0],
+  scope: ContractScope,
+): Contract {
+  return mapContract(row, {
+    ownerUserId: scope.ownerUserId,
+    ownerUserName: scope.ownerUserName,
+    isOwner: scope.isOwn,
+    canManageAttachments: scope.canManageAttachments,
+  });
+}
+
 export const contractsService = {
-  async listContracts(ownerUserId: number, query: ContractListQuery): Promise<ContractList> {
+  async listAccessScopes(actorUserId: number): Promise<ContractAccessScope[]> {
+    return accessPermissionsRepository.listContractAccessScopes(actorUserId);
+  },
+
+  async listContracts(
+    actorUserId: number,
+    permissions: readonly AccessPermission[],
+    query: ContractListQuery,
+  ): Promise<ContractList> {
+    const ownerUserId = query.ownerUserId ?? actorUserId;
+    const scope = await scopeContext(actorUserId, permissions, ownerUserId);
     const settings = await getSettings(ownerUserId);
     const today = getCurrentDateInAppTimeZone();
     const [page, summary] = await Promise.all([
@@ -158,7 +203,8 @@ export const contractsService = {
       contractsRepository.getContractSummary(ownerUserId, today, settings.expiringSoonDays),
     ]);
     return {
-      items: page.records.map(mapContract),
+      scope,
+      items: page.records.map((row) => mapWithScope(row, scope)),
       page: query.page,
       pageSize: query.pageSize,
       total: page.total,
@@ -166,52 +212,73 @@ export const contractsService = {
     };
   },
 
-  async getContract(ownerUserId: number, contractId: number): Promise<Contract> {
-    const settings = await getSettings(ownerUserId);
+  async getContract(
+    actorUserId: number,
+    permissions: readonly AccessPermission[],
+    contractId: number,
+  ): Promise<Contract> {
+    const owner = await contractsRepository.findContractOwner(contractId);
+    if (!owner) throw notFound("Contract");
+    const scope = await scopeContext(actorUserId, permissions, Number(owner.ownerUserId));
+    const settings = await getSettings(scope.ownerUserId);
     const row = await contractsRepository.findOwnedContract(
-      ownerUserId,
+      scope.ownerUserId,
       contractId,
       getCurrentDateInAppTimeZone(),
       settings.expiringSoonDays,
     );
     if (!row) throw notFound("Contract");
-    return mapContract(row);
+    return mapWithScope(row, scope);
   },
 
-  async createContract(ownerUserId: number, rawInput: ContractInput): Promise<Contract> {
+  async createContract(
+    actorUserId: number,
+    permissions: readonly AccessPermission[],
+    rawInput: ContractInput,
+  ): Promise<Contract> {
     const input = normalizeContract(rawInput);
     const contractId = await withTransaction(async (transaction) => {
       const supplier = await suppliersRepository.findSupplierIdentity(input.supplierId, transaction);
       if (!supplier) throw notFound("Supplier");
-      const id = await contractsRepository.createContract(transaction, ownerUserId, input);
-      await contractsRepository.addContractActivity(transaction, ownerUserId, id, "CREATED", null);
+      const id = await contractsRepository.createContract(transaction, actorUserId, input);
+      await contractsRepository.addContractActivity(
+        transaction,
+        actorUserId,
+        id,
+        "CREATED",
+        actorUserId,
+        null,
+      );
       return id;
     });
-    return this.getContract(ownerUserId, contractId);
+    return this.getContract(actorUserId, permissions, contractId);
   },
 
   async updateContract(
-    ownerUserId: number,
+    actorUserId: number,
+    permissions: readonly AccessPermission[],
     contractId: number,
     rawInput: UpdateContractInput,
   ): Promise<Contract> {
-    const input = normalizeContract(rawInput);
-    const settings = await getSettings(ownerUserId);
-    const today = getCurrentDateInAppTimeZone();
+    const owner = await contractsRepository.findContractOwner(contractId);
+    if (!owner) throw notFound("Contract");
+    const scope = await scopeContext(actorUserId, permissions, Number(owner.ownerUserId));
+    requireContractOwner({ isOwner: scope.isOwn, canManageAttachments: scope.canManageAttachments });
 
+    const input = normalizeContract(rawInput);
+    const settings = await getSettings(scope.ownerUserId);
+    const today = getCurrentDateInAppTimeZone();
     await withTransaction(async (transaction) => {
       const currentRow = await contractsRepository.findOwnedContractForUpdate(
         transaction,
-        ownerUserId,
+        scope.ownerUserId,
         contractId,
         today,
         settings.expiringSoonDays,
       );
       if (!currentRow) throw notFound("Contract");
-      const current = mapContract(currentRow);
-      if (current.rowVersion.toUpperCase() !== rawInput.rowVersion.toUpperCase()) {
-        throw stale("Contract");
-      }
+      const current = mapWithScope(currentRow, scope);
+      if (current.rowVersion.toUpperCase() !== rawInput.rowVersion.toUpperCase()) throw stale("Contract");
       if (!current.isActive) {
         throw new AppError({
           statusCode: 409,
@@ -220,18 +287,14 @@ export const contractsService = {
         });
       }
 
-      const selectedSupplier = await suppliersRepository.findSupplierIdentity(
-        input.supplierId,
-        transaction,
-      );
+      const selectedSupplier = await suppliersRepository.findSupplierIdentity(input.supplierId, transaction);
       if (!selectedSupplier) throw notFound("Supplier");
-
       const changes = contractChanges(current, input, selectedSupplier.name);
       if (Object.keys(changes).length === 0) return;
 
       const updated = await contractsRepository.updateContract(
         transaction,
-        ownerUserId,
+        scope.ownerUserId,
         contractId,
         rawInput.rowVersion,
         input,
@@ -239,39 +302,46 @@ export const contractsService = {
       if (!updated) throw stale("Contract");
       await contractsRepository.addContractActivity(
         transaction,
-        ownerUserId,
+        scope.ownerUserId,
         contractId,
         "UPDATED",
+        actorUserId,
         changes,
       );
     });
 
-    return this.getContract(ownerUserId, contractId);
+    return this.getContract(actorUserId, permissions, contractId);
   },
 
   async setContractArchived(
-    ownerUserId: number,
+    actorUserId: number,
+    permissions: readonly AccessPermission[],
     contractId: number,
     input: RowVersionInput,
     archived: boolean,
   ): Promise<Contract> {
-    const settings = await getSettings(ownerUserId);
+    const owner = await contractsRepository.findContractOwner(contractId);
+    if (!owner) throw notFound("Contract");
+    const scope = await scopeContext(actorUserId, permissions, Number(owner.ownerUserId));
+    requireContractOwner({ isOwner: scope.isOwn, canManageAttachments: scope.canManageAttachments });
+    const settings = await getSettings(scope.ownerUserId);
+
     await withTransaction(async (transaction) => {
       const currentRow = await contractsRepository.findOwnedContractForUpdate(
         transaction,
-        ownerUserId,
+        scope.ownerUserId,
         contractId,
         getCurrentDateInAppTimeZone(),
         settings.expiringSoonDays,
       );
       if (!currentRow) throw notFound("Contract");
-      const current = mapContract(currentRow);
+      const current = mapWithScope(currentRow, scope);
       if (current.rowVersion.toUpperCase() !== input.rowVersion.toUpperCase()) throw stale("Contract");
       if (current.isActive === !archived) return;
 
       const changed = await contractsRepository.setContractActive(
         transaction,
-        ownerUserId,
+        scope.ownerUserId,
         contractId,
         input.rowVersion,
         !archived,
@@ -279,35 +349,53 @@ export const contractsService = {
       if (!changed) throw stale("Contract");
       await contractsRepository.addContractActivity(
         transaction,
-        ownerUserId,
+        scope.ownerUserId,
         contractId,
         archived ? "ARCHIVED" : "RESTORED",
+        actorUserId,
         null,
       );
     });
-    return this.getContract(ownerUserId, contractId);
+    return this.getContract(actorUserId, permissions, contractId);
   },
 
-  async listActivity(ownerUserId: number, contractId: number): Promise<ContractActivity[]> {
-    await this.getContract(ownerUserId, contractId);
-    const rows = await contractsRepository.listContractActivity(ownerUserId, contractId);
+  async listActivity(
+    actorUserId: number,
+    permissions: readonly AccessPermission[],
+    contractId: number,
+  ): Promise<ContractActivity[]> {
+    const contract = await this.getContract(actorUserId, permissions, contractId);
+    const rows = await contractsRepository.listContractActivity(contract.ownerUserId, contractId);
     return rows.map(mapActivity);
   },
 
-  async listAttachments(ownerUserId: number, contractId: number): Promise<ContractAttachment[]> {
-    await this.getContract(ownerUserId, contractId);
-    const rows = await contractsRepository.listContractAttachments(ownerUserId, contractId);
+  async listAttachments(
+    actorUserId: number,
+    permissions: readonly AccessPermission[],
+    contractId: number,
+  ): Promise<ContractAttachment[]> {
+    const contract = await this.getContract(actorUserId, permissions, contractId);
+    const rows = await contractsRepository.listContractAttachments(contract.ownerUserId, contractId);
     return rows.map(mapContractAttachment);
   },
 
   async uploadAttachment(
-    ownerUserId: number,
+    actorUserId: number,
+    permissions: readonly AccessPermission[],
     contractId: number,
     file: Express.Multer.File,
   ): Promise<ContractAttachment> {
+    const owner = await contractsRepository.findContractOwner(contractId);
+    if (!owner) throw notFound("Contract");
+    const scope = await scopeContext(actorUserId, permissions, Number(owner.ownerUserId));
+    requireContractAttachmentManagement({
+      isOwner: scope.isOwn,
+      canManageAttachments: scope.canManageAttachments,
+    });
+
     const originalFileName = cleanAttachmentName(file.originalname);
     const extension = path.extname(originalFileName).toLowerCase();
-    if (![".pdf", ".png", ".jpg", ".jpeg"].includes(extension) || !signatureMatches(extension, file.buffer)) {
+    if (!['.pdf', '.png', '.jpg', '.jpeg'].includes(extension) || !signatureMatches(extension, file.buffer)) {
       throw new AppError({
         statusCode: 400,
         code: "CONTRACT_ATTACHMENT_CONTENT_INVALID",
@@ -317,28 +405,28 @@ export const contractsService = {
 
     const storageKey = await storeContractAttachment(file.buffer, extension);
     try {
-      const settings = await getSettings(ownerUserId);
+      const settings = await getSettings(scope.ownerUserId);
       const created = await withTransaction(async (transaction) => {
         const currentRow = await contractsRepository.findOwnedContractForUpdate(
           transaction,
-          ownerUserId,
+          scope.ownerUserId,
           contractId,
           getCurrentDateInAppTimeZone(),
           settings.expiringSoonDays,
         );
         if (!currentRow) throw notFound("Contract");
-        const current = mapContract(currentRow);
+        const current = mapWithScope(currentRow, scope);
         if (!current.isActive) {
           throw new AppError({
             statusCode: 409,
             code: "ARCHIVED_CONTRACT_READ_ONLY",
-            message: "Restore the contract before adding files.",
+            message: "Archived Contracts are read-only.",
           });
         }
 
         const fileCount = await contractsRepository.countActiveContractAttachments(
           transaction,
-          ownerUserId,
+          scope.ownerUserId,
           contractId,
         );
         if (fileCount >= 10) {
@@ -350,13 +438,14 @@ export const contractsService = {
         }
 
         const record = await contractsRepository.createContractAttachment(transaction, {
-          ownerUserId,
+          ownerUserId: scope.ownerUserId,
           contractId,
           originalFileName,
           storageKey,
           mimeType: attachmentMimeType(extension),
           fileExtension: extension,
           sizeBytes: file.size,
+          uploadedByUserId: actorUserId,
         });
         if (!record) {
           throw new AppError({
@@ -368,9 +457,10 @@ export const contractsService = {
 
         await contractsRepository.addContractActivity(
           transaction,
-          ownerUserId,
+          scope.ownerUserId,
           contractId,
           "ATTACHMENT_ADDED",
+          actorUserId,
           {
             attachmentId: { from: null, to: record.id },
             fileName: { from: null, to: originalFileName },
@@ -386,9 +476,16 @@ export const contractsService = {
     }
   },
 
-  async readAttachment(ownerUserId: number, attachmentId: string) {
+  async readAttachment(
+    actorUserId: number,
+    permissions: readonly AccessPermission[],
+    attachmentId: string,
+  ) {
+    const owner = await contractsRepository.findContractAttachmentOwner(attachmentId);
+    if (!owner) throw contractAttachmentNotFound();
+    resolveContractResourceAccess(actorUserId, permissions, owner.ownerUserId);
     const attachment = await contractsRepository.findOwnedContractAttachment(
-      ownerUserId,
+      owner.ownerUserId,
       attachmentId,
     );
     if (!attachment) throw contractAttachmentNotFound();
@@ -398,11 +495,23 @@ export const contractsService = {
     };
   },
 
-  async removeAttachment(ownerUserId: number, attachmentId: string): Promise<void> {
-    const settings = await getSettings(ownerUserId);
+  async removeAttachment(
+    actorUserId: number,
+    permissions: readonly AccessPermission[],
+    attachmentId: string,
+  ): Promise<void> {
+    const owner = await contractsRepository.findContractAttachmentOwner(attachmentId);
+    if (!owner) throw contractAttachmentNotFound();
+    const scope = await scopeContext(actorUserId, permissions, owner.ownerUserId);
+    requireContractAttachmentManagement({
+      isOwner: scope.isOwn,
+      canManageAttachments: scope.canManageAttachments,
+    });
+    const settings = await getSettings(scope.ownerUserId);
+
     const removed = await withTransaction(async (transaction) => {
       const attachment = await contractsRepository.findOwnedContractAttachment(
-        ownerUserId,
+        scope.ownerUserId,
         attachmentId,
         transaction,
       );
@@ -410,33 +519,34 @@ export const contractsService = {
 
       const currentRow = await contractsRepository.findOwnedContractForUpdate(
         transaction,
-        ownerUserId,
+        scope.ownerUserId,
         Number(attachment.contractId),
         getCurrentDateInAppTimeZone(),
         settings.expiringSoonDays,
       );
       if (!currentRow) throw notFound("Contract");
-      const contract = mapContract(currentRow);
+      const contract = mapWithScope(currentRow, scope);
       if (!contract.isActive) {
         throw new AppError({
           statusCode: 409,
           code: "ARCHIVED_CONTRACT_READ_ONLY",
-          message: "Restore the contract before removing files.",
+          message: "Archived Contracts are read-only.",
         });
       }
 
       const changed = await contractsRepository.deactivateContractAttachment(
         transaction,
-        ownerUserId,
+        scope.ownerUserId,
         attachmentId,
       );
       if (!changed) throw contractAttachmentNotFound();
 
       await contractsRepository.addContractActivity(
         transaction,
-        ownerUserId,
+        scope.ownerUserId,
         Number(attachment.contractId),
         "ATTACHMENT_REMOVED",
+        actorUserId,
         {
           attachmentId: { from: attachment.id, to: null },
           fileName: { from: attachment.originalFileName, to: null },
@@ -466,5 +576,3 @@ export const contractsService = {
     return getSettings(ownerUserId);
   },
 };
-
-

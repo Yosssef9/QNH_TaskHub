@@ -10,6 +10,7 @@ import { LoadingState } from '@/components/shared/LoadingState'
 import { AnimatedFetching, AnimatedState } from '@/components/shared/TaskHubMotion'
 import { Card } from '@/components/ui/card'
 import { AccessEditorDialog } from '@/features/access-management/components/AccessEditorDialog'
+import { ContractAccessManager } from '@/features/access-management/components/ContractAccessManager'
 import { AccessUsersTable } from '@/features/access-management/components/AccessUsersTable'
 import { useAccessUsers } from '@/features/access-management/hooks/use-access-users'
 import type { AccessUser } from '@/features/access-management/types/access.types'
@@ -107,6 +108,8 @@ export function AccessManagementPage() {
           )}
         </AnimatedState>
       </Card>
+
+      <ContractAccessManager />
 
       <AccessEditorDialog
         user={selectedUser}

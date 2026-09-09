@@ -25,6 +25,7 @@ export const contractIdParamsSchema = z.object({
 });
 
 export const contractListQuerySchema = z.object({
+  ownerUserId: z.coerce.number().int().positive().optional(),
   search: z.string().trim().max(100).optional(),
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),

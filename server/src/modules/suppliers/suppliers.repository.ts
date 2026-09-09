@@ -63,8 +63,32 @@ function sourceSql(alias = "supplier"): string {
   return `CASE WHEN CONVERT(BIGINT, ${alias}.SUPPLIER_ID) < 0 OR CONVERT(NVARCHAR(100), ${alias}.SUPPLIER_CODE) LIKE N'USR-SUP-%' THEN 'MANUAL' ELSE 'ORACLE' END`;
 }
 
-function supplierSelectSql(ownerUserIdBound = true): string {
+function supplierSelectSql(ownerUserIdBound = true, includeContractStats = true): string {
   const ownerFilter = ownerUserIdBound ? "AND contract.owner_user_id = @ownerUserId" : "";
+  const currentContractCountSql = includeContractStats
+    ? `(
+      SELECT COUNT_BIG(1)
+      FROM dbo.TM_contracts AS contract
+      WHERE contract.supplier_id = CONVERT(BIGINT, supplier.SUPPLIER_ID)
+        ${ownerFilter}
+        AND contract.is_active = 1
+    )`
+    : "CAST(0 AS BIGINT)";
+  const expiringSoonContractCountSql = includeContractStats
+    ? `(
+      SELECT COUNT_BIG(1)
+      FROM dbo.TM_contracts AS contract
+      LEFT JOIN dbo.TM_contract_user_settings AS settings
+        ON settings.owner_user_id = contract.owner_user_id
+      WHERE contract.supplier_id = CONVERT(BIGINT, supplier.SUPPLIER_ID)
+        ${ownerFilter}
+        AND contract.is_active = 1
+        AND contract.start_date <= @today
+        AND contract.end_date IS NOT NULL
+        AND contract.end_date >= @today
+        AND DATEDIFF(DAY, @today, contract.end_date) <= COALESCE(settings.expiring_soon_days, 90)
+    )`
+    : "CAST(0 AS BIGINT)";
   return `
     CONVERT(BIGINT, supplier.SUPPLIER_ID) AS id,
     CONVERT(NVARCHAR(100), supplier.SUPPLIER_CODE) AS code,
@@ -81,26 +105,8 @@ function supplierSelectSql(ownerUserIdBound = true): string {
     CONVERT(NVARCHAR(100), supplier.HOME_PHONE) AS homePhone,
     CONVERT(NVARCHAR(320), supplier.EMAIL) AS email,
     ${sourceSql()} AS source,
-    (
-      SELECT COUNT_BIG(1)
-      FROM dbo.TM_contracts AS contract
-      WHERE contract.supplier_id = CONVERT(BIGINT, supplier.SUPPLIER_ID)
-        ${ownerFilter}
-        AND contract.is_active = 1
-    ) AS currentContractCount,
-    (
-      SELECT COUNT_BIG(1)
-      FROM dbo.TM_contracts AS contract
-      LEFT JOIN dbo.TM_contract_user_settings AS settings
-        ON settings.owner_user_id = contract.owner_user_id
-      WHERE contract.supplier_id = CONVERT(BIGINT, supplier.SUPPLIER_ID)
-        ${ownerFilter}
-        AND contract.is_active = 1
-        AND contract.start_date <= @today
-        AND contract.end_date IS NOT NULL
-        AND contract.end_date >= @today
-        AND DATEDIFF(DAY, @today, contract.end_date) <= COALESCE(settings.expiring_soon_days, 90)
-    ) AS expiringSoonContractCount,
+    ${currentContractCountSql} AS currentContractCount,
+    ${expiringSoonContractCountSql} AS expiringSoonContractCount,
     (
       SELECT COUNT(DISTINCT TRY_CONVERT(BIGINT, tx.ITEM_NO))
       FROM ${transactionsTable} AS tx
@@ -141,6 +147,7 @@ export async function listSuppliers(
   ownerUserId: number,
   query: SupplierListQuery,
   today: string,
+  includeContractStats: boolean,
 ): Promise<{ records: SupplierRecord[]; total: number }> {
   const pool = await getDatabasePool();
   const offset = (query.page - 1) * query.pageSize;
@@ -159,7 +166,7 @@ export async function listSuppliers(
     .input("pageSize", sql.Int, query.pageSize);
 
   const records = await request.query<SupplierRecord>(`
-    SELECT ${supplierSelectSql()}
+    SELECT ${supplierSelectSql(true, includeContractStats)}
     FROM ${suppliersTable} AS supplier
     WHERE (
       @search IS NULL
@@ -275,6 +282,7 @@ export async function findSupplier(
   ownerUserId: number,
   supplierId: number,
   today: string,
+  includeContractStats: boolean,
   transaction?: DatabaseTransaction,
 ): Promise<SupplierRecord | null> {
   const request = transaction ? transaction.request() : (await getDatabasePool()).request();
@@ -282,7 +290,7 @@ export async function findSupplier(
     .input("ownerUserId", sql.Int, ownerUserId)
     .input("supplierId", sql.BigInt, supplierId)
     .input("today", sql.Date, today).query<SupplierRecord>(`
-      SELECT TOP (1) ${supplierSelectSql()}
+      SELECT TOP (1) ${supplierSelectSql(true, includeContractStats)}
       FROM ${suppliersTable} AS supplier ${transaction ? "WITH (UPDLOCK, HOLDLOCK)" : ""}
       WHERE CONVERT(BIGINT, supplier.SUPPLIER_ID) = @supplierId;
     `);

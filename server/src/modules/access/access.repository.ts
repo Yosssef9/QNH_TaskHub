@@ -4,7 +4,11 @@ import { ensureUserFoundationInTransaction } from "../auth/auth.repository.js";
 import type { PortalUserRecord } from "../auth/auth.repository.js";
 import type { TaskHubRoleCode } from "../auth/auth.types.js";
 import type { AccessUserRecord } from "./access.mapper.js";
-import type { AccessListQuery, CurrentAccessRecord } from "./access.types.js";
+import type {
+  AccessListQuery,
+  CurrentAccessRecord,
+  DelegationParticipantRecord,
+} from "./access.types.js";
 
 interface AccessUserRecordsPage {
   items: AccessUserRecord[];
@@ -13,6 +17,42 @@ interface AccessUserRecordsPage {
 
 interface CountRecord {
   total: number;
+}
+
+function procurementPermissionColumns(alias: string): string {
+  const exists = (entity: string) => `
+    CAST(CASE WHEN EXISTS (
+      SELECT 1
+      FROM dbo.TM_access_permissions AS permission
+      WHERE permission.grantee_user_id = ${alias}.USER_ID
+        AND permission.module_code = 'PROCUREMENT'
+        AND permission.entity_code = '${entity}'
+        AND permission.permission_code = 'ACCESS'
+        AND permission.resource_owner_user_id IS NULL
+        AND permission.is_active = 1
+    ) THEN 1 ELSE 0 END AS BIT)`;
+
+  return `
+    ${exists("CONTRACTS")} AS contractsAccess,
+    ${exists("ITEMS")} AS itemsAccess,
+    ${exists("SUPPLIERS")} AS suppliersAccess,
+    ${exists("PRICE_QUOTES")} AS priceQuotesAccess`;
+}
+
+function meetingPermissionColumns(alias: string): string {
+  return `
+    CAST(CASE WHEN EXISTS (
+      SELECT 1 FROM dbo.TM_meeting_user_permissions AS permission
+      WHERE permission.portal_user_id = ${alias}.USER_ID
+        AND permission.permission_code = 'MEETING_ORGANIZE'
+        AND permission.is_active = 1
+    ) THEN 1 ELSE 0 END AS BIT) AS meetingOrganizeEnabled,
+    CAST(CASE WHEN EXISTS (
+      SELECT 1 FROM dbo.TM_meeting_user_permissions AS permission
+      WHERE permission.portal_user_id = ${alias}.USER_ID
+        AND permission.permission_code = 'MEETING_COORDINATE'
+        AND permission.is_active = 1
+    ) THEN 1 ELSE 0 END AS BIT) AS meetingCoordinateEnabled`;
 }
 
 export async function listAccessUsers(query: AccessListQuery): Promise<AccessUserRecordsPage> {
@@ -37,30 +77,10 @@ export async function listAccessUsers(query: AccessListQuery): Promise<AccessUse
         CAST(portal.IS_ACTIVE AS BIT) AS portalIsActive,
         access.role_code AS roleCode,
         access.is_active AS accessIsActive,
-        CAST(COALESCE(access.procurement_enabled, 0) AS BIT) AS procurementEnabled,
-        CAST(
-          CASE WHEN EXISTS (
-            SELECT 1
-            FROM dbo.TM_meeting_user_permissions AS permission
-            WHERE permission.portal_user_id = portal.USER_ID
-              AND permission.permission_code = 'MEETING_ORGANIZE'
-              AND permission.is_active = 1
-          ) THEN 1 ELSE 0 END
-          AS BIT
-        ) AS meetingOrganizeEnabled,
-        CAST(
-          CASE WHEN EXISTS (
-            SELECT 1
-            FROM dbo.TM_meeting_user_permissions AS permission
-            WHERE permission.portal_user_id = portal.USER_ID
-              AND permission.permission_code = 'MEETING_COORDINATE'
-              AND permission.is_active = 1
-          ) THEN 1 ELSE 0 END
-          AS BIT
-        ) AS meetingCoordinateEnabled
+        ${procurementPermissionColumns("portal")},
+        ${meetingPermissionColumns("portal")}
       FROM dbo.users AS portal
-      LEFT JOIN dbo.TM_user_access AS access
-        ON access.portal_user_id = portal.USER_ID
+      LEFT JOIN dbo.TM_user_access AS access ON access.portal_user_id = portal.USER_ID
       WHERE portal.IS_ACTIVE = 1
         AND (
           @search IS NULL
@@ -84,50 +104,26 @@ export async function listAccessUsers(query: AccessListQuery): Promise<AccessUse
     `),
   ]);
 
-  return {
-    items: itemsResult.recordset,
-    total: Number(countResult.recordset[0]?.total ?? 0),
-  };
+  return { items: itemsResult.recordset, total: Number(countResult.recordset[0]?.total ?? 0) };
 }
 
 export async function findAccessUserById(userId: number): Promise<AccessUserRecord | null> {
   const pool = await getDatabasePool();
   const result = await pool.request().input("userId", sql.Int, userId).query<AccessUserRecord>(`
-      SELECT TOP (1)
-        portal.USER_ID AS userId,
-        portal.USER_CODE AS userCode,
-        portal.USER_NAME AS userName,
-        portal.email,
-        CAST(portal.IS_ACTIVE AS BIT) AS portalIsActive,
-        access.role_code AS roleCode,
-        access.is_active AS accessIsActive,
-        CAST(COALESCE(access.procurement_enabled, 0) AS BIT) AS procurementEnabled,
-        CAST(
-          CASE WHEN EXISTS (
-            SELECT 1
-            FROM dbo.TM_meeting_user_permissions AS permission
-            WHERE permission.portal_user_id = portal.USER_ID
-              AND permission.permission_code = 'MEETING_ORGANIZE'
-              AND permission.is_active = 1
-          ) THEN 1 ELSE 0 END
-          AS BIT
-        ) AS meetingOrganizeEnabled,
-        CAST(
-          CASE WHEN EXISTS (
-            SELECT 1
-            FROM dbo.TM_meeting_user_permissions AS permission
-            WHERE permission.portal_user_id = portal.USER_ID
-              AND permission.permission_code = 'MEETING_COORDINATE'
-              AND permission.is_active = 1
-          ) THEN 1 ELSE 0 END
-          AS BIT
-        ) AS meetingCoordinateEnabled
-      FROM dbo.users AS portal
-      LEFT JOIN dbo.TM_user_access AS access
-        ON access.portal_user_id = portal.USER_ID
-      WHERE portal.USER_ID = @userId;
-    `);
-
+    SELECT TOP (1)
+      portal.USER_ID AS userId,
+      portal.USER_CODE AS userCode,
+      portal.USER_NAME AS userName,
+      portal.email,
+      CAST(portal.IS_ACTIVE AS BIT) AS portalIsActive,
+      access.role_code AS roleCode,
+      access.is_active AS accessIsActive,
+      ${procurementPermissionColumns("portal")},
+      ${meetingPermissionColumns("portal")}
+    FROM dbo.users AS portal
+    LEFT JOIN dbo.TM_user_access AS access ON access.portal_user_id = portal.USER_ID
+    WHERE portal.USER_ID = @userId;
+  `);
   return result.recordset[0] ?? null;
 }
 
@@ -135,18 +131,16 @@ export async function findPortalUserForUpdate(
   transaction: DatabaseTransaction,
   userId: number,
 ): Promise<PortalUserRecord | null> {
-  const result = await transaction.request().input("userId", sql.Int, userId)
-    .query<PortalUserRecord>(`
-      SELECT TOP (1)
-        USER_ID AS userId,
-        USER_CODE AS userCode,
-        USER_NAME AS userName,
-        email,
-        CAST(IS_ACTIVE AS BIT) AS isActive
-      FROM dbo.users WITH (UPDLOCK, HOLDLOCK)
-      WHERE USER_ID = @userId;
-    `);
-
+  const result = await transaction.request().input("userId", sql.Int, userId).query<PortalUserRecord>(`
+    SELECT TOP (1)
+      USER_ID AS userId,
+      USER_CODE AS userCode,
+      USER_NAME AS userName,
+      email,
+      CAST(IS_ACTIVE AS BIT) AS isActive
+    FROM dbo.users WITH (UPDLOCK, HOLDLOCK)
+    WHERE USER_ID = @userId;
+  `);
   return result.recordset[0] ?? null;
 }
 
@@ -154,49 +148,34 @@ export async function findCurrentAccessForUpdate(
   transaction: DatabaseTransaction,
   userId: number,
 ): Promise<CurrentAccessRecord | null> {
-  const result = await transaction.request().input("userId", sql.Int, userId)
-    .query<CurrentAccessRecord>(`
-      SELECT
-        role_code AS roleCode,
-        is_active AS isActive,
-        CAST(procurement_enabled AS BIT) AS procurementEnabled,
-        CAST(
-          CASE WHEN EXISTS (
-            SELECT 1
-            FROM dbo.TM_meeting_user_permissions AS permission
-            WHERE permission.portal_user_id = access.portal_user_id
-              AND permission.permission_code = 'MEETING_ORGANIZE'
-              AND permission.is_active = 1
-          ) THEN 1 ELSE 0 END
-          AS BIT
-        ) AS meetingOrganizeEnabled,
-        CAST(
-          CASE WHEN EXISTS (
-            SELECT 1
-            FROM dbo.TM_meeting_user_permissions AS permission
-            WHERE permission.portal_user_id = access.portal_user_id
-              AND permission.permission_code = 'MEETING_COORDINATE'
-              AND permission.is_active = 1
-          ) THEN 1 ELSE 0 END
-          AS BIT
-        ) AS meetingCoordinateEnabled
-      FROM dbo.TM_user_access AS access WITH (UPDLOCK, HOLDLOCK)
-      WHERE access.portal_user_id = @userId;
-    `);
-
+  const result = await transaction.request().input("userId", sql.Int, userId).query<CurrentAccessRecord>(`
+    SELECT
+      role_code AS roleCode,
+      CAST(is_active AS BIT) AS isActive,
+      CAST(CASE WHEN EXISTS (
+        SELECT 1 FROM dbo.TM_meeting_user_permissions AS permission
+        WHERE permission.portal_user_id = access.portal_user_id
+          AND permission.permission_code = 'MEETING_ORGANIZE'
+          AND permission.is_active = 1
+      ) THEN 1 ELSE 0 END AS BIT) AS meetingOrganizeEnabled,
+      CAST(CASE WHEN EXISTS (
+        SELECT 1 FROM dbo.TM_meeting_user_permissions AS permission
+        WHERE permission.portal_user_id = access.portal_user_id
+          AND permission.permission_code = 'MEETING_COORDINATE'
+          AND permission.is_active = 1
+      ) THEN 1 ELSE 0 END AS BIT) AS meetingCoordinateEnabled
+    FROM dbo.TM_user_access AS access WITH (UPDLOCK, HOLDLOCK)
+    WHERE access.portal_user_id = @userId;
+  `);
   return result.recordset[0] ?? null;
 }
 
-export async function countActiveAdminsForUpdate(
-  transaction: DatabaseTransaction,
-): Promise<number> {
+export async function countActiveAdminsForUpdate(transaction: DatabaseTransaction): Promise<number> {
   const result = await transaction.request().query<CountRecord>(`
     SELECT COUNT_BIG(1) AS total
     FROM dbo.TM_user_access WITH (UPDLOCK, HOLDLOCK)
-    WHERE role_code = 'ADMIN'
-      AND is_active = 1;
+    WHERE role_code = 'ADMIN' AND is_active = 1;
   `);
-
   return Number(result.recordset[0]?.total ?? 0);
 }
 
@@ -208,7 +187,6 @@ export async function saveAccess(
     roleCode: TaskHubRoleCode;
     isActive: boolean;
     accessExists: boolean;
-    procurementEnabled: boolean;
   },
 ): Promise<void> {
   const request = transaction
@@ -216,19 +194,16 @@ export async function saveAccess(
     .input("actorUserId", sql.Int, input.actorUserId)
     .input("targetUserId", sql.Int, input.targetUserId)
     .input("roleCode", sql.VarChar(20), input.roleCode)
-    .input("isActive", sql.Bit, input.isActive)
-    .input("procurementEnabled", sql.Bit, input.procurementEnabled);
+    .input("isActive", sql.Bit, input.isActive);
 
   if (input.accessExists) {
     await request.query(`
       UPDATE dbo.TM_user_access
-      SET
-        role_code = @roleCode,
-        is_active = @isActive,
-        procurement_enabled = @procurementEnabled,
-        deactivated_by_user_id = CASE WHEN @isActive = 0 THEN @actorUserId ELSE NULL END,
-        deactivated_at_utc = CASE WHEN @isActive = 0 THEN SYSUTCDATETIME() ELSE NULL END,
-        updated_at_utc = SYSUTCDATETIME()
+      SET role_code = @roleCode,
+          is_active = @isActive,
+          deactivated_by_user_id = CASE WHEN @isActive = 0 THEN @actorUserId ELSE NULL END,
+          deactivated_at_utc = CASE WHEN @isActive = 0 THEN SYSUTCDATETIME() ELSE NULL END,
+          updated_at_utc = SYSUTCDATETIME()
       WHERE portal_user_id = @targetUserId;
     `);
     return;
@@ -239,7 +214,6 @@ export async function saveAccess(
       portal_user_id,
       role_code,
       is_active,
-      procurement_enabled,
       granted_by_user_id,
       deactivated_by_user_id,
       deactivated_at_utc
@@ -248,7 +222,6 @@ export async function saveAccess(
       @targetUserId,
       @roleCode,
       @isActive,
-      @procurementEnabled,
       @actorUserId,
       CASE WHEN @isActive = 0 THEN @actorUserId ELSE NULL END,
       CASE WHEN @isActive = 0 THEN SYSUTCDATETIME() ELSE NULL END
@@ -273,19 +246,16 @@ async function saveMeetingPermission(
     .input("enabled", sql.Bit, input.enabled)
     .query(`
       IF EXISTS (
-        SELECT 1
-        FROM dbo.TM_meeting_user_permissions WITH (UPDLOCK, HOLDLOCK)
-        WHERE portal_user_id = @targetUserId
-          AND permission_code = @permissionCode
+        SELECT 1 FROM dbo.TM_meeting_user_permissions WITH (UPDLOCK, HOLDLOCK)
+        WHERE portal_user_id = @targetUserId AND permission_code = @permissionCode
       )
       BEGIN
         UPDATE dbo.TM_meeting_user_permissions
-        SET
-          is_active = @enabled,
-          granted_by_user_id = CASE WHEN @enabled = 1 THEN @actorUserId ELSE granted_by_user_id END,
-          granted_at_utc = CASE WHEN @enabled = 1 THEN SYSUTCDATETIME() ELSE granted_at_utc END,
-          revoked_by_user_id = CASE WHEN @enabled = 0 THEN @actorUserId ELSE NULL END,
-          revoked_at_utc = CASE WHEN @enabled = 0 THEN SYSUTCDATETIME() ELSE NULL END
+        SET is_active = @enabled,
+            granted_by_user_id = CASE WHEN @enabled = 1 THEN @actorUserId ELSE granted_by_user_id END,
+            granted_at_utc = CASE WHEN @enabled = 1 THEN SYSUTCDATETIME() ELSE granted_at_utc END,
+            revoked_by_user_id = CASE WHEN @enabled = 0 THEN @actorUserId ELSE NULL END,
+            revoked_at_utc = CASE WHEN @enabled = 0 THEN SYSUTCDATETIME() ELSE NULL END
         WHERE portal_user_id = @targetUserId
           AND permission_code = @permissionCode
           AND is_active <> @enabled;
@@ -293,17 +263,8 @@ async function saveMeetingPermission(
       ELSE IF @enabled = 1
       BEGIN
         INSERT INTO dbo.TM_meeting_user_permissions (
-          portal_user_id,
-          permission_code,
-          is_active,
-          granted_by_user_id
-        )
-        VALUES (
-          @targetUserId,
-          @permissionCode,
-          1,
-          @actorUserId
-        );
+          portal_user_id, permission_code, is_active, granted_by_user_id
+        ) VALUES (@targetUserId, @permissionCode, 1, @actorUserId);
       END;
     `);
 }
@@ -338,14 +299,39 @@ export async function ensureContractSettingsInTransaction(
   await transaction.request().input("userId", sql.Int, userId).query(`
     IF OBJECT_ID(N'dbo.TM_contract_user_settings', N'U') IS NOT NULL
        AND NOT EXISTS (
-         SELECT 1
-         FROM dbo.TM_contract_user_settings WITH (UPDLOCK, HOLDLOCK)
+         SELECT 1 FROM dbo.TM_contract_user_settings WITH (UPDLOCK, HOLDLOCK)
          WHERE owner_user_id = @userId
        )
     BEGIN
       INSERT INTO dbo.TM_contract_user_settings (owner_user_id) VALUES (@userId);
     END;
   `);
+}
+
+export async function findDelegationParticipantForUpdate(
+  transaction: DatabaseTransaction,
+  userId: number,
+): Promise<DelegationParticipantRecord | null> {
+  const result = await transaction.request().input("userId", sql.Int, userId).query<DelegationParticipantRecord>(`
+    SELECT TOP (1)
+      portal.USER_ID AS userId,
+      CAST(CASE WHEN EXISTS (
+        SELECT 1 FROM dbo.TM_access_permissions AS permission
+        WHERE permission.grantee_user_id = portal.USER_ID
+          AND permission.module_code = 'PROCUREMENT'
+          AND permission.entity_code = 'CONTRACTS'
+          AND permission.permission_code = 'ACCESS'
+          AND permission.resource_owner_user_id IS NULL
+          AND permission.is_active = 1
+      ) THEN 1 ELSE 0 END AS BIT) AS contractsAccess
+    FROM dbo.users AS portal WITH (UPDLOCK, HOLDLOCK)
+    INNER JOIN dbo.TM_user_access AS access WITH (UPDLOCK, HOLDLOCK)
+      ON access.portal_user_id = portal.USER_ID
+    WHERE portal.USER_ID = @userId
+      AND portal.IS_ACTIVE = 1
+      AND access.is_active = 1;
+  `);
+  return result.recordset[0] ?? null;
 }
 
 export const accessRepository = {
@@ -358,5 +344,5 @@ export const accessRepository = {
   saveMeetingPermissions,
   ensureUserFoundationInTransaction,
   ensureContractSettingsInTransaction,
+  findDelegationParticipantForUpdate,
 };
-

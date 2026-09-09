@@ -13,6 +13,7 @@ interface TableEntityLinkProps {
   code?: string | null
   to?: To
   compact?: boolean
+  enabled?: boolean
   className?: string
 }
 
@@ -35,21 +36,13 @@ export function TableEntityLink({
   code,
   to,
   compact = false,
+  enabled = true,
   className,
 }: TableEntityLinkProps) {
   const Icon = entityIcons[kind]
 
-  return (
-    <Link
-      to={to ?? entityPath(kind, id)}
-      className={cn(
-        'inline-flex max-w-full items-center gap-2 rounded-lg border border-primary/15 bg-primary/10 px-2.5 py-1.5 text-start text-primary no-underline outline-none',
-        'transition-colors hover:border-primary/25 hover:bg-primary/15 hover:text-primary',
-        'focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-1',
-        compact && 'gap-1.5 rounded-md px-2 py-1 text-xs',
-        className,
-      )}
-    >
+  const content = (
+    <>
       <Icon aria-hidden="true" className={cn('shrink-0', compact ? 'size-3.5' : 'size-4')} />
       <span className="min-w-0 leading-tight">
         <OverflowTooltipText
@@ -61,7 +54,8 @@ export function TableEntityLink({
           <span
             dir="ltr"
             className={cn(
-              'mt-0.5 block truncate font-mono font-medium text-primary/70',
+              'mt-0.5 block truncate font-mono font-medium',
+              enabled ? 'text-primary/70' : 'text-muted-foreground',
               compact ? 'text-[10px]' : 'text-[11px]',
             )}
           >
@@ -69,6 +63,23 @@ export function TableEntityLink({
           </span>
         ) : null}
       </span>
+    </>
+  )
+
+  const baseClassName = cn(
+    'inline-flex max-w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-start no-underline',
+    compact && 'gap-1.5 rounded-md px-2 py-1 text-xs',
+    enabled
+      ? 'border-primary/15 bg-primary/10 text-primary outline-none transition-colors hover:border-primary/25 hover:bg-primary/15 hover:text-primary focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-1'
+      : 'border-border bg-muted/45 text-foreground',
+    className,
+  )
+
+  if (!enabled) return <span className={baseClassName}>{content}</span>
+
+  return (
+    <Link to={to ?? entityPath(kind, id)} className={baseClassName}>
+      {content}
     </Link>
   )
 }

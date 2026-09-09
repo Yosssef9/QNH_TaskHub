@@ -13,11 +13,14 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
-import { NavLink } from 'react-router'
+import { Link, NavLink, useLocation } from 'react-router'
 
 import { taskHubEase } from '@/components/shared/TaskHubMotion'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { hasAccessPermission } from '@/features/auth/access-permissions'
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
+import type { ProcurementEntityCode } from '@/features/auth/types/auth.types'
+import { useContractAccessScopes } from '@/features/contracts/hooks/use-contracts'
 import { cn } from '@/lib/cn'
 
 import type { ProcurementSyncStep } from '../api/procurement.api'
@@ -26,12 +29,18 @@ import {
   useRequestProcurementSync,
 } from '../hooks/use-procurement-sync-status'
 
-const procurementLinks = [
-  { to: '/contracts', labelKey: 'procurement.navigation.contracts', icon: FileText, end: true, enabled: true },
-  { to: '/items', labelKey: 'procurement.navigation.items', icon: PackageSearch, end: false, enabled: true },
-  { to: '/suppliers', labelKey: 'procurement.navigation.suppliers', icon: Building2, end: false, enabled: true },
-  { to: '/price-quotes', labelKey: 'procurement.navigation.priceQuotes', icon: Tags, end: false, enabled: true },
-] as const
+const procurementLinks: Array<{
+  to: string
+  labelKey: string
+  icon: typeof FileText
+  end: boolean
+  entityCode: ProcurementEntityCode
+}> = [
+  { to: '/contracts', labelKey: 'procurement.navigation.contracts', icon: FileText, end: true, entityCode: 'CONTRACTS' },
+  { to: '/items', labelKey: 'procurement.navigation.items', icon: PackageSearch, end: false, entityCode: 'ITEMS' },
+  { to: '/suppliers', labelKey: 'procurement.navigation.suppliers', icon: Building2, end: false, entityCode: 'SUPPLIERS' },
+  { to: '/price-quotes', labelKey: 'procurement.navigation.priceQuotes', icon: Tags, end: false, entityCode: 'PRICE_QUOTES' },
+]
 
 function formatRelativeSyncTime(value: string, language: string): string {
   const timestamp = Date.parse(value)
@@ -41,15 +50,9 @@ function formatRelativeSyncTime(value: string, language: string): string {
   const elapsedMinutes = Math.floor(elapsedMs / 60_000)
   const formatter = new Intl.RelativeTimeFormat(language, { numeric: 'auto' })
 
-  if (elapsedMinutes < 60) {
-    return formatter.format(-elapsedMinutes, 'minute')
-  }
-
+  if (elapsedMinutes < 60) return formatter.format(-elapsedMinutes, 'minute')
   const elapsedHours = Math.floor(elapsedMinutes / 60)
-  if (elapsedHours < 24) {
-    return formatter.format(-elapsedHours, 'hour')
-  }
-
+  if (elapsedHours < 24) return formatter.format(-elapsedHours, 'hour')
   return formatter.format(-Math.floor(elapsedHours / 24), 'day')
 }
 
@@ -71,9 +74,14 @@ export function ProcurementSidebarSection({
   const { i18n, t } = useTranslation()
   const shouldReduceMotion = useReducedMotion()
   const currentUser = useCurrentUser()
+  const location = useLocation()
+  const access = currentUser.data?.access
+  const canAccessContracts = hasAccessPermission(access, 'CONTRACTS')
+  const contractScopes = useContractAccessScopes(canAccessContracts)
   const syncStatus = useProcurementSyncStatus()
   const requestSync = useRequestProcurementSync()
   const canRefresh = currentUser.data?.access.roleCode === 'ADMIN'
+  const visibleLinks = procurementLinks.filter((item) => hasAccessPermission(access, item.entityCode))
 
   const lastSuccessfulRelative = syncStatus.data?.lastSuccessfulAtUtc
     ? formatRelativeSyncTime(syncStatus.data.lastSuccessfulAtUtc, i18n.language)
@@ -123,24 +131,14 @@ export function ProcurementSidebarSection({
     ? syncStatus.data.lastAttempt.failedStep
     : null
   const statusTitle = failedStep
-    ? t('procurement.syncStatus.failedStep', {
-        step: t(stepTranslationKey(failedStep)),
-      })
+    ? t('procurement.syncStatus.failedStep', { step: t(stepTranslationKey(failedStep)) })
     : statusText
 
   async function refreshNow() {
     try {
       const result = await requestSync.mutateAsync()
-      if (result.accepted) {
-        toast.success(t('procurement.syncStatus.refreshRequested'))
-        return
-      }
-
-      if (result.reason === 'ALREADY_RUNNING') {
-        toast(t('procurement.syncStatus.alreadyRunning'))
-        return
-      }
-
+      if (result.accepted) return void toast.success(t('procurement.syncStatus.refreshRequested'))
+      if (result.reason === 'ALREADY_RUNNING') return void toast(t('procurement.syncStatus.alreadyRunning'))
       toast.error(t('procurement.syncStatus.disabled'))
     } catch {
       toast.error(t('procurement.syncStatus.refreshFailed'))
@@ -159,9 +157,15 @@ export function ProcurementSidebarSection({
       onClick={onToggle}
     >
       <ShoppingBasket aria-hidden="true" className="size-5 shrink-0" />
-      <span className={cn('flex-1 text-start', collapsed && 'hidden')}>{t('procurement.navigation.section')}</span>
+      <span className={cn('flex-1 text-start', collapsed && 'hidden')}>
+        {t('procurement.navigation.section')}
+      </span>
       {!collapsed ? (
-        <motion.span className="grid place-items-center" animate={{ rotate: expanded ? 180 : 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: taskHubEase }}>
+        <motion.span
+          className="grid place-items-center"
+          animate={{ rotate: expanded ? 180 : 0 }}
+          transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: taskHubEase }}
+        >
           <ChevronDown aria-hidden="true" className="size-4" />
         </motion.span>
       ) : null}
@@ -193,10 +197,7 @@ export function ProcurementSidebarSection({
             className="overflow-hidden"
           >
             <div className="mt-1 space-y-1 ps-3 pe-1">
-              <div
-                className="flex min-h-9 items-center gap-2 rounded-lg px-2"
-                title={statusTitle}
-              >
+              <div className="flex min-h-9 items-center gap-2 rounded-lg px-2" title={statusTitle}>
                 <StatusIcon
                   aria-hidden="true"
                   className={cn('size-3.5 shrink-0', statusTone, statusIconClassName)}
@@ -225,29 +226,58 @@ export function ProcurementSidebarSection({
                 ) : null}
               </div>
 
-              {procurementLinks.map((item) => {
+              {visibleLinks.map((item) => {
                 const Icon = item.icon
-                if (!item.enabled) {
-                  return (
-                    <div key={item.labelKey} aria-disabled="true" className="text-sidebar-muted/55 flex h-9 cursor-not-allowed items-center gap-2 rounded-lg px-2 text-sm">
-                      <Icon aria-hidden="true" className="size-4 shrink-0" />
-                      <span className="flex-1">{t(item.labelKey)}</span>
-                      <span className="text-[10px] font-medium uppercase">{t('procurement.navigation.comingSoon')}</span>
-                    </div>
-                  )
-                }
-
                 return (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.end}
-                    onClick={onNavigate}
-                    className={({ isActive }) => cn('flex h-9 items-center gap-2 rounded-lg px-2 text-sm', isActive ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground')}
-                  >
-                    <Icon aria-hidden="true" className="size-4 shrink-0" />
-                    <span>{t(item.labelKey)}</span>
-                  </NavLink>
+                  <div key={item.to}>
+                    <NavLink
+                      to={item.to}
+                      end={item.end}
+                      onClick={onNavigate}
+                      className={({ isActive }) =>
+                        cn(
+                          'flex h-9 items-center gap-2 rounded-lg px-2 text-sm transition-colors',
+                          isActive
+                            ? 'bg-sidebar-active text-sidebar-accent-foreground font-medium'
+                            : 'text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-accent-foreground',
+                        )
+                      }
+                    >
+                      <Icon aria-hidden="true" className="size-4 shrink-0" />
+                      <span>{t(item.labelKey)}</span>
+                    </NavLink>
+
+                    {item.entityCode === 'CONTRACTS' && (contractScopes.data?.length ?? 0) > 1 ? (
+                      <div className="mt-1 space-y-1 ps-6">
+                        {contractScopes.data?.map((scope) => {
+                          const ownerParam = new URLSearchParams(location.search).get('ownerUserId')
+                          const active = location.pathname === '/contracts' && (
+                            scope.isOwn ? ownerParam === null : ownerParam === String(scope.ownerUserId)
+                          )
+                          const to = scope.isOwn
+                            ? '/contracts'
+                            : `/contracts?ownerUserId=${scope.ownerUserId}`
+                          return (
+                            <Link
+                              key={scope.ownerUserId}
+                              to={to}
+                              onClick={onNavigate}
+                              className={cn(
+                                'block truncate rounded-lg px-2 py-1.5 text-xs transition-colors',
+                                active
+                                  ? 'bg-sidebar-active text-sidebar-accent-foreground font-medium'
+                                  : 'text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-accent-foreground',
+                              )}
+                            >
+                              {scope.isOwn
+                                ? t('contracts.navigation.myContracts')
+                                : t('contracts.navigation.ownerContracts', { name: scope.ownerUserName })}
+                            </Link>
+                          )
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
                 )
               })}
             </div>

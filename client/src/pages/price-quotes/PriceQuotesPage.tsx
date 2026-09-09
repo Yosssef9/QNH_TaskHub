@@ -10,6 +10,8 @@ import { PageHeader } from '@/components/shared/PageHeader'
 import { SearchInput } from '@/components/shared/SearchInput'
 import { SortableHeader } from '@/components/shared/SortableHeader'
 import { TableEntityLink } from '@/components/shared/TableEntityLink'
+import { hasAccessPermission } from '@/features/auth/access-permissions'
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { TablePagination } from '@/components/shared/TablePagination'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -47,6 +49,9 @@ const PERIODS: ProcurementPricePeriod[] = ['1M', '3M', '6M', '1Y', 'ALL']
 export function PriceQuotesPage() {
   const { i18n, t } = useTranslation()
   const locale = i18n.language
+  const currentUser = useCurrentUser()
+  const canAccessItems = hasAccessPermission(currentUser.data?.access, 'ITEMS')
+  const canAccessSuppliers = hasAccessPermission(currentUser.data?.access, 'SUPPLIERS')
   const [search, setSearch] = useState('')
   const [period, setPeriod] = useState<ProcurementPricePeriod>('1Y')
   const [status, setStatus] = useState<QuoteStatusFilter>('ALL')
@@ -285,8 +290,8 @@ export function PriceQuotesPage() {
                       className="hover:bg-primary/[0.035] border-b last:border-b-0"
                     >
                       <td className="px-4 py-4">{formatDateOnly(quote.quoteDate, locale)}</td>
-                      <td className="px-4 py-4"><TableEntityLink kind="item" id={quote.itemId} name={quote.itemName} code={quote.itemCode} compact /></td>
-                      <td className="px-4 py-4"><TableEntityLink kind="supplier" id={quote.supplierId} name={quote.supplierName} code={quote.supplierCode} compact /></td>
+                      <td className="px-4 py-4">{canAccessItems ? <TableEntityLink kind="item" id={quote.itemId} name={quote.itemName} code={quote.itemCode} compact /> : <EntityIdentity name={quote.itemName} code={quote.itemCode} />}</td>
+                      <td className="px-4 py-4">{canAccessSuppliers ? <TableEntityLink kind="supplier" id={quote.supplierId} name={quote.supplierName} code={quote.supplierCode} compact /> : <EntityIdentity name={quote.supplierName} code={quote.supplierCode} />}</td>
                       <td dir="ltr" className="px-4 py-4 font-semibold tabular-nums">
                         {formatUnitCost(
                           quote.quotedUnitCost,
@@ -441,6 +446,16 @@ export function PriceQuotesPage() {
     </div>
   )
 }
+
+function EntityIdentity({ name, code }: { name: string; code: string | null }) {
+  return (
+    <div className="min-w-0">
+      <p className="truncate font-semibold">{name}</p>
+      {code ? <p dir="ltr" className="text-muted-foreground mt-0.5 truncate text-xs">{code}</p> : null}
+    </div>
+  )
+}
+
 
 function SummaryCard({
   label,

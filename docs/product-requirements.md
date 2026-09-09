@@ -20,6 +20,20 @@ The product should feel simple enough to use without documentation. The Arabic d
 - Administrators manage application access, the official-holiday calendar, Meeting permissions, and Meeting Room setup.
 - Administrators do not automatically see users' private lists, tasks, attachments, KPIs, or results.
 
+### Procurement and delegated Contract access
+
+- `TM_user_access` stores TaskHub membership, `USER` / `ADMIN`, and activation state only; feature permissions are not stored as boolean module columns.
+- `TM_access_permissions` is the active source of Procurement submodule access.
+- Contract ownership remains private by default. Administrators may explicitly delegate one owner's Contracts to another active TaskHub user.
+- Delegated `VIEW` is read-only and allows Contract/list/detail/history/file reads only.
+- Delegated `MANAGE_ATTACHMENTS` implies `VIEW` and additionally allows upload/removal of files on active Contracts. It never permits Contract edits, archive/restore, Contract settings changes, or Supplier/Item/Quote access.
+- Archived Contracts are fully read-only even when `MANAGE_ATTACHMENTS` is granted.
+- The actual acting user is preserved as the Contract activity actor and attachment uploader.
+- Removing Contracts feature access revokes Contract delegations to and from that user.
+- Procurement workspace access and dependent reference lookup are distinct: full Items/Suppliers/Price Quotes pages require their own `ACCESS` grant, while narrow Item/Supplier option endpoints may support another already-authorized Procurement workflow without granting the full referenced workspace.
+- Excel Quote Import requires both Items and Price Quotes access because it starts from Items but creates private Price Quote history.
+- Meetings continue to use their existing Meeting-specific permission model; this feature does not migrate Meeting authorization.
+
 ## Normal task lists
 
 - Every user has one permanent default list named **My Tasks**.
@@ -162,7 +176,7 @@ The numeric value may exceed 100%, while a visual progress fill may stop at 100%
 
 ## Procurement and Contracts
 
-Procurement is an optional module controlled by `procurement_enabled`. It groups **Contracts**, **Items**, **Suppliers**, and **Price Quotes** under one sidebar section. `ADMIN` does not automatically grant Procurement business access.
+Procurement is an optional domain with separate `TM_access_permissions` `ACCESS` grants for **Contracts**, **Items**, **Suppliers**, and **Price Quotes**. The sidebar shows only granted destinations, and `ADMIN` does not automatically grant Procurement business access.
 
 
 Production source mapping finalized on 2026-09-03:

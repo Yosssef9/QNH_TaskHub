@@ -30,7 +30,7 @@ export function AccessUsersTable({ onEdit, users }: AccessUsersTableProps) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-4xl text-sm">
+      <table className="w-full min-w-5xl text-sm">
         <thead className="bg-muted/60 text-muted-foreground">
           <tr>
             <th scope="col" className="px-5 py-3 text-start font-medium">
@@ -41,6 +41,9 @@ export function AccessUsersTable({ onEdit, users }: AccessUsersTableProps) {
             </th>
             <th scope="col" className="px-5 py-3 text-start font-medium">
               {t('access.role')}
+            </th>
+            <th scope="col" className="px-5 py-3 text-start font-medium">
+              {t('access.procurementPermissions')}
             </th>
             <th scope="col" className="px-5 py-3 text-start font-medium">
               {t('access.meetingPermissions')}
@@ -79,6 +82,28 @@ export function AccessUsersTable({ onEdit, users }: AccessUsersTableProps) {
                 ) : (
                   <span className="text-muted-foreground">{t('access.notAssigned')}</span>
                 )}
+              </td>
+              <td className="px-5 py-4">
+                <div className="flex max-w-sm flex-wrap gap-1.5">
+                  {user.procurementAccess.contracts ? (
+                    <Badge variant="secondary">{t('access.procurement.contracts')}</Badge>
+                  ) : null}
+                  {user.procurementAccess.items ? (
+                    <Badge variant="secondary">{t('access.procurement.items')}</Badge>
+                  ) : null}
+                  {user.procurementAccess.suppliers ? (
+                    <Badge variant="secondary">{t('access.procurement.suppliers')}</Badge>
+                  ) : null}
+                  {user.procurementAccess.priceQuotes ? (
+                    <Badge variant="secondary">{t('access.procurement.priceQuotes')}</Badge>
+                  ) : null}
+                  {!user.procurementAccess.contracts &&
+                  !user.procurementAccess.items &&
+                  !user.procurementAccess.suppliers &&
+                  !user.procurementAccess.priceQuotes ? (
+                    <span className="text-muted-foreground">{t('common.none')}</span>
+                  ) : null}
+                </div>
               </td>
               <td className="px-5 py-4">
                 <div className="flex flex-wrap gap-1.5">

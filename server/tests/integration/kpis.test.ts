@@ -71,7 +71,7 @@ describe("personal KPI endpoints", () => {
 
     vi.spyOn(authService, "resolveCurrentUser").mockResolvedValue({
       user: { userId: 7, userCode: "USER0007", userName: "User", email: null },
-      access: { roleCode: "USER", procurementEnabled: false },
+      access: { roleCode: "USER", permissions: [] },
       preferences: {
         languageCode: "AR",
         theme: "SYSTEM",

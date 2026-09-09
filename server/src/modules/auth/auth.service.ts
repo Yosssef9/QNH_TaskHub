@@ -68,7 +68,8 @@ export function createAuthService(repository: AuthRepository): AuthService {
         });
       }
 
-      return mapAuthMeData(portalUser, access);
+      const permissions = await repository.listAccessPermissions(portalUser.userId);
+      return mapAuthMeData(portalUser, access, permissions);
     },
   };
 }

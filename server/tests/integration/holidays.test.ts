@@ -18,7 +18,7 @@ function token() {
 function profile(roleCode: "USER" | "ADMIN"): AuthMeData {
   return {
     user: { userId: 1, userCode: "ADMIN001", userName: "Admin", email: null },
-    access: { roleCode, procurementEnabled: false },
+    access: { roleCode, permissions: [] },
     preferences: {
       languageCode: "AR",
       theme: "SYSTEM",

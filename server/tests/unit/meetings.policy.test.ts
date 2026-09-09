@@ -8,7 +8,7 @@ import type { TaskHubAccess } from "../../src/modules/auth/auth.types.js";
 
 const baseAccess: TaskHubAccess = {
   roleCode: "USER",
-  procurementEnabled: false,
+  permissions: [],
   meetingOrganizeEnabled: false,
   meetingCoordinateEnabled: false,
 };

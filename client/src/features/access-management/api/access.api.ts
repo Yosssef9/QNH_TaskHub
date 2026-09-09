@@ -5,7 +5,9 @@ import type {
   AccessListQuery,
   AccessUser,
   AccessUserList,
+  ContractAccessAdminData,
   UpdateAccessInput,
+  UpdateContractDelegationInput,
 } from '../types/access.types'
 
 export async function getAccessUsers(query: AccessListQuery): Promise<AccessUserList> {
@@ -22,7 +24,7 @@ export async function updateAccessUser(input: UpdateAccessInput): Promise<Access
     {
       roleCode: input.roleCode,
       isActive: input.isActive,
-      procurementEnabled: input.procurementEnabled,
+      procurementAccess: input.procurementAccess,
       meetingOrganizeEnabled: input.meetingOrganizeEnabled,
       meetingCoordinateEnabled: input.meetingCoordinateEnabled,
     },
@@ -31,3 +33,19 @@ export async function updateAccessUser(input: UpdateAccessInput): Promise<Access
   return response.data.data.user
 }
 
+export async function getContractAccessAdminData(): Promise<ContractAccessAdminData> {
+  const response = await apiClient.get<ApiSuccessResponse<ContractAccessAdminData>>(
+    '/admin/access/contract-delegations',
+  )
+  return response.data.data
+}
+
+export async function updateContractDelegation(
+  input: UpdateContractDelegationInput,
+): Promise<ContractAccessAdminData> {
+  const response = await apiClient.put<ApiSuccessResponse<ContractAccessAdminData>>(
+    '/admin/access/contract-delegations',
+    input,
+  )
+  return response.data.data
+}

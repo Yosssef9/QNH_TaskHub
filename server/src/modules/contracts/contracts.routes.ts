@@ -1,6 +1,6 @@
 import { Router, type Router as ExpressRouter } from "express";
 
-import { requireProcurementAccess } from "../../middleware/requireProcurementAccess.middleware.js";
+import { requireProcurementEntityAccess } from "../../middleware/requireAccessPermission.middleware.js";
 import { resolveTaskHubAccess } from "../../middleware/resolveTaskHubAccess.middleware.js";
 import { validateRequest } from "../../middleware/validate.middleware.js";
 import { verifyPortalJwt } from "../../middleware/verifyPortalJwt.middleware.js";
@@ -11,6 +11,7 @@ import {
   downloadContractAttachment,
   getContract,
   getContractSettings,
+  listContractAccessScopes,
   listContractAttachments,
   listContractActivity,
   listContracts,
@@ -33,8 +34,13 @@ import {
 
 export const contractsRouter: ExpressRouter = Router();
 
-contractsRouter.use(verifyPortalJwt, resolveTaskHubAccess, requireProcurementAccess);
+contractsRouter.use(
+  verifyPortalJwt,
+  resolveTaskHubAccess,
+  requireProcurementEntityAccess("CONTRACTS"),
+);
 
+contractsRouter.get("/access-scopes", listContractAccessScopes);
 contractsRouter.get("/", validateRequest({ query: contractListQuerySchema }), listContracts);
 contractsRouter.post("/", validateRequest({ body: createContractBodySchema }), createContract);
 contractsRouter.get("/settings", getContractSettings);
@@ -71,11 +77,7 @@ contractsRouter.delete(
   removeContractAttachment,
 );
 
-contractsRouter.get(
-  "/:contractId",
-  validateRequest({ params: contractIdParamsSchema }),
-  getContract,
-);
+contractsRouter.get("/:contractId", validateRequest({ params: contractIdParamsSchema }), getContract);
 contractsRouter.patch(
   "/:contractId",
   validateRequest({ params: contractIdParamsSchema, body: updateContractBodySchema }),
@@ -96,4 +98,3 @@ contractsRouter.get(
   validateRequest({ params: contractIdParamsSchema }),
   listContractActivity,
 );
-
