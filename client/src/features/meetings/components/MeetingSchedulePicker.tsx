@@ -27,7 +27,12 @@ import { Button } from '@/components/ui/button'
 import { buttonStyles } from '@/components/ui/button.styles'
 import { Popover, PopoverArrow, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/cn'
-import { formatClockTime, formatRiyadhDateInput, formatTime, riyadhLocalDateTimeToUtcIso } from '@/lib/date-time'
+import {
+  formatClockTime,
+  formatRiyadhDateInput,
+  formatTime,
+  riyadhLocalDateTimeToUtcIso,
+} from '@/lib/date-time'
 import { getMeetingRoomAccent } from '@/features/meetings/meeting-room-colors'
 import { useTimeFormatPreference } from '@/features/preferences/hooks/use-time-format'
 
@@ -113,7 +118,10 @@ function overlaps(startA: number, endA: number, startB: number, endB: number): b
   return startA < endB && endA > startB
 }
 
-function entryMinutes(entry: MeetingScheduleEntry, date: string): { start: number; end: number } | null {
+function entryMinutes(
+  entry: MeetingScheduleEntry,
+  date: string,
+): { start: number; end: number } | null {
   const dayStart = new Date(riyadhLocalDateTimeToUtcIso(date, '00:00')).getTime()
   const dayEnd = new Date(riyadhLocalDateTimeToUtcIso(shiftDateOnly(date, 1), '00:00')).getTime()
   const start = Math.max(new Date(entry.startAtUtc).getTime(), dayStart)
@@ -125,7 +133,11 @@ function entryMinutes(entry: MeetingScheduleEntry, date: string): { start: numbe
   }
 }
 
-function formatDateLabel(date: string, locale: string, options?: Intl.DateTimeFormatOptions): string {
+function formatDateLabel(
+  date: string,
+  locale: string,
+  options?: Intl.DateTimeFormatOptions,
+): string {
   return new Intl.DateTimeFormat(locale, {
     timeZone: 'UTC',
     ...options,
@@ -176,14 +188,14 @@ function BusyMeetingBlock({
   const triggerContent = (
     <>
       {durationMinutes >= 60 ? (
-        <span className="pointer-events-none absolute inset-0 flex items-center justify-center gap-1 overflow-hidden px-1 text-[10px] font-bold uppercase tracking-wide">
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center gap-1 overflow-hidden px-1 text-[10px] font-bold tracking-wide uppercase">
           <span>{t('meetings.create.slotBusy')}</span>
           {inspectable ? <Eye aria-hidden="true" className="size-3 shrink-0" /> : null}
         </span>
       ) : null}
       <span
         role="tooltip"
-        className="bg-popover text-popover-foreground border-border pointer-events-none absolute bottom-[calc(100%+0.55rem)] left-1/2 z-40 hidden w-max max-w-64 -translate-x-1/2 overflow-hidden rounded-xl border text-start text-[11px] normal-case tracking-normal shadow-xl group-hover:block group-focus-visible:block"
+        className="bg-popover text-popover-foreground border-border pointer-events-none absolute bottom-[calc(100%+0.55rem)] left-1/2 z-40 hidden w-max max-w-64 -translate-x-1/2 overflow-hidden rounded-xl border text-start text-[11px] tracking-normal normal-case shadow-xl group-hover:block group-focus-visible:block"
       >
         <span className="flex min-w-52 items-stretch">
           <span aria-hidden="true" className="w-1 shrink-0" style={{ backgroundColor: accent }} />
@@ -200,7 +212,9 @@ function BusyMeetingBlock({
             {entry.visibility !== 'BUSY' ? (
               <span className="text-muted-foreground mt-1 flex items-center gap-1.5">
                 <UserRound aria-hidden="true" className="size-3.5 shrink-0" />
-                <span className="truncate">{t('meetings.organizedBy', { name: entry.organizer.userName })}</span>
+                <span className="truncate">
+                  {t('meetings.organizedBy', { name: entry.organizer.userName })}
+                </span>
               </span>
             ) : null}
             {inspectable ? (
@@ -257,7 +271,7 @@ function BusyMeetingBlock({
         align="center"
         sideOffset={10}
         collisionPadding={12}
-        className="w-[min(23rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border-border/80 p-0 shadow-2xl"
+        className="border-border/80 w-[min(23rem,calc(100vw-2rem))] overflow-hidden rounded-2xl p-0 shadow-2xl"
         style={{ '--meeting-preview-accent': accent } as CSSProperties}
       >
         <div className="relative overflow-hidden">
@@ -267,18 +281,21 @@ function BusyMeetingBlock({
             style={{ backgroundColor: accent }}
           />
 
-          <header className="border-b border-border/70 bg-muted/20 px-5 pb-4 pt-4">
+          <header className="border-border/70 bg-muted/20 border-b px-5 pt-4 pb-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-muted-foreground text-[10px] font-bold uppercase tracking-[0.12em]">
+                <p className="text-muted-foreground text-[10px] font-bold tracking-[0.12em] uppercase">
                   {t('meetings.create.busyMeetingDetails')}
                 </p>
-                <h3 className="mt-1.5 line-clamp-2 text-lg font-bold leading-6 tracking-tight">
+                <h3 className="mt-1.5 line-clamp-2 text-lg leading-6 font-bold tracking-tight">
                   {entry.title}
                 </h3>
               </div>
               {meeting ? (
-                <Badge variant={statusVariant} className="shrink-0 gap-1.5 border border-border/60 px-2.5 py-1">
+                <Badge
+                  variant={statusVariant}
+                  className="border-border/60 shrink-0 gap-1.5 border px-2.5 py-1"
+                >
                   {meeting.status === 'SCHEDULED' ? (
                     <CheckCircle2 aria-hidden="true" className="size-3.5" />
                   ) : (
@@ -309,7 +326,7 @@ function BusyMeetingBlock({
           ) : (
             <div className="space-y-3.5 p-4 ps-5 text-sm">
               <div
-                className="rounded-xl border bg-muted/20 p-3"
+                className="bg-muted/20 rounded-xl border p-3"
                 style={{ borderInlineStartWidth: 3, borderInlineStartColor: accent }}
               >
                 <div className="flex min-w-0 items-start gap-2.5">
@@ -326,7 +343,7 @@ function BusyMeetingBlock({
               </div>
 
               <div className="grid gap-2.5 sm:grid-cols-2">
-                <div className="rounded-xl border bg-background p-3 shadow-xs">
+                <div className="bg-background rounded-xl border p-3 shadow-xs">
                   <div className="flex items-start gap-2.5">
                     <span className="bg-primary/10 text-primary grid size-8 shrink-0 place-items-center rounded-full font-bold">
                       {personInitials(meeting.organizer.userName)}
@@ -340,7 +357,7 @@ function BusyMeetingBlock({
                   </div>
                 </div>
 
-                <div className="rounded-xl border bg-background p-3 shadow-xs">
+                <div className="bg-background rounded-xl border p-3 shadow-xs">
                   <div className="flex items-start gap-2.5">
                     <span className="bg-primary/10 text-primary grid size-8 shrink-0 place-items-center rounded-lg">
                       <UsersRound aria-hidden="true" className="size-4" />
@@ -358,13 +375,13 @@ function BusyMeetingBlock({
                             <span
                               key={`${name}-${index}`}
                               title={name}
-                              className="bg-muted text-foreground grid size-6 place-items-center rounded-full border-2 border-background text-[9px] font-bold"
+                              className="bg-muted text-foreground border-background grid size-6 place-items-center rounded-full border-2 text-[9px] font-bold"
                             >
                               {personInitials(name)}
                             </span>
                           ))}
                           {extraPeople > 0 ? (
-                            <span className="bg-primary/10 text-primary grid size-6 place-items-center rounded-full border-2 border-background text-[9px] font-bold">
+                            <span className="bg-primary/10 text-primary border-background grid size-6 place-items-center rounded-full border-2 text-[9px] font-bold">
                               +{extraPeople}
                             </span>
                           ) : null}
@@ -375,14 +392,14 @@ function BusyMeetingBlock({
                 </div>
               </div>
 
-              <section className="rounded-xl border bg-muted/15 p-3.5">
+              <section className="bg-muted/15 rounded-xl border p-3.5">
                 <div className="flex items-center gap-2 text-xs font-semibold">
                   <FileText aria-hidden="true" className="text-primary size-4" />
                   <span>{t('meetings.fields.descriptionPurpose')}</span>
                 </div>
                 <p
                   className={cn(
-                    'mt-2 line-clamp-3 whitespace-pre-wrap text-sm leading-6',
+                    'mt-2 line-clamp-3 text-sm leading-6 whitespace-pre-wrap',
                     !meeting.description && 'text-muted-foreground italic',
                   )}
                 >
@@ -390,17 +407,14 @@ function BusyMeetingBlock({
                 </p>
               </section>
 
-              <MeetingAgendaDisplay
-                items={detailQuery.data?.agendaItems ?? []}
-                variant="compact"
-              />
+              <MeetingAgendaDisplay items={detailQuery.data?.agendaItems ?? []} variant="compact" />
             </div>
           )}
 
           {meeting ? (
-            <footer className="border-t border-border/70 bg-muted/15 px-4 py-3 ps-5">
+            <footer className="border-border/70 bg-muted/15 border-t px-4 py-3 ps-5">
               <a
-                href={`/meetings/${entry.meetingId}`}
+                href={`${import.meta.env.BASE_URL}meetings/${entry.meetingId}`}
                 target="_blank"
                 rel="noreferrer"
                 className={buttonStyles({ size: 'sm', className: 'w-full justify-center' })}
@@ -484,10 +498,7 @@ export function MeetingSchedulePicker({
   }, [roomId])
 
   useEffect(() => {
-    const nextStart = Math.max(
-      0,
-      Math.min(48 - VISIBLE_OPTION_COUNT, selectedSlotIndex - 2),
-    )
+    const nextStart = Math.max(0, Math.min(48 - VISIBLE_OPTION_COUNT, selectedSlotIndex - 2))
     setWindowStartSlot(nextStart)
   }, [date, roomId, selectedSlotIndex])
 
@@ -584,8 +595,7 @@ export function MeetingSchedulePicker({
   const selectedHasKnownConflict = scheduleRanges.some(({ range }) =>
     overlaps(selectedStartMinutes, selectedEndMinutes, range.start, range.end),
   )
-  const selectedRoomHasCapacity =
-    selectedRoom !== null && selectedRoom.capacity >= participantCount
+  const selectedRoomHasCapacity = selectedRoom !== null && selectedRoom.capacity >= participantCount
   const selectionCanSchedule =
     selectedRoom !== null &&
     selectedRoomHasCapacity &&
@@ -692,7 +702,7 @@ export function MeetingSchedulePicker({
           </div>
         </div>
 
-        <div className="grid auto-cols-[minmax(5.5rem,1fr)] grid-flow-col gap-2 overflow-x-auto pb-2 [scrollbar-width:thin]">
+        <div className="grid [scrollbar-width:thin] auto-cols-[minmax(5.5rem,1fr)] grid-flow-col gap-2 overflow-x-auto pb-2">
           {dateCards.map((itemDate) => {
             const selected = itemDate === date
             const isPast = itemDate < today
@@ -709,7 +719,7 @@ export function MeetingSchedulePicker({
                   onDateChange(itemDate)
                 }}
                 className={cn(
-                  'focus-visible:ring-ring min-h-16 rounded-xl border px-2 py-2 text-center outline-none transition focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-40',
+                  'focus-visible:ring-ring min-h-16 rounded-xl border px-2 py-2 text-center transition outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-40',
                   selected
                     ? 'border-primary bg-primary text-primary-foreground shadow-sm'
                     : 'bg-background hover:border-primary/40 hover:bg-accent',
@@ -741,15 +751,18 @@ export function MeetingSchedulePicker({
           />
         </div>
         {validationErrors.date ? (
-          <p role="alert" className="text-destructive text-xs font-medium">{validationErrors.date}</p>
+          <p role="alert" className="text-destructive text-xs font-medium">
+            {validationErrors.date}
+          </p>
         ) : null}
       </div>
 
       <div
         className={cn(
           'space-y-3 rounded-xl transition-[background-color,box-shadow] duration-300',
-          roomPromptedByTime && !roomId &&
-            'bg-destructive/5 ring-2 ring-destructive/20 ring-offset-4 ring-offset-muted/20',
+          roomPromptedByTime &&
+            !roomId &&
+            'bg-destructive/5 ring-destructive/20 ring-offset-muted/20 ring-2 ring-offset-4',
         )}
       >
         <div className="flex items-center gap-2">
@@ -768,7 +781,7 @@ export function MeetingSchedulePicker({
             {t('meetings.noActiveRooms')}
           </div>
         ) : (
-          <div className="grid auto-cols-[minmax(11.5rem,1fr)] grid-flow-col gap-2 overflow-x-auto pb-2 [scrollbar-width:thin]">
+          <div className="grid [scrollbar-width:thin] auto-cols-[minmax(11.5rem,1fr)] grid-flow-col gap-2 overflow-x-auto pb-2">
             {orderedRooms.map((room) => {
               const selected = room.id === roomId
               const fits = room.capacity >= participantCount
@@ -782,7 +795,7 @@ export function MeetingSchedulePicker({
                   aria-pressed={selected}
                   aria-invalid={Boolean(
                     ((validationErrors.room || validationErrors.capacity) && selected) ||
-                      (roomPromptedByTime && !roomId && room === orderedRooms[0]),
+                    (roomPromptedByTime && !roomId && room === orderedRooms[0]),
                   )}
                   aria-describedby={
                     roomPromptedByTime && !roomId && room === orderedRooms[0]
@@ -798,14 +811,18 @@ export function MeetingSchedulePicker({
                     onRoomChange(room.id)
                   }}
                   className={cn(
-                    'focus-visible:ring-ring min-h-28 rounded-xl border p-3 text-start outline-none transition focus-visible:ring-2',
+                    'focus-visible:ring-ring min-h-28 rounded-xl border p-3 text-start transition outline-none focus-visible:ring-2',
                     selected
                       ? 'border-primary bg-primary/10 ring-primary/15 ring-1'
                       : 'bg-background hover:border-primary/40 hover:bg-accent/40',
                     !fits && !selected && 'border-warning/35 bg-warning/5',
-                    roomPromptedByTime && !roomId && room === orderedRooms[0] &&
-                      'border-destructive/60 bg-destructive/5 ring-2 ring-destructive/20',
-                    (validationErrors.room || validationErrors.capacity) && selected && 'border-destructive ring-destructive/20 ring-2',
+                    roomPromptedByTime &&
+                      !roomId &&
+                      room === orderedRooms[0] &&
+                      'border-destructive/60 bg-destructive/5 ring-destructive/20 ring-2',
+                    (validationErrors.room || validationErrors.capacity) &&
+                      selected &&
+                      'border-destructive ring-destructive/20 ring-2',
                   )}
                 >
                   <span className="block truncate text-sm font-semibold">{roomName}</span>
@@ -845,10 +862,14 @@ export function MeetingSchedulePicker({
           </p>
         ) : null}
         {validationErrors.room ? (
-          <p role="alert" className="text-destructive text-xs font-medium">{validationErrors.room}</p>
+          <p role="alert" className="text-destructive text-xs font-medium">
+            {validationErrors.room}
+          </p>
         ) : null}
         {validationErrors.capacity ? (
-          <p role="alert" className="text-destructive text-xs font-medium">{validationErrors.capacity}</p>
+          <p role="alert" className="text-destructive text-xs font-medium">
+            {validationErrors.capacity}
+          </p>
         ) : null}
       </div>
 
@@ -871,7 +892,10 @@ export function MeetingSchedulePicker({
             <div className="flex items-center gap-2">
               <p className="text-sm font-semibold">{t('meetings.create.roomDayOverview')}</p>
               {scheduleQuery.isFetching ? (
-                <Loader2 aria-hidden="true" className="text-muted-foreground size-3.5 animate-spin" />
+                <Loader2
+                  aria-hidden="true"
+                  className="text-muted-foreground size-3.5 animate-spin"
+                />
               ) : null}
             </div>
             <p className="text-muted-foreground text-xs">
@@ -882,13 +906,11 @@ export function MeetingSchedulePicker({
           </div>
         </div>
 
-        <div className="rounded-xl border bg-background p-3" dir={rtl ? 'rtl' : 'ltr'}>
-          <div className="relative h-14 rounded-lg border bg-muted/20">
+        <div className="bg-background rounded-xl border p-3" dir={rtl ? 'rtl' : 'ltr'}>
+          <div className="bg-muted/20 relative h-14 rounded-lg border">
             {roomId
               ? scheduleRanges.map(({ entry, range }, index) => {
-                  const left = rtl
-                    ? ((1440 - range.end) / 1440) * 100
-                    : (range.start / 1440) * 100
+                  const left = rtl ? ((1440 - range.end) / 1440) * 100 : (range.start / 1440) * 100
                   const width = Math.max(0.9, ((range.end - range.start) / 1440) * 100)
                   return (
                     <BusyMeetingBlock
@@ -933,7 +955,10 @@ export function MeetingSchedulePicker({
             <span className="flex items-center gap-1.5">
               <span
                 className="bg-warning/25 border-warning size-3 rounded-sm border"
-                style={{ backgroundImage: 'repeating-linear-gradient(135deg, color-mix(in oklab, var(--warning) 40%, transparent) 0 3px, transparent 3px 6px)' }}
+                style={{
+                  backgroundImage:
+                    'repeating-linear-gradient(135deg, color-mix(in oklab, var(--warning) 40%, transparent) 0 3px, transparent 3px 6px)',
+                }}
               />
               {t('meetings.create.slotBusy')}
             </span>
@@ -961,7 +986,8 @@ export function MeetingSchedulePicker({
         tabIndex={-1}
         className={cn(
           'space-y-3 rounded-xl outline-none',
-          validationErrors.time && 'ring-2 ring-destructive/20 ring-offset-2 ring-offset-background',
+          validationErrors.time &&
+            'ring-destructive/20 ring-offset-background ring-2 ring-offset-2',
         )}
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -969,7 +995,9 @@ export function MeetingSchedulePicker({
             <p className="text-sm font-semibold">{t('meetings.create.chooseTime')}</p>
             <p className="text-muted-foreground text-xs">
               {roomId
-                ? t('meetings.create.chooseTimeHint', { duration: formatMeetingDuration(activeDuration, t) })
+                ? t('meetings.create.chooseTimeHint', {
+                    duration: formatMeetingDuration(activeDuration, t),
+                  })
                 : t('meetings.create.chooseRoomToSeeAvailability')}
             </p>
           </div>
@@ -990,7 +1018,8 @@ export function MeetingSchedulePicker({
               dir="ltr"
               className="text-muted-foreground min-w-28 text-center text-xs tabular-nums"
             >
-              {formatClockTime(firstVisibleTime, locale, timeFormat)}–{formatClockTime(lastVisibleStart, locale, timeFormat)}
+              {formatClockTime(firstVisibleTime, locale, timeFormat)}–
+              {formatClockTime(lastVisibleStart, locale, timeFormat)}
             </span>
             <Button
               variant="outline"
@@ -1010,13 +1039,12 @@ export function MeetingSchedulePicker({
 
         <div
           dir={rtl ? 'rtl' : 'ltr'}
-          className="grid auto-cols-[minmax(9.5rem,1fr)] grid-flow-col gap-2 overflow-x-auto pb-2 [scrollbar-width:thin]"
+          className="grid [scrollbar-width:thin] auto-cols-[minmax(9.5rem,1fr)] grid-flow-col gap-2 overflow-x-auto pb-2"
         >
           {visibleOptions.map((option) => {
             const canFitDuration = option.end <= 1440
-            const busyEntry = roomId && canFitDuration
-              ? busyEntryForRange(option.start, option.end)
-              : null
+            const busyEntry =
+              roomId && canFitDuration ? busyEntryForRange(option.start, option.end) : null
             const isBusy = busyEntry !== null
             const selected = Boolean(
               roomId && option.start === selectedStartMinutes && option.end === selectedEndMinutes,
@@ -1048,13 +1076,13 @@ export function MeetingSchedulePicker({
                 aria-label={`${formatClockTime(optionStart, locale, timeFormat)}. ${stateText}`}
                 onClick={() => chooseTime(option.start, option.end, isBusy)}
                 className={cn(
-                  'focus-visible:ring-ring min-h-24 rounded-xl border p-3 text-start outline-none transition focus-visible:ring-2 disabled:cursor-not-allowed',
+                  'focus-visible:ring-ring min-h-24 rounded-xl border p-3 text-start transition outline-none focus-visible:ring-2 disabled:cursor-not-allowed',
                   conflict
                     ? 'border-destructive bg-destructive/10 text-destructive'
                     : selected
                       ? 'border-primary bg-primary text-primary-foreground shadow-sm'
                       : !roomId && canFitDuration
-                        ? 'border-dashed bg-muted/20 hover:border-primary/45 hover:bg-primary/5'
+                        ? 'bg-muted/20 hover:border-primary/45 hover:bg-primary/5 border-dashed'
                         : isBusy
                           ? allowBusySelection
                             ? 'border-warning/40 bg-warning/5 hover:bg-warning/10'
@@ -1096,7 +1124,9 @@ export function MeetingSchedulePicker({
         </div>
 
         {validationErrors.time ? (
-          <p role="alert" className="text-destructive text-xs font-medium">{validationErrors.time}</p>
+          <p role="alert" className="text-destructive text-xs font-medium">
+            {validationErrors.time}
+          </p>
         ) : null}
 
         {allowBusySelection && roomId ? (
@@ -1116,7 +1146,8 @@ export function MeetingSchedulePicker({
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-semibold tabular-nums">
-                {formatClockTime(startTime, locale, timeFormat)} – {formatClockTime(endTime, locale, timeFormat)}
+                {formatClockTime(startTime, locale, timeFormat)} –{' '}
+                {formatClockTime(endTime, locale, timeFormat)}
               </span>
               <span className="text-muted-foreground text-xs">
                 {t('meetings.create.capacitySummary', {
