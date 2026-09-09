@@ -39,7 +39,7 @@ interface ContractAccessDelegationRecord {
   ownerUserId: number;
   ownerUserCode: string;
   ownerUserName: string;
-  view: boolean;
+  hasView: boolean;
   manageAttachments: boolean;
 }
 
@@ -63,7 +63,8 @@ function mapPermission(record: AccessPermissionRecord): AccessPermission {
 
 export async function listUserPermissions(userId: number): Promise<AccessPermission[]> {
   const pool = await getDatabasePool();
-  const result = await pool.request().input("userId", sql.Int, userId).query<AccessPermissionRecord>(`
+  const result = await pool.request().input("userId", sql.Int, userId)
+    .query<AccessPermissionRecord>(`
     SELECT
       module_code AS moduleCode,
       entity_code AS entityCode,
@@ -96,8 +97,7 @@ async function setPermission(
     .input("entityCode", sql.VarChar(40), input.entityCode)
     .input("permissionCode", sql.VarChar(40), input.permissionCode)
     .input("resourceOwnerUserId", sql.Int, input.resourceOwnerUserId)
-    .input("enabled", sql.Bit, input.enabled)
-    .query(`
+    .input("enabled", sql.Bit, input.enabled).query(`
       IF EXISTS (
         SELECT 1
         FROM dbo.TM_access_permissions WITH (UPDLOCK, HOLDLOCK)
@@ -183,8 +183,7 @@ export async function saveProcurementAccess(
     await transaction
       .request()
       .input("actorUserId", sql.Int, input.actorUserId)
-      .input("targetUserId", sql.Int, input.granteeUserId)
-      .query(`
+      .input("targetUserId", sql.Int, input.granteeUserId).query(`
         UPDATE dbo.TM_access_permissions
         SET
           is_active = 0,
@@ -290,8 +289,27 @@ export async function getContractAccessAdminData(): Promise<ContractAccessAdminD
         owner.USER_ID AS ownerUserId,
         owner.USER_CODE AS ownerUserCode,
         owner.USER_NAME AS ownerUserName,
-        CAST(MAX(CASE WHEN permission.permission_code = 'VIEW' AND permission.is_active = 1 THEN 1 ELSE 0 END) AS BIT) AS view,
-        CAST(MAX(CASE WHEN permission.permission_code = 'MANAGE_ATTACHMENTS' AND permission.is_active = 1 THEN 1 ELSE 0 END) AS BIT) AS manageAttachments
+     CAST(
+  MAX(
+    CASE
+      WHEN permission.permission_code = 'VIEW'
+       AND permission.is_active = 1
+      THEN 1
+      ELSE 0
+    END
+  ) AS BIT
+) AS hasView,
+
+CAST(
+  MAX(
+    CASE
+      WHEN permission.permission_code = 'MANAGE_ATTACHMENTS'
+       AND permission.is_active = 1
+      THEN 1
+      ELSE 0
+    END
+  ) AS BIT
+) AS manageAttachments
       FROM dbo.TM_access_permissions AS permission
       INNER JOIN dbo.users AS grantee ON grantee.USER_ID = permission.grantee_user_id
       INNER JOIN dbo.users AS owner ON owner.USER_ID = permission.resource_owner_user_id
@@ -325,7 +343,7 @@ export async function getContractAccessAdminData(): Promise<ContractAccessAdminD
       ownerUserId: Number(record.ownerUserId),
       ownerUserCode: record.ownerUserCode,
       ownerUserName: record.ownerUserName,
-      view: record.view,
+      view: record.hasView,
       manageAttachments: record.manageAttachments,
     })),
   };
