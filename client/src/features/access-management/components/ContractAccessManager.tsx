@@ -105,7 +105,7 @@ export function ContractAccessManager() {
             <div className="space-y-2">
               <label className="text-sm font-medium">{t('access.contractAccess.grantee')}</label>
               <Select
-                value={granteeUserId === null ? undefined : String(granteeUserId)}
+                value={granteeUserId === null ? '' : String(granteeUserId)}
                 onValueChange={(value) => setGranteeUserId(Number(value))}
               >
                 <SelectTrigger aria-label={t('access.contractAccess.grantee')}>
@@ -124,7 +124,7 @@ export function ContractAccessManager() {
             <div className="space-y-2">
               <label className="text-sm font-medium">{t('access.contractAccess.owner')}</label>
               <Select
-                value={ownerUserId === null ? undefined : String(ownerUserId)}
+                value={ownerUserId === null ? '' : String(ownerUserId)}
                 onValueChange={(value) => setOwnerUserId(Number(value))}
               >
                 <SelectTrigger aria-label={t('access.contractAccess.owner')}>
@@ -173,12 +173,12 @@ export function ContractAccessManager() {
               {t('common.clear')}
             </Button>
             <Button
-              disabled={
-                update.isPending || granteeUserId === null || ownerUserId === null || !view
-              }
+              disabled={update.isPending || granteeUserId === null || ownerUserId === null || !view}
               onClick={save}
             >
-              {update.isPending ? <Loader2 aria-hidden="true" className="size-4 animate-spin" /> : null}
+              {update.isPending ? (
+                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+              ) : null}
               {t('access.contractAccess.apply')}
             </Button>
           </div>
