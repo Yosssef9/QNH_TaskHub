@@ -5,7 +5,12 @@ import type { ContractAccessAdminData } from "../access-permissions/access-permi
 import { mapAccessUser } from "./access.mapper.js";
 import { assertLastAdminIsPreserved } from "./access.policy.js";
 import { accessRepository } from "./access.repository.js";
-import type { AccessListQuery, AccessUser, AccessUserList, UpdateAccessInput } from "./access.types.js";
+import type {
+  AccessListQuery,
+  AccessUser,
+  AccessUserList,
+  UpdateAccessInput,
+} from "./access.types.js";
 
 export interface AccessService {
   listUsers(query: AccessListQuery): Promise<AccessUserList>;
@@ -51,7 +56,10 @@ export const accessService: AccessService = {
         });
       }
 
-      const currentAccess = await accessRepository.findCurrentAccessForUpdate(transaction, input.userId);
+      const currentAccess = await accessRepository.findCurrentAccessForUpdate(
+        transaction,
+        input.userId,
+      );
       if (!currentAccess && !input.isActive) {
         throw new AppError({
           statusCode: 409,
@@ -119,10 +127,15 @@ export const accessService: AccessService = {
 
   async updateContractDelegation(actorUserId, input) {
     await withTransaction(async (transaction) => {
-      const [grantee, owner] = await Promise.all([
-        accessRepository.findDelegationParticipantForUpdate(transaction, input.granteeUserId),
-        accessRepository.findDelegationParticipantForUpdate(transaction, input.ownerUserId),
-      ]);
+      const grantee = await accessRepository.findDelegationParticipantForUpdate(
+        transaction,
+        input.granteeUserId,
+      );
+
+      const owner = await accessRepository.findDelegationParticipantForUpdate(
+        transaction,
+        input.ownerUserId,
+      );
       if (!grantee || !owner) {
         throw new AppError({
           statusCode: 409,
@@ -147,7 +160,10 @@ export const accessService: AccessService = {
       });
 
       if (input.view && !grantee.contractsAccess) {
-        await accessRepository.ensureContractSettingsInTransaction(transaction, input.granteeUserId);
+        await accessRepository.ensureContractSettingsInTransaction(
+          transaction,
+          input.granteeUserId,
+        );
       }
     });
 
