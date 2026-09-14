@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/cn'
 
-const DEFAULT_DURATION_PRESETS = [30, 60, 90, 120] as const
+const DEFAULT_DURATION_PRESETS = [30, 45, 60, 90, 120] as const
 
 export function formatMeetingDuration(minutes: number, t: TFunction): string {
   if (minutes < 60) return t('meetings.create.durationMinutes', { count: minutes })
@@ -35,7 +35,7 @@ export function MeetingDurationPicker({
   disabled = false,
   minMinutes = 30,
   maxMinutes = 1440,
-  stepMinutes = 30,
+  stepMinutes = 15,
   title,
   description,
   error,

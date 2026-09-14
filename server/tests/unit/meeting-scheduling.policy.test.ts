@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  assertMeetingHasNotStarted,
   assertParticipantCount,
+  assertSchedulableMeetingWindow,
   assertScheduleWindow,
   hasRoomCapacity,
 } from "../../src/modules/meetings/meeting-scheduling.policy.js";
@@ -21,9 +23,56 @@ describe("Meeting scheduling policy", () => {
     ).toThrowError(expect.objectContaining({ code: "INVALID_MEETING_SCHEDULE_WINDOW" }));
   });
 
+
+  it("rejects a Meeting start time that has already passed", () => {
+    expect(() =>
+      assertSchedulableMeetingWindow(
+        new Date("2026-09-10T07:00:00Z"),
+        new Date("2026-09-10T08:00:00Z"),
+        new Date("2026-09-10T07:00:01Z"),
+      ),
+    ).toThrowError(expect.objectContaining({ code: "MEETING_SCHEDULE_IN_PAST" }));
+  });
+
+  it("requires 15-minute Meeting time increments", () => {
+    expect(() =>
+      assertSchedulableMeetingWindow(
+        new Date("2026-09-10T07:10:00Z"),
+        new Date("2026-09-10T08:10:00Z"),
+        new Date("2026-09-10T06:00:00Z"),
+      ),
+    ).toThrowError(expect.objectContaining({ code: "INVALID_MEETING_TIME_INCREMENT" }));
+  });
+
+  it("blocks lifecycle schedule changes once the approved Meeting start is reached", () => {
+    expect(() =>
+      assertMeetingHasNotStarted(
+        new Date("2026-09-10T07:00:00Z"),
+        new Date("2026-09-10T07:00:00Z"),
+      ),
+    ).toThrowError(expect.objectContaining({ code: "MEETING_ALREADY_STARTED" }));
+
+    expect(() =>
+      assertMeetingHasNotStarted(
+        new Date("2026-09-10T07:00:00Z"),
+        new Date("2026-09-10T08:00:00Z"),
+      ),
+    ).toThrowError(expect.objectContaining({ code: "MEETING_ALREADY_STARTED" }));
+  });
+
+  it("allows lifecycle schedule changes before the approved Meeting start", () => {
+    expect(() =>
+      assertMeetingHasNotStarted(
+        new Date("2026-09-10T07:00:00Z"),
+        new Date("2026-09-10T06:59:59Z"),
+      ),
+    ).not.toThrow();
+  });
+
   it("requires at least one participant", () => {
     expect(() => assertParticipantCount(0)).toThrowError(
       expect.objectContaining({ code: "INVALID_MEETING_PARTICIPANT_COUNT" }),
     );
   });
 });
+

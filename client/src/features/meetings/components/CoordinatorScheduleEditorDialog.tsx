@@ -239,7 +239,9 @@ export function CoordinatorScheduleEditorDialog({
 
   const statusClass = !selectionState || selectionState.isChecking
     ? 'border-border bg-muted/20 text-foreground'
-    : selectionState.hasKnownConflict
+    : selectionState.isPast
+      ? 'border-warning/40 bg-warning/5 text-warning-foreground'
+      : selectionState.hasKnownConflict
       ? 'border-destructive/30 bg-destructive/5 text-destructive'
       : !selectionState.hasCapacity
         ? 'border-warning/40 bg-warning/5 text-warning-foreground'
@@ -249,7 +251,9 @@ export function CoordinatorScheduleEditorDialog({
 
   const statusText = selectionState?.isChecking
     ? t('meetings.coordinatorSchedule.checking')
-    : selectionState?.hasKnownConflict
+    : selectionState?.isPast
+      ? t('meetings.coordinatorSchedule.pastTime')
+      : selectionState?.hasKnownConflict
       ? t('meetings.coordinatorSchedule.conflict')
       : selectionState && !selectionState.hasCapacity
         ? t('meetings.coordinatorSchedule.capacity')

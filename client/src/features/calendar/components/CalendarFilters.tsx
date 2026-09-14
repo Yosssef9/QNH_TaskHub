@@ -129,12 +129,18 @@ interface Props {
   value: CalendarFilterState
   onChange: (next: CalendarFilterState) => void
   onOpenSearchResult: (task: CalendarTask) => void
+  kpiWorkCyclesAccess?: boolean
 }
 
-export function CalendarFilters({ onChange, onOpenSearchResult, value }: Props) {
+export function CalendarFilters({
+  kpiWorkCyclesAccess = true,
+  onChange,
+  onOpenSearchResult,
+  value,
+}: Props) {
   const { i18n, t } = useTranslation()
   const listsQuery = useLists()
-  const cyclesQuery = useWorkCycles()
+  const cyclesQuery = useWorkCycles(kpiWorkCyclesAccess)
   const roomsQuery = useActiveMeetingRooms(value.sources.meetings)
   const initializedKpiScope = useRef(false)
   const isArabic = i18n.language.toLowerCase().startsWith('ar')
@@ -152,7 +158,10 @@ export function CalendarFilters({ onChange, onOpenSearchResult, value }: Props) 
   const selectedInstance =
     availableInstances.find((instance) => instance.id === value.kpiInstanceId) ?? null
   const selectedRoom = (roomsQuery.data ?? []).find((room) => room.id === value.roomId) ?? null
-  const taskScopes = selectedTaskScopes(value)
+  const taskScopes = selectedTaskScopes({
+    ...value,
+    sources: { ...value.sources, kpi: kpiWorkCyclesAccess && value.sources.kpi },
+  })
 
   useEffect(() => {
     if (!value.sources.kpi) {
@@ -230,7 +239,10 @@ export function CalendarFilters({ onChange, onOpenSearchResult, value }: Props) 
         </div>
 
         <div
-          className="bg-muted/60 grid grid-cols-1 gap-1 rounded-xl p-1 sm:grid-cols-3"
+          className={cn(
+            'bg-muted/60 grid grid-cols-1 gap-1 rounded-xl p-1',
+            kpiWorkCyclesAccess ? 'sm:grid-cols-3' : 'sm:grid-cols-2',
+          )}
           aria-label={t('calendar.sourceLabel')}
         >
           <SourceButton
@@ -239,12 +251,14 @@ export function CalendarFilters({ onChange, onOpenSearchResult, value }: Props) 
             label={t('calendar.personalTasks')}
             onClick={() => toggleSource('PERSONAL')}
           />
-          <SourceButton
-            active={value.sources.kpi}
-            icon={Gauge}
-            label={t('calendar.kpiTasks')}
-            onClick={() => toggleSource('KPI')}
-          />
+          {kpiWorkCyclesAccess ? (
+            <SourceButton
+              active={value.sources.kpi}
+              icon={Gauge}
+              label={t('calendar.kpiTasks')}
+              onClick={() => toggleSource('KPI')}
+            />
+          ) : null}
           <SourceButton
             active={value.sources.meetings}
             icon={CalendarClock}
@@ -506,3 +520,4 @@ function SourceButton({
     </Button>
   )
 }
+

@@ -1,3 +1,7 @@
+import type {
+  MeetingActionItemCapabilities,
+  MeetingActionItemContext,
+} from "../meeting-action-items/meeting-action-items.types.js";
 import type { PersonalTask } from "../tasks/tasks.types.js";
 
 export interface SubtaskRecord {
@@ -21,11 +25,15 @@ export interface AttachmentRecord {
   mimeType: string;
   fileExtension: string;
   sizeBytes: number | string;
+  uploadedByUserId: number;
+  uploadedByName: string;
   uploadedAtUtc: Date;
 }
 
 export interface ActivityRecord {
   id: number | string;
+  actorUserId: number;
+  actorName: string;
   activityType: string;
   eventDataJson: string | null;
   createdAtUtc: Date;
@@ -51,11 +59,15 @@ export interface Attachment {
   mimeType: string;
   fileExtension: string;
   sizeBytes: number;
+  uploadedByUserId: number;
+  uploadedByName: string;
   uploadedAtUtc: string;
 }
 
 export interface TaskActivity {
   id: number;
+  actorUserId: number;
+  actorName: string;
   activityType: string;
   eventData: Record<string, unknown> | null;
   createdAtUtc: string;
@@ -63,9 +75,10 @@ export interface TaskActivity {
 
 export interface TaskDetails {
   task: PersonalTask;
+  actionItem: MeetingActionItemContext | null;
+  capabilities: MeetingActionItemCapabilities;
   subtasks: Subtask[];
   attachments: Attachment[];
   activity: TaskActivity[];
   progress: { completed: number; total: number; percentage: number };
 }
-

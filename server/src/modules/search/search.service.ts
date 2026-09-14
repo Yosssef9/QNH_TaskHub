@@ -56,7 +56,12 @@ function mapResult(record: SearchResultRecord): GlobalSearchResult {
 }
 
 export const searchService = {
-  async search(ownerUserId: number, query: string, limit: number): Promise<GlobalSearchData> {
+  async search(
+    ownerUserId: number,
+    query: string,
+    limit: number,
+    includeKpiWorkCycles = true,
+  ): Promise<GlobalSearchData> {
     const normalized = query.trim();
     const escaped = escapeLike(normalized);
     const records = await searchRepository.search(
@@ -65,6 +70,7 @@ export const searchService = {
       `${escaped}%`,
       `%${escaped}%`,
       limit,
+      includeKpiWorkCycles,
     );
 
     return {
@@ -73,3 +79,4 @@ export const searchService = {
     };
   },
 };
+

@@ -8,6 +8,7 @@ export const updatePreferencesBodySchema = z
     calendarShowAdjacentDates: z.boolean().optional(),
     meetingStartReminderEnabled: z.boolean().optional(),
     timeFormat: z.enum(["12H", "24H"]).optional(),
+    meetingScheduleSlotInterval: z.union([z.literal(15), z.literal(30), z.literal(60)]).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one preference must be provided.",

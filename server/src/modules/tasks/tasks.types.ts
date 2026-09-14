@@ -6,6 +6,18 @@ import type {
   TaskStatus,
 } from "./tasks.constants.js";
 
+export interface MeetingActionItemTaskContext {
+  meetingId: number;
+  meetingTitle: string;
+  assigneeUserId: number;
+  assigneeName: string;
+  assignedByUserId: number;
+  assignedByName: string;
+  agendaItemId: number | null;
+  agendaTitle: string | null;
+  assignedAtUtc: string;
+}
+
 export interface TaskRecord {
   id: number;
   listId: number | null;
@@ -34,6 +46,15 @@ export interface TaskRecord {
   isOverdue: boolean;
   subtaskTotal: number;
   subtaskCompleted: number;
+  actionMeetingId: number | string | null;
+  actionMeetingTitle: string | null;
+  actionAssigneeUserId: number | null;
+  actionAssigneeName: string | null;
+  actionAssignedByUserId: number | null;
+  actionAssignedByName: string | null;
+  actionAgendaItemId: number | string | null;
+  actionAgendaTitle: string | null;
+  actionAssignedAtUtc: Date | null;
 }
 
 export interface PersonalTask {
@@ -63,6 +84,7 @@ export interface PersonalTask {
   isOverdue: boolean;
   subtaskTotal: number;
   subtaskCompleted: number;
+  meetingActionItem: MeetingActionItemTaskContext | null;
 }
 
 export interface TaskListQuery {

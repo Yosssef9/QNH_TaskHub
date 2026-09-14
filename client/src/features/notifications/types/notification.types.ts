@@ -17,6 +17,8 @@ export const NOTIFICATION_TYPES = [
   'MEETING_RESCHEDULE_REQUEST_CANCELLED',
   'MEETING_CANCELLED',
   'MEETING_START_REMINDER',
+  'MEETING_ACTION_ITEM_ASSIGNED',
+  'MEETING_ACTION_ITEM_COMPLETED',
 ] as const
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number]
@@ -39,5 +41,6 @@ export interface NotificationListData {
   items: NotificationItem[]
   unreadCount: number
 }
+
 
 

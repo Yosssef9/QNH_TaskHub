@@ -20,6 +20,7 @@ export interface SearchRepository {
     prefixQuery: string,
     containsQuery: string,
     limit: number,
+    includeKpiWorkCycles: boolean,
   ): Promise<SearchResultRecord[]>;
 }
 
@@ -29,6 +30,7 @@ async function search(
   prefixQuery: string,
   containsQuery: string,
   limit: number,
+  includeKpiWorkCycles: boolean,
 ): Promise<SearchResultRecord[]> {
   const pool = await getDatabasePool();
   const result = await pool
@@ -38,6 +40,7 @@ async function search(
     .input("prefixQuery", sql.NVarChar(244), prefixQuery)
     .input("containsQuery", sql.NVarChar(246), containsQuery)
     .input("limit", sql.Int, limit)
+    .input("includeKpiWorkCycles", sql.Bit, includeKpiWorkCycles)
     .query<SearchResultRecord>(`
       ;WITH current_cycle AS (
         SELECT settings.current_work_cycle_id AS cycleId
@@ -85,6 +88,7 @@ async function search(
         WHERE task.owner_user_id = @ownerUserId
           AND task.deleted_at_utc IS NULL
           AND (task.list_id IS NULL OR list.archived_at_utc IS NULL)
+          AND (task.kpi_instance_id IS NULL OR @includeKpiWorkCycles = 1)
           AND (task.kpi_instance_id IS NULL OR cycle.archived_at_utc IS NULL)
           AND (
             task.title LIKE @containsQuery ESCAPE '\\'
@@ -131,6 +135,7 @@ async function search(
           AND subtask.deleted_at_utc IS NULL
           AND task.deleted_at_utc IS NULL
           AND (task.list_id IS NULL OR list.archived_at_utc IS NULL)
+          AND (task.kpi_instance_id IS NULL OR @includeKpiWorkCycles = 1)
           AND (task.kpi_instance_id IS NULL OR cycle.archived_at_utc IS NULL)
           AND subtask.title LIKE @containsQuery ESCAPE '\\'
 
@@ -155,7 +160,8 @@ async function search(
           2 AS typeRank
         FROM dbo.TM_work_cycles AS cycle
         LEFT JOIN current_cycle ON 1 = 1
-        WHERE cycle.owner_user_id = @ownerUserId
+        WHERE @includeKpiWorkCycles = 1
+          AND cycle.owner_user_id = @ownerUserId
           AND cycle.archived_at_utc IS NULL
           AND (
             cycle.title LIKE @containsQuery ESCAPE '\\'
@@ -186,7 +192,8 @@ async function search(
           ON cycle.id = instance.cycle_id
           AND cycle.owner_user_id = instance.owner_user_id
         LEFT JOIN current_cycle ON 1 = 1
-        WHERE instance.owner_user_id = @ownerUserId
+        WHERE @includeKpiWorkCycles = 1
+          AND instance.owner_user_id = @ownerUserId
           AND cycle.archived_at_utc IS NULL
           AND (
             instance.name_snapshot LIKE @containsQuery ESCAPE '\\'
@@ -213,7 +220,8 @@ async function search(
           END AS matchRank,
           4 AS typeRank
         FROM dbo.TM_kpis AS kpi
-        WHERE kpi.owner_user_id = @ownerUserId
+        WHERE @includeKpiWorkCycles = 1
+          AND kpi.owner_user_id = @ownerUserId
           AND kpi.archived_at_utc IS NULL
           AND (
             kpi.name LIKE @containsQuery ESCAPE '\\'
@@ -271,3 +279,4 @@ async function search(
 }
 
 export const searchRepository: SearchRepository = { search };
+

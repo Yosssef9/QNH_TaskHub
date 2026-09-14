@@ -1,6 +1,7 @@
 import type { RequestHandler } from "express";
 import { AppError } from "../../shared/errors/app-error.js";
 import type { ApiSuccessResponse } from "../../shared/types/result.js";
+import { hasKpiWorkCyclesAccess } from "../access-permissions/access-permissions.policy.js";
 import { dashboardService } from "./dashboard.service.js";
 import type { DashboardData } from "./dashboard.types.js";
 
@@ -14,7 +15,11 @@ export const getDashboard: RequestHandler = async (req, res) => {
     });
   }
 
-  const dashboard = await dashboardService.get(owner);
+  const dashboard = await dashboardService.get(
+    owner,
+    hasKpiWorkCyclesAccess(req.authContext!.access.permissions),
+  );
   const body: ApiSuccessResponse<DashboardData> = { success: true, data: dashboard };
   res.json(body);
 };
+

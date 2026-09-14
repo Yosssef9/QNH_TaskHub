@@ -187,6 +187,8 @@ export function useUpdateMeetingAgenda() {
       client.setQueryData([...meetingsQueryKey, 'detail', input.meetingId], detail)
       void client.invalidateQueries({ queryKey: myMeetingsQueryKey })
       void client.invalidateQueries({ queryKey: myMeetingRequestsQueryKey })
+      void client.invalidateQueries({ queryKey: ['meetings', 'action-items', input.meetingId] })
+      void client.invalidateQueries({ queryKey: ['meetings', 'follow-up', input.meetingId] })
     },
   })
 }
@@ -269,4 +271,5 @@ export function useUpdateMeetingTemplate() {
 export function useArchiveMeetingTemplate() {
   return useMeetingMutation(archiveMeetingTemplate)
 }
+
 

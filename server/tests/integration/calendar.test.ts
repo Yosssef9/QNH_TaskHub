@@ -27,6 +27,7 @@ describe("calendar endpoints", () => {
         calendarShowAdjacentDates: false,
         meetingStartReminderEnabled: true,
         timeFormat: "12H",
+        meetingScheduleSlotInterval: 30,
         timezone: "Asia/Riyadh",
       },
     });

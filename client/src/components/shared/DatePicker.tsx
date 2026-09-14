@@ -76,7 +76,9 @@ export function DatePicker({
         {...(pickerMaxDate ? { maxDate: pickerMaxDate } : {})}
         slots={{
           /*
-           * Remove the calendar button completely.
+           * TaskHub uses the whole date field as the calendar affordance.
+           * Keep MUI's opening button hidden consistently so the icon never
+           * competes with the segmented date text in either RTL or LTR.
            */
           openPickerButton: () => null,
         }}
@@ -256,3 +258,4 @@ export function DatePicker({
     </div>
   )
 }
+

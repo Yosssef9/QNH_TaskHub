@@ -1,6 +1,4 @@
 import {
-  ArrowDown,
-  ArrowUp,
   CalendarDays,
   Check,
   Circle,
@@ -13,7 +11,7 @@ import {
 } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type { ComponentProps } from 'react'
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
@@ -28,7 +26,6 @@ import {
   taskHubEase,
   taskHubItemMotion,
 } from '@/components/shared/TaskHubMotion'
-import { SearchInput } from '@/components/shared/SearchInput'
 import { TablePagination } from '@/components/shared/TablePagination'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -66,9 +63,10 @@ import type {
 } from '../types/task.types'
 import { TaskEditorDialog } from './TaskEditorDialog'
 import { TaskDetailsDrawer } from './TaskDetailsDrawer'
+import { TaskCollectionToolbar } from './TaskCollectionToolbar'
 import { TaskListSummary } from './TaskListSummary'
 import { TaskStatusIndicator } from './TaskStatusIndicator'
-import { TaskDueIndicator, TaskPriorityIndicator, TaskSortIndicator } from './TaskSelectIndicators'
+import { TaskDueIndicator, TaskPriorityIndicator } from './TaskSelectIndicators'
 
 type Props =
   | {
@@ -81,6 +79,41 @@ type Props =
   | { instance: KpiInstance; listId?: never; lists?: never; cycle?: never; cycles?: never }
   | { cycle: WorkCycle; listId?: never; lists?: never; instance?: never; cycles?: never }
   | { cycles: WorkCycle[]; instance?: never; cycle?: never; listId?: never; lists?: never }
+
+type TaskListGroupBy = 'NONE' | 'STATUS' | 'PRIORITY' | 'DUE_DATE' | 'KPI' | 'CYCLE'
+
+function taskGroupKey(task: PersonalTask, groupBy: TaskListGroupBy): string {
+  if (groupBy === 'STATUS') return `status:${task.status}`
+  if (groupBy === 'PRIORITY') return `priority:${task.priority}`
+  if (groupBy === 'DUE_DATE') return `due:${task.dueDate ?? 'none'}`
+  if (groupBy === 'KPI') return `kpi:${task.kpiInstanceId ?? 'none'}`
+  if (groupBy === 'CYCLE') return `cycle:${task.cycleId ?? 'none'}`
+  return 'all'
+}
+
+function TaskGroupHeading({ task, groupBy }: { task: PersonalTask; groupBy: TaskListGroupBy }) {
+  const { i18n, t } = useTranslation()
+  if (groupBy === 'NONE') return null
+
+  let label = ''
+  if (groupBy === 'STATUS') label = t(`tasks.statuses.${task.status}`)
+  if (groupBy === 'PRIORITY') label = t(`tasks.priorities.${task.priority}`)
+  if (groupBy === 'KPI') label = task.kpiName ?? t('tasks.toolbar.groupValues.KPI')
+  if (groupBy === 'CYCLE') label = task.cycleTitle ?? t('tasks.toolbar.groupValues.CYCLE')
+  if (groupBy === 'DUE_DATE') {
+    const date = task.dueDate ? parseDateOnly(task.dueDate) : null
+    label = date
+      ? date.toLocaleDateString(i18n.language, { day: 'numeric', month: 'long', year: 'numeric' })
+      : t('tasks.noDueDate')
+  }
+
+  return (
+    <li className="text-muted-foreground flex items-center gap-3 pt-2 text-xs font-semibold uppercase tracking-wide">
+      <span className="truncate">{label}</span>
+      <span className="bg-border h-px flex-1" />
+    </li>
+  )
+}
 
 function TaskActionButton({
   label,
@@ -127,6 +160,7 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
   const [due, setDue] = useState<TaskDueFilter>('ALL')
   const [sortBy, setSortBy] = useState<TaskSortField>('createdAt')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
+  const [groupBy, setGroupBy] = useState<TaskListGroupBy>('NONE')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [editorOpen, setEditorOpen] = useState(false)
@@ -187,6 +221,229 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
   const restoreMutation = useRestoreTask()
   const total = query.data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
+
+  const displayedItems = useMemo(() => {
+    const items = query.data?.items ?? []
+    if (groupBy === 'NONE') return items
+
+    const grouped = new Map<string, PersonalTask[]>()
+    for (const task of items) {
+      const key = taskGroupKey(task, groupBy)
+      const existing = grouped.get(key)
+      if (existing) existing.push(task)
+      else grouped.set(key, [task])
+    }
+
+    return Array.from(grouped.values()).flat()
+  }, [groupBy, query.data?.items])
+
+  const structuredFilterCount =
+    Number(Boolean(status)) +
+    Number(Boolean(priority)) +
+    Number(due !== 'ALL') +
+    Number(Boolean(cycles && selectedCycleId)) +
+    Number(Boolean(isKpiAggregate && selectedKpiId))
+
+  function clearStructuredFilters() {
+    setPage(1)
+    setStatus(undefined)
+    setPriority(undefined)
+    setDue('ALL')
+    if (cycles) setSelectedCycleId(undefined)
+    if (isKpiAggregate) setSelectedKpiId(undefined)
+  }
+
+  const activeFilterChips = [
+    ...(cycles && selectedCycle
+      ? [{
+          key: 'cycle',
+          label: `${t('tasks.filterByCycle')}: ${selectedCycle.title}`,
+          onRemove: () => resetPageAnd(() => {
+            setSelectedCycleId(undefined)
+            setSelectedKpiId(undefined)
+          }),
+          removeLabel: t('tasks.toolbar.removeFilter', {
+            filter: `${t('tasks.filterByCycle')}: ${selectedCycle.title}`,
+          }),
+        }]
+      : []),
+    ...(isKpiAggregate && selectedKpi
+      ? [{
+          key: 'kpi',
+          label: `${t('tasks.filterByKpi')}: ${selectedKpi.name}`,
+          onRemove: () => resetPageAnd(() => setSelectedKpiId(undefined)),
+          removeLabel: t('tasks.toolbar.removeFilter', {
+            filter: `${t('tasks.filterByKpi')}: ${selectedKpi.name}`,
+          }),
+        }]
+      : []),
+    ...(status
+      ? [{
+          key: 'status',
+          label: `${t('tasks.allStatuses')}: ${t(`tasks.statuses.${status}`)}`,
+          onRemove: () => resetPageAnd(() => setStatus(undefined)),
+          removeLabel: t('tasks.toolbar.removeFilter', {
+            filter: `${t('tasks.allStatuses')}: ${t(`tasks.statuses.${status}`)}`,
+          }),
+        }]
+      : []),
+    ...(priority
+      ? [{
+          key: 'priority',
+          label: `${t('tasks.priority')}: ${t(`tasks.priorities.${priority}`)}`,
+          onRemove: () => resetPageAnd(() => setPriority(undefined)),
+          removeLabel: t('tasks.toolbar.removeFilter', {
+            filter: `${t('tasks.priority')}: ${t(`tasks.priorities.${priority}`)}`,
+          }),
+        }]
+      : []),
+    ...(due !== 'ALL'
+      ? [{
+          key: 'due',
+          label: `${t('tasks.dueDate')}: ${t(`tasks.dueFilters.${due}`)}`,
+          onRemove: () => resetPageAnd(() => setDue('ALL')),
+          removeLabel: t('tasks.toolbar.removeFilter', {
+            filter: `${t('tasks.dueDate')}: ${t(`tasks.dueFilters.${due}`)}`,
+          }),
+        }]
+      : []),
+  ]
+
+  const filterFields = (
+    <div className="grid gap-4 sm:grid-cols-2">
+      {cycles ? (
+        <div className="space-y-1.5 sm:col-span-2">
+          <label className="text-muted-foreground text-xs font-medium">{t('tasks.filterByCycle')}</label>
+          <Select
+            value={selectedCycleId ? String(selectedCycleId) : 'ALL'}
+            onValueChange={(value) =>
+              resetPageAnd(() => {
+                setSelectedCycleId(value === 'ALL' ? undefined : Number(value))
+                setSelectedKpiId(undefined)
+              })
+            }
+          >
+            <SelectTrigger className="h-10 min-w-0">
+              <SelectValue>
+                <span className="block min-w-0 truncate">
+                  {selectedCycle?.title ?? t('tasks.toolbar.all')}
+                </span>
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">{t('tasks.toolbar.all')}</SelectItem>
+              {availableCycles.map((item) => (
+                <SelectItem key={item.id} value={String(item.id)}>
+                  <span className="block max-w-[28rem] truncate">{item.title}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
+
+      {isKpiAggregate ? (
+        <div className="space-y-1.5 sm:col-span-2">
+          <label className="text-muted-foreground text-xs font-medium">{t('tasks.filterByKpi')}</label>
+          <Select
+            value={selectedKpiId ? String(selectedKpiId) : 'ALL'}
+            disabled={Boolean(cycles && !selectedCycle)}
+            onValueChange={(value) =>
+              resetPageAnd(() => setSelectedKpiId(value === 'ALL' ? undefined : Number(value)))
+            }
+          >
+            <SelectTrigger className="h-10 min-w-0">
+              <SelectValue>
+                {selectedKpi ? (
+                  <KpiSelectIndicator kpi={selectedKpi} />
+                ) : (
+                  <span>{t('tasks.toolbar.all')}</span>
+                )}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">{t('tasks.toolbar.all')}</SelectItem>
+              {taskKpis.map((item) => (
+                <SelectItem key={item.id} value={String(item.templateId)}>
+                  <KpiSelectIndicator kpi={item} />
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
+
+      <div className="space-y-1.5">
+        <label className="text-muted-foreground text-xs font-medium">{t('tasks.allStatuses')}</label>
+        <Select
+          value={status ?? 'ALL'}
+          onValueChange={(value) =>
+            resetPageAnd(() => setStatus(value === 'ALL' ? undefined : (value as TaskStatus)))
+          }
+        >
+          <SelectTrigger className="h-10 min-w-0">
+            <SelectValue>
+              {status ? <TaskStatusIndicator status={status} pill /> : <span>{t('tasks.toolbar.all')}</span>}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">{t('tasks.toolbar.all')}</SelectItem>
+            {TASK_STATUSES.map((value) => (
+              <SelectItem value={value} key={value}>
+                <TaskStatusIndicator status={value} />
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-muted-foreground text-xs font-medium">{t('tasks.priority')}</label>
+        <Select
+          value={priority ?? 'ALL'}
+          onValueChange={(value) =>
+            resetPageAnd(() => setPriority(value === 'ALL' ? undefined : (value as TaskPriority)))
+          }
+        >
+          <SelectTrigger className="h-10 min-w-0">
+            <SelectValue>
+              {priority ? <TaskPriorityIndicator priority={priority} pill /> : <span>{t('tasks.toolbar.all')}</span>}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">{t('tasks.toolbar.all')}</SelectItem>
+            {TASK_PRIORITIES.map((value) => (
+              <SelectItem value={value} key={value}>
+                <TaskPriorityIndicator priority={value} />
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-1.5 sm:col-span-2">
+        <label className="text-muted-foreground text-xs font-medium">{t('tasks.dueDate')}</label>
+        <Select
+          value={due}
+          onValueChange={(value) => resetPageAnd(() => setDue(value as TaskDueFilter))}
+        >
+          <SelectTrigger className="h-10 min-w-0">
+            <SelectValue>
+              {due === 'ALL' ? <span>{t('tasks.toolbar.all')}</span> : <TaskDueIndicator due={due} pill />}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">{t('tasks.toolbar.all')}</SelectItem>
+            {TASK_DUE_FILTERS.filter((value) => value !== 'ALL').map((value) => (
+              <SelectItem value={value} key={value}>
+                <TaskDueIndicator due={value} />
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  )
 
   useEffect(() => {
     const rawTaskId = searchParams.get('taskId')
@@ -298,175 +555,66 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
         />
       ) : null}
 
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-        <SearchInput
-          value={search}
-          onChange={(value) => resetPageAnd(() => setSearch(value))}
-          ariaLabel={t('tasks.searchLabel')}
-          placeholder={t('tasks.searchPlaceholder')}
-          className={isKpiAggregate ? 'xl:w-[210px] xl:max-w-[210px] xl:shrink-0' : 'xl:max-w-md'}
-        />
-        <div
-          className={cn(
-            'grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2',
-            cycles ? 'xl:grid-cols-6' : isKpiAggregate ? 'xl:grid-cols-5' : 'xl:grid-cols-4',
-          )}
-        >
-          {cycles ? (
-            <Select
-              value={selectedCycleId ? String(selectedCycleId) : 'ALL'}
-              onValueChange={(value) =>
-                resetPageAnd(() => {
-                  setSelectedCycleId(value === 'ALL' ? undefined : Number(value))
-                  setSelectedKpiId(undefined)
-                })
-              }
-            >
-              <SelectTrigger aria-label={t('tasks.filterByCycle')}>
-                <SelectValue>{selectedCycle?.title ?? t('tasks.allCycles')}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">{t('tasks.allCycles')}</SelectItem>
-                {availableCycles.map((item) => (
-                  <SelectItem key={item.id} value={String(item.id)}>
-                    {item.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : null}
-          {isKpiAggregate ? (
-            <Select
-              value={selectedKpiId ? String(selectedKpiId) : 'ALL'}
-              disabled={Boolean(cycles && !selectedCycle)}
-              onValueChange={(value) =>
-                resetPageAnd(() => setSelectedKpiId(value === 'ALL' ? undefined : Number(value)))
-              }
-            >
-              <SelectTrigger aria-label={t('tasks.filterByKpi')}>
-                <SelectValue>
-                  {selectedKpi ? <KpiSelectIndicator kpi={selectedKpi} /> : t('tasks.allKpis')}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">{t('tasks.allKpis')}</SelectItem>
-                {taskKpis.map((item) => (
-                  <SelectItem key={item.id} value={String(item.templateId)}>
-                    <KpiSelectIndicator kpi={item} />
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : null}
-          <Select
-            value={status ?? 'ALL'}
-            onValueChange={(value) =>
-              resetPageAnd(() => setStatus(value === 'ALL' ? undefined : (value as TaskStatus)))
-            }
+      <TaskCollectionToolbar
+        searchValue={search}
+        onSearchChange={(value) => resetPageAnd(() => setSearch(value))}
+        searchAriaLabel={t('tasks.searchLabel')}
+        searchPlaceholder={t('tasks.searchPlaceholder')}
+        filterButtonLabel={t('tasks.toolbar.filters')}
+        filterTitle={t('tasks.toolbar.filterTitle')}
+        filterDescription={t('tasks.toolbar.filterDescription')}
+        filterCount={structuredFilterCount}
+        filterContent={filterFields}
+        clearFiltersLabel={t('tasks.toolbar.clear')}
+        onClearFilters={clearStructuredFilters}
+        closeLabel={t('common.close')}
+        groupValue={groupBy}
+        groupLabel={t('tasks.toolbar.group')}
+        groupOptions={[
+          { value: 'NONE', label: t('tasks.toolbar.groupValues.NONE') },
+          { value: 'STATUS', label: t('tasks.toolbar.groupValues.STATUS') },
+          { value: 'PRIORITY', label: t('tasks.toolbar.groupValues.PRIORITY') },
+          { value: 'DUE_DATE', label: t('tasks.toolbar.groupValues.DUE_DATE') },
+          ...(isKpiAggregate
+            ? [{ value: 'KPI', label: t('tasks.toolbar.groupValues.KPI') }]
+            : []),
+          ...(cycles
+            ? [{ value: 'CYCLE', label: t('tasks.toolbar.groupValues.CYCLE') }]
+            : []),
+        ]}
+        onGroupChange={(value) => setGroupBy(value as TaskListGroupBy)}
+        sortValue={sortBy}
+        sortLabel={t('tasks.toolbar.sort')}
+        sortOptions={(['createdAt', 'dueDate', 'priority', 'title', 'status'] as const).map((value) => ({
+          value,
+          label: t(`tasks.sortFields.${value}`),
+        }))}
+        onSortChange={(value) =>
+          resetPageAnd(() => setSortBy(value as TaskSortField))
+        }
+        sortDirection={sortDirection}
+        onSortDirectionChange={(direction) => {
+          setPage(1)
+          setSortDirection(direction)
+        }}
+        sortDirectionLabel={t('tasks.toolbar.sortDirection')}
+        ascendingLabel={t('tasks.toolbar.ascending')}
+        descendingLabel={t('tasks.toolbar.descending')}
+        activeFilters={activeFilterChips}
+        activeFiltersLabel={t('tasks.toolbar.active')}
+        trailingAction={
+          <Button
+            disabled={createDisabled}
+            onClick={() => {
+              setEditing(null)
+              setEditorOpen(true)
+            }}
           >
-            <SelectTrigger>
-              <SelectValue>
-                <TaskStatusIndicator status={status ?? 'ALL'} pill />
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">
-                <TaskStatusIndicator status="ALL" />
-              </SelectItem>
-              {TASK_STATUSES.map((value) => (
-                <SelectItem value={value} key={value}>
-                  <TaskStatusIndicator status={value} />
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={priority ?? 'ALL'}
-            onValueChange={(value) =>
-              resetPageAnd(() => setPriority(value === 'ALL' ? undefined : (value as TaskPriority)))
-            }
-          >
-            <SelectTrigger>
-              <SelectValue>
-                <TaskPriorityIndicator priority={priority ?? 'ALL'} pill />
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">
-                <TaskPriorityIndicator priority="ALL" />
-              </SelectItem>
-              {TASK_PRIORITIES.map((value) => (
-                <SelectItem value={value} key={value}>
-                  <TaskPriorityIndicator priority={value} />
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={due}
-            onValueChange={(value) => resetPageAnd(() => setDue(value as TaskDueFilter))}
-          >
-            <SelectTrigger>
-              <SelectValue>
-                <TaskDueIndicator due={due} pill />
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {TASK_DUE_FILTERS.map((value) => (
-                <SelectItem value={value} key={value}>
-                  <TaskDueIndicator due={value} />
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div className="flex gap-2">
-            <Select
-              value={sortBy}
-              onValueChange={(value) => resetPageAnd(() => setSortBy(value as TaskSortField))}
-            >
-              <SelectTrigger aria-label={t('tasks.sortBy')}>
-                <SelectValue>
-                  <TaskSortIndicator sortBy={sortBy} pill />
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {(['createdAt', 'dueDate', 'priority', 'title', 'status'] as const).map((value) => (
-                  <SelectItem value={value} key={value}>
-                    <TaskSortIndicator sortBy={value} />
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              size="icon"
-              variant="outline"
-              aria-label={t(
-                sortDirection === 'asc' ? 'tasks.sortAscending' : 'tasks.sortDescending',
-              )}
-              onClick={() => {
-                setPage(1)
-                setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'))
-              }}
-            >
-              {sortDirection === 'asc' ? (
-                <ArrowUp className="size-4" />
-              ) : (
-                <ArrowDown className="size-4" />
-              )}
-            </Button>
-          </div>
-        </div>
-        <Button
-          disabled={createDisabled}
-          onClick={() => {
-            setEditing(null)
-            setEditorOpen(true)
-          }}
-        >
-          <Plus className="size-4" />
-          {t(isKpiMode ? 'tasks.createKpiTask' : 'tasks.create')}
-        </Button>
-      </div>
+            <Plus className="size-4" />
+            {t(isKpiMode ? 'tasks.createKpiTask' : 'tasks.create')}
+          </Button>
+        }
+      />
 
       <AnimatedState stateKey={resultsState}>
         {query.isPending ? (
@@ -493,7 +641,14 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
                       <div className="space-y-4">
                         <ul className="relative space-y-3">
                           <AnimatePresence initial={false} mode="popLayout">
-                            {query.data.items.map((task) => (
+                            {displayedItems.map((task, index) => (
+                              <Fragment key={task.id}>
+                                {groupBy !== 'NONE' &&
+                                (index === 0 ||
+                                  taskGroupKey(task, groupBy) !==
+                                    taskGroupKey(displayedItems[index - 1]!, groupBy)) ? (
+                                  <TaskGroupHeading task={task} groupBy={groupBy} />
+                                ) : null}
                               <motion.li
                               key={task.id}
                               initial={taskHubItemMotion.initial}
@@ -539,11 +694,20 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
                                           ? 'text-destructive hover:bg-destructive/10 hover:text-destructive'
                                           : 'text-muted-foreground hover:bg-success/10 hover:text-success',
                                     )}
-                                    disabled={task.isReadOnly}
+                                    disabled={
+                                      task.isReadOnly ||
+                                      (task.meetingActionItem !== null &&
+                                        task.status !== 'DONE' &&
+                                        task.status !== 'CANCELLED')
+                                    }
                                     aria-label={
-                                      task.status === 'DONE'
-                                        ? t('tasks.reopenTask', { title: task.title })
-                                        : t('tasks.completeTask', { title: task.title })
+                                      task.meetingActionItem !== null &&
+                                      task.status !== 'DONE' &&
+                                      task.status !== 'CANCELLED'
+                                        ? t('tasks.actionItem.assigneeCompletes')
+                                        : task.status === 'DONE'
+                                          ? t('tasks.reopenTask', { title: task.title })
+                                          : t('tasks.completeTask', { title: task.title })
                                     }
                                     onClick={(event) => {
                                       event.stopPropagation()
@@ -586,9 +750,13 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
                                   </button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  {task.status === 'DONE'
-                                    ? t('tasks.reopenTask', { title: task.title })
-                                    : t('tasks.completeTask', { title: task.title })}
+                                  {task.meetingActionItem !== null &&
+                                  task.status !== 'DONE' &&
+                                  task.status !== 'CANCELLED'
+                                    ? t('tasks.actionItem.assigneeCompletes')
+                                    : task.status === 'DONE'
+                                      ? t('tasks.reopenTask', { title: task.title })
+                                      : t('tasks.completeTask', { title: task.title })}
                                 </TooltipContent>
                               </Tooltip>
                               <div className="min-w-0 flex-1">
@@ -738,6 +906,7 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
                                 </div>
                               ) : null}
                             </motion.li>
+                              </Fragment>
                             ))}
                           </AnimatePresence>
                         </ul>
@@ -831,3 +1000,4 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
     </div>
   )
 }
+

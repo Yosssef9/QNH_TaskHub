@@ -454,6 +454,7 @@ export function TaskEditorDialog({
                       <label className="text-sm font-medium">{t('tasks.list')}</label>
                       <Select
                         value={field.value ? String(field.value) : ''}
+                        disabled={task?.meetingActionItem !== null && task?.meetingActionItem !== undefined}
                         onValueChange={(value) => {
                           field.onChange(Number(value))
                           clearErrors('listId')
@@ -581,3 +582,4 @@ export function TaskEditorDialog({
     </Dialog>
   )
 }
+

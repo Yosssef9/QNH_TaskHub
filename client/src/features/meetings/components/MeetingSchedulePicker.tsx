@@ -22,10 +22,13 @@ import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
 
 import { DatePicker } from '@/components/shared/DatePicker'
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
+import type { MeetingScheduleSlotInterval } from '@/features/auth/types/auth.types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { buttonStyles } from '@/components/ui/button.styles'
 import { Popover, PopoverArrow, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/cn'
 import {
   formatClockTime,
@@ -35,15 +38,20 @@ import {
 } from '@/lib/date-time'
 import { getMeetingRoomAccent } from '@/features/meetings/meeting-room-colors'
 import { useTimeFormatPreference } from '@/features/preferences/hooks/use-time-format'
+import { useUpdatePreferences } from '@/features/preferences/hooks/use-update-preferences'
 
 import { MeetingAgendaDisplay } from './MeetingAgendaDisplay'
 import { MeetingDurationPicker, formatMeetingDuration } from './MeetingDurationPicker'
 import { useMeetingDetail, useMeetingSchedule } from '../hooks/use-meetings'
 import type { MeetingRoom, MeetingScheduleEntry } from '../types/meeting.types'
 
-const SLOT_MINUTES = 30
+const DAY_MINUTES = 24 * 60
+const SELECTION_STEP_MINUTES = 15
+const MIN_MEETING_DURATION_MINUTES = 30
+const DEFAULT_SLOT_VIEW_MINUTES: MeetingScheduleSlotInterval = 30
+const SLOT_VIEW_OPTIONS = [15, 30, 60] as const satisfies readonly MeetingScheduleSlotInterval[]
 const VISIBLE_OPTION_COUNT = 6
-const WINDOW_STEP_SLOTS = 4
+const WINDOW_STEP_OPTIONS = 4
 const ROOM_REQUIRED_TOAST_ID = 'meeting-room-required-before-time'
 
 export type MeetingScheduleFocusField = 'date' | 'room' | 'capacity' | 'duration' | 'time' | null
@@ -60,6 +68,7 @@ export interface MeetingScheduleSelectionState {
   selectedRoom: MeetingRoom | null
   hasCapacity: boolean
   hasKnownConflict: boolean
+  isPast: boolean
   canSchedule: boolean
   isChecking: boolean
   hasScheduleLoadError: boolean
@@ -72,6 +81,7 @@ interface MeetingSchedulePickerProps {
   participantCount: number
   startTime: string
   endTime: string
+  timeSelected?: boolean
   disabled?: boolean
   allowBusySelection?: boolean
   excludeMeetingId?: number | null
@@ -86,6 +96,7 @@ interface MeetingSchedulePickerProps {
   onSelectionStateChange?: (state: MeetingScheduleSelectionState) => void
   onDateChange: (date: string) => void
   onRoomChange: (roomId: number | null) => void
+  onDurationChange?: (minutes: number) => void
   onTimeChange: (startTime: string, endTime: string) => void
 }
 
@@ -111,11 +122,48 @@ function minutesToTime(value: number): string {
 }
 
 function durationBetween(startTime: string, endTime: string): number {
-  return Math.max(SLOT_MINUTES, timeToMinutes(endTime) - timeToMinutes(startTime))
+  return Math.max(MIN_MEETING_DURATION_MINUTES, timeToMinutes(endTime) - timeToMinutes(startTime))
 }
 
 function overlaps(startA: number, endA: number, startB: number, endB: number): boolean {
   return startA < endB && endA > startB
+}
+
+function scheduleStartUtcMs(date: string, startMinutes: number): number | null {
+  try {
+    const value = new Date(riyadhLocalDateTimeToUtcIso(date, minutesToTime(startMinutes))).getTime()
+    return Number.isNaN(value) ? null : value
+  } catch {
+    return null
+  }
+}
+
+function hasStartTimePassed(date: string, startMinutes: number, nowUtcMs: number): boolean {
+  const startUtcMs = scheduleStartUtcMs(date, startMinutes)
+  return startUtcMs !== null && startUtcMs <= nowUtcMs
+}
+
+function isQuarterHourAligned(minutes: number): boolean {
+  return minutes % SELECTION_STEP_MINUTES === 0
+}
+
+function preferredSlotViewForStartMinutes(startMinutes: number): MeetingScheduleSlotInterval {
+  const minuteWithinHour = startMinutes % 60
+  if (minuteWithinHour === 0) return 60
+  if (minuteWithinHour === 30) return 30
+  return 15
+}
+
+function firstFutureDisplaySlotIndex(
+  date: string,
+  slotViewMinutes: MeetingScheduleSlotInterval,
+  nowUtcMs: number,
+): number {
+  const totalSlots = DAY_MINUTES / slotViewMinutes
+  for (let index = 0; index < totalSlots; index += 1) {
+    if (!hasStartTimePassed(date, index * slotViewMinutes, nowUtcMs)) return index
+  }
+  return totalSlots - 1
 }
 
 function entryMinutes(
@@ -439,6 +487,7 @@ export function MeetingSchedulePicker({
   participantCount,
   startTime,
   endTime,
+  timeSelected = true,
   disabled = false,
   allowBusySelection = false,
   excludeMeetingId = null,
@@ -453,27 +502,60 @@ export function MeetingSchedulePicker({
   onSelectionStateChange,
   onDateChange,
   onRoomChange,
+  onDurationChange,
   onTimeChange,
 }: MeetingSchedulePickerProps) {
   const { i18n, t } = useTranslation()
+  const currentUser = useCurrentUser()
+  const updatePreferences = useUpdatePreferences()
   const timeFormat = useTimeFormatPreference()
   const locale = i18n.language.startsWith('ar') ? 'ar-SA-u-ca-gregory' : 'en-SA'
   const rtl = i18n.dir() === 'rtl'
   const PreviousIcon = rtl ? ChevronRight : ChevronLeft
   const NextIcon = rtl ? ChevronLeft : ChevronRight
+  const preferredSlotViewMinutes =
+    currentUser.data?.preferences.meetingScheduleSlotInterval ?? DEFAULT_SLOT_VIEW_MINUTES
 
   const selectedDuration = durationBetween(startTime, endTime)
   const [roomPromptedByTime, setRoomPromptedByTime] = useState(false)
+  const [slotViewMinutes, setSlotViewMinutes] =
+    useState<MeetingScheduleSlotInterval>(preferredSlotViewMinutes)
+  const [nowUtcMs, setNowUtcMs] = useState(() => Date.now())
   const selectedStartMinutes = timeToMinutes(startTime)
   const selectedEndMinutes = timeToMinutes(endTime)
-  const selectedSlotIndex = Math.floor(selectedStartMinutes / SLOT_MINUTES)
-  const [windowStartSlot, setWindowStartSlot] = useState(() =>
-    Math.max(0, Math.min(48 - VISIBLE_OPTION_COUNT, selectedSlotIndex - 2)),
-  )
+  const totalDisplaySlots = DAY_MINUTES / slotViewMinutes
+  const maxWindowStartSlot = Math.max(0, totalDisplaySlots - VISIBLE_OPTION_COUNT)
+  const selectedDisplaySlotIndex = Math.floor(selectedStartMinutes / slotViewMinutes)
+  const [windowStartSlot, setWindowStartSlot] = useState(() => {
+    const now = Date.now()
+    const today = formatRiyadhDateInput(now)
+    const anchorDate = date || today
+    const anchorIndex =
+      anchorDate === today && hasStartTimePassed(anchorDate, selectedStartMinutes, now)
+        ? firstFutureDisplaySlotIndex(anchorDate, preferredSlotViewMinutes, now)
+        : Math.floor(selectedStartMinutes / preferredSlotViewMinutes)
+    return Math.max(
+      0,
+      Math.min(
+        Math.max(0, DAY_MINUTES / preferredSlotViewMinutes - VISIBLE_OPTION_COUNT),
+        anchorIndex - 2,
+      ),
+    )
+  })
+  const effectiveWindowStartSlot = Math.min(windowStartSlot, maxWindowStartSlot)
   const dateFocusRef = useRef<HTMLButtonElement | null>(null)
   const roomFocusRef = useRef<HTMLButtonElement | null>(null)
   const durationFocusRef = useRef<HTMLButtonElement | null>(null)
   const timeFocusRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    setSlotViewMinutes(preferredSlotViewMinutes)
+  }, [preferredSlotViewMinutes])
+
+  useEffect(() => {
+    const timerId = window.setInterval(() => setNowUtcMs(Date.now()), 30_000)
+    return () => window.clearInterval(timerId)
+  }, [])
 
   useEffect(() => {
     if (!focusField || focusRequestId <= 0) return
@@ -498,9 +580,22 @@ export function MeetingSchedulePicker({
   }, [roomId])
 
   useEffect(() => {
-    const nextStart = Math.max(0, Math.min(48 - VISIBLE_OPTION_COUNT, selectedSlotIndex - 2))
-    setWindowStartSlot(nextStart)
-  }, [date, roomId, selectedSlotIndex])
+    const now = Date.now()
+    const today = formatRiyadhDateInput(now)
+    const anchorDate = date || today
+    const anchorIndex =
+      anchorDate === today && hasStartTimePassed(anchorDate, selectedStartMinutes, now)
+        ? firstFutureDisplaySlotIndex(anchorDate, slotViewMinutes, now)
+        : selectedDisplaySlotIndex
+    setWindowStartSlot(Math.max(0, Math.min(maxWindowStartSlot, anchorIndex - 2)))
+  }, [
+    date,
+    maxWindowStartSlot,
+    roomId,
+    selectedDisplaySlotIndex,
+    selectedStartMinutes,
+    slotViewMinutes,
+  ])
 
   const scheduleInput = useMemo(() => {
     if (!date || !roomId) return null
@@ -511,6 +606,8 @@ export function MeetingSchedulePicker({
     }
   }, [date, roomId])
   const scheduleQuery = useMeetingSchedule(scheduleInput)
+  const today = formatRiyadhDateInput(nowUtcMs)
+  const displayDate = date || today
 
   const scheduleRanges = useMemo(
     () =>
@@ -523,12 +620,12 @@ export function MeetingSchedulePicker({
               entry.meetingId === excludeMeetingId
             ),
         )
-        .map((entry) => ({ entry, range: entryMinutes(entry, date) }))
+        .map((entry) => ({ entry, range: entryMinutes(entry, displayDate) }))
         .filter(
           (item): item is { entry: MeetingScheduleEntry; range: { start: number; end: number } } =>
             item.range !== null,
         ),
-    [date, excludeMeetingId, scheduleQuery.data],
+    [displayDate, excludeMeetingId, scheduleQuery.data],
   )
 
   const selectedRoom = rooms.find((room) => room.id === roomId) ?? null
@@ -544,15 +641,14 @@ export function MeetingSchedulePicker({
   )
 
   const dateCards = useMemo(
-    () => Array.from({ length: 7 }, (_, index) => shiftDateOnly(date, index - 3)),
-    [date],
+    () => Array.from({ length: 7 }, (_, index) => shiftDateOnly(displayDate, index - 3)),
+    [displayDate],
   )
-  const today = formatRiyadhDateInput(new Date())
   const activeDuration = selectedDuration
 
   const visibleOptions = Array.from({ length: VISIBLE_OPTION_COUNT }, (_, offset) => {
-    const index = windowStartSlot + offset
-    const start = index * SLOT_MINUTES
+    const index = effectiveWindowStartSlot + offset
+    const start = index * slotViewMinutes
     return {
       index,
       start,
@@ -560,8 +656,13 @@ export function MeetingSchedulePicker({
     }
   })
 
-  function chooseTime(optionStart: number, optionEnd: number, isBusy: boolean) {
-    if (optionEnd > 1440) return
+  const customTimeOptions = Array.from(
+    { length: DAY_MINUTES / SELECTION_STEP_MINUTES },
+    (_, index) => index * SELECTION_STEP_MINUTES,
+  )
+
+  function chooseTime(optionStart: number, optionEnd: number, isBusy: boolean): boolean {
+    if (!date || optionEnd > DAY_MINUTES || hasStartTimePassed(date, optionStart, Date.now())) return false
 
     if (!roomId) {
       setRoomPromptedByTime(true)
@@ -577,12 +678,13 @@ export function MeetingSchedulePicker({
         })
         roomFocusRef.current?.focus({ preventScroll: true })
       })
-      return
+      return false
     }
 
-    if (isBusy && !allowBusySelection) return
+    if (isBusy && !allowBusySelection) return false
     onValidationClear?.('time')
     onTimeChange(minutesToTime(optionStart), minutesToTime(optionEnd))
+    return true
   }
 
   function busyEntryForRange(rangeStart: number, rangeEnd: number): MeetingScheduleEntry | null {
@@ -592,14 +694,37 @@ export function MeetingSchedulePicker({
     )
   }
 
-  const selectedHasKnownConflict = scheduleRanges.some(({ range }) =>
-    overlaps(selectedStartMinutes, selectedEndMinutes, range.start, range.end),
-  )
+  async function changeSlotViewMinutes(nextValue: MeetingScheduleSlotInterval) {
+    if (nextValue === slotViewMinutes) return
+    const previous = slotViewMinutes
+    setSlotViewMinutes(nextValue)
+
+    try {
+      await updatePreferences.mutateAsync({ meetingScheduleSlotInterval: nextValue })
+    } catch {
+      setSlotViewMinutes(previous)
+      toast.error(t('meetings.create.slotViewPreferenceError'))
+    }
+  }
+
+  const selectedHasKnownConflict =
+    timeSelected &&
+    scheduleRanges.some(({ range }) =>
+      overlaps(selectedStartMinutes, selectedEndMinutes, range.start, range.end),
+    )
+  const selectedStartIsPast =
+    timeSelected && Boolean(date) && hasStartTimePassed(date, selectedStartMinutes, nowUtcMs)
+  const selectedUsesValidIncrement =
+    isQuarterHourAligned(selectedStartMinutes) && isQuarterHourAligned(selectedEndMinutes)
   const selectedRoomHasCapacity = selectedRoom !== null && selectedRoom.capacity >= participantCount
   const selectionCanSchedule =
+    timeSelected &&
+    Boolean(date) &&
     selectedRoom !== null &&
     selectedRoomHasCapacity &&
     !selectedHasKnownConflict &&
+    !selectedStartIsPast &&
+    selectedUsesValidIncrement &&
     !scheduleQuery.isFetching &&
     !scheduleQuery.isError
 
@@ -608,6 +733,7 @@ export function MeetingSchedulePicker({
       selectedRoom,
       hasCapacity: selectedRoomHasCapacity,
       hasKnownConflict: selectedHasKnownConflict,
+      isPast: selectedStartIsPast,
       canSchedule: selectionCanSchedule,
       isChecking: scheduleQuery.isFetching,
       hasScheduleLoadError: scheduleQuery.isError,
@@ -619,12 +745,13 @@ export function MeetingSchedulePicker({
     selectedHasKnownConflict,
     selectedRoom,
     selectedRoomHasCapacity,
+    selectedStartIsPast,
     selectionCanSchedule,
   ])
 
-  const firstVisibleTime = minutesToTime(windowStartSlot * SLOT_MINUTES)
+  const firstVisibleTime = minutesToTime(effectiveWindowStartSlot * slotViewMinutes)
   const lastVisibleStart = minutesToTime(
-    Math.min(1439, (windowStartSlot + VISIBLE_OPTION_COUNT - 1) * SLOT_MINUTES),
+    Math.min(DAY_MINUTES - 1, (effectiveWindowStartSlot + VISIBLE_OPTION_COUNT - 1) * slotViewMinutes),
   )
 
   return (
@@ -664,12 +791,14 @@ export function MeetingSchedulePicker({
           <div>
             <p className="text-sm font-semibold">{t('meetings.create.chooseDate')}</p>
             <p className="text-muted-foreground text-xs">
-              {formatDateLabel(date, locale, {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric',
-              })}
+              {date
+                ? formatDateLabel(date, locale, {
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric',
+                  })
+                : t('meetings.create.dateNotSelected')}
             </p>
           </div>
           <div className="flex items-center gap-1">
@@ -677,11 +806,11 @@ export function MeetingSchedulePicker({
               variant="outline"
               size="icon"
               aria-label={t('meetings.create.previousWeek')}
-              disabled={disabled || shiftDateOnly(date, -7) < today}
+              disabled={disabled || shiftDateOnly(displayDate, -7) < today}
               onClick={() => {
                 onValidationClear?.('date')
                 onValidationClear?.('time')
-                onDateChange(shiftDateOnly(date, -7))
+                onDateChange(shiftDateOnly(displayDate, -7))
               }}
             >
               <PreviousIcon aria-hidden="true" className="size-4" />
@@ -694,7 +823,7 @@ export function MeetingSchedulePicker({
               onClick={() => {
                 onValidationClear?.('date')
                 onValidationClear?.('time')
-                onDateChange(shiftDateOnly(date, 7))
+                onDateChange(shiftDateOnly(displayDate, 7))
               }}
             >
               <NextIcon aria-hidden="true" className="size-4" />
@@ -875,13 +1004,18 @@ export function MeetingSchedulePicker({
 
       <MeetingDurationPicker
         valueMinutes={selectedDuration}
-        maxMinutes={Math.max(SLOT_MINUTES, 1440 - selectedStartMinutes)}
-        disabled={disabled}
+        maxMinutes={Math.max(MIN_MEETING_DURATION_MINUTES, DAY_MINUTES - selectedStartMinutes)}
+        stepMinutes={SELECTION_STEP_MINUTES}
+        disabled={disabled || (!timeSelected && !onDurationChange)}
         error={validationErrors.duration}
         focusRequestId={focusField === 'duration' ? focusRequestId : 0}
         onChange={(minutes) => {
           onValidationClear?.('duration')
           onValidationClear?.('time')
+          if (!timeSelected && onDurationChange) {
+            onDurationChange(minutes)
+            return
+          }
           onTimeChange(startTime, minutesToTime(selectedStartMinutes + minutes))
         }}
       />
@@ -910,8 +1044,8 @@ export function MeetingSchedulePicker({
           <div className="bg-muted/20 relative h-14 rounded-lg border">
             {roomId
               ? scheduleRanges.map(({ entry, range }, index) => {
-                  const left = rtl ? ((1440 - range.end) / 1440) * 100 : (range.start / 1440) * 100
-                  const width = Math.max(0.9, ((range.end - range.start) / 1440) * 100)
+                  const left = rtl ? ((DAY_MINUTES - range.end) / DAY_MINUTES) * 100 : (range.start / DAY_MINUTES) * 100
+                  const width = Math.max(0.9, ((range.end - range.start) / DAY_MINUTES) * 100)
                   return (
                     <BusyMeetingBlock
                       key={`${entry.startAtUtc}-${entry.endAtUtc}-${index}`}
@@ -924,22 +1058,24 @@ export function MeetingSchedulePicker({
                   )
                 })
               : null}
-            {roomId ? (
+            {roomId && timeSelected ? (
               <span
                 title={`${formatClockTime(startTime, locale, timeFormat)} – ${formatClockTime(endTime, locale, timeFormat)}`}
                 className={cn(
                   'absolute inset-y-1 z-20 rounded-md border-2',
-                  selectedHasKnownConflict
-                    ? 'border-destructive bg-destructive/20 shadow-sm'
-                    : 'border-primary bg-primary/20 shadow-sm',
+                  selectedStartIsPast
+                    ? 'border-muted-foreground/50 bg-muted-foreground/15'
+                    : selectedHasKnownConflict
+                      ? 'border-destructive bg-destructive/20 shadow-sm'
+                      : 'border-primary bg-primary/20 shadow-sm',
                 )}
                 style={{
                   left: `${
                     rtl
-                      ? ((1440 - selectedEndMinutes) / 1440) * 100
-                      : (selectedStartMinutes / 1440) * 100
+                      ? ((DAY_MINUTES - selectedEndMinutes) / DAY_MINUTES) * 100
+                      : (selectedStartMinutes / DAY_MINUTES) * 100
                   }%`,
-                  width: `${Math.max(1, ((selectedEndMinutes - selectedStartMinutes) / 1440) * 100)}%`,
+                  width: `${Math.max(1, ((selectedEndMinutes - selectedStartMinutes) / DAY_MINUTES) * 100)}%`,
                 }}
               />
             ) : null}
@@ -970,6 +1106,10 @@ export function MeetingSchedulePicker({
               <span className="bg-destructive/20 border-destructive size-3 rounded-sm border-2" />
               {t('meetings.create.slotConflict')}
             </span>
+            <span className="flex items-center gap-1.5">
+              <span className="bg-muted border-muted-foreground/35 size-3 rounded-sm border" />
+              {t('meetings.create.slotPassed')}
+            </span>
           </div>
         </div>
 
@@ -990,7 +1130,7 @@ export function MeetingSchedulePicker({
             'ring-destructive/20 ring-offset-background ring-2 ring-offset-2',
         )}
       >
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-sm font-semibold">{t('meetings.create.chooseTime')}</p>
             <p className="text-muted-foreground text-xs">
@@ -1002,38 +1142,72 @@ export function MeetingSchedulePicker({
             </p>
           </div>
 
-          <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="icon"
-              disabled={disabled || windowStartSlot === 0}
-              aria-label={t('meetings.create.earlierTimes')}
-              onClick={() =>
-                setWindowStartSlot((current) => Math.max(0, current - WINDOW_STEP_SLOTS))
-              }
-            >
-              <PreviousIcon aria-hidden="true" className="size-4" />
-            </Button>
-            <span
-              dir="ltr"
-              className="text-muted-foreground min-w-28 text-center text-xs tabular-nums"
-            >
-              {formatClockTime(firstVisibleTime, locale, timeFormat)}–
-              {formatClockTime(lastVisibleStart, locale, timeFormat)}
-            </span>
-            <Button
-              variant="outline"
-              size="icon"
-              disabled={disabled || windowStartSlot >= 48 - VISIBLE_OPTION_COUNT}
-              aria-label={t('meetings.create.laterTimes')}
-              onClick={() =>
-                setWindowStartSlot((current) =>
-                  Math.min(48 - VISIBLE_OPTION_COUNT, current + WINDOW_STEP_SLOTS),
-                )
-              }
-            >
-              <NextIcon aria-hidden="true" className="size-4" />
-            </Button>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground text-xs font-medium">
+                {t('meetings.create.slotViewLabel')}
+              </span>
+              <div
+                role="group"
+                aria-label={t('meetings.create.slotViewLabel')}
+                className="bg-background inline-flex rounded-lg border p-1 shadow-xs"
+              >
+                {SLOT_VIEW_OPTIONS.map((option) => {
+                  const selected = slotViewMinutes === option
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      aria-pressed={selected}
+                      disabled={disabled || updatePreferences.isPending}
+                      onClick={() => void changeSlotViewMinutes(option)}
+                      className={cn(
+                        'min-w-12 rounded-md px-2.5 py-1.5 text-xs font-semibold transition focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+                        selected
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                      )}
+                    >
+                      {t(`meetings.create.slotView${option}`)}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="icon"
+                disabled={disabled || effectiveWindowStartSlot === 0}
+                aria-label={t('meetings.create.earlierTimes')}
+                onClick={() =>
+                  setWindowStartSlot((current) => Math.max(0, current - WINDOW_STEP_OPTIONS))
+                }
+              >
+                <PreviousIcon aria-hidden="true" className="size-4" />
+              </Button>
+              <span
+                dir="ltr"
+                className="text-muted-foreground min-w-28 text-center text-xs tabular-nums"
+              >
+                {formatClockTime(firstVisibleTime, locale, timeFormat)}–
+                {formatClockTime(lastVisibleStart, locale, timeFormat)}
+              </span>
+              <Button
+                variant="outline"
+                size="icon"
+                disabled={disabled || effectiveWindowStartSlot >= maxWindowStartSlot}
+                aria-label={t('meetings.create.laterTimes')}
+                onClick={() =>
+                  setWindowStartSlot((current) =>
+                    Math.min(maxWindowStartSlot, current + WINDOW_STEP_OPTIONS),
+                  )
+                }
+              >
+                <NextIcon aria-hidden="true" className="size-4" />
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -1042,30 +1216,37 @@ export function MeetingSchedulePicker({
           className="grid [scrollbar-width:thin] auto-cols-[minmax(9.5rem,1fr)] grid-flow-col gap-2 overflow-x-auto pb-2"
         >
           {visibleOptions.map((option) => {
-            const canFitDuration = option.end <= 1440
+            const canFitDuration = option.end <= DAY_MINUTES
+            const isPast = date ? hasStartTimePassed(date, option.start, nowUtcMs) : false
             const busyEntry =
               roomId && canFitDuration ? busyEntryForRange(option.start, option.end) : null
             const isBusy = busyEntry !== null
             const selected = Boolean(
-              roomId && option.start === selectedStartMinutes && option.end === selectedEndMinutes,
+              timeSelected && roomId && option.start === selectedStartMinutes && option.end === selectedEndMinutes,
             )
             const conflict = selected && isBusy
             const optionStart = minutesToTime(option.start)
             const optionEnd = canFitDuration ? minutesToTime(option.end) : null
             const slotDisabled = Boolean(
-              disabled || !canFitDuration || (roomId && isBusy && !allowBusySelection),
+              disabled ||
+                !date ||
+                isPast ||
+                !canFitDuration ||
+                (roomId && isBusy && !allowBusySelection),
             )
-            const stateText = !canFitDuration
-              ? t('meetings.create.timeDoesNotFit')
-              : !roomId
-                ? t('meetings.create.slotNeedsRoom')
-                : conflict
-                  ? t('meetings.create.slotConflict')
-                  : selected
-                    ? t('meetings.create.slotSelected')
-                    : isBusy
-                      ? t('meetings.create.slotBusy')
-                      : t('meetings.create.slotAvailable')
+            const stateText = isPast
+              ? t('meetings.create.slotPassed')
+              : !canFitDuration
+                ? t('meetings.create.timeDoesNotFit')
+                : !roomId
+                  ? t('meetings.create.slotNeedsRoom')
+                  : conflict
+                    ? t('meetings.create.slotConflict')
+                    : selected
+                      ? t('meetings.create.slotSelected')
+                      : isBusy
+                        ? t('meetings.create.slotBusy')
+                        : t('meetings.create.slotAvailable')
 
             return (
               <button
@@ -1077,19 +1258,21 @@ export function MeetingSchedulePicker({
                 onClick={() => chooseTime(option.start, option.end, isBusy)}
                 className={cn(
                   'focus-visible:ring-ring min-h-24 rounded-xl border p-3 text-start transition outline-none focus-visible:ring-2 disabled:cursor-not-allowed',
-                  conflict
-                    ? 'border-destructive bg-destructive/10 text-destructive'
-                    : selected
-                      ? 'border-primary bg-primary text-primary-foreground shadow-sm'
-                      : !roomId && canFitDuration
-                        ? 'bg-muted/20 hover:border-primary/45 hover:bg-primary/5 border-dashed'
-                        : isBusy
-                          ? allowBusySelection
-                            ? 'border-warning/40 bg-warning/5 hover:bg-warning/10'
-                            : 'bg-muted text-muted-foreground opacity-65'
-                          : canFitDuration
-                            ? 'bg-background hover:border-primary/45 hover:bg-primary/5'
-                            : 'bg-muted text-muted-foreground opacity-45',
+                  isPast
+                    ? 'bg-muted/60 text-muted-foreground border-muted opacity-55'
+                    : conflict
+                      ? 'border-destructive bg-destructive/10 text-destructive'
+                      : selected
+                        ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                        : !roomId && canFitDuration
+                          ? 'bg-muted/20 hover:border-primary/45 hover:bg-primary/5 border-dashed'
+                          : isBusy
+                            ? allowBusySelection
+                              ? 'border-warning/40 bg-warning/5 hover:bg-warning/10'
+                              : 'bg-muted text-muted-foreground opacity-65'
+                            : canFitDuration
+                              ? 'bg-background hover:border-primary/45 hover:bg-primary/5'
+                              : 'bg-muted text-muted-foreground opacity-45',
                 )}
               >
                 <span className="block text-sm font-semibold tabular-nums">
@@ -1098,7 +1281,9 @@ export function MeetingSchedulePicker({
                 <span
                   className={cn(
                     'mt-0.5 block text-[11px]',
-                    selected && !conflict ? 'text-primary-foreground/80' : 'text-muted-foreground',
+                    selected && !conflict && !isPast
+                      ? 'text-primary-foreground/80'
+                      : 'text-muted-foreground',
                   )}
                 >
                   {optionEnd ? `→ ${formatClockTime(optionEnd, locale, timeFormat)}` : '—'}
@@ -1107,13 +1292,15 @@ export function MeetingSchedulePicker({
                   dir={rtl ? 'rtl' : 'ltr'}
                   className={cn(
                     'mt-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold',
-                    selected && !conflict
-                      ? 'bg-primary-foreground/15 text-primary-foreground'
-                      : !roomId
-                        ? 'bg-muted text-muted-foreground'
-                        : conflict || isBusy
-                          ? 'bg-warning/15 text-warning-foreground'
-                          : 'bg-success/10 text-success',
+                    isPast
+                      ? 'bg-muted text-muted-foreground'
+                      : selected && !conflict
+                        ? 'bg-primary-foreground/15 text-primary-foreground'
+                        : !roomId
+                          ? 'bg-muted text-muted-foreground'
+                          : conflict || isBusy
+                            ? 'bg-warning/15 text-warning-foreground'
+                            : 'bg-success/10 text-success',
                   )}
                 >
                   {stateText}
@@ -1121,6 +1308,79 @@ export function MeetingSchedulePicker({
               </button>
             )
           })}
+        </div>
+
+        <div className="bg-background flex flex-wrap items-end justify-between gap-3 rounded-xl border p-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">{t('meetings.create.customStartTime')}</p>
+            <p className="text-muted-foreground mt-0.5 text-xs">
+              {t('meetings.create.customStartTimeHint')}
+            </p>
+          </div>
+          <div className="w-full sm:w-56">
+            <Select
+              value={timeSelected ? startTime : ''}
+              disabled={disabled || !date}
+              onValueChange={(value) => {
+                const nextStart = timeToMinutes(value)
+                const nextEnd = nextStart + activeDuration
+                const busy =
+                  roomId && nextEnd <= DAY_MINUTES
+                    ? busyEntryForRange(nextStart, nextEnd) !== null
+                    : false
+                const accepted = chooseTime(nextStart, nextEnd, busy)
+                if (accepted) {
+                  void changeSlotViewMinutes(preferredSlotViewForStartMinutes(nextStart))
+                }
+              }}
+            >
+              <SelectTrigger aria-label={t('meetings.create.customStartTime')}>
+                <SelectValue placeholder={t('meetings.create.customStartTime')} />
+              </SelectTrigger>
+              <SelectContent>
+                {customTimeOptions.map((optionStart) => {
+                  const optionEnd = optionStart + activeDuration
+                  const canFitDuration = optionEnd <= DAY_MINUTES
+                  const isPast = date ? hasStartTimePassed(date, optionStart, nowUtcMs) : false
+                  const isBusy =
+                    roomId && canFitDuration
+                      ? busyEntryForRange(optionStart, optionEnd) !== null
+                      : false
+                  const optionDisabled =
+                    !date ||
+                    isPast ||
+                    !canFitDuration ||
+                    Boolean(roomId && isBusy && !allowBusySelection)
+                  const stateText = isPast
+                    ? t('meetings.create.slotPassed')
+                    : !canFitDuration
+                      ? t('meetings.create.timeDoesNotFit')
+                      : isBusy
+                        ? t('meetings.create.slotBusy')
+                        : null
+
+                  return (
+                    <SelectItem
+                      key={optionStart}
+                      value={minutesToTime(optionStart)}
+                      disabled={optionDisabled}
+                    >
+                      <span className="flex w-full items-center justify-between gap-3">
+                        <span className="font-medium tabular-nums">
+                          {formatClockTime(minutesToTime(optionStart), locale, timeFormat)}
+                        </span>
+                        {stateText ? (
+                          <span className="text-muted-foreground text-[11px]">
+                            {stateText}
+                          </span>
+                        ) : null}
+                      </span>
+                    </SelectItem>
+                  )
+                })}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {validationErrors.time ? (
@@ -1135,11 +1395,13 @@ export function MeetingSchedulePicker({
           </p>
         ) : null}
 
-        {selectedRoom ? (
+        {selectedRoom && timeSelected ? (
           <div
             className={cn(
               'rounded-xl border p-3 text-sm',
-              selectedHasKnownConflict || selectedRoom.capacity < participantCount
+              selectedStartIsPast ||
+                selectedHasKnownConflict ||
+                selectedRoom.capacity < participantCount
                 ? 'border-warning/40 bg-warning/5'
                 : 'border-success/30 bg-success/5',
             )}
@@ -1156,7 +1418,11 @@ export function MeetingSchedulePicker({
                 })}
               </span>
             </div>
-            {selectedHasKnownConflict ? (
+            {selectedStartIsPast ? (
+              <p className="text-warning-foreground mt-1 text-xs">
+                {t('meetings.create.selectedTimePassedHint')}
+              </p>
+            ) : selectedHasKnownConflict ? (
               <p className="text-warning-foreground mt-1 text-xs">
                 {t('meetings.create.knownConflictHint')}
               </p>
@@ -1167,3 +1433,5 @@ export function MeetingSchedulePicker({
     </section>
   )
 }
+
+

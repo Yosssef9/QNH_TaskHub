@@ -35,6 +35,15 @@ export function notificationHref(record: NotificationRecord): string {
   const contractId = optionalId(record.contractId);
   const meetingId = optionalId(record.meetingId);
 
+  if (record.notificationType === "MEETING_ACTION_ITEM_ASSIGNED") {
+    return taskId === null ? "/assigned-to-me" : `/assigned-to-me?taskId=${taskId}`;
+  }
+
+  if (record.notificationType === "MEETING_ACTION_ITEM_COMPLETED") {
+    if (taskId === null) return "/";
+    return listId === null ? "/" : `/lists/${listId}?taskId=${taskId}`;
+  }
+
   if (
     record.notificationType === "TASK_OVERDUE" ||
     record.notificationType === "TASK_DUE_TODAY" ||
@@ -144,22 +153,26 @@ async function syncKpiNotifications(owner: number, today: string): Promise<void>
   );
 }
 
-async function synchronize(owner: number): Promise<void> {
+async function synchronize(owner: number, kpiWorkCyclesAccess = true): Promise<void> {
   const today = getCurrentDateInAppTimeZone();
-  await notificationsRepository.syncTimeBased(owner, today, addDays(today, 1));
+  await notificationsRepository.syncTimeBased(owner, today, addDays(today, 1), kpiWorkCyclesAccess);
   await notificationsRepository.syncContractNotifications(owner, today);
   await meetingNotificationsService.syncStartReminder(owner);
-  await syncKpiNotifications(owner, today);
+  if (kpiWorkCyclesAccess) await syncKpiNotifications(owner, today);
 }
 
 export const notificationsService = {
   synchronize,
 
-  async list(owner: number, limit: number): Promise<NotificationListData> {
-    await synchronize(owner);
+  async list(
+    owner: number,
+    limit: number,
+    kpiWorkCyclesAccess = true,
+  ): Promise<NotificationListData> {
+    await synchronize(owner, kpiWorkCyclesAccess);
     const [records, unreadCount] = await Promise.all([
-      notificationsRepository.list(owner, limit),
-      notificationsRepository.unreadCount(owner),
+      notificationsRepository.list(owner, limit, kpiWorkCyclesAccess),
+      notificationsRepository.unreadCount(owner, kpiWorkCyclesAccess),
     ]);
 
     return {
@@ -168,8 +181,12 @@ export const notificationsService = {
     };
   },
 
-  async markRead(owner: number, notificationId: number): Promise<void> {
-    if (!(await notificationsRepository.markRead(owner, notificationId))) {
+  async markRead(
+    owner: number,
+    notificationId: number,
+    kpiWorkCyclesAccess = true,
+  ): Promise<void> {
+    if (!(await notificationsRepository.markRead(owner, notificationId, kpiWorkCyclesAccess))) {
       throw new AppError({
         statusCode: 404,
         code: "NOTIFICATION_NOT_FOUND",
@@ -178,9 +195,11 @@ export const notificationsService = {
     }
   },
 
-  async markAllRead(owner: number): Promise<number> {
-    return notificationsRepository.markAllRead(owner);
+  async markAllRead(owner: number, kpiWorkCyclesAccess = true): Promise<number> {
+    return notificationsRepository.markAllRead(owner, kpiWorkCyclesAccess);
   },
 };
+
+
 
 

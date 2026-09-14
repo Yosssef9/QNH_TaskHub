@@ -6,6 +6,7 @@ import type { TaskHubRoleCode } from "../auth/auth.types.js";
 import type { AccessUserRecord } from "./access.mapper.js";
 import type {
   AccessListQuery,
+  AccessSortBy,
   CurrentAccessRecord,
   DelegationParticipantRecord,
 } from "./access.types.js";
@@ -19,18 +20,26 @@ interface CountRecord {
   total: number;
 }
 
-function procurementPermissionColumns(alias: string): string {
-  const exists = (entity: string) => `
-    CAST(CASE WHEN EXISTS (
+function permissionExistsExpression(
+  alias: string,
+  moduleCode: "PROCUREMENT" | "KPI_MANAGEMENT",
+  entityCode: string | null = null,
+): string {
+  const entityPredicate = entityCode === null ? "" : `\n        AND permission.entity_code = '${entityCode}'`;
+  return `EXISTS (
       SELECT 1
       FROM dbo.TM_access_permissions AS permission
       WHERE permission.grantee_user_id = ${alias}.USER_ID
-        AND permission.module_code = 'PROCUREMENT'
-        AND permission.entity_code = '${entity}'
+        AND permission.module_code = '${moduleCode}'${entityPredicate}
         AND permission.permission_code = 'ACCESS'
         AND permission.resource_owner_user_id IS NULL
         AND permission.is_active = 1
-    ) THEN 1 ELSE 0 END AS BIT)`;
+    )`;
+}
+
+function procurementPermissionColumns(alias: string): string {
+  const exists = (entity: string) => `
+    CAST(CASE WHEN ${permissionExistsExpression(alias, "PROCUREMENT", entity)} THEN 1 ELSE 0 END AS BIT)`;
 
   return `
     ${exists("CONTRACTS")} AS contractsAccess,
@@ -39,31 +48,114 @@ function procurementPermissionColumns(alias: string): string {
     ${exists("PRICE_QUOTES")} AS priceQuotesAccess`;
 }
 
+function procurementHasAccessExpression(alias: string): string {
+  return `CASE WHEN ${permissionExistsExpression(alias, "PROCUREMENT")} THEN 1 ELSE 0 END`;
+}
+
+function kpiWorkCyclesHasAccessExpression(alias: string): string {
+  return `CASE WHEN ${permissionExistsExpression(alias, "KPI_MANAGEMENT", "KPI_WORK_CYCLES")} THEN 1 ELSE 0 END`;
+}
+
+function kpiWorkCyclesPermissionColumn(alias: string): string {
+  return `
+    CAST(${kpiWorkCyclesHasAccessExpression(alias)} AS BIT) AS kpiWorkCyclesAccess`;
+}
+
+function meetingPermissionExistsExpression(
+  alias: string,
+  permissionCode: "MEETING_ORGANIZE" | "MEETING_COORDINATE",
+): string {
+  return `EXISTS (
+      SELECT 1 FROM dbo.TM_meeting_user_permissions AS permission
+      WHERE permission.portal_user_id = ${alias}.USER_ID
+        AND permission.permission_code = '${permissionCode}'
+        AND permission.is_active = 1
+    )`;
+}
+
 function meetingPermissionColumns(alias: string): string {
   return `
-    CAST(CASE WHEN EXISTS (
-      SELECT 1 FROM dbo.TM_meeting_user_permissions AS permission
-      WHERE permission.portal_user_id = ${alias}.USER_ID
-        AND permission.permission_code = 'MEETING_ORGANIZE'
-        AND permission.is_active = 1
-    ) THEN 1 ELSE 0 END AS BIT) AS meetingOrganizeEnabled,
-    CAST(CASE WHEN EXISTS (
-      SELECT 1 FROM dbo.TM_meeting_user_permissions AS permission
-      WHERE permission.portal_user_id = ${alias}.USER_ID
-        AND permission.permission_code = 'MEETING_COORDINATE'
-        AND permission.is_active = 1
-    ) THEN 1 ELSE 0 END AS BIT) AS meetingCoordinateEnabled`;
+    CAST(CASE WHEN ${meetingPermissionExistsExpression(alias, "MEETING_ORGANIZE")} THEN 1 ELSE 0 END AS BIT) AS meetingOrganizeEnabled,
+    CAST(CASE WHEN ${meetingPermissionExistsExpression(alias, "MEETING_COORDINATE")} THEN 1 ELSE 0 END AS BIT) AS meetingCoordinateEnabled`;
+}
+
+function accessFilterClause(alias: string, accessAlias: string): string {
+  const procurementAccess = procurementHasAccessExpression(alias);
+  const kpiWorkCyclesAccess = kpiWorkCyclesHasAccessExpression(alias);
+  const organizer = meetingPermissionExistsExpression(alias, "MEETING_ORGANIZE");
+  const coordinator = meetingPermissionExistsExpression(alias, "MEETING_COORDINATE");
+
+  return `
+    AND (
+      @roleFilter = 'ALL'
+      OR (@roleFilter = 'UNASSIGNED' AND ${accessAlias}.portal_user_id IS NULL)
+      OR (@roleFilter IN ('USER', 'ADMIN') AND ${accessAlias}.role_code = @roleFilter)
+    )
+    AND (
+      @statusFilter = 'ALL'
+      OR (@statusFilter = 'UNASSIGNED' AND ${accessAlias}.portal_user_id IS NULL)
+      OR (@statusFilter = 'ACTIVE' AND ${accessAlias}.portal_user_id IS NOT NULL AND ${accessAlias}.is_active = 1)
+      OR (@statusFilter = 'INACTIVE' AND ${accessAlias}.portal_user_id IS NOT NULL AND ${accessAlias}.is_active = 0)
+    )
+    AND (
+      @procurementFilter = 'ALL'
+      OR (@procurementFilter = 'WITH_ACCESS' AND (${procurementAccess}) = 1)
+      OR (@procurementFilter = 'WITHOUT_ACCESS' AND (${procurementAccess}) = 0)
+    )
+    AND (
+      @kpiWorkCyclesFilter = 'ALL'
+      OR (@kpiWorkCyclesFilter = 'WITH_ACCESS' AND (${kpiWorkCyclesAccess}) = 1)
+      OR (@kpiWorkCyclesFilter = 'WITHOUT_ACCESS' AND (${kpiWorkCyclesAccess}) = 0)
+    )
+    AND (
+      @meetingFilter = 'ALL'
+      OR (@meetingFilter = 'ORGANIZER' AND ${organizer} AND NOT ${coordinator})
+      OR (@meetingFilter = 'COORDINATOR' AND ${coordinator} AND NOT ${organizer})
+      OR (@meetingFilter = 'BOTH' AND ${organizer} AND ${coordinator})
+      OR (@meetingFilter = 'NONE' AND NOT ${organizer} AND NOT ${coordinator})
+    )`;
+}
+
+function accessSortExpression(sortBy: AccessSortBy, alias: string, accessAlias: string): string {
+  switch (sortBy) {
+    case "userCode":
+      return `${alias}.USER_CODE`;
+    case "role":
+      return `CASE WHEN ${accessAlias}.role_code IS NULL THEN 0 WHEN ${accessAlias}.role_code = 'USER' THEN 1 WHEN ${accessAlias}.role_code = 'ADMIN' THEN 2 ELSE 3 END`;
+    case "procurement":
+      return procurementHasAccessExpression(alias);
+    case "kpiWorkCycles":
+      return kpiWorkCyclesHasAccessExpression(alias);
+    case "meetings":
+      return `(
+        CASE WHEN ${meetingPermissionExistsExpression(alias, "MEETING_ORGANIZE")} THEN 1 ELSE 0 END
+        + CASE WHEN ${meetingPermissionExistsExpression(alias, "MEETING_COORDINATE")} THEN 2 ELSE 0 END
+      )`;
+    case "status":
+      return `CASE WHEN ${accessAlias}.portal_user_id IS NULL THEN 0 WHEN ${accessAlias}.is_active = 0 THEN 1 ELSE 2 END`;
+    case "userName":
+    default:
+      return `${alias}.USER_NAME`;
+  }
 }
 
 export async function listAccessUsers(query: AccessListQuery): Promise<AccessUserRecordsPage> {
   const pool = await getDatabasePool();
   const offset = (query.page - 1) * query.pageSize;
   const search = query.search?.trim() || null;
+  const filters = accessFilterClause("portal", "access");
+  const sortExpression = accessSortExpression(query.sortBy, "portal", "access");
+  const sortDirection = query.sortDirection === "desc" ? "DESC" : "ASC";
 
   const baseRequest = () =>
     pool
       .request()
       .input("search", sql.NVarChar(100), search)
+      .input("roleFilter", sql.VarChar(20), query.role)
+      .input("statusFilter", sql.VarChar(20), query.status)
+      .input("procurementFilter", sql.VarChar(20), query.procurement)
+      .input("kpiWorkCyclesFilter", sql.VarChar(20), query.kpiWorkCycles)
+      .input("meetingFilter", sql.VarChar(20), query.meetings)
       .input("offset", sql.Int, offset)
       .input("pageSize", sql.Int, query.pageSize);
 
@@ -78,6 +170,7 @@ export async function listAccessUsers(query: AccessListQuery): Promise<AccessUse
         access.role_code AS roleCode,
         access.is_active AS accessIsActive,
         ${procurementPermissionColumns("portal")},
+        ${kpiWorkCyclesPermissionColumn("portal")},
         ${meetingPermissionColumns("portal")}
       FROM dbo.users AS portal
       LEFT JOIN dbo.TM_user_access AS access ON access.portal_user_id = portal.USER_ID
@@ -88,19 +181,22 @@ export async function listAccessUsers(query: AccessListQuery): Promise<AccessUse
           OR portal.USER_NAME LIKE N'%' + @search + N'%'
           OR portal.email LIKE N'%' + @search + N'%'
         )
-      ORDER BY portal.USER_NAME, portal.USER_ID
+        ${filters}
+      ORDER BY ${sortExpression} ${sortDirection}, portal.USER_NAME ASC, portal.USER_ID ASC
       OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;
     `),
     baseRequest().query<CountRecord>(`
       SELECT COUNT_BIG(1) AS total
       FROM dbo.users AS portal
+      LEFT JOIN dbo.TM_user_access AS access ON access.portal_user_id = portal.USER_ID
       WHERE portal.IS_ACTIVE = 1
         AND (
           @search IS NULL
           OR portal.USER_CODE LIKE N'%' + @search + N'%'
           OR portal.USER_NAME LIKE N'%' + @search + N'%'
           OR portal.email LIKE N'%' + @search + N'%'
-        );
+        )
+        ${filters};
     `),
   ]);
 
@@ -119,6 +215,7 @@ export async function findAccessUserById(userId: number): Promise<AccessUserReco
       access.role_code AS roleCode,
       access.is_active AS accessIsActive,
       ${procurementPermissionColumns("portal")},
+      ${kpiWorkCyclesPermissionColumn("portal")},
       ${meetingPermissionColumns("portal")}
     FROM dbo.users AS portal
     LEFT JOIN dbo.TM_user_access AS access ON access.portal_user_id = portal.USER_ID
@@ -346,3 +443,5 @@ export const accessRepository = {
   ensureContractSettingsInTransaction,
   findDelegationParticipantForUpdate,
 };
+
+

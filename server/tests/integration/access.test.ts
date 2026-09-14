@@ -31,6 +31,7 @@ function createProfile(roleCode: "USER" | "ADMIN"): AuthMeData {
       calendarShowAdjacentDates: false,
       meetingStartReminderEnabled: true,
       timeFormat: "12H",
+      meetingScheduleSlotInterval: 30,
       timezone: "Asia/Riyadh",
     },
   };
@@ -42,7 +43,7 @@ describe("TaskHub access administration", () => {
   });
 
   it("allows an administrator to list Portal users and access state", async () => {
-    vi.spyOn(accessService, "listUsers").mockResolvedValue({
+    const listUsers = vi.spyOn(accessService, "listUsers").mockResolvedValue({
       items: [],
       page: 1,
       pageSize: 20,
@@ -55,6 +56,48 @@ describe("TaskHub access administration", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.data).toEqual({ items: [], page: 1, pageSize: 20, total: 0 });
+    expect(listUsers).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: "ALL",
+        status: "ALL",
+        procurement: "ALL",
+        kpiWorkCycles: "ALL",
+        meetings: "ALL",
+        sortBy: "userName",
+        sortDirection: "asc",
+        page: 1,
+        pageSize: 20,
+      }),
+    );
+  });
+
+  it("accepts server-side access filters, sorting, search, and pagination", async () => {
+    const listUsers = vi.spyOn(accessService, "listUsers").mockResolvedValue({
+      items: [],
+      page: 2,
+      pageSize: 50,
+      total: 0,
+    });
+
+    const response = await request(app)
+      .get(
+        "/api/admin/access/users?search=abdul&role=USER&status=ACTIVE&procurement=WITH_ACCESS&kpiWorkCycles=WITHOUT_ACCESS&meetings=ORGANIZER&sortBy=userCode&sortDirection=desc&page=2&pageSize=50",
+      )
+      .set("Authorization", `Bearer ${createToken()}`);
+
+    expect(response.status).toBe(200);
+    expect(listUsers).toHaveBeenCalledWith({
+      search: "abdul",
+      role: "USER",
+      status: "ACTIVE",
+      procurement: "WITH_ACCESS",
+      kpiWorkCycles: "WITHOUT_ACCESS",
+      meetings: "ORGANIZER",
+      sortBy: "userCode",
+      sortDirection: "desc",
+      page: 2,
+      pageSize: 50,
+    });
   });
 
   it("rejects access administration by a normal user", async () => {
@@ -83,6 +126,7 @@ describe("TaskHub access administration", () => {
     expect(updateUserAccess).not.toHaveBeenCalled();
   });
 });
+
 
 
 

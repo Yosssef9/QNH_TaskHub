@@ -2,6 +2,8 @@ import { withTransaction } from "../../database/transaction.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
 import { resolveKpiTaskDates } from "../kpis/kpi-task-dates.js";
+import { resolveTaskAccess } from "../meeting-action-items/meeting-action-items.access.js";
+import { notificationsRepository } from "../notifications/notifications.repository.js";
 import { workCyclesService } from "../work-cycles/work-cycles.service.js";
 import { mapTask } from "./tasks.mapper.js";
 import { assertTaskStatusTransition, assertTaskWritable } from "./tasks.policy.js";
@@ -17,11 +19,23 @@ import type {
 } from "./tasks.types.js";
 
 function notFound(): AppError {
-  return new AppError({ statusCode: 404, code: "TASK_NOT_FOUND", message: "Task not found." });
+  return new AppError({
+    statusCode: 404,
+    code: "TASK_NOT_FOUND",
+    message: "Task not found.",
+  });
 }
 
 function listNotFound(): AppError {
-  return new AppError({ statusCode: 404, code: "LIST_NOT_FOUND", message: "List not found." });
+  return new AppError({
+    statusCode: 404,
+    code: "LIST_NOT_FOUND",
+    message: "List not found.",
+  });
+}
+
+function forbidden(code: string, message: string): AppError {
+  return new AppError({ statusCode: 403, code, message });
 }
 
 function toDateOnly(value: Date | null): string | null {
@@ -44,13 +58,16 @@ async function loadTask(ownerUserId: number, taskId: number): Promise<PersonalTa
     taskId,
     getCurrentDateInAppTimeZone(),
   );
-
   if (!record) throw notFound();
   return mapTask(record);
 }
 
 export const tasksService = {
-  async list(ownerUserId: number, listId: number, query: TaskListQuery): Promise<TaskListResult> {
+  async list(
+    ownerUserId: number,
+    listId: number,
+    query: TaskListQuery,
+  ): Promise<TaskListResult> {
     if (!(await tasksRepository.ownedListExists(ownerUserId, listId))) throw listNotFound();
 
     const result = await tasksRepository.list(
@@ -70,12 +87,13 @@ export const tasksService = {
 
   async summary(ownerUserId: number, listId: number): Promise<TaskSummary> {
     if (!(await tasksRepository.ownedListExists(ownerUserId, listId))) throw listNotFound();
-
     return tasksRepository.summary(ownerUserId, listId, getCurrentDateInAppTimeZone());
   },
 
-  async get(ownerUserId: number, taskId: number): Promise<PersonalTask> {
-    return loadTask(ownerUserId, taskId);
+  async get(actorUserId: number, taskId: number): Promise<PersonalTask> {
+    const access = await resolveTaskAccess(actorUserId, taskId);
+    if (!access) throw notFound();
+    return loadTask(access.ownerUserId, taskId);
   },
 
   async create(ownerUserId: number, listId: number, input: CreateTaskInput): Promise<PersonalTask> {
@@ -85,7 +103,6 @@ export const tasksService = {
       }
 
       const createdId = await tasksRepository.create(transaction, ownerUserId, listId, input);
-
       if (!createdId) {
         throw new AppError({
           statusCode: 500,
@@ -98,16 +115,32 @@ export const tasksService = {
         listId,
         title: input.title,
       });
-
       return createdId;
     });
 
     return loadTask(ownerUserId, taskId);
   },
 
-  async update(ownerUserId: number, taskId: number, input: UpdateTaskInput): Promise<PersonalTask> {
+  async update(actorUserId: number, taskId: number, input: UpdateTaskInput): Promise<PersonalTask> {
+    let ownerUserId = actorUserId;
+
     await withTransaction(async (transaction) => {
-      const current = await tasksRepository.findOwnedForUpdate(transaction, ownerUserId, taskId);
+      const access = await resolveTaskAccess(actorUserId, taskId, false, transaction);
+      if (!access) throw notFound();
+      ownerUserId = access.ownerUserId;
+
+      if (!access.capabilities.canEditDetails) {
+        throw forbidden(
+          "TASK_EDIT_FORBIDDEN",
+          "The Action Item assignee cannot change administrative Task details.",
+        );
+      }
+
+      const current = await tasksRepository.findOwnedForUpdate(
+        transaction,
+        ownerUserId,
+        taskId,
+      );
       if (!current) throw notFound();
       assertTaskWritable(current);
 
@@ -116,6 +149,18 @@ export const tasksService = {
           statusCode: 409,
           code: "KPI_TASK_CONTAINER_IMMUTABLE",
           message: "KPI tasks cannot be moved into a normal list.",
+        });
+      }
+
+      if (
+        access.context !== null &&
+        input.listId !== undefined &&
+        input.listId !== current.listId
+      ) {
+        throw new AppError({
+          statusCode: 409,
+          code: "MEETING_ACTION_ITEM_CONTAINER_IMMUTABLE",
+          message: "Meeting Action Items remain in the Organizer's My Tasks list.",
         });
       }
 
@@ -128,7 +173,6 @@ export const tasksService = {
       }
 
       const destinationListId = input.listId ?? current.listId;
-
       if (
         current.kpiInstanceId === null &&
         destinationListId !== current.listId &&
@@ -149,7 +193,6 @@ export const tasksService = {
           dueDate: toDateOnly(current.dueDate),
           referenceDate: toDateOnly(current.referenceDate),
         });
-
         startDate = dates.startDate;
         dueDate = dates.dueDate;
         referenceDate = dates.referenceDate;
@@ -160,7 +203,7 @@ export const tasksService = {
         assertDateRange(startDate, dueDate);
       }
 
-      const next = {
+      await tasksRepository.update(transaction, ownerUserId, taskId, {
         listId: destinationListId,
         title: input.title ?? current.title,
         description: input.description !== undefined ? input.description : current.description,
@@ -168,25 +211,58 @@ export const tasksService = {
         startDate,
         dueDate,
         referenceDate,
-      };
-
-      await tasksRepository.update(transaction, ownerUserId, taskId, next);
-      await tasksRepository.addActivity(transaction, ownerUserId, taskId, "UPDATED", {
-        fromListId: current.listId,
-        toListId: destinationListId,
       });
+
+      await tasksRepository.addActivity(
+        transaction,
+        ownerUserId,
+        taskId,
+        "UPDATED",
+        { fromListId: current.listId, toListId: destinationListId },
+        actorUserId,
+      );
     });
 
     return loadTask(ownerUserId, taskId);
   },
 
   async changeStatus(
-    ownerUserId: number,
+    actorUserId: number,
     taskId: number,
     input: ChangeTaskStatusInput,
   ): Promise<PersonalTask> {
+    let ownerUserId = actorUserId;
+
     await withTransaction(async (transaction) => {
-      const current = await tasksRepository.findOwnedForUpdate(transaction, ownerUserId, taskId);
+      const access = await resolveTaskAccess(actorUserId, taskId, false, transaction);
+      if (!access) throw notFound();
+      ownerUserId = access.ownerUserId;
+
+      if (access.context) {
+        if (access.capabilities.role === "OWNER" && input.status === "DONE") {
+          throw forbidden(
+            "MEETING_ACTION_ITEM_OWNER_CANNOT_COMPLETE",
+            "Only the assigned participant can mark this Action Item complete.",
+          );
+        }
+        if (
+          access.capabilities.role === "ASSIGNEE" &&
+          input.status !== "TODO" &&
+          input.status !== "IN_PROGRESS" &&
+          input.status !== "DONE"
+        ) {
+          throw forbidden(
+            "MEETING_ACTION_ITEM_ASSIGNEE_STATUS_FORBIDDEN",
+            "The assignee may move the Action Item only between To Do, In Progress, and Done.",
+          );
+        }
+      }
+
+      const current = await tasksRepository.findOwnedForUpdate(
+        transaction,
+        ownerUserId,
+        taskId,
+      );
       if (!current) throw notFound();
       assertTaskWritable(current);
 
@@ -202,35 +278,92 @@ export const tasksService = {
         input.status === "CANCELLED" ? (input.cancellationReason ?? null) : null,
       );
 
-      await tasksRepository.addActivity(transaction, ownerUserId, taskId, "STATUS_CHANGED", {
-        from: currentStatus,
-        to: input.status,
-      });
+      await tasksRepository.addActivity(
+        transaction,
+        ownerUserId,
+        taskId,
+        "STATUS_CHANGED",
+        { from: currentStatus, to: input.status },
+        actorUserId,
+      );
+
+      if (
+        access.context &&
+        access.capabilities.role === "ASSIGNEE" &&
+        input.status === "DONE"
+      ) {
+        const eventToken =
+          current.updatedAtUtc?.toISOString() ?? current.createdAtUtc.toISOString();
+        await notificationsRepository.ensureMeetingActionItemNotification(
+          ownerUserId,
+          {
+            type: "MEETING_ACTION_ITEM_COMPLETED",
+            dedupeKey: `MEETING_ACTION_ITEM_COMPLETED:${taskId}:${eventToken}`,
+            subjectTitle: current.title,
+            contextTitle: `${access.context.assigneeName} · ${access.context.meetingTitle}`,
+            taskId,
+            listId: current.listId,
+            meetingId: access.context.meetingId,
+          },
+          transaction,
+        );
+      }
     });
 
     return loadTask(ownerUserId, taskId);
   },
 
-  async remove(ownerUserId: number, taskId: number): Promise<void> {
+  async remove(actorUserId: number, taskId: number): Promise<void> {
     await withTransaction(async (transaction) => {
-      const current = await tasksRepository.findOwnedForUpdate(transaction, ownerUserId, taskId);
+      const access = await resolveTaskAccess(actorUserId, taskId, false, transaction);
+      if (!access) throw notFound();
+      if (!access.capabilities.canDeleteRestoreTask) {
+        throw forbidden(
+          "TASK_DELETE_FORBIDDEN",
+          "The Action Item assignee cannot delete this Task.",
+        );
+      }
+
+      const current = await tasksRepository.findOwnedForUpdate(
+        transaction,
+        access.ownerUserId,
+        taskId,
+      );
       if (!current) throw notFound();
       assertTaskWritable(current);
 
-      await tasksRepository.setDeleted(transaction, ownerUserId, taskId, true);
-      await tasksRepository.addActivity(transaction, ownerUserId, taskId, "DELETED");
+      await tasksRepository.setDeleted(transaction, access.ownerUserId, taskId, true);
+      await tasksRepository.addActivity(
+        transaction,
+        access.ownerUserId,
+        taskId,
+        "DELETED",
+        undefined,
+        actorUserId,
+      );
     });
   },
 
-  async restore(ownerUserId: number, taskId: number): Promise<PersonalTask> {
+  async restore(actorUserId: number, taskId: number): Promise<PersonalTask> {
+    let ownerUserId = actorUserId;
+
     await withTransaction(async (transaction) => {
+      const access = await resolveTaskAccess(actorUserId, taskId, true, transaction);
+      if (!access) throw notFound();
+      ownerUserId = access.ownerUserId;
+      if (!access.capabilities.canDeleteRestoreTask) {
+        throw forbidden(
+          "TASK_RESTORE_FORBIDDEN",
+          "The Action Item assignee cannot restore this Task.",
+        );
+      }
+
       const current = await tasksRepository.findOwnedForUpdate(
         transaction,
         ownerUserId,
         taskId,
         true,
       );
-
       if (!current) throw notFound();
       if (!current.deletedAtUtc) return;
       assertTaskWritable(current);
@@ -248,7 +381,11 @@ export const tasksService = {
 
       if (
         current.kpiInstanceId !== null &&
-        !(await tasksRepository.ownedKpiInstanceIsOpen(ownerUserId, current.kpiInstanceId, transaction))
+        !(await tasksRepository.ownedKpiInstanceIsOpen(
+          ownerUserId,
+          current.kpiInstanceId,
+          transaction,
+        ))
       ) {
         throw new AppError({
           statusCode: 409,
@@ -258,7 +395,14 @@ export const tasksService = {
       }
 
       await tasksRepository.setDeleted(transaction, ownerUserId, taskId, false);
-      await tasksRepository.addActivity(transaction, ownerUserId, taskId, "RESTORED");
+      await tasksRepository.addActivity(
+        transaction,
+        ownerUserId,
+        taskId,
+        "RESTORED",
+        undefined,
+        actorUserId,
+      );
     });
 
     return loadTask(ownerUserId, taskId);

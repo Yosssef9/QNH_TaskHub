@@ -1,4 +1,5 @@
 import { getDatabasePool, sql } from "../../database/sql.js";
+import type { DatabaseTransaction } from "../../database/types.js";
 import { PROCUREMENT_DB_OBJECTS } from "../procurement/procurement.config.js";
 import type { NotificationType } from "./notifications.types.js";
 
@@ -40,6 +41,16 @@ export interface TaskEmailState {
   cycleArchivedAtUtc: Date | null;
 }
 
+export interface MeetingActionItemNotificationInput {
+  type: "MEETING_ACTION_ITEM_ASSIGNED" | "MEETING_ACTION_ITEM_COMPLETED";
+  dedupeKey: string;
+  subjectTitle: string;
+  contextTitle: string;
+  taskId: number;
+  listId?: number | null;
+  meetingId: number;
+}
+
 export interface KpiNotificationInput {
   type: "KPI_BELOW_TARGET" | "KPI_MEASUREMENT_DUE";
   dedupeKey: string;
@@ -65,6 +76,54 @@ const activeTaskContainer = `(
 )`;
 
 export const notificationsRepository = {
+  async ensureMeetingActionItemNotification(
+    owner: number,
+    input: MeetingActionItemNotificationInput,
+    transaction?: DatabaseTransaction,
+  ): Promise<void> {
+    const request = transaction ? transaction.request() : (await getDatabasePool()).request();
+    await request
+      .input("owner", sql.Int, owner)
+      .input("type", sql.VarChar(40), input.type)
+      .input("dedupeKey", sql.VarChar(220), input.dedupeKey)
+      .input("subjectTitle", sql.NVarChar(250), input.subjectTitle)
+      .input("contextTitle", sql.NVarChar(500), input.contextTitle)
+      .input("taskId", sql.BigInt, input.taskId)
+      .input("listId", sql.BigInt, input.listId ?? null)
+      .input("meetingId", sql.BigInt, input.meetingId)
+      .query(`
+        IF NOT EXISTS (
+          SELECT 1
+          FROM dbo.TM_notifications WITH (UPDLOCK, HOLDLOCK)
+          WHERE owner_user_id = @owner AND dedupe_key = @dedupeKey
+        )
+        BEGIN
+          INSERT INTO dbo.TM_notifications (
+            owner_user_id,
+            notification_type,
+            dedupe_key,
+            subject_title,
+            context_title,
+            task_id,
+            list_id,
+            meeting_id,
+            email_processed_at_utc
+          )
+          VALUES (
+            @owner,
+            @type,
+            @dedupeKey,
+            @subjectTitle,
+            @contextTitle,
+            @taskId,
+            @listId,
+            @meetingId,
+            SYSUTCDATETIME()
+          );
+        END;
+      `);
+  },
+
   async listActiveOwners(): Promise<number[]> {
     const pool = await getDatabasePool();
     const result = await pool.request().query<{ ownerUserId: number | string }>(`
@@ -183,13 +242,19 @@ export const notificationsRepository = {
       `);
     return result.recordset[0] ?? null;
   },
-  async syncTimeBased(owner: number, today: string, tomorrow: string): Promise<void> {
+  async syncTimeBased(
+    owner: number,
+    today: string,
+    tomorrow: string,
+    includeKpiWorkCycles = true,
+  ): Promise<void> {
     const pool = await getDatabasePool();
     await pool
       .request()
       .input("owner", sql.Int, owner)
       .input("today", sql.Date, today)
-      .input("tomorrow", sql.Date, tomorrow).query(`
+      .input("tomorrow", sql.Date, tomorrow)
+      .input("includeKpiWorkCycles", sql.Bit, includeKpiWorkCycles).query(`
         MERGE dbo.TM_notifications WITH (HOLDLOCK) AS target
         USING (
           SELECT
@@ -214,6 +279,7 @@ export const notificationsRepository = {
             ON cycle.id=instance.cycle_id AND cycle.owner_user_id=instance.owner_user_id
           WHERE task.owner_user_id=@owner
             AND task.deleted_at_utc IS NULL
+            AND (task.kpi_instance_id IS NULL OR @includeKpiWorkCycles = 1)
             AND task.status NOT IN ('DONE','CANCELLED')
             AND task.due_date<@today
             AND ${activeTaskContainer}
@@ -242,6 +308,7 @@ export const notificationsRepository = {
             ON cycle.id=instance.cycle_id AND cycle.owner_user_id=instance.owner_user_id
           WHERE task.owner_user_id=@owner
             AND task.deleted_at_utc IS NULL
+            AND (task.kpi_instance_id IS NULL OR @includeKpiWorkCycles = 1)
             AND task.status NOT IN ('DONE','CANCELLED')
             AND task.due_date=@today
             AND ${activeTaskContainer}
@@ -270,6 +337,7 @@ export const notificationsRepository = {
             ON cycle.id=instance.cycle_id AND cycle.owner_user_id=instance.owner_user_id
           WHERE task.owner_user_id=@owner
             AND task.deleted_at_utc IS NULL
+            AND (task.kpi_instance_id IS NULL OR @includeKpiWorkCycles = 1)
             AND task.status NOT IN ('DONE','CANCELLED')
             AND task.priority='HIGH'
             AND task.due_date=@tomorrow
@@ -295,6 +363,7 @@ export const notificationsRepository = {
             ON cycle.id=settings.current_work_cycle_id
             AND cycle.owner_user_id=settings.portal_user_id
           WHERE settings.portal_user_id=@owner
+            AND @includeKpiWorkCycles = 1
             AND cycle.closed_at_utc IS NULL
             AND cycle.archived_at_utc IS NULL
             AND cycle.end_date BETWEEN @today AND DATEADD(DAY, 3, @today)
@@ -319,6 +388,7 @@ export const notificationsRepository = {
             ON cycle.id=settings.current_work_cycle_id
             AND cycle.owner_user_id=settings.portal_user_id
           WHERE settings.portal_user_id=@owner
+            AND @includeKpiWorkCycles = 1
             AND cycle.closed_at_utc IS NULL
             AND cycle.archived_at_utc IS NULL
             AND cycle.end_date<@today
@@ -490,12 +560,17 @@ export const notificationsRepository = {
       `);
   },
 
-  async list(owner: number, limit: number): Promise<NotificationRecord[]> {
+  async list(
+    owner: number,
+    limit: number,
+    includeKpiWorkCycles = true,
+  ): Promise<NotificationRecord[]> {
     const pool = await getDatabasePool();
     const result = await pool
       .request()
       .input("owner", sql.Int, owner)
-      .input("limit", sql.Int, limit).query<NotificationRecord>(`
+      .input("limit", sql.Int, limit)
+      .input("includeKpiWorkCycles", sql.Bit, includeKpiWorkCycles).query<NotificationRecord>(`
         SELECT TOP (@limit)
           id,
           notification_type AS notificationType,
@@ -516,6 +591,18 @@ export const notificationsRepository = {
           created_at_utc AS createdAtUtc
         FROM dbo.TM_notifications
         WHERE owner_user_id=@owner
+          AND (
+            @includeKpiWorkCycles = 1
+            OR (
+              kpi_instance_id IS NULL
+              AND notification_type NOT IN (
+                'CURRENT_CYCLE_ENDING_SOON',
+                'CURRENT_CYCLE_PAST_END',
+                'KPI_BELOW_TARGET',
+                'KPI_MEASUREMENT_DUE'
+              )
+            )
+          )
         ORDER BY
           CASE WHEN read_at_utc IS NULL THEN 0 ELSE 1 END,
           created_at_utc DESC,
@@ -524,41 +611,93 @@ export const notificationsRepository = {
     return result.recordset;
   },
 
-  async unreadCount(owner: number): Promise<number> {
-    const pool = await getDatabasePool();
-    const result = await pool.request().input("owner", sql.Int, owner).query<{
-      total: number | string;
-    }>(`
-        SELECT COUNT_BIG(*) AS total
-        FROM dbo.TM_notifications
-        WHERE owner_user_id=@owner AND read_at_utc IS NULL;
-      `);
-    return Number(result.recordset[0]?.total ?? 0);
-  },
-
-  async markRead(owner: number, notificationId: number): Promise<boolean> {
+  async unreadCount(owner: number, includeKpiWorkCycles = true): Promise<number> {
     const pool = await getDatabasePool();
     const result = await pool
       .request()
       .input("owner", sql.Int, owner)
-      .input("notificationId", sql.BigInt, notificationId).query(`
+      .input("includeKpiWorkCycles", sql.Bit, includeKpiWorkCycles).query<{
+      total: number | string;
+    }>(`
+        SELECT COUNT_BIG(*) AS total
+        FROM dbo.TM_notifications
+        WHERE owner_user_id=@owner
+          AND read_at_utc IS NULL
+          AND (
+            @includeKpiWorkCycles = 1
+            OR (
+              kpi_instance_id IS NULL
+              AND notification_type NOT IN (
+                'CURRENT_CYCLE_ENDING_SOON',
+                'CURRENT_CYCLE_PAST_END',
+                'KPI_BELOW_TARGET',
+                'KPI_MEASUREMENT_DUE'
+              )
+            )
+          );
+      `);
+    return Number(result.recordset[0]?.total ?? 0);
+  },
+
+  async markRead(
+    owner: number,
+    notificationId: number,
+    includeKpiWorkCycles = true,
+  ): Promise<boolean> {
+    const pool = await getDatabasePool();
+    const result = await pool
+      .request()
+      .input("owner", sql.Int, owner)
+      .input("notificationId", sql.BigInt, notificationId)
+      .input("includeKpiWorkCycles", sql.Bit, includeKpiWorkCycles).query(`
         UPDATE dbo.TM_notifications
         SET read_at_utc=COALESCE(read_at_utc,SYSUTCDATETIME())
-        WHERE id=@notificationId AND owner_user_id=@owner;
+        WHERE id=@notificationId
+          AND owner_user_id=@owner
+          AND (
+            @includeKpiWorkCycles = 1
+            OR (
+              kpi_instance_id IS NULL
+              AND notification_type NOT IN (
+                'CURRENT_CYCLE_ENDING_SOON',
+                'CURRENT_CYCLE_PAST_END',
+                'KPI_BELOW_TARGET',
+                'KPI_MEASUREMENT_DUE'
+              )
+            )
+          );
       `);
     return result.rowsAffected[0] === 1;
   },
 
-  async markAllRead(owner: number): Promise<number> {
+  async markAllRead(owner: number, includeKpiWorkCycles = true): Promise<number> {
     const pool = await getDatabasePool();
-    const result = await pool.request().input("owner", sql.Int, owner).query(`
+    const result = await pool
+      .request()
+      .input("owner", sql.Int, owner)
+      .input("includeKpiWorkCycles", sql.Bit, includeKpiWorkCycles).query(`
         UPDATE dbo.TM_notifications
         SET read_at_utc=SYSUTCDATETIME()
-        WHERE owner_user_id=@owner AND read_at_utc IS NULL;
+        WHERE owner_user_id=@owner
+          AND read_at_utc IS NULL
+          AND (
+            @includeKpiWorkCycles = 1
+            OR (
+              kpi_instance_id IS NULL
+              AND notification_type NOT IN (
+                'CURRENT_CYCLE_ENDING_SOON',
+                'CURRENT_CYCLE_PAST_END',
+                'KPI_BELOW_TARGET',
+                'KPI_MEASUREMENT_DUE'
+              )
+            )
+          );
       `);
     return result.rowsAffected[0] ?? 0;
   },
 };
+
+
 
 
 

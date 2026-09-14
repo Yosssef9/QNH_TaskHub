@@ -21,6 +21,7 @@ function renderGuard(roleCode: 'USER' | 'ADMIN') {
         calendarShowAdjacentDates: false,
         meetingStartReminderEnabled: true,
         timeFormat: '12H',
+        meetingScheduleSlotInterval: 30,
         timezone: 'Asia/Riyadh',
       },
     },

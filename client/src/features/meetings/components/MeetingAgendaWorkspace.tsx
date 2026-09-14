@@ -16,6 +16,7 @@ import {
 function toDraft(item: MeetingAgendaItem): MeetingAgendaDraftItem {
   return {
     clientId: `agenda-${item.id}`,
+    id: item.id,
     topic: item.topic,
     presenterUserId: item.presenter?.userId ?? null,
     plannedDurationMinutes: item.plannedDurationMinutes,
@@ -25,6 +26,7 @@ function toDraft(item: MeetingAgendaItem): MeetingAgendaDraftItem {
 function signature(items: readonly MeetingAgendaDraftItem[]): string {
   return JSON.stringify(
     items.map((item) => ({
+      id: item.id ?? null,
       topic: item.topic.trim(),
       presenterUserId: item.presenterUserId,
       plannedDurationMinutes: item.plannedDurationMinutes,
@@ -35,9 +37,13 @@ function signature(items: readonly MeetingAgendaDraftItem[]): string {
 export function MeetingAgendaWorkspace({
   detail,
   meetingDurationMinutes,
+  onAddDecision,
+  onAddActionItem,
 }: {
   detail: MeetingDetail
   meetingDurationMinutes: number
+  onAddDecision?: (agendaItemId: number) => void
+  onAddActionItem?: (agendaItemId: number) => void
 }) {
   const { t } = useTranslation()
   const updateAgenda = useUpdateMeetingAgenda()
@@ -57,6 +63,9 @@ export function MeetingAgendaWorkspace({
 
   const changed = signature(items) !== signature(serverDrafts)
 
+  const followUpActionsEnabled =
+    meeting.status === 'SCHEDULED' && new Date(meeting.startAtUtc).getTime() <= Date.now()
+
   async function save() {
     const nextErrors = Object.fromEntries(
       items
@@ -71,6 +80,7 @@ export function MeetingAgendaWorkspace({
         meetingId: meeting.id,
         meetingRowVersion: meeting.meetingRowVersion,
         agendaItems: items.map((item) => ({
+          id: item.id ?? null,
           topic: item.topic.trim(),
           presenterUserId: item.presenterUserId,
           plannedDurationMinutes: item.plannedDurationMinutes,
@@ -110,6 +120,9 @@ export function MeetingAgendaWorkspace({
         disabled={updateAgenda.isPending}
         errors={errors}
         onChange={setItems}
+        followUpActionsEnabled={followUpActionsEnabled}
+        onAddDecision={onAddDecision}
+        onAddActionItem={onAddActionItem}
         onErrorClear={(clientId) => {
           setErrors((current) => {
             if (!current[clientId]) return current
@@ -122,4 +135,5 @@ export function MeetingAgendaWorkspace({
     </div>
   )
 }
+
 

@@ -11,11 +11,13 @@ interface EmptyStateProps {
   icon?: LucideIcon
   action?: ReactNode
   className?: string
+  compact?: boolean
 }
 
 export function EmptyState({
   action,
   className,
+  compact = false,
   description,
   icon: Icon = Inbox,
   title,
@@ -25,7 +27,8 @@ export function EmptyState({
   return (
     <section
       className={cn(
-        'bg-card flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed p-8 text-center',
+        'bg-card flex flex-col items-center justify-center rounded-xl border border-dashed text-center',
+        compact ? 'p-5' : 'min-h-64 p-8',
         className,
       )}
     >
@@ -40,3 +43,4 @@ export function EmptyState({
     </section>
   )
 }
+

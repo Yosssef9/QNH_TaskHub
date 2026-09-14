@@ -22,6 +22,35 @@ describe("Meeting workflow schemas", () => {
     expect(parsed.title).toBe("Operations review");
     expect(parsed.organizerAttending).toBe(true);
     expect(parsed.attendeeUserIds).toEqual([11, 12]);
+    expect(parsed.followUpOfMeetingId).toBeNull();
+  });
+
+  it("accepts an optional positive Follow-up source Meeting ID", () => {
+    const parsed = createMeetingBodySchema.parse({
+      title: "Operations review - Follow-up",
+      roomId: 3,
+      startAtUtc: "2026-09-10T06:00:00.000Z",
+      endAtUtc: "2026-09-10T07:00:00.000Z",
+      organizerAttending: true,
+      attendeeUserIds: [11],
+      followUpOfMeetingId: 42,
+    });
+
+    expect(parsed.followUpOfMeetingId).toBe(42);
+  });
+
+  it("rejects invalid Follow-up source Meeting IDs", () => {
+    const input = {
+      title: "Operations review - Follow-up",
+      roomId: 3,
+      startAtUtc: "2026-09-10T06:00:00.000Z",
+      endAtUtc: "2026-09-10T07:00:00.000Z",
+      organizerAttending: false,
+      attendeeUserIds: [],
+    };
+
+    expect(createMeetingBodySchema.safeParse({ ...input, followUpOfMeetingId: 0 }).success).toBe(false);
+    expect(createMeetingBodySchema.safeParse({ ...input, followUpOfMeetingId: -1 }).success).toBe(false);
   });
 
   it("rejects a Meeting whose end is not after its start", () => {
@@ -77,4 +106,5 @@ describe("Meeting workflow schemas", () => {
     ).toBe(false);
   });
 });
+
 

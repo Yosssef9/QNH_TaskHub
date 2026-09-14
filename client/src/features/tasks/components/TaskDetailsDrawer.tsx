@@ -15,6 +15,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router'
 
 import { ErrorState } from '@/components/shared/ErrorState'
 import { LoadingState } from '@/components/shared/LoadingState'
@@ -42,6 +43,7 @@ import {
   useDeleteSubtask,
   useReorderSubtasks,
   useTaskDetails,
+  useChangeTaskStatus,
   useUploadAttachment,
 } from '../hooks/use-tasks'
 import type { Subtask, TaskAttachment } from '../types/task.types'
@@ -88,7 +90,10 @@ function getCurrentDateOnlyInAppTimeZone(): string {
 function SortableSubtaskRow({
   attachments,
   dragDisabled,
-  readOnly,
+  canComplete,
+  canManage,
+  canUpload,
+  canDeleteAttachment,
   index,
   item,
   justMoved,
@@ -103,7 +108,10 @@ function SortableSubtaskRow({
 }: {
   attachments: TaskAttachment[]
   dragDisabled: boolean
-  readOnly: boolean
+  canComplete: boolean
+  canManage: boolean
+  canUpload: boolean
+  canDeleteAttachment: (attachment: TaskAttachment) => boolean
   index: number
   item: Subtask
   justMoved: boolean
@@ -158,7 +166,7 @@ function SortableSubtaskRow({
             <TooltipTrigger asChild>
               <button
                 type="button"
-                disabled={readOnly}
+                disabled={!canComplete}
                 onClick={onToggle}
                 aria-label={t('tasks.details.toggleSubtask')}
                 className="text-muted-foreground hover:bg-success/10 hover:text-success focus-visible:ring-ring grid size-9 shrink-0 place-items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
@@ -198,9 +206,9 @@ function SortableSubtaskRow({
             </div>
           </div>
 
-          {!readOnly ? (
+          {canManage || canUpload ? (
             <div className="flex items-center gap-1 self-end opacity-75 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 sm:self-center">
-              <Tooltip>
+              {canUpload ? <Tooltip>
                 <TooltipTrigger asChild>
                   <label
                     role="button"
@@ -229,8 +237,9 @@ function SortableSubtaskRow({
                   </label>
                 </TooltipTrigger>
                 <TooltipContent>{t('tasks.details.attachToSubtask')}</TooltipContent>
-              </Tooltip>
+              </Tooltip> : null}
 
+              {canManage ? <>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -260,6 +269,7 @@ function SortableSubtaskRow({
                 </TooltipTrigger>
                 <TooltipContent>{t('tasks.details.deleteSubtask')}</TooltipContent>
               </Tooltip>
+              </> : null}
             </div>
           ) : null}
         </div>
@@ -273,7 +283,8 @@ function SortableSubtaskRow({
             <TaskAttachmentList
               compact
               attachments={attachments}
-              readOnly={readOnly}
+              readOnly={false}
+              canDelete={canDeleteAttachment}
               onOpen={onOpenAttachment}
               onDownload={onDownloadAttachment}
               onDelete={onDeleteAttachment}
@@ -287,6 +298,7 @@ function SortableSubtaskRow({
 
 export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange }: Props) {
   const { t, i18n } = useTranslation()
+  const navigate = useNavigate()
   const timeFormat = useTimeFormatPreference()
   const [subtaskEditorOpen, setSubtaskEditorOpen] = useState(false)
   const [subtaskEditorSession, setSubtaskEditorSession] = useState(0)
@@ -298,6 +310,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
   const taskFileRef = useRef<HTMLInputElement>(null)
   const query = useTaskDetails(taskId)
   const completeMutation = useCompleteSubtask()
+  const statusMutation = useChangeTaskStatus()
   const deleteMutation = useDeleteSubtask()
   const reorderMutation = useReorderSubtasks()
   const uploadMutation = useUploadAttachment()
@@ -325,6 +338,15 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
   }, [focusSubtaskId, query.data])
 
   const readOnly = query.data?.task.isReadOnly ?? false
+  const capabilities = query.data?.capabilities
+  const canManageSubtasks = !readOnly && (capabilities?.canManageSubtasks ?? true)
+  const canCompleteSubtasks = !readOnly && (capabilities?.canCompleteSubtasks ?? true)
+  const canUploadAttachments = !readOnly && (capabilities?.canUploadAttachments ?? true)
+  const canDeleteAttachment = (item: TaskAttachment) => {
+    if (readOnly || !capabilities) return !readOnly
+    if (capabilities.canDeleteAnyAttachment) return true
+    return capabilities.role === 'ASSIGNEE' && query.data?.actionItem?.assigneeUserId === item.uploadedByUserId
+  }
   const serverSubtasks = query.data?.subtasks ?? []
   const displayedSubtasks = sameSubtaskSet(orderedSubtasks, serverSubtasks)
     ? orderedSubtasks
@@ -359,7 +381,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
   }, [recentlyMovedSubtaskId])
 
   function toggle(item: Subtask) {
-    if (readOnly) return
+    if (!canCompleteSubtasks) return
     completeMutation.mutate(
       { subtaskId: item.id, isCompleted: !item.isCompleted },
       { onError: () => toast.error(t('tasks.details.errors.subtask')) },
@@ -367,7 +389,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
   }
 
   function upload(file: File, subtaskId?: number) {
-    if (readOnly || !taskId) return
+    if (!canUploadAttachments || !taskId) return
     uploadMutation.mutate(
       { ...(subtaskId ? { subtaskId } : { taskId }), file },
       {
@@ -386,7 +408,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
   }
 
   function removeAttachment(item: TaskAttachment) {
-    if (readOnly) return
+    if (!canDeleteAttachment(item)) return
     deleteAttachmentMutation.mutate(item.id, {
       onSuccess: () => toast.success(t('tasks.details.attachmentRemoved')),
       onError: () => toast.error(t('tasks.details.errors.attachment')),
@@ -452,6 +474,95 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                   </div>
                 ) : null}
 
+                {query.data.actionItem ? (
+                  <div className="border-primary/20 bg-primary/5 mb-5 rounded-xl border p-4 text-sm">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold">{t('tasks.actionItem.badge')}</p>
+                        <button
+                          type="button"
+                          className="text-primary mt-1 inline-flex items-center gap-1.5 rounded-md font-medium hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                          onClick={() => {
+                            onOpenChange(false)
+                            navigate(`/meetings/${query.data.actionItem!.meetingId}`)
+                          }}
+                        >
+                          <CalendarDays className="size-4 shrink-0" />
+                          <span>{query.data.actionItem.meetingTitle}</span>
+                        </button>
+                        <p className="text-muted-foreground mt-1">
+                          {capabilities?.role === 'ASSIGNEE'
+                            ? t('tasks.actionItem.assignedBy', { name: query.data.actionItem.organizerName })
+                            : t('tasks.actionItem.assignedTo', { name: query.data.actionItem.assigneeName })}
+                        </p>
+                      </div>
+                      {capabilities?.role === 'ASSIGNEE' && !readOnly ? (
+                        <div className="flex flex-wrap gap-2">
+                          {query.data.task.status === 'TODO' ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={statusMutation.isPending}
+                              onClick={() =>
+                                statusMutation.mutate(
+                                  { taskId: query.data.task.id, status: 'IN_PROGRESS' },
+                                  { onError: () => toast.error(t('tasks.errors.status')) },
+                                )
+                              }
+                            >
+                              {t('tasks.actionItem.markInProgress')}
+                            </Button>
+                          ) : null}
+                          {query.data.task.status === 'IN_PROGRESS' ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={statusMutation.isPending}
+                              onClick={() =>
+                                statusMutation.mutate(
+                                  { taskId: query.data.task.id, status: 'TODO' },
+                                  { onError: () => toast.error(t('tasks.errors.status')) },
+                                )
+                              }
+                            >
+                              {t('tasks.backToTodo')}
+                            </Button>
+                          ) : null}
+                          {query.data.task.status !== 'DONE' && query.data.task.status !== 'CANCELLED' ? (
+                            <Button
+                              size="sm"
+                              disabled={statusMutation.isPending}
+                              onClick={() =>
+                                statusMutation.mutate(
+                                  { taskId: query.data.task.id, status: 'DONE' },
+                                  { onError: () => toast.error(t('tasks.errors.status')) },
+                                )
+                              }
+                            >
+                              {t('tasks.actionItem.markComplete')}
+                            </Button>
+                          ) : null}
+                          {query.data.task.status === 'DONE' ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={statusMutation.isPending}
+                              onClick={() =>
+                                statusMutation.mutate(
+                                  { taskId: query.data.task.id, status: 'TODO' },
+                                  { onError: () => toast.error(t('tasks.errors.status')) },
+                                )
+                              }
+                            >
+                              {t('tasks.reopenTask', { title: query.data.task.title })}
+                            </Button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="grid gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(19rem,0.75fr)]">
                   <main className="min-w-0 space-y-5">
                     <Card>
@@ -464,7 +575,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                         </div>
                         <Button
                           size="sm"
-                          disabled={readOnly}
+                          disabled={!canManageSubtasks}
                           onClick={() => {
                             setEditingSubtask(null)
                             setSubtaskEditorSession((current) => current + 1)
@@ -500,7 +611,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                             onDragEnd={(event) => {
                               subtaskDraggingRef.current = false
 
-                              if (readOnly || event.canceled) {
+                              if (!canManageSubtasks || event.canceled) {
                                 setOrderedSubtasks(serverSubtasks)
                                 return
                               }
@@ -547,8 +658,11 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                                     item={item}
                                     index={index}
                                     attachments={subtaskAttachments.get(item.id) ?? []}
-                                    dragDisabled={readOnly || reorderMutation.isPending}
-                                    readOnly={readOnly}
+                                    dragDisabled={!canManageSubtasks || reorderMutation.isPending}
+                                    canComplete={canCompleteSubtasks}
+                                    canManage={canManageSubtasks}
+                                    canUpload={canUploadAttachments}
+                                    canDeleteAttachment={canDeleteAttachment}
                                     justMoved={recentlyMovedSubtaskId === item.id}
                                     focused={focusSubtaskId === item.id}
                                     onToggle={() => toggle(item)}
@@ -599,7 +713,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                           <Button
                             size="sm"
                             variant="outline"
-                            disabled={readOnly}
+                            disabled={!canUploadAttachments}
                             onClick={() => taskFileRef.current?.click()}
                           >
                             <Paperclip className="size-4" />
@@ -611,7 +725,8 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                         <TaskAttachmentList
                           attachments={taskAttachments}
                           emptyLabel={t('tasks.details.noTaskFiles')}
-                          readOnly={readOnly}
+                          readOnly={false}
+                          canDelete={canDeleteAttachment}
                           onOpen={setPreviewAttachment}
                           onDownload={(attachment) => void download(attachment)}
                           onDelete={removeAttachment}
@@ -716,7 +831,10 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                                       defaultValue: item.activityType,
                                     })}
                                   </p>
-                                  <time className="text-muted-foreground mt-1 block text-xs">
+                                  <p className="text-muted-foreground mt-1 text-xs">
+                                    {t('tasks.actionItem.performedBy', { name: item.actorName })}
+                                  </p>
+                                  <time className="text-muted-foreground mt-0.5 block text-xs">
                                     {formatDateTime(item.createdAtUtc, i18n.language, timeFormat)}
                                   </time>
                                 </motion.li>
@@ -744,7 +862,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
         onOpenChange={(open) => !open && setPreviewAttachment(null)}
       />
 
-      {taskId && !readOnly ? (
+      {taskId && canManageSubtasks ? (
         <SubtaskEditorDialog
           key={subtaskEditorSession}
           open={subtaskEditorOpen}
@@ -779,4 +897,5 @@ function InfoRow({
     </div>
   )
 }
+
 

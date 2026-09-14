@@ -95,6 +95,12 @@ export const accessService: AccessService = {
         access: input.procurementAccess,
       });
 
+      await accessPermissionsRepository.saveKpiWorkCyclesAccess(transaction, {
+        actorUserId,
+        granteeUserId: input.userId,
+        enabled: input.kpiWorkCyclesAccess,
+      });
+
       await accessRepository.saveMeetingPermissions(transaction, {
         actorUserId,
         targetUserId: input.userId,
@@ -170,3 +176,4 @@ export const accessService: AccessService = {
     return accessPermissionsRepository.getContractAccessAdminData();
   },
 };
+

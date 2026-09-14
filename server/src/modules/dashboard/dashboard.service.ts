@@ -6,12 +6,23 @@ import { dashboardRepository } from "./dashboard.repository.js";
 import type { DashboardData, DashboardKpiPerformance } from "./dashboard.types.js";
 
 export const dashboardService = {
-  async get(owner: number): Promise<DashboardData> {
+  async get(owner: number, kpiWorkCyclesAccess = true): Promise<DashboardData> {
     const today = getCurrentDateInAppTimeZone();
-    const [cycles, personalSummary] = await Promise.all([
-      workCyclesService.list(owner),
-      dashboardRepository.personalSummary(owner, today),
-    ]);
+    const personalSummary = await dashboardRepository.personalSummary(owner, today);
+
+    if (!kpiWorkCyclesAccess) {
+      return {
+        currentCycle: null,
+        openCycleCount: 0,
+        cycleSummary: null,
+        attentionTasks: [],
+        kpiPerformance: [],
+        kpiHealth: { met: 0, notMet: 0, noData: 0, noTarget: 0 },
+        personalSummary,
+      };
+    }
+
+    const cycles = await workCyclesService.list(owner);
 
     let currentCycle = cycles.find((cycle) => cycle.isCurrent && !cycle.closedAtUtc) ?? null;
 
@@ -80,3 +91,4 @@ export const dashboardService = {
     };
   },
 };
+

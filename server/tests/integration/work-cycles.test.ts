@@ -48,7 +48,17 @@ describe("Work Cycle endpoints", () => {
     vi.restoreAllMocks();
     vi.spyOn(authService, "resolveCurrentUser").mockResolvedValue({
       user: { userId: 7, userCode: "USER0007", userName: "User", email: null },
-      access: { roleCode: "USER", permissions: [] },
+      access: {
+        roleCode: "USER",
+        permissions: [
+          {
+            moduleCode: "KPI_MANAGEMENT",
+            entityCode: "KPI_WORK_CYCLES",
+            permissionCode: "ACCESS",
+            resourceOwnerUserId: null,
+          },
+        ],
+      },
       preferences: {
         languageCode: "AR",
         theme: "SYSTEM",
@@ -56,6 +66,7 @@ describe("Work Cycle endpoints", () => {
         calendarShowAdjacentDates: false,
         meetingStartReminderEnabled: true,
         timeFormat: "12H",
+        meetingScheduleSlotInterval: 30,
         timezone: "Asia/Riyadh",
       },
     });
@@ -110,6 +121,7 @@ describe("Work Cycle endpoints", () => {
     expect(remove).toHaveBeenCalledWith(7, 9, 31);
   });
 });
+
 
 
 

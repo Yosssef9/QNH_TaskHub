@@ -34,6 +34,8 @@ export function mapAttachment(record: AttachmentRecord): Attachment {
     mimeType: record.mimeType,
     fileExtension: record.fileExtension,
     sizeBytes: Number(record.sizeBytes),
+    uploadedByUserId: Number(record.uploadedByUserId),
+    uploadedByName: record.uploadedByName,
     uploadedAtUtc: record.uploadedAtUtc.toISOString(),
   };
 }
@@ -48,9 +50,10 @@ export function mapActivity(record: ActivityRecord): TaskActivity {
   }
   return {
     id: parsePositiveIntegerId(record.id, "activity id"),
+    actorUserId: Number(record.actorUserId),
+    actorName: record.actorName,
     activityType: record.activityType,
     eventData,
     createdAtUtc: record.createdAtUtc.toISOString(),
   };
 }
-

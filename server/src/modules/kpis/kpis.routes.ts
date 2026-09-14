@@ -1,4 +1,5 @@
 import { Router, type Router as ExpressRouter } from "express";
+import { requireKpiWorkCyclesAccess } from "../../middleware/requireAccessPermission.middleware.js";
 import { resolveTaskHubAccess } from "../../middleware/resolveTaskHubAccess.middleware.js";
 import { validateRequest } from "../../middleware/validate.middleware.js";
 import { verifyPortalJwt } from "../../middleware/verifyPortalJwt.middleware.js";
@@ -20,7 +21,7 @@ import {
 
 export const kpisRouter: ExpressRouter = Router();
 
-kpisRouter.use(verifyPortalJwt, resolveTaskHubAccess);
+kpisRouter.use(verifyPortalJwt, resolveTaskHubAccess, requireKpiWorkCyclesAccess);
 
 kpisRouter.get("/", listKpis);
 kpisRouter.post("/", validateRequest({ body: saveKpiBodySchema }), createKpi);
@@ -41,3 +42,4 @@ kpisRouter.patch(
 );
 
 kpisRouter.delete("/:kpiId", validateRequest({ params: kpiParamsSchema }), archiveKpi);
+

@@ -342,6 +342,25 @@ export const meetingWorkspaceRepository = {
     };
   },
 
+  async approvedStart(
+    meetingId: number,
+    revisionId: number,
+    transaction?: DatabaseTransaction,
+  ): Promise<Date | null> {
+    const request = await baseRequest(transaction);
+    const result = await request
+      .input("meetingId", sql.BigInt, meetingId)
+      .input("revisionId", sql.BigInt, revisionId)
+      .query<{ startAtUtc: Date }>(`
+        SELECT TOP (1) start_at_utc AS startAtUtc
+        FROM dbo.TM_meeting_revisions
+        WHERE id = @revisionId
+          AND meeting_id = @meetingId
+          AND revision_status = 'APPROVED';
+      `);
+    return result.recordset[0]?.startAtUtc ?? null;
+  },
+
   async listRevisions(meetingId: number): Promise<MeetingRevisionDetail[]> {
     const pool = await getDatabasePool();
     const result = await pool.request().input("meetingId", sql.BigInt, meetingId).query<RevisionRecord>(`
@@ -409,11 +428,14 @@ export const meetingWorkspaceRepository = {
       expectedMeetingRowVersion: string;
       agendaItems: readonly MeetingAgendaItemInput[];
     },
-  ): Promise<boolean> {
+  ): Promise<"UPDATED" | "STALE" | "INVALID_ITEM"> {
+    const meetingRowVersion = rowVersionToBuffer(input.expectedMeetingRowVersion);
+    if (!meetingRowVersion) return "STALE";
+
     const touched = await transaction
       .request()
       .input("meetingId", sql.BigInt, input.meetingId)
-      .input("meetingRowVersion", sql.VarBinary(8), rowVersionToBuffer(input.expectedMeetingRowVersion))
+      .input("meetingRowVersion", sql.VarBinary(8), meetingRowVersion)
       .query<{ affected: number }>(`
         UPDATE dbo.TM_meetings
         SET updated_at_utc = SYSUTCDATETIME()
@@ -423,44 +445,116 @@ export const meetingWorkspaceRepository = {
         SELECT @@ROWCOUNT AS affected;
       `);
 
-    if (Number(touched.recordset[0]?.affected ?? 0) !== 1) return false;
+    if (Number(touched.recordset[0]?.affected ?? 0) !== 1) return "STALE";
 
+    const existingResult = await transaction
+      .request()
+      .input("meetingId", sql.BigInt, input.meetingId)
+      .query<{ id: number | string }>(`
+        SELECT id
+        FROM dbo.TM_meeting_agenda_items WITH (UPDLOCK, HOLDLOCK)
+        WHERE meeting_id = @meetingId;
+      `);
+    const existingIds = new Set(existingResult.recordset.map((record) => Number(record.id)));
+    const submittedIds = input.agendaItems.flatMap((item) =>
+      item.id === null || item.id === undefined ? [] : [item.id],
+    );
+
+    if (
+      new Set(submittedIds).size !== submittedIds.length ||
+      submittedIds.some((id) => !existingIds.has(id))
+    ) {
+      return "INVALID_ITEM";
+    }
+
+    const retainedIds = new Set(submittedIds);
+    for (const existingId of existingIds) {
+      if (retainedIds.has(existingId)) continue;
+      await transaction
+        .request()
+        .input("meetingId", sql.BigInt, input.meetingId)
+        .input("agendaItemId", sql.BigInt, existingId)
+        .query(`
+          DELETE FROM dbo.TM_meeting_agenda_items
+          WHERE id = @agendaItemId
+            AND meeting_id = @meetingId;
+        `);
+    }
+
+    // Move retained rows out of the final 1..N sort-order range before
+    // applying the requested order. This preserves Agenda identities while
+    // avoiding transient UQ(meeting_id, sort_order) collisions on swaps.
     await transaction
       .request()
       .input("meetingId", sql.BigInt, input.meetingId)
-      .query(`DELETE FROM dbo.TM_meeting_agenda_items WHERE meeting_id = @meetingId;`);
+      .query(`
+        DECLARE @currentMaxSortOrder INT = ISNULL((
+          SELECT MAX(sort_order)
+          FROM dbo.TM_meeting_agenda_items
+          WHERE meeting_id = @meetingId
+        ), 0);
+
+        ;WITH staged AS (
+          SELECT
+            id,
+            ROW_NUMBER() OVER (ORDER BY id) AS temporaryOrder
+          FROM dbo.TM_meeting_agenda_items
+          WHERE meeting_id = @meetingId
+        )
+        UPDATE agenda
+        SET sort_order = @currentMaxSortOrder + staged.temporaryOrder
+        FROM dbo.TM_meeting_agenda_items AS agenda
+        INNER JOIN staged ON staged.id = agenda.id;
+      `);
 
     for (const [index, item] of input.agendaItems.entries()) {
-      await transaction
+      const request = transaction
         .request()
         .input("meetingId", sql.BigInt, input.meetingId)
         .input("sortOrder", sql.Int, index + 1)
         .input("topic", sql.NVarChar(500), item.topic)
         .input("presenterUserId", sql.Int, item.presenterUserId)
         .input("plannedDurationMinutes", sql.Int, item.plannedDurationMinutes)
-        .input("actorUserId", sql.Int, input.actorUserId)
-        .query(`
-          INSERT INTO dbo.TM_meeting_agenda_items (
-            meeting_id,
-            sort_order,
-            topic,
-            presenter_user_id,
-            planned_duration_minutes,
-            created_by_user_id,
-            updated_at_utc
-          ) VALUES (
-            @meetingId,
-            @sortOrder,
-            @topic,
-            @presenterUserId,
-            @plannedDurationMinutes,
-            @actorUserId,
-            SYSUTCDATETIME()
-          );
-        `);
+        .input("actorUserId", sql.Int, input.actorUserId);
+
+      if (item.id !== null && item.id !== undefined) {
+        await request
+          .input("agendaItemId", sql.BigInt, item.id)
+          .query(`
+            UPDATE dbo.TM_meeting_agenda_items
+            SET sort_order = @sortOrder,
+                topic = @topic,
+                presenter_user_id = @presenterUserId,
+                planned_duration_minutes = @plannedDurationMinutes,
+                updated_at_utc = SYSUTCDATETIME()
+            WHERE id = @agendaItemId
+              AND meeting_id = @meetingId;
+          `);
+        continue;
+      }
+
+      await request.query(`
+        INSERT INTO dbo.TM_meeting_agenda_items (
+          meeting_id,
+          sort_order,
+          topic,
+          presenter_user_id,
+          planned_duration_minutes,
+          created_by_user_id,
+          updated_at_utc
+        ) VALUES (
+          @meetingId,
+          @sortOrder,
+          @topic,
+          @presenterUserId,
+          @plannedDurationMinutes,
+          @actorUserId,
+          SYSUTCDATETIME()
+        );
+      `);
     }
 
-    return true;
+    return "UPDATED";
   },
 
   async listAgendaItems(meetingId: number): Promise<MeetingAgendaItem[]> {
@@ -1077,3 +1171,4 @@ export const meetingWorkspaceRepository = {
 export function mapMeetingAttachmentRecord(record: MeetingAttachmentRecord): MeetingAttachment {
   return mapAttachment(record);
 }
+

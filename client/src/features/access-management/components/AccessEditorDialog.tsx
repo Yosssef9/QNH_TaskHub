@@ -48,6 +48,7 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
   const [procurementAccess, setProcurementAccess] = useState<ProcurementAccessState>(
     user.procurementAccess,
   )
+  const [kpiWorkCyclesAccess, setKpiWorkCyclesAccess] = useState(user.kpiWorkCyclesAccess)
   const [meetingOrganizeEnabled, setMeetingOrganizeEnabled] = useState(
     user.meetingOrganizeEnabled ?? false,
   )
@@ -66,6 +67,7 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
         roleCode,
         isActive,
         procurementAccess,
+        kpiWorkCyclesAccess,
         meetingOrganizeEnabled,
         meetingCoordinateEnabled,
       },
@@ -170,6 +172,28 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
 
           <div className="space-y-3 rounded-lg border p-4">
             <div>
+              <p className="text-sm font-medium">{t('access.kpiWorkCyclesPermission')}</p>
+              <p className="text-muted-foreground mt-1 text-xs leading-5">
+                {t('access.kpiWorkCyclesPermissionDescription')}
+              </p>
+            </div>
+            <div className="bg-muted/60 flex items-center justify-between gap-4 rounded-lg border p-3">
+              <div>
+                <p className="text-sm font-medium">{t('access.kpiWorkCyclesAccess')}</p>
+                <p className="text-muted-foreground mt-1 text-xs leading-5">
+                  {t('access.kpiWorkCyclesAccessDescription')}
+                </p>
+              </div>
+              <Switch
+                checked={kpiWorkCyclesAccess}
+                aria-label={t('access.kpiWorkCyclesAccess')}
+                onCheckedChange={setKpiWorkCyclesAccess}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-3 rounded-lg border p-4">
+            <div>
               <p className="text-sm font-medium">{t('access.meetingPermissions')}</p>
               <p className="text-muted-foreground mt-1 text-xs leading-5">
                 {t('access.meetingPermissionsDescription')}
@@ -219,3 +243,4 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
     </Dialog>
   )
 }
+

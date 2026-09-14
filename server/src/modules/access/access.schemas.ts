@@ -2,6 +2,15 @@ import { z } from "zod";
 
 export const accessListQuerySchema = z.object({
   search: z.string().trim().max(100).optional(),
+  role: z.enum(["ALL", "USER", "ADMIN", "UNASSIGNED"]).default("ALL"),
+  status: z.enum(["ALL", "ACTIVE", "INACTIVE", "UNASSIGNED"]).default("ALL"),
+  procurement: z.enum(["ALL", "WITH_ACCESS", "WITHOUT_ACCESS"]).default("ALL"),
+  kpiWorkCycles: z.enum(["ALL", "WITH_ACCESS", "WITHOUT_ACCESS"]).default("ALL"),
+  meetings: z.enum(["ALL", "ORGANIZER", "COORDINATOR", "BOTH", "NONE"]).default("ALL"),
+  sortBy: z
+    .enum(["userName", "userCode", "role", "procurement", "kpiWorkCycles", "meetings", "status"])
+    .default("userName"),
+  sortDirection: z.enum(["asc", "desc"]).default("asc"),
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
 });
@@ -21,6 +30,7 @@ export const updateAccessBodySchema = z.object({
   roleCode: z.enum(["USER", "ADMIN"]),
   isActive: z.boolean(),
   procurementAccess: procurementAccessSchema,
+  kpiWorkCyclesAccess: z.boolean(),
   meetingOrganizeEnabled: z.boolean().optional(),
   meetingCoordinateEnabled: z.boolean().optional(),
 });

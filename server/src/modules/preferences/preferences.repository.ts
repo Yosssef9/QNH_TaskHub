@@ -9,6 +9,7 @@ interface PreferencesRecord {
   calendarShowAdjacentDates: boolean;
   meetingStartReminderEnabled: boolean;
   timeFormat: "12H" | "24H";
+  meetingScheduleSlotInterval: 15 | 30 | 60;
   timezone: "Asia/Riyadh";
 }
 
@@ -30,6 +31,11 @@ export async function updatePreferences(
     )
     .input("meetingStartReminderEnabled", sql.Bit, input.meetingStartReminderEnabled ?? null)
     .input("timeFormat", sql.VarChar(3), input.timeFormat ?? null)
+    .input(
+      "meetingScheduleSlotInterval",
+      sql.SmallInt,
+      input.meetingScheduleSlotInterval ?? null,
+    )
     .query<PreferencesRecord>(`
       UPDATE dbo.TM_user_settings
       SET
@@ -45,6 +51,10 @@ export async function updatePreferences(
           meeting_start_reminder_enabled
         ),
         time_format = COALESCE(@timeFormat, time_format),
+        meeting_schedule_slot_interval = COALESCE(
+          @meetingScheduleSlotInterval,
+          meeting_schedule_slot_interval
+        ),
         updated_at_utc = SYSUTCDATETIME()
       OUTPUT
         inserted.language_code AS languageCode,
@@ -53,6 +63,7 @@ export async function updatePreferences(
         inserted.calendar_show_adjacent_dates AS calendarShowAdjacentDates,
         inserted.meeting_start_reminder_enabled AS meetingStartReminderEnabled,
         inserted.time_format AS timeFormat,
+        inserted.meeting_schedule_slot_interval AS meetingScheduleSlotInterval,
         inserted.timezone_name AS timezone
       WHERE portal_user_id = @userId;
     `);

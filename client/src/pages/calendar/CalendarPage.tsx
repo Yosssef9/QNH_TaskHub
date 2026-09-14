@@ -13,6 +13,7 @@ import {
 } from '@/features/calendar/components/CalendarFilters'
 import { TaskCalendar } from '@/features/calendar/components/TaskCalendar'
 import { useCalendarTasks } from '@/features/calendar/hooks/use-calendar-tasks'
+import { hasKpiWorkCyclesAccess } from '@/features/auth/access-permissions'
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import type {
   CalendarSearchTarget,
@@ -62,8 +63,9 @@ export function CalendarPage() {
 
   const currentUserQuery = useCurrentUser()
   const updatePreferencesMutation = useUpdatePreferences()
+  const kpiWorkCyclesAccess = hasKpiWorkCyclesAccess(currentUserQuery.data?.access)
   const listsQuery = useLists()
-  const cyclesQuery = useWorkCycles()
+  const cyclesQuery = useWorkCycles(kpiWorkCyclesAccess)
   const savedShowAdjacentDates =
     currentUserQuery.data?.preferences.calendarShowAdjacentDates ?? true
   const showAdjacentDates = showAdjacentDatesOverride ?? savedShowAdjacentDates
@@ -71,6 +73,16 @@ export function CalendarPage() {
   useEffect(() => {
     setShowAdjacentDatesOverride(null)
   }, [savedShowAdjacentDates])
+
+  useEffect(() => {
+    if (kpiWorkCyclesAccess || !filters.sources.kpi) return
+    setFilters((current) => ({
+      ...current,
+      sources: { ...current.sources, kpi: false },
+      cycleId: undefined,
+      kpiInstanceId: undefined,
+    }))
+  }, [filters.sources.kpi, kpiWorkCyclesAccess])
 
   const personalQueryFilters = useMemo<CalendarTaskFilters | null>(() => {
     if (!range || !filters.sources.personal) return null
@@ -85,7 +97,7 @@ export function CalendarPage() {
   }, [filters, range])
 
   const kpiQueryFilters = useMemo<CalendarTaskFilters | null>(() => {
-    if (!range || !filters.sources.kpi) return null
+    if (!kpiWorkCyclesAccess || !range || !filters.sources.kpi) return null
     return {
       start: range.start,
       end: range.end,
@@ -95,7 +107,7 @@ export function CalendarPage() {
       cycleId: filters.cycleId,
       kpiInstanceId: filters.kpiInstanceId,
     }
-  }, [filters, range])
+  }, [filters, kpiWorkCyclesAccess, range])
 
   const meetingScheduleInput = useMemo(() => {
     if (!range || !filters.sources.meetings) return null
@@ -263,6 +275,7 @@ export function CalendarPage() {
 
       <CalendarFilters
         value={filters}
+        kpiWorkCyclesAccess={kpiWorkCyclesAccess}
         onChange={changeFilters}
         onOpenSearchResult={openSearchResult}
       />
@@ -354,3 +367,4 @@ export function CalendarPage() {
     </div>
   )
 }
+

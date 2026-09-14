@@ -25,6 +25,7 @@ import { procurementRouter } from "./modules/procurement/procurement.routes.js";
 import { searchRouter } from "./modules/search/search.routes.js";
 import { suppliersRouter } from "./modules/suppliers/suppliers.routes.js";
 import { notificationsRouter } from "./modules/notifications/notifications.routes.js";
+import { meetingActionItemsRouter } from "./modules/meeting-action-items/meeting-action-items.routes.js";
 import {
   meetingRoomsAdminRouter,
   meetingsRouter,
@@ -76,6 +77,7 @@ export function createApp(): express.Express {
   app.use("/api/search", searchRouter);
   app.use("/api/notifications", notificationsRouter);
   app.use("/api/meetings", meetingsRouter);
+  app.use("/api/action-items", meetingActionItemsRouter);
   app.use("/api/email-settings", emailSettingsRouter);
   app.use("/api/lists", listTasksRouter, listsRouter);
   app.use("/api/kpis", kpisRouter);
@@ -97,6 +99,7 @@ export function createApp(): express.Express {
 }
 
 export const app = createApp();
+
 
 
 

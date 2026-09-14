@@ -1,9 +1,30 @@
 import type {
   AccessPermission,
   AccessPermissionCode,
+  AccessModuleCode,
+  AccessEntityCode,
   ProcurementEntityCode,
   TaskHubAccess,
 } from './types/auth.types'
+
+export function hasModuleAccessPermission(
+  access: Pick<TaskHubAccess, 'permissions'> | null | undefined,
+  moduleCode: AccessModuleCode,
+  entityCode: AccessEntityCode,
+  permissionCode: AccessPermissionCode = 'ACCESS',
+  resourceOwnerUserId: number | null = null,
+): boolean {
+  return Boolean(
+    access?.permissions.some(
+      (permission) =>
+        permission.moduleCode === moduleCode &&
+        permission.entityCode === entityCode &&
+        permission.permissionCode === permissionCode &&
+        permission.resourceOwnerUserId === resourceOwnerUserId,
+    ),
+  )
+}
+
 
 export function hasAccessPermission(
   access: Pick<TaskHubAccess, 'permissions'> | null | undefined,
@@ -11,15 +32,19 @@ export function hasAccessPermission(
   permissionCode: AccessPermissionCode = 'ACCESS',
   resourceOwnerUserId: number | null = null,
 ): boolean {
-  return Boolean(
-    access?.permissions.some(
-      (permission) =>
-        permission.moduleCode === 'PROCUREMENT' &&
-        permission.entityCode === entityCode &&
-        permission.permissionCode === permissionCode &&
-        permission.resourceOwnerUserId === resourceOwnerUserId,
-    ),
+  return hasModuleAccessPermission(
+    access,
+    'PROCUREMENT',
+    entityCode,
+    permissionCode,
+    resourceOwnerUserId,
   )
+}
+
+export function hasKpiWorkCyclesAccess(
+  access: Pick<TaskHubAccess, 'permissions'> | null | undefined,
+): boolean {
+  return hasModuleAccessPermission(access, 'KPI_MANAGEMENT', 'KPI_WORK_CYCLES')
 }
 
 export function hasAnyProcurementAccess(
@@ -50,3 +75,4 @@ export function permissionKey(permission: AccessPermission): string {
     permission.resourceOwnerUserId ?? 'GLOBAL',
   ].join(':')
 }
+

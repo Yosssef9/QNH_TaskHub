@@ -61,6 +61,22 @@ interface MeetingSummaryRecord {
   revisionRowVersion: unknown;
 }
 
+interface RelatedMeetingSummaryRecord extends MeetingSummaryRecord {
+  rootMeetingId: number | string;
+  isAttendee: boolean | number;
+}
+
+export interface MeetingFollowUpSourceRecord {
+  meetingId: number;
+  organizerUserId: number;
+  title: string;
+}
+
+export interface RelatedMeetingSummaryItem {
+  meeting: MeetingSummary;
+  isAttendee: boolean;
+}
+
 interface ScheduleRecord {
   meetingId: number | string;
   title: string;
@@ -371,29 +387,58 @@ export const meetingWorkflowRepository = {
     return result.recordset.map((record) => Number(record.userId));
   },
 
+  async findFollowUpSource(
+    transaction: DatabaseTransaction,
+    meetingId: number,
+  ): Promise<MeetingFollowUpSourceRecord | null> {
+    const result = await transaction
+      .request()
+      .input("meetingId", sql.BigInt, meetingId)
+      .query<{ meetingId: number | string; organizerUserId: number | string; title: string }>(`
+        SELECT TOP (1)
+          id AS meetingId,
+          organizer_user_id AS organizerUserId,
+          title
+        FROM dbo.TM_meetings
+        WHERE id = @meetingId;
+      `);
+
+    const record = result.recordset[0];
+    return record
+      ? {
+          meetingId: Number(record.meetingId),
+          organizerUserId: Number(record.organizerUserId),
+          title: record.title,
+        }
+      : null;
+  },
+
   async createMeeting(
     transaction: DatabaseTransaction,
     organizerUserId: number,
-    input: Pick<CreateMeetingInput, "title" | "description">,
+    input: Pick<CreateMeetingInput, "title" | "description" | "followUpOfMeetingId">,
   ): Promise<{ meetingId: number; rowVersion: string } | null> {
     const result = await transaction
       .request()
       .input("organizerUserId", sql.Int, organizerUserId)
       .input("title", sql.NVarChar(250), input.title)
       .input("description", sql.NVarChar(sql.MAX), input.description ?? null)
+      .input("followUpOfMeetingId", sql.BigInt, input.followUpOfMeetingId ?? null)
       .query<MeetingIdentityRecord>(`
         INSERT INTO dbo.TM_meetings (
           organizer_user_id,
           title,
           description,
-          status
+          status,
+          follow_up_of_meeting_id
         )
         OUTPUT inserted.id AS meetingId, inserted.row_version AS rowVersion
         VALUES (
           @organizerUserId,
           @title,
           @description,
-          'PENDING_APPROVAL'
+          'PENDING_APPROVAL',
+          @followUpOfMeetingId
         );
       `);
 
@@ -567,6 +612,107 @@ export const meetingWorkflowRepository = {
       request.input("meetingId", sql.BigInt, meetingId);
     });
     return meetings[0] ?? null;
+  },
+
+  async listRelatedMeetingFamily(
+    meetingId: number,
+    actorUserId: number,
+  ): Promise<{ rootMeetingId: number; items: RelatedMeetingSummaryItem[] }> {
+    const pool = await getDatabasePool();
+    const request = pool
+      .request()
+      .input("meetingId", sql.BigInt, meetingId)
+      .input("actorUserId", sql.Int, actorUserId)
+      .input("pendingRescheduleViewerUserId", sql.Int, actorUserId);
+
+    const result = await request.query<RelatedMeetingSummaryRecord>(`
+      WITH Ancestors AS (
+        SELECT
+          m.id,
+          m.follow_up_of_meeting_id,
+          CAST(N'/' + CONVERT(NVARCHAR(20), m.id) + N'/' AS NVARCHAR(MAX)) AS visitedPath,
+          CAST(0 AS INT) AS depth
+        FROM dbo.TM_meetings AS m
+        WHERE m.id = @meetingId
+
+        UNION ALL
+
+        SELECT
+          parent.id,
+          parent.follow_up_of_meeting_id,
+          CAST(ancestor.visitedPath + CONVERT(NVARCHAR(20), parent.id) + N'/' AS NVARCHAR(MAX)),
+          ancestor.depth + 1
+        FROM Ancestors AS ancestor
+        INNER JOIN dbo.TM_meetings AS parent
+          ON parent.id = ancestor.follow_up_of_meeting_id
+        WHERE ancestor.depth < 63
+          AND CHARINDEX(
+            N'/' + CONVERT(NVARCHAR(20), parent.id) + N'/',
+            ancestor.visitedPath
+          ) = 0
+      ),
+      RootMeeting AS (
+        SELECT TOP (1)
+          id AS rootMeetingId
+        FROM Ancestors
+        ORDER BY
+          CASE WHEN follow_up_of_meeting_id IS NULL THEN 0 ELSE 1 END,
+          CASE WHEN follow_up_of_meeting_id IS NULL THEN depth ELSE 0 END DESC,
+          id ASC
+      ),
+      Family AS (
+        SELECT
+          rootMeeting.rootMeetingId AS id,
+          CAST(N'/' + CONVERT(NVARCHAR(20), rootMeeting.rootMeetingId) + N'/' AS NVARCHAR(MAX)) AS visitedPath,
+          CAST(0 AS INT) AS depth
+        FROM RootMeeting AS rootMeeting
+
+        UNION ALL
+
+        SELECT
+          child.id,
+          CAST(family.visitedPath + CONVERT(NVARCHAR(20), child.id) + N'/' AS NVARCHAR(MAX)),
+          family.depth + 1
+        FROM Family AS family
+        INNER JOIN dbo.TM_meetings AS child
+          ON child.follow_up_of_meeting_id = family.id
+        WHERE family.depth < 63
+          AND CHARINDEX(
+            N'/' + CONVERT(NVARCHAR(20), child.id) + N'/',
+            family.visitedPath
+          ) = 0
+      )
+      SELECT
+        ${meetingSummaryFields},
+        rootMeeting.rootMeetingId AS rootMeetingId,
+        CAST(CASE WHEN EXISTS (
+          SELECT 1
+          FROM dbo.TM_meeting_attendees AS relationshipAttendee
+          WHERE relationshipAttendee.meeting_id = m.id
+            AND relationshipAttendee.attendee_user_id = @actorUserId
+        ) THEN 1 ELSE 0 END AS BIT) AS isAttendee
+      FROM Family AS family
+      CROSS JOIN RootMeeting AS rootMeeting
+      INNER JOIN dbo.TM_meetings AS m
+        ON m.id = family.id
+      ${meetingSummaryJoins}
+      ORDER BY selectedRevision.start_at_utc ASC, m.id ASC
+      OPTION (MAXRECURSION 64);
+    `);
+
+    const mapped = result.recordset
+      .map((record) => {
+        const meeting = mapMeetingSummary(record);
+        return meeting
+          ? { meeting, isAttendee: Boolean(record.isAttendee), rootMeetingId: Number(record.rootMeetingId) }
+          : null;
+      })
+      .filter((item): item is RelatedMeetingSummaryItem & { rootMeetingId: number } => item !== null);
+
+    return {
+      rootMeetingId: mapped[0]?.rootMeetingId ?? meetingId,
+      items: mapped.map(({ meeting, isAttendee }) => ({ meeting, isAttendee })),
+    };
   },
 
   async updatePendingInitialRequestedSchedule(
@@ -797,6 +943,7 @@ export const meetingWorkflowRepository = {
     }));
   },
 };
+
 
 
 

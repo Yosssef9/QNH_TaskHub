@@ -55,5 +55,29 @@ export function mapTask(record: TaskRecord): PersonalTask {
     isOverdue: record.isOverdue,
     subtaskTotal: Number(record.subtaskTotal),
     subtaskCompleted: Number(record.subtaskCompleted),
+    meetingActionItem:
+      record.actionMeetingId === null ||
+      record.actionMeetingTitle === null ||
+      record.actionAssigneeUserId === null ||
+      record.actionAssigneeName === null ||
+      record.actionAssignedByUserId === null ||
+      record.actionAssignedByName === null ||
+      record.actionAssignedAtUtc === null
+        ? null
+        : {
+            meetingId: parsePositiveIntegerId(record.actionMeetingId, "action item meeting id"),
+            meetingTitle: record.actionMeetingTitle,
+            assigneeUserId: record.actionAssigneeUserId,
+            assigneeName: record.actionAssigneeName,
+            assignedByUserId: record.actionAssignedByUserId,
+            assignedByName: record.actionAssignedByName,
+            agendaItemId:
+              record.actionAgendaItemId === null
+                ? null
+                : parsePositiveIntegerId(record.actionAgendaItemId, "action item agenda id"),
+            agendaTitle: record.actionAgendaTitle,
+            assignedAtUtc: record.actionAssignedAtUtc.toISOString(),
+          },
   };
 }
+

@@ -4,6 +4,7 @@ export type TaskHubRoleCode = "USER" | "ADMIN";
 export type LanguageCode = "AR" | "EN";
 export type ThemePreference = "LIGHT" | "DARK" | "SYSTEM";
 export type TimeFormatPreference = "12H" | "24H";
+export type MeetingScheduleSlotInterval = 15 | 30 | 60;
 
 export interface PortalIdentity {
   userCode: string;
@@ -30,6 +31,7 @@ export interface UserPreferences {
   calendarShowAdjacentDates: boolean;
   meetingStartReminderEnabled: boolean;
   timeFormat: TimeFormatPreference;
+  meetingScheduleSlotInterval: MeetingScheduleSlotInterval;
   timezone: "Asia/Riyadh";
 }
 

@@ -7,7 +7,7 @@ import { ReturnToPortalButton } from '@/components/shared/ReturnToPortalButton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { navigationItems } from '@/config/navigation'
 import { cn } from '@/lib/cn'
-import { hasAnyProcurementAccess } from '@/features/auth/access-permissions'
+import { hasAnyProcurementAccess, hasKpiWorkCyclesAccess } from '@/features/auth/access-permissions'
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { ProcurementSidebarSection } from '@/features/procurement/components/ProcurementSidebarSection'
 import { ListsSidebarSection } from '@/features/lists/components/ListsSidebarSection'
@@ -49,7 +49,8 @@ export function AppSidebar({ collapsed = false, onNavigate }: AppSidebarProps) {
   )
   const [createKpiOpen, setCreateKpiOpen] = useState(false)
   const [createCycleOpen, setCreateCycleOpen] = useState(false)
-  const kpisQuery = useKpis()
+  const kpiWorkCyclesAccess = hasKpiWorkCyclesAccess(data?.access)
+  const kpisQuery = useKpis(kpiWorkCyclesAccess)
 
   useEffect(() => {
     if (location.pathname.startsWith('/meetings')) {
@@ -219,22 +220,26 @@ export function AppSidebar({ collapsed = false, onNavigate }: AppSidebarProps) {
           }
           onNavigate={onNavigate}
         />
-        <WorkCyclesSidebarSection
-          collapsed={collapsed}
-          expanded={openSection === 'workCycles'}
-          onToggle={() =>
-            setOpenSection((current) => (current === 'workCycles' ? null : 'workCycles'))
-          }
-          onCreate={() => setCreateCycleOpen(true)}
-          onNavigate={onNavigate}
-        />
-        <KpisSidebarSection
-          collapsed={collapsed}
-          expanded={openSection === 'kpis'}
-          onToggle={() => setOpenSection((current) => (current === 'kpis' ? null : 'kpis'))}
-          onCreate={() => setCreateKpiOpen(true)}
-          onNavigate={onNavigate}
-        />
+        {kpiWorkCyclesAccess ? (
+          <>
+            <WorkCyclesSidebarSection
+              collapsed={collapsed}
+              expanded={openSection === 'workCycles'}
+              onToggle={() =>
+                setOpenSection((current) => (current === 'workCycles' ? null : 'workCycles'))
+              }
+              onCreate={() => setCreateCycleOpen(true)}
+              onNavigate={onNavigate}
+            />
+            <KpisSidebarSection
+              collapsed={collapsed}
+              expanded={openSection === 'kpis'}
+              onToggle={() => setOpenSection((current) => (current === 'kpis' ? null : 'kpis'))}
+              onCreate={() => setCreateKpiOpen(true)}
+              onNavigate={onNavigate}
+            />
+          </>
+        ) : null}
         {hasAnyProcurementAccess(data?.access) ? (
           <ProcurementSidebarSection
             collapsed={collapsed}
@@ -250,15 +255,18 @@ export function AppSidebar({ collapsed = false, onNavigate }: AppSidebarProps) {
       <div className="border-sidebar-border shrink-0 border-t p-3">
         <ReturnToPortalButton collapsed={collapsed} />
       </div>
-      {createCycleOpen && kpisQuery.data ? (
+      {kpiWorkCyclesAccess && createCycleOpen && kpisQuery.data ? (
         <WorkCycleEditorDialog
           open
           onOpenChange={setCreateCycleOpen}
           kpis={kpisQuery.data}
         />
       ) : null}
-      {createKpiOpen ? <KpiEditorDialog open onOpenChange={setCreateKpiOpen} /> : null}
+      {kpiWorkCyclesAccess && createKpiOpen ? (
+        <KpiEditorDialog open onOpenChange={setCreateKpiOpen} />
+      ) : null}
     </div>
   )
 }
+
 

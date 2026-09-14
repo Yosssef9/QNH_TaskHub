@@ -31,7 +31,16 @@ const taskSelect = `
   CAST(CASE WHEN task.due_date < @today
     AND task.status NOT IN ('DONE', 'CANCELLED') THEN 1 ELSE 0 END AS BIT) AS isOverdue,
   ISNULL(subtaskSummary.total, 0) AS subtaskTotal,
-  ISNULL(subtaskSummary.completed, 0) AS subtaskCompleted`;
+  ISNULL(subtaskSummary.completed, 0) AS subtaskCompleted,
+  actionItem.meeting_id AS actionMeetingId,
+  actionMeeting.title AS actionMeetingTitle,
+  actionItem.assignee_user_id AS actionAssigneeUserId,
+  COALESCE(actionAssignee.USER_NAME, actionAssignee.USER_CODE) AS actionAssigneeName,
+  actionItem.assigned_by_user_id AS actionAssignedByUserId,
+  COALESCE(actionAssignedBy.USER_NAME, actionAssignedBy.USER_CODE) AS actionAssignedByName,
+  actionItem.agenda_item_id AS actionAgendaItemId,
+  actionAgenda.topic AS actionAgendaTitle,
+  actionItem.assigned_at_utc AS actionAssignedAtUtc`;
 
 const subtaskSummarySql = `OUTER APPLY (
   SELECT COUNT(*) AS total,
@@ -44,7 +53,12 @@ const subtaskSummarySql = `OUTER APPLY (
 const taskContextJoins = `LEFT JOIN dbo.TM_kpi_instances AS instance
   ON instance.id=task.kpi_instance_id AND instance.owner_user_id=task.owner_user_id
   LEFT JOIN dbo.TM_work_cycles AS cycle
-  ON cycle.id=instance.cycle_id AND cycle.owner_user_id=instance.owner_user_id`;
+  ON cycle.id=instance.cycle_id AND cycle.owner_user_id=instance.owner_user_id
+  LEFT JOIN dbo.TM_meeting_action_items AS actionItem ON actionItem.task_id=task.id
+  LEFT JOIN dbo.TM_meetings AS actionMeeting ON actionMeeting.id=actionItem.meeting_id
+  LEFT JOIN dbo.users AS actionAssignee ON actionAssignee.USER_ID=actionItem.assignee_user_id
+  LEFT JOIN dbo.users AS actionAssignedBy ON actionAssignedBy.USER_ID=actionItem.assigned_by_user_id
+  LEFT JOIN dbo.TM_meeting_agenda_items AS actionAgenda ON actionAgenda.id=actionItem.agenda_item_id`;
 
 function addListFilters(
   request: sql.Request,
@@ -212,7 +226,11 @@ export const tasksRepository = {
     return Boolean(result.recordset[0]);
   },
 
-  async ownedKpiInstanceIsOpen(ownerUserId: number, instanceId: number, transaction?: DatabaseTransaction) {
+  async ownedKpiInstanceIsOpen(
+    ownerUserId: number,
+    instanceId: number,
+    transaction?: DatabaseTransaction,
+  ) {
     const request = transaction ? transaction.request() : (await getDatabasePool()).request();
     const result = await request
       .input("ownerUserId", sql.Int, ownerUserId)
@@ -244,7 +262,8 @@ export const tasksRepository = {
         SELECT @ownerUserId, @listId, @title, @description, @priority, @startDate, @dueDate,
           ISNULL(MAX(display_order), 0) + 1 FROM dbo.TM_tasks
         WHERE owner_user_id = @ownerUserId AND list_id = @listId AND deleted_at_utc IS NULL;`);
-    return result.recordset[0]?.id ?? null;
+    const createdId = result.recordset[0]?.id;
+    return createdId == null ? null : Number(createdId);
   },
 
   async update(
@@ -311,15 +330,17 @@ export const tasksRepository = {
     taskId: number,
     type: string,
     data?: unknown,
+    actorUserId: number = ownerUserId,
   ) {
     await transaction
       .request()
       .input("ownerUserId", sql.Int, ownerUserId)
       .input("taskId", sql.BigInt, taskId)
       .input("type", sql.VarChar(50), type)
+      .input("actorUserId", sql.Int, actorUserId)
       .input("data", sql.NVarChar(sql.MAX), data === undefined ? null : JSON.stringify(data))
       .query(`
         INSERT INTO dbo.TM_task_activity (task_id, owner_user_id, actor_user_id, activity_type, event_data_json)
-        VALUES (@taskId, @ownerUserId, @ownerUserId, @type, @data);`);
+        VALUES (@taskId, @ownerUserId, @actorUserId, @type, @data);`);
   },
 };

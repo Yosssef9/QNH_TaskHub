@@ -14,6 +14,7 @@ export interface AccessUserRecord {
   itemsAccess: boolean | null;
   suppliersAccess: boolean | null;
   priceQuotesAccess: boolean | null;
+  kpiWorkCyclesAccess: boolean | null;
   meetingOrganizeEnabled?: boolean | null;
   meetingCoordinateEnabled?: boolean | null;
 }
@@ -42,7 +43,9 @@ export function mapAccessUser(record: AccessUserRecord): AccessUser {
       suppliers: record.suppliersAccess ?? false,
       priceQuotes: record.priceQuotesAccess ?? false,
     },
+    kpiWorkCyclesAccess: record.kpiWorkCyclesAccess ?? false,
     meetingOrganizeEnabled: record.meetingOrganizeEnabled ?? false,
     meetingCoordinateEnabled: record.meetingCoordinateEnabled ?? false,
   };
 }
+

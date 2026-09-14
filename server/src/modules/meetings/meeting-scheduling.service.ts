@@ -3,6 +3,7 @@ import type { DatabaseTransaction } from "../../database/types.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import {
   assertParticipantCount,
+  assertSchedulableMeetingWindow,
   assertScheduleWindow,
   hasRoomCapacity,
 } from "./meeting-scheduling.policy.js";
@@ -113,7 +114,7 @@ async function assertLockedScheduleAvailable(
   transaction: DatabaseTransaction,
   input: LockedScheduleInput,
 ): Promise<void> {
-  assertScheduleWindow(input.startAtUtc, input.endAtUtc);
+  assertSchedulableMeetingWindow(input.startAtUtc, input.endAtUtc);
   assertParticipantCount(input.participantCount);
 
   assertRoomLock(await meetingSchedulingRepository.acquireRoomLock(transaction, input.roomId));
@@ -173,6 +174,8 @@ async function commitPendingRevisionInTransaction(
     revisionId,
   );
   if (!afterLock || !sameConcurrencySnapshot(beforeLock, afterLock)) throw staleSchedule();
+
+  assertSchedulableMeetingWindow(afterLock.startAtUtc, afterLock.endAtUtc);
 
   const participantCount = await meetingSchedulingRepository.countMeetingParticipants(
     transaction,

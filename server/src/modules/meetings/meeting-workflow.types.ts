@@ -52,6 +52,7 @@ export interface CreateMeetingInput {
   organizerAttending: boolean;
   attendeeUserIds: number[];
   agendaItems: MeetingAgendaItemInput[];
+  followUpOfMeetingId?: number | null;
 }
 
 export interface UpdatePendingMeetingScheduleInput {
@@ -110,6 +111,7 @@ export type MeetingScheduleEntry =
   | MeetingScheduleFullEntry
   | MeetingSchedulePreviewEntry
   | MeetingScheduleBusyEntry;
+
 
 
 

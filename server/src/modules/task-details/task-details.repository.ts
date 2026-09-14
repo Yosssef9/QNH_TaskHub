@@ -30,7 +30,10 @@ export const taskDetailsRepository = {
         attachment.subtask_id AS subtaskId, attachment.original_file_name AS originalFileName,
         attachment.storage_key AS storageKey, attachment.mime_type AS mimeType,
         attachment.file_extension AS fileExtension, attachment.size_bytes AS sizeBytes,
+        attachment.uploaded_by_user_id AS uploadedByUserId,
+        COALESCE(uploader.USER_NAME,uploader.USER_CODE) AS uploadedByName,
         attachment.uploaded_at_utc AS uploadedAtUtc FROM dbo.TM_attachments AS attachment
+        INNER JOIN dbo.users AS uploader ON uploader.USER_ID=attachment.uploaded_by_user_id
         LEFT JOIN dbo.TM_subtasks AS subtask ON subtask.id=attachment.subtask_id
           AND subtask.owner_user_id=attachment.owner_user_id
         WHERE attachment.owner_user_id=@ownerUserId AND attachment.deleted_at_utc IS NULL
@@ -45,9 +48,13 @@ export const taskDetailsRepository = {
       .request()
       .input("ownerUserId", sql.Int, ownerUserId)
       .input("taskId", sql.BigInt, taskId)
-      .query<ActivityRecord>(`SELECT id, activity_type AS activityType, event_data_json AS eventDataJson,
-        created_at_utc AS createdAtUtc FROM dbo.TM_task_activity
-        WHERE owner_user_id=@ownerUserId AND task_id=@taskId ORDER BY created_at_utc DESC, id DESC;`);
+      .query<ActivityRecord>(`SELECT activity.id, activity.actor_user_id AS actorUserId,
+        COALESCE(portal.USER_NAME,portal.USER_CODE) AS actorName, activity.activity_type AS activityType,
+        activity.event_data_json AS eventDataJson, activity.created_at_utc AS createdAtUtc
+        FROM dbo.TM_task_activity AS activity
+        INNER JOIN dbo.users AS portal ON portal.USER_ID=activity.actor_user_id
+        WHERE activity.owner_user_id=@ownerUserId AND activity.task_id=@taskId
+        ORDER BY activity.created_at_utc DESC, activity.id DESC;`);
     return result.recordset;
   },
 
@@ -65,6 +72,30 @@ export const taskDetailsRepository = {
         WHERE subtask.id=@subtaskId AND subtask.owner_user_id=@ownerUserId
           AND subtask.deleted_at_utc IS NULL AND task.deleted_at_utc IS NULL;`);
     return result.recordset[0] ?? null;
+  },
+
+  async findSubtaskAccess(subtaskId: number) {
+    const pool = await getDatabasePool();
+    const result = await pool.request().input("subtaskId", sql.BigInt, subtaskId).query<{ taskId:number|string; ownerUserId:number }>(`
+      SELECT TOP(1) subtask.task_id AS taskId, subtask.owner_user_id AS ownerUserId
+      FROM dbo.TM_subtasks AS subtask
+      INNER JOIN dbo.TM_tasks AS task ON task.id=subtask.task_id AND task.owner_user_id=subtask.owner_user_id
+      WHERE subtask.id=@subtaskId AND subtask.deleted_at_utc IS NULL AND task.deleted_at_utc IS NULL;`);
+    const row=result.recordset[0];
+    return row ? { taskId:Number(row.taskId), ownerUserId:Number(row.ownerUserId) } : null;
+  },
+
+  async findAttachmentAccess(id: string) {
+    const pool=await getDatabasePool();
+    const result=await pool.request().input("id",sql.UniqueIdentifier,id).query<{ownerUserId:number;taskId:number|string|null;uploadedByUserId:number}>(`
+      SELECT TOP(1) attachment.owner_user_id AS ownerUserId,
+        COALESCE(attachment.task_id,subtask.task_id) AS taskId,
+        attachment.uploaded_by_user_id AS uploadedByUserId
+      FROM dbo.TM_attachments attachment
+      LEFT JOIN dbo.TM_subtasks subtask ON subtask.id=attachment.subtask_id AND subtask.owner_user_id=attachment.owner_user_id
+      WHERE attachment.id=@id AND attachment.deleted_at_utc IS NULL;`);
+    const row=result.recordset[0];
+    return row && row.taskId!==null ? {ownerUserId:Number(row.ownerUserId),taskId:Number(row.taskId),uploadedByUserId:Number(row.uploadedByUserId)} : null;
   },
 
   async createSubtask(
@@ -150,6 +181,7 @@ export const taskDetailsRepository = {
     transaction: DatabaseTransaction,
     values: {
       ownerUserId: number;
+      uploadedByUserId: number;
       taskId: number | null;
       subtaskId: number | null;
       name: string;
@@ -162,6 +194,7 @@ export const taskDetailsRepository = {
     const result = await transaction
       .request()
       .input("ownerUserId", sql.Int, values.ownerUserId)
+      .input("uploadedByUserId", sql.Int, values.uploadedByUserId)
       .input("taskId", sql.BigInt, values.taskId)
       .input("subtaskId", sql.BigInt, values.subtaskId)
       .input("name", sql.NVarChar(260), values.name)
@@ -169,12 +202,14 @@ export const taskDetailsRepository = {
       .input("mime", sql.VarChar(255), values.mime)
       .input("extension", sql.VarChar(20), values.extension)
       .input("size", sql.BigInt, values.size).query<AttachmentRecord>(`INSERT dbo.TM_attachments
-        (owner_user_id,task_id,subtask_id,original_file_name,storage_key,mime_type,file_extension,size_bytes)
+        (owner_user_id,uploaded_by_user_id,task_id,subtask_id,original_file_name,storage_key,mime_type,file_extension,size_bytes)
         OUTPUT inserted.id,inserted.task_id AS taskId,inserted.subtask_id AS subtaskId,
         inserted.original_file_name AS originalFileName,inserted.storage_key AS storageKey,
-        inserted.mime_type AS mimeType,inserted.file_extension AS fileExtension,
-        inserted.size_bytes AS sizeBytes,inserted.uploaded_at_utc AS uploadedAtUtc
-        VALUES(@ownerUserId,@taskId,@subtaskId,@name,@key,@mime,@extension,@size);`);
+        inserted.mime_type AS mimeType,inserted.file_extension AS fileExtension, inserted.size_bytes AS sizeBytes,
+        inserted.uploaded_by_user_id AS uploadedByUserId,
+        CONVERT(NVARCHAR(20), @uploadedByUserId) AS uploadedByName,
+        inserted.uploaded_at_utc AS uploadedAtUtc
+        VALUES(@ownerUserId,@uploadedByUserId,@taskId,@subtaskId,@name,@key,@mime,@extension,@size);`);
     return result.recordset[0] ?? null;
   },
 
@@ -187,7 +222,10 @@ export const taskDetailsRepository = {
         attachment.subtask_id AS subtaskId,attachment.original_file_name AS originalFileName,
         attachment.storage_key AS storageKey,attachment.mime_type AS mimeType,
         attachment.file_extension AS fileExtension,attachment.size_bytes AS sizeBytes,
+        attachment.uploaded_by_user_id AS uploadedByUserId,
+        COALESCE(uploader.USER_NAME,uploader.USER_CODE) AS uploadedByName,
         attachment.uploaded_at_utc AS uploadedAtUtc FROM dbo.TM_attachments AS attachment
+        INNER JOIN dbo.users AS uploader ON uploader.USER_ID=attachment.uploaded_by_user_id
         LEFT JOIN dbo.TM_tasks AS directTask ON directTask.id=attachment.task_id AND directTask.owner_user_id=attachment.owner_user_id
         LEFT JOIN dbo.TM_subtasks AS subtask ON subtask.id=attachment.subtask_id AND subtask.owner_user_id=attachment.owner_user_id
         LEFT JOIN dbo.TM_tasks AS subtaskTask ON subtaskTask.id=subtask.task_id AND subtaskTask.owner_user_id=subtask.owner_user_id
@@ -207,3 +245,4 @@ export const taskDetailsRepository = {
         WHERE id=@id AND owner_user_id=@ownerUserId AND deleted_at_utc IS NULL;`);
   },
 };
+

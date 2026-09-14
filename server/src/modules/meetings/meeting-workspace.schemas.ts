@@ -90,6 +90,7 @@ export const cancelMeetingBodySchema = z.object({
 });
 
 const meetingAgendaItemBodySchema = z.object({
+  id: z.coerce.number().int().positive().nullable().optional(),
   topic: z.string().trim().min(1).max(500),
   presenterUserId: z.coerce.number().int().positive().nullable().optional().transform((value) => value ?? null),
   plannedDurationMinutes: z.coerce.number().int().min(1).max(1440).nullable().optional().transform((value) => value ?? null),
@@ -132,3 +133,4 @@ export type UpdateMeetingAgendaBody = z.infer<typeof updateMeetingAgendaBodySche
 export type CreateMeetingTemplateBody = z.infer<typeof createMeetingTemplateBodySchema>;
 export type UpdateMeetingTemplateBody = z.infer<typeof updateMeetingTemplateBodySchema>;
 export type ArchiveMeetingTemplateBody = z.infer<typeof archiveMeetingTemplateBodySchema>;
+

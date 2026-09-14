@@ -1,4 +1,5 @@
 import { Router, type Router as ExpressRouter } from "express";
+import { requireKpiWorkCyclesAccess } from "../../middleware/requireAccessPermission.middleware.js";
 import { resolveTaskHubAccess } from "../../middleware/resolveTaskHubAccess.middleware.js";
 import { validateRequest } from "../../middleware/validate.middleware.js";
 import { verifyPortalJwt } from "../../middleware/verifyPortalJwt.middleware.js";
@@ -6,7 +7,7 @@ import { addWorkCycleKpis, archiveWorkCycle, closeWorkCycle, createWorkCycle, ge
 import { addCycleKpisBodySchema, createCycleBodySchema, cycleParamsSchema, instanceParamsSchema, reorderCyclesBodySchema, reorderInstancesBodySchema, updateCycleBodySchema } from "./work-cycles.schemas.js";
 
 export const workCyclesRouter: ExpressRouter = Router();
-workCyclesRouter.use(verifyPortalJwt, resolveTaskHubAccess);
+workCyclesRouter.use(verifyPortalJwt, resolveTaskHubAccess, requireKpiWorkCyclesAccess);
 workCyclesRouter.get("/", listWorkCycles);
 workCyclesRouter.post("/", validateRequest({ body: createCycleBodySchema }), createWorkCycle);
 workCyclesRouter.put("/reorder", validateRequest({ body: reorderCyclesBodySchema }), reorderWorkCycles);
@@ -19,3 +20,4 @@ workCyclesRouter.delete("/:cycleId", validateRequest({ params: cycleParamsSchema
 workCyclesRouter.post("/:cycleId/kpis", validateRequest({ params: cycleParamsSchema, body: addCycleKpisBodySchema }), addWorkCycleKpis);
 workCyclesRouter.put("/:cycleId/kpis/reorder", validateRequest({ params: cycleParamsSchema, body: reorderInstancesBodySchema }), reorderWorkCycleKpis);
 workCyclesRouter.delete("/:cycleId/kpis/:instanceId", validateRequest({ params: instanceParamsSchema }), removeWorkCycleKpi);
+

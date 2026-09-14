@@ -2,7 +2,11 @@ import { withTransaction } from "../../database/transaction.js";
 import type { DatabaseTransaction } from "../../database/types.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import type { TaskHubAccess } from "../auth/auth.types.js";
-import { assertParticipantCount, assertScheduleWindow } from "./meeting-scheduling.policy.js";
+import {
+  assertParticipantCount,
+  assertSchedulableMeetingWindow,
+  assertScheduleWindow,
+} from "./meeting-scheduling.policy.js";
 import { meetingSchedulingRepository } from "./meeting-scheduling.repository.js";
 import { meetingSchedulingService } from "./meeting-scheduling.service.js";
 import { meetingWorkflowRepository } from "./meeting-workflow.repository.js";
@@ -41,6 +45,14 @@ function meetingCreateFailed(): AppError {
     statusCode: 500,
     code: "MEETING_CREATE_FAILED",
     message: "Meeting could not be created.",
+  });
+}
+
+function followUpSourceNotFound(): AppError {
+  return new AppError({
+    statusCode: 404,
+    code: "MEETING_FOLLOW_UP_SOURCE_NOT_FOUND",
+    message: "Follow-up source Meeting was not found or is not available for this operation.",
   });
 }
 
@@ -161,10 +173,11 @@ async function createPendingMeetingInTransaction(
   actorUserId: number,
   input: CreateMeetingInput,
   activityType: "REQUESTED" | "DIRECT_CREATED",
+  creationMode: "REQUEST" | "DIRECT",
 ): Promise<{ meetingId: number; revisionId: number; revisionRowVersion: string }> {
   const startAtUtc = new Date(input.startAtUtc);
   const endAtUtc = new Date(input.endAtUtc);
-  assertScheduleWindow(startAtUtc, endAtUtc);
+  assertSchedulableMeetingWindow(startAtUtc, endAtUtc);
   await assertActiveRequestedRoom(transaction, input.roomId);
   const selectedAttendeeUserIds = await assertActivePortalAttendees(
     transaction,
@@ -176,6 +189,14 @@ async function createPendingMeetingInTransaction(
     : selectedAttendeeUserIds;
   assertParticipantCount(attendeeUserIds.length);
   const agendaItems = normalizeAgendaItems(attendeeUserIds, input.agendaItems);
+
+  const followUpSource = input.followUpOfMeetingId
+    ? await meetingWorkflowRepository.findFollowUpSource(transaction, input.followUpOfMeetingId)
+    : null;
+  if (input.followUpOfMeetingId && !followUpSource) throw followUpSourceNotFound();
+  if (followUpSource && creationMode === "REQUEST" && followUpSource.organizerUserId !== actorUserId) {
+    throw followUpSourceNotFound();
+  }
 
   const meeting = await meetingWorkflowRepository.createMeeting(transaction, actorUserId, input);
   if (!meeting) throw meetingCreateFailed();
@@ -217,6 +238,31 @@ async function createPendingMeetingInTransaction(
       agendaItemCount: agendaItems.length,
     },
   );
+
+  if (followUpSource) {
+    await meetingSchedulingRepository.addActivity(
+      transaction,
+      followUpSource.meetingId,
+      actorUserId,
+      "FOLLOW_UP_MEETING_CREATED",
+      {
+        followUpMeetingId: meeting.meetingId,
+        followUpMeetingTitle: input.title,
+        creationMode,
+      },
+    );
+    await meetingSchedulingRepository.addActivity(
+      transaction,
+      meeting.meetingId,
+      actorUserId,
+      "CREATED_AS_FOLLOW_UP",
+      {
+        sourceMeetingId: followUpSource.meetingId,
+        sourceMeetingTitle: followUpSource.title,
+        creationMode,
+      },
+    );
+  }
 
   return {
     meetingId: meeting.meetingId,
@@ -261,7 +307,13 @@ export const meetingWorkflowService = {
   async createRequest(actorUserId: number, input: CreateMeetingInput): Promise<MeetingSummary> {
     const created = await withTransaction(async (transaction) => {
       await assertEffectiveOrganizerPermission(transaction, actorUserId);
-      return createPendingMeetingInTransaction(transaction, actorUserId, input, "REQUESTED");
+      return createPendingMeetingInTransaction(
+        transaction,
+        actorUserId,
+        input,
+        "REQUESTED",
+        "REQUEST",
+      );
     });
 
     await meetingNotificationsService.safeRequestSubmitted(created.meetingId, created.revisionId);
@@ -276,6 +328,7 @@ export const meetingWorkflowService = {
         actorUserId,
         input,
         "DIRECT_CREATED",
+        "DIRECT",
       );
       await meetingSchedulingService.commitPendingRevisionInTransaction(
         transaction,
@@ -332,7 +385,7 @@ export const meetingWorkflowService = {
 
       const startAtUtc = new Date(input.startAtUtc);
       const endAtUtc = new Date(input.endAtUtc);
-      assertScheduleWindow(startAtUtc, endAtUtc);
+      assertSchedulableMeetingWindow(startAtUtc, endAtUtc);
       await assertActiveRequestedRoom(transaction, input.roomId);
 
       const updated = await meetingWorkflowRepository.updatePendingInitialRequestedSchedule(
@@ -391,7 +444,7 @@ export const meetingWorkflowService = {
 
       const startAtUtc = new Date(input.startAtUtc);
       const endAtUtc = new Date(input.endAtUtc);
-      assertScheduleWindow(startAtUtc, endAtUtc);
+      assertSchedulableMeetingWindow(startAtUtc, endAtUtc);
       await assertActiveRequestedRoom(transaction, input.roomId);
 
       const updated = await meetingWorkflowRepository.updatePendingInitialSchedule(
@@ -450,7 +503,7 @@ export const meetingWorkflowService = {
 
       const startAtUtc = new Date(input.startAtUtc);
       const endAtUtc = new Date(input.endAtUtc);
-      assertScheduleWindow(startAtUtc, endAtUtc);
+      assertSchedulableMeetingWindow(startAtUtc, endAtUtc);
       await assertActiveRequestedRoom(transaction, input.roomId);
 
       const updated = await meetingWorkflowRepository.updatePendingInitialSchedule(
@@ -663,5 +716,6 @@ export const meetingWorkflowService = {
     });
   },
 };
+
 
 

@@ -44,6 +44,8 @@ const notificationIcons: Record<NotificationType, LucideIcon> = {
   MEETING_RESCHEDULED: CalendarClock,
   MEETING_CANCELLED: AlertTriangle,
   MEETING_START_REMINDER: Clock3,
+  MEETING_ACTION_ITEM_ASSIGNED: CalendarClock,
+  MEETING_ACTION_ITEM_COMPLETED: CheckCheck,
 }
 
 const notificationTones: Record<NotificationType, string> = {
@@ -65,6 +67,8 @@ const notificationTones: Record<NotificationType, string> = {
   MEETING_RESCHEDULED: 'bg-info/10 text-info-foreground',
   MEETING_CANCELLED: 'bg-destructive/10 text-destructive',
   MEETING_START_REMINDER: 'bg-warning/10 text-warning-foreground',
+  MEETING_ACTION_ITEM_ASSIGNED: 'bg-primary/10 text-primary',
+  MEETING_ACTION_ITEM_COMPLETED: 'bg-success/10 text-success',
 }
 
 function formatDate(value: string | null, locale: string): string | null {
@@ -330,5 +334,6 @@ function NotificationDetail({
 
   return null
 }
+
 
 

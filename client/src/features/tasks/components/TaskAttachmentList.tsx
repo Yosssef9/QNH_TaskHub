@@ -13,6 +13,7 @@ interface Props {
   emptyLabel?: string
   compact?: boolean
   readOnly: boolean
+  canDelete?: ((attachment: TaskAttachment) => boolean) | undefined
   onOpen: (attachment: TaskAttachment) => void
   onDownload: (attachment: TaskAttachment) => void
   onDelete: (attachment: TaskAttachment) => void
@@ -29,6 +30,7 @@ export function TaskAttachmentList({
   emptyLabel,
   compact = false,
   readOnly,
+  canDelete,
   onOpen,
   onDownload,
   onDelete,
@@ -91,7 +93,9 @@ export function TaskAttachmentList({
               <p className={cn('truncate font-medium', compact ? 'text-xs' : 'text-sm')}>
                 {item.originalFileName}
               </p>
-              <p className="text-muted-foreground mt-0.5 text-[11px]">{formatBytes(item.sizeBytes)}</p>
+              <p className="text-muted-foreground mt-0.5 text-[11px]">
+                {formatBytes(item.sizeBytes)} · {t('tasks.actionItem.uploadedBy', { name: item.uploadedByName })}
+              </p>
             </div>
 
             <div className="flex shrink-0 items-center gap-1 opacity-75 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
@@ -109,7 +113,7 @@ export function TaskAttachmentList({
                 <Download className="size-4" />
               </Button>
 
-              {!readOnly ? (
+              {!readOnly && (canDelete ? canDelete(item) : true) ? (
                 <Button
                   type="button"
                   variant="ghost"
@@ -134,3 +138,4 @@ export function TaskAttachmentList({
     </ul>
   )
 }
+

@@ -23,6 +23,7 @@ export interface AccessProfileRecord {
   calendarShowAdjacentDates: boolean | null;
   meetingStartReminderEnabled: boolean | null;
   timeFormat: string | null;
+  meetingScheduleSlotInterval: number | null;
   timezone: string | null;
   hasDefaultList: boolean;
 }
@@ -83,6 +84,7 @@ export async function findAccessProfile(userId: number): Promise<AccessProfileRe
         settings.calendar_show_adjacent_dates AS calendarShowAdjacentDates,
         settings.meeting_start_reminder_enabled AS meetingStartReminderEnabled,
         settings.time_format AS timeFormat,
+        settings.meeting_schedule_slot_interval AS meetingScheduleSlotInterval,
         settings.timezone_name AS timezone,
         CAST(
           CASE WHEN EXISTS (

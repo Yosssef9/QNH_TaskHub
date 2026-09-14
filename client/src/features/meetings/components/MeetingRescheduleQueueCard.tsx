@@ -130,6 +130,7 @@ export function MeetingRescheduleQueueCard({
   const locale = arabic ? 'ar-SA' : 'en-SA'
   const revision = item.requestedRevision
   const busy = approving || rejecting
+  const meetingHasStarted = new Date(item.meeting.startAtUtc).getTime() <= Date.now()
 
   return (
     <Card
@@ -214,18 +215,21 @@ export function MeetingRescheduleQueueCard({
             {t('meetings.reject')}
           </Button>
 
-          <div className="ms-auto flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" disabled={busy} onClick={onEdit}>
-              <Pencil aria-hidden="true" className="size-4" />
-              {t('meetings.coordinatorSchedule.adjustAndApprove')}
-            </Button>
-            <Button size="sm" disabled={busy} onClick={onApprove}>
-              <Check aria-hidden="true" className="size-4" />
-              {t('meetings.approveAsRequested')}
-            </Button>
-          </div>
+          {!meetingHasStarted ? (
+            <div className="ms-auto flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" disabled={busy} onClick={onEdit}>
+                <Pencil aria-hidden="true" className="size-4" />
+                {t('meetings.coordinatorSchedule.adjustAndApprove')}
+              </Button>
+              <Button size="sm" disabled={busy} onClick={onApprove}>
+                <Check aria-hidden="true" className="size-4" />
+                {t('meetings.approveAsRequested')}
+              </Button>
+            </div>
+          ) : null}
         </div>
       </div>
     </Card>
   )
 }
+

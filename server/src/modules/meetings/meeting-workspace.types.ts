@@ -28,6 +28,7 @@ export interface MeetingAgendaItem {
 }
 
 export interface MeetingAgendaItemInput {
+  id?: number | null | undefined;
   topic: string;
   presenterUserId: number | null;
   plannedDurationMinutes: number | null;
@@ -160,3 +161,4 @@ export interface SaveMeetingTemplateInput {
 export interface UpdateMeetingTemplateInput extends SaveMeetingTemplateInput {
   rowVersion: string;
 }
+

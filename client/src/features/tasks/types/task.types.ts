@@ -7,6 +7,18 @@ export type TaskPriority = (typeof TASK_PRIORITIES)[number]
 export type TaskDueFilter = (typeof TASK_DUE_FILTERS)[number]
 export type TaskSortField = 'createdAt' | 'dueDate' | 'priority' | 'title' | 'status'
 
+export interface MeetingActionItemTaskContext {
+  meetingId: number
+  meetingTitle: string
+  assigneeUserId: number
+  assigneeName: string
+  assignedByUserId: number
+  assignedByName: string
+  agendaItemId: number | null
+  agendaTitle: string | null
+  assignedAtUtc: string
+}
+
 export interface PersonalTask {
   id: number
   listId: number | null
@@ -34,6 +46,7 @@ export interface PersonalTask {
   isOverdue: boolean
   subtaskTotal: number
   subtaskCompleted: number
+  meetingActionItem: MeetingActionItemTaskContext | null
 }
 
 export interface TaskListFilters {
@@ -97,20 +110,57 @@ export interface TaskAttachment {
   mimeType: string
   fileExtension: string
   sizeBytes: number
+  uploadedByUserId: number
+  uploadedByName: string
   uploadedAtUtc: string
 }
 
 export interface TaskActivity {
   id: number
+  actorUserId: number
+  actorName: string
   activityType: string
   eventData: Record<string, unknown> | null
   createdAtUtc: string
 }
 
+
+export interface TaskActionItemContext {
+  taskId: number
+  ownerUserId: number
+  meetingId: number
+  meetingTitle: string
+  organizerUserId: number
+  organizerName: string
+  assigneeUserId: number
+  assigneeName: string
+  assignedByUserId: number
+  assignedByName: string
+  agendaItemId: number | null
+  agendaTitle: string | null
+  assignedAtUtc: string
+  rowVersion: string
+}
+
+export interface TaskCapabilities {
+  role: 'OWNER' | 'ASSIGNEE'
+  canEditDetails: boolean
+  canManageSubtasks: boolean
+  canCompleteSubtasks: boolean
+  canUploadAttachments: boolean
+  canDeleteAnyAttachment: boolean
+  canCompleteTask: boolean
+  canChangeNonCompletionStatus: boolean
+  canDeleteRestoreTask: boolean
+}
+
 export interface TaskDetails {
   task: PersonalTask
+  actionItem: TaskActionItemContext | null
+  capabilities: TaskCapabilities
   subtasks: Subtask[]
   attachments: TaskAttachment[]
   activity: TaskActivity[]
   progress: { completed: number; total: number; percentage: number }
 }
+

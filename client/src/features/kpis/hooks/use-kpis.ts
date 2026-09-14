@@ -15,8 +15,8 @@ import type { PersonalKpi } from '../types/kpi.types'
 
 export const kpisQueryKey = ['kpis'] as const
 
-export function useKpis() {
-  return useQuery({ queryKey: kpisQueryKey, queryFn: getKpis })
+export function useKpis(enabled = true) {
+  return useQuery({ queryKey: kpisQueryKey, queryFn: getKpis, enabled })
 }
 
 function useReplaceKpi() {
@@ -124,3 +124,4 @@ export function useSaveKpiMeasurement() {
     },
   })
 }
+

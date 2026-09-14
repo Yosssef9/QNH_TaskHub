@@ -6,6 +6,8 @@ import { useLocation } from 'react-router'
 
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { hasKpiWorkCyclesAccess } from '@/features/auth/access-permissions'
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { KpiEditorDialog } from '@/features/kpis/components/KpiEditorDialog'
 import { useKpis } from '@/features/kpis/hooks/use-kpis'
 import { useLists } from '@/features/lists/hooks/use-lists'
@@ -62,9 +64,11 @@ export function QuickCreateMenu() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [target, setTarget] = useState<QuickCreateTarget>(null)
 
+  const currentUser = useCurrentUser()
+  const kpiWorkCyclesAccess = hasKpiWorkCyclesAccess(currentUser.data?.access)
   const listsQuery = useLists()
-  const cyclesQuery = useWorkCycles()
-  const kpisQuery = useKpis()
+  const cyclesQuery = useWorkCycles(kpiWorkCyclesAccess)
+  const kpisQuery = useKpis(kpiWorkCyclesAccess)
 
   const lists = listsQuery.data ?? []
   const cycles = cyclesQuery.data ?? []
@@ -101,7 +105,9 @@ export function QuickCreateMenu() {
     ? taskEnabledInstances(routeCycle).length > 0
     : openCycles.some((cycle) => taskEnabledInstances(cycle).length > 0)
 
-  const queriesPending = listsQuery.isPending || cyclesQuery.isPending || kpisQuery.isPending
+  const queriesPending =
+    listsQuery.isPending ||
+    (kpiWorkCyclesAccess && (cyclesQuery.isPending || kpisQuery.isPending))
 
   function choose(nextTarget: Exclude<QuickCreateTarget, null>) {
     setMenuOpen(false)
@@ -175,26 +181,30 @@ export function QuickCreateMenu() {
               disabled={taskDisabled}
               onClick={() => choose('TASK')}
             />
-            <QuickCreateItem
-              icon={ListChecks}
-              label={t('quickCreate.kpiTask')}
-              description={kpiTaskReason}
-              disabled={kpiTaskDisabled}
-              onClick={() => choose('KPI_TASK')}
-            />
-            <QuickCreateItem
-              icon={Repeat2}
-              label={t('quickCreate.workCycle')}
-              description={cycleReason}
-              disabled={cycleDisabled}
-              onClick={() => choose('WORK_CYCLE')}
-            />
-            <QuickCreateItem
-              icon={Gauge}
-              label={t('quickCreate.kpiTemplate')}
-              description={t('quickCreate.kpiTemplateDescription')}
-              onClick={() => choose('KPI_TEMPLATE')}
-            />
+            {kpiWorkCyclesAccess ? (
+              <>
+                <QuickCreateItem
+                  icon={ListChecks}
+                  label={t('quickCreate.kpiTask')}
+                  description={kpiTaskReason}
+                  disabled={kpiTaskDisabled}
+                  onClick={() => choose('KPI_TASK')}
+                />
+                <QuickCreateItem
+                  icon={Repeat2}
+                  label={t('quickCreate.workCycle')}
+                  description={cycleReason}
+                  disabled={cycleDisabled}
+                  onClick={() => choose('WORK_CYCLE')}
+                />
+                <QuickCreateItem
+                  icon={Gauge}
+                  label={t('quickCreate.kpiTemplate')}
+                  description={t('quickCreate.kpiTemplateDescription')}
+                  onClick={() => choose('KPI_TEMPLATE')}
+                />
+              </>
+            ) : null}
           </div>
 
           {queriesPending ? (
@@ -217,7 +227,7 @@ export function QuickCreateMenu() {
         />
       ) : null}
 
-      {target === 'KPI_TASK' && kpiTaskAvailable ? (
+      {kpiWorkCyclesAccess && target === 'KPI_TASK' && kpiTaskAvailable ? (
         routeInstance ? (
           <TaskEditorDialog
             key={`quick-kpi-task-instance-${routeInstance.id}`}
@@ -245,7 +255,7 @@ export function QuickCreateMenu() {
         )
       ) : null}
 
-      {target === 'WORK_CYCLE' && activeKpis.length > 0 ? (
+      {kpiWorkCyclesAccess && target === 'WORK_CYCLE' && activeKpis.length > 0 ? (
         <WorkCycleEditorDialog
           key="quick-work-cycle"
           open
@@ -254,7 +264,7 @@ export function QuickCreateMenu() {
         />
       ) : null}
 
-      {target === 'KPI_TEMPLATE' ? (
+      {kpiWorkCyclesAccess && target === 'KPI_TEMPLATE' ? (
         <KpiEditorDialog
           key="quick-kpi-template"
           open
@@ -300,3 +310,4 @@ function QuickCreateItem({
     </button>
   )
 }
+

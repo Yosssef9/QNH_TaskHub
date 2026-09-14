@@ -5,6 +5,7 @@ import {
   canViewContractOwner,
   hasAccessPermission,
   hasAnyProcurementAccess,
+  hasKpiWorkCyclesAccess,
   procurementAccessState,
 } from "../../src/modules/access-permissions/access-permissions.policy.js";
 import type { AccessPermission } from "../../src/modules/access-permissions/access-permissions.types.js";
@@ -52,6 +53,18 @@ describe("access permissions policy", () => {
     });
   });
 
+  it("keeps KPI + Work Cycles behind one combined global permission", () => {
+    const kpiPermission: AccessPermission = {
+      moduleCode: "KPI_MANAGEMENT",
+      entityCode: "KPI_WORK_CYCLES",
+      permissionCode: "ACCESS",
+      resourceOwnerUserId: null,
+    };
+
+    expect(hasKpiWorkCyclesAccess([])).toBe(false);
+    expect(hasKpiWorkCyclesAccess([kpiPermission])).toBe(true);
+  });
+
   it("always lets a Contract owner view and manage their own attachments", () => {
     expect(canViewContractOwner([], 100, 100)).toBe(true);
     expect(canManageContractOwnerAttachments([], 100, 100)).toBe(true);
@@ -69,3 +82,4 @@ describe("access permissions policy", () => {
     expect(canManageContractOwnerAttachments(permissions, 100, 201)).toBe(false);
   });
 });
+

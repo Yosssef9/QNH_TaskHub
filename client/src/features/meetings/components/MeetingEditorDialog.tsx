@@ -28,7 +28,12 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { cn } from '@/lib/cn'
 import { toApiClientError } from '@/lib/api-error'
-import { formatClockTime, formatRiyadhDateInput, riyadhLocalDateTimeToUtcIso } from '@/lib/date-time'
+import {
+  formatClockTime,
+  formatRiyadhDateInput,
+  formatRiyadhTimeInput,
+  riyadhLocalDateTimeToUtcIso,
+} from '@/lib/date-time'
 
 import { useActiveMeetingRooms } from '../hooks/use-meeting-rooms'
 import {
@@ -59,6 +64,7 @@ import { MeetingParticipantPicker } from './MeetingParticipantPicker'
 import {
   MeetingSchedulePicker,
   type MeetingScheduleFocusField,
+  type MeetingScheduleSelectionState,
   type MeetingScheduleValidationErrors,
 } from './MeetingSchedulePicker'
 
@@ -76,17 +82,31 @@ export interface MeetingEditorInitialSchedule {
   roomId?: number | null
 }
 
+export interface MeetingEditorInitialValues {
+  title: string
+  description?: string | null
+  durationMinutes: number
+  roomId?: number | null
+  organizerAttending?: boolean
+  attendees: MeetingParticipant[]
+  followUpOfMeetingId?: number | null
+  scheduleStartsUnselected?: boolean
+}
+
 interface MeetingEditorDialogProps {
   open: boolean
   mode: 'REQUEST' | 'DIRECT'
+  presentation?: 'modal' | 'drawer'
+  heading?: string
+  description?: string
   template?: MeetingTemplate | null
   initialSchedule?: MeetingEditorInitialSchedule | null
+  initialValues?: MeetingEditorInitialValues | null
   onOpenChange: (open: boolean) => void
 }
 
-function todayInRiyadh(): string {
-  return formatRiyadhDateInput(new Date())
-}
+const QUARTER_HOUR_MS = 15 * 60 * 1000
+const DAY_MINUTES = 24 * 60
 
 function addMinutes(time: string, minutes: number): string {
   const [hoursText, minutesText] = time.split(':')
@@ -94,6 +114,54 @@ function addMinutes(time: string, minutes: number): string {
   const currentMinutes = Number(minutesText ?? 0)
   const total = Math.min(23 * 60 + 59, hours * 60 + currentMinutes + minutes)
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
+function defaultMeetingSchedule(durationMinutes: number): MeetingEditorInitialSchedule {
+  let nextStartMs = (Math.floor(Date.now() / QUARTER_HOUR_MS) + 1) * QUARTER_HOUR_MS
+  let date = formatRiyadhDateInput(nextStartMs)
+  let startTime = formatRiyadhTimeInput(nextStartMs)
+  const startMinutes = Number(startTime.slice(0, 2)) * 60 + Number(startTime.slice(3, 5))
+
+  if (startMinutes + durationMinutes >= DAY_MINUTES) {
+    nextStartMs += 24 * 60 * 60 * 1000
+    date = formatRiyadhDateInput(nextStartMs)
+    startTime = '09:00'
+  }
+
+  return {
+    date,
+    startTime,
+    endTime: addMinutes(startTime, durationMinutes),
+  }
+}
+
+function usableInitialSchedule(
+  initialSchedule: MeetingEditorInitialSchedule | null,
+): MeetingEditorInitialSchedule | null {
+  if (!initialSchedule) return null
+
+  try {
+    const startMinutes =
+      Number(initialSchedule.startTime.slice(0, 2)) * 60 +
+      Number(initialSchedule.startTime.slice(3, 5))
+    const endMinutes =
+      Number(initialSchedule.endTime.slice(0, 2)) * 60 +
+      Number(initialSchedule.endTime.slice(3, 5))
+    const startAtUtc = riyadhLocalDateTimeToUtcIso(initialSchedule.date, initialSchedule.startTime)
+
+    if (
+      startMinutes % 15 !== 0 ||
+      endMinutes % 15 !== 0 ||
+      endMinutes <= startMinutes ||
+      new Date(startAtUtc).getTime() <= Date.now()
+    ) {
+      return null
+    }
+
+    return initialSchedule
+  } catch {
+    return null
+  }
 }
 
 function durationBetweenTimes(startTime: string, endTime: string): number {
@@ -165,8 +233,12 @@ function fileKey(file: File): string {
 export function MeetingEditorDialog({
   open,
   mode,
+  presentation = 'modal',
+  heading,
+  description: dialogDescription,
   template = null,
   initialSchedule = null,
+  initialValues = null,
   onOpenChange,
 }: MeetingEditorDialogProps) {
   const { i18n, t } = useTranslation()
@@ -180,36 +252,50 @@ export function MeetingEditorDialog({
   const attachmentInputRef = useRef<HTMLInputElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
 
+  const initialDurationMinutes = initialValues?.durationMinutes ?? template?.durationMinutes ?? 60
+  const scheduleStartsUnselected = initialValues?.scheduleStartsUnselected === true
+  const [defaultSchedule] = useState(() =>
+    usableInitialSchedule(initialSchedule) ?? defaultMeetingSchedule(initialDurationMinutes),
+  )
+  const initialAttendees = initialValues?.attendees ?? template?.attendees ?? []
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(template?.id ?? null)
-  const [title, setTitle] = useState(template?.title ?? '')
-  const [description, setDescription] = useState(template?.description ?? '')
+  const [title, setTitle] = useState(initialValues?.title ?? template?.title ?? '')
+  const [description, setDescription] = useState(
+    initialValues?.description ?? template?.description ?? '',
+  )
   const [agendaItems, setAgendaItems] = useState<MeetingAgendaDraftItem[]>([])
   const [agendaErrors, setAgendaErrors] = useState<Record<string, string>>({})
   const [agendaFocusItemId, setAgendaFocusItemId] = useState<string | null>(null)
   const [agendaFocusRequestId, setAgendaFocusRequestId] = useState(0)
-  const [date, setDate] = useState(() => initialSchedule?.date ?? todayInRiyadh())
-  const [startTime, setStartTime] = useState(() => initialSchedule?.startTime ?? '09:00')
-  const [endTime, setEndTime] = useState(() =>
-    initialSchedule?.endTime ?? addMinutes('09:00', template?.durationMinutes ?? 60),
+  const [date, setDate] = useState(scheduleStartsUnselected ? '' : defaultSchedule.date)
+  const [startTime, setStartTime] = useState(defaultSchedule.startTime)
+  const [endTime, setEndTime] = useState(
+    scheduleStartsUnselected
+      ? addMinutes(defaultSchedule.startTime, initialDurationMinutes)
+      : defaultSchedule.endTime,
   )
-  const [roomId, setRoomId] = useState<number | null>(() =>
-    initialSchedule?.roomId ?? (template?.defaultRoom?.isActive ? template.defaultRoom.id : null),
-  )
+  const [timeSelected, setTimeSelected] = useState(!scheduleStartsUnselected)
+  const [roomId, setRoomId] = useState<number | null>(() => {
+    if (initialValues) return initialValues.roomId ?? null
+    return initialSchedule?.roomId ?? (template?.defaultRoom?.isActive ? template.defaultRoom.id : null)
+  })
   const [organizerAttending, setOrganizerAttending] = useState(
-    template?.organizerAttending ?? (mode === 'REQUEST'),
+    initialValues?.organizerAttending ?? template?.organizerAttending ?? (mode === 'REQUEST'),
   )
   const [attendeeUserIds, setAttendeeUserIds] = useState<number[]>(() =>
-    template?.attendees.map((attendee) => attendee.userId) ?? [],
+    initialAttendees.map((attendee) => attendee.userId),
   )
   const [participantSearch, setParticipantSearch] = useState('')
   const [selectedParticipantOptions, setSelectedParticipantOptions] = useState<
     SearchableSelectOption[]
-  >(() => template?.attendees.map(participantOption) ?? [])
+  >(() => initialAttendees.map(participantOption))
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [focusMode, setFocusMode] = useState<MeetingEditorFocusMode>('NONE')
   const [validationErrors, setValidationErrors] = useState<MeetingEditorValidationErrors>({})
   const [scheduleFocusField, setScheduleFocusField] = useState<MeetingScheduleFocusField>(null)
   const [scheduleFocusRequestId, setScheduleFocusRequestId] = useState(0)
+  const [scheduleSelectionState, setScheduleSelectionState] =
+    useState<MeetingScheduleSelectionState | null>(null)
 
   const participantQuery = useMeetingParticipants(participantSearch, open)
   const currentUserId = currentUser.data?.user.userId
@@ -271,7 +357,12 @@ export function MeetingEditorDialog({
     : null
   const locale = i18n.language.startsWith('ar') ? 'ar-SA-u-ca-gregory' : 'en-SA'
   const timeFormat = currentUser.data?.preferences.timeFormat ?? '12H'
-  const selectedTimeSummary = `${formatClockTime(startTime, locale, timeFormat)} – ${formatClockTime(endTime, locale, timeFormat)}`
+  const selectedTimeSummary = timeSelected
+    ? `${formatClockTime(startTime, locale, timeFormat)} – ${formatClockTime(endTime, locale, timeFormat)}`
+    : t('meetings.create.timeNotSelected')
+  const selectedDateSummary = date
+    ? formatSelectedDate(date, locale)
+    : t('meetings.create.dateNotSelected')
   const editorGridClass =
     focusMode === 'DETAILS'
       ? 'xl:grid-cols-[minmax(0,1fr)_12rem]'
@@ -279,13 +370,15 @@ export function MeetingEditorDialog({
         ? 'xl:grid-cols-[12rem_minmax(0,1fr)]'
         : 'xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.3fr)]'
 
-  const availabilityInput = buildAvailabilityInput({
-    roomId,
-    date,
-    startTime,
-    endTime,
-    participantCount,
-  })
+  const availabilityInput = timeSelected
+    ? buildAvailabilityInput({
+        roomId,
+        date,
+        startTime,
+        endTime,
+        participantCount,
+      })
+    : null
   const availability = useMeetingAvailability(open ? availabilityInput : null)
   const saveMutation = mode === 'DIRECT' ? createDirect : createRequest
   const isSaving = saveMutation.isPending || uploadAttachment.isPending
@@ -431,9 +524,24 @@ export function MeetingEditorDialog({
 
     const startMinutes = Number(startTime.slice(0, 2)) * 60 + Number(startTime.slice(3, 5))
     const endMinutes = Number(endTime.slice(0, 2)) * 60 + Number(endTime.slice(3, 5))
-    if (!startTime || !endTime || endMinutes <= startMinutes) {
+    if (!timeSelected) {
+      nextErrors.time = t('meetings.create.validation.timeRequired')
+    } else if (!startTime || !endTime || endMinutes <= startMinutes) {
       nextErrors.duration = t('meetings.create.validation.durationRequired')
-    } else if (roomId && participantCount > 0 && !availabilityInput) {
+    } else if (startMinutes % 15 !== 0 || endMinutes % 15 !== 0) {
+      nextErrors.time = t('meetings.create.validation.timeIncrement')
+    } else {
+      try {
+        const selectedStartAtUtc = riyadhLocalDateTimeToUtcIso(date, startTime)
+        if (new Date(selectedStartAtUtc).getTime() <= Date.now()) {
+          nextErrors.time = t('meetings.create.validation.timePassed')
+        }
+      } catch {
+        nextErrors.time = t('meetings.create.validation.timeRequired')
+      }
+    }
+
+    if (!nextErrors.time && roomId && participantCount > 0 && !availabilityInput) {
       nextErrors.time = t('meetings.create.validation.timeRequired')
     }
 
@@ -516,6 +624,7 @@ export function MeetingEditorDialog({
           presenterUserId: item.presenterUserId,
           plannedDurationMinutes: item.plannedDurationMinutes,
         })),
+        followUpOfMeetingId: initialValues?.followUpOfMeetingId ?? null,
       })
 
       let failedUploads = 0
@@ -544,10 +653,20 @@ export function MeetingEditorDialog({
         defaultValue: t('meetings.errors.save'),
       })
 
-      if (apiError.code === 'MEETING_ROOM_TIME_CONFLICT' || apiError.code === 'MEETING_ROOM_SCHEDULE_BUSY') {
+      if (
+        apiError.code === 'MEETING_ROOM_TIME_CONFLICT' ||
+        apiError.code === 'MEETING_ROOM_SCHEDULE_BUSY' ||
+        apiError.code === 'MEETING_SCHEDULE_IN_PAST' ||
+        apiError.code === 'INVALID_MEETING_TIME_INCREMENT'
+      ) {
         setValidationErrors((current) => ({ ...current, time: message }))
         focusValidationError('time')
-        void queryClient.invalidateQueries({ queryKey: meetingsQueryKey })
+        if (
+          apiError.code === 'MEETING_ROOM_TIME_CONFLICT' ||
+          apiError.code === 'MEETING_ROOM_SCHEDULE_BUSY'
+        ) {
+          void queryClient.invalidateQueries({ queryKey: meetingsQueryKey })
+        }
       } else if (apiError.code === 'MEETING_ROOM_CAPACITY_EXCEEDED') {
         setValidationErrors((current) => ({ ...current, capacity: message }))
         focusValidationError('capacity')
@@ -560,18 +679,20 @@ export function MeetingEditorDialog({
     }
   }
 
-  const availabilityMessage = availability.data
-    ? availability.data.canSchedule
-      ? t('meetings.availability.available')
-      : !availability.data.isRoomActive
-        ? t('meetings.availability.inactive')
-        : !availability.data.hasCapacity
-          ? t('meetings.availability.capacity', {
-              capacity: availability.data.roomCapacity,
-              participants: availability.data.participantCount,
-            })
-          : t('meetings.availability.busy')
-    : null
+  const availabilityMessage = scheduleSelectionState?.isPast
+    ? t('meetings.create.selectedTimePassedHint')
+    : availability.data
+      ? availability.data.canSchedule
+        ? t('meetings.availability.available')
+        : !availability.data.isRoomActive
+          ? t('meetings.availability.inactive')
+          : !availability.data.hasCapacity
+            ? t('meetings.availability.capacity', {
+                capacity: availability.data.roomCapacity,
+                participants: availability.data.participantCount,
+              })
+            : t('meetings.availability.busy')
+      : null
 
   return (
     <Dialog
@@ -582,9 +703,14 @@ export function MeetingEditorDialog({
       }}
     >
       <DialogContent
-        variant="modal"
+        variant={presentation}
         closeLabel={t('common.close')}
-        className="max-h-[96vh] w-[min(88rem,calc(100vw-1rem))] p-0"
+        className={cn(
+          'p-0',
+          presentation === 'drawer'
+            ? 'h-dvh w-[min(54rem,96vw)] max-w-none'
+            : 'max-h-[96vh] w-[min(88rem,calc(100vw-1rem))]',
+        )}
       >
         <div className="min-h-0">
           <header className="border-b px-5 py-5 pe-14 sm:px-6 sm:py-6 sm:pe-16">
@@ -596,11 +722,12 @@ export function MeetingEditorDialog({
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <DialogTitle className="text-xl font-semibold sm:text-2xl">
-                      {t(
-                        mode === 'DIRECT'
-                          ? 'meetings.createDirectTitle'
-                          : 'meetings.createRequestTitle',
-                      )}
+                      {heading ??
+                        t(
+                          mode === 'DIRECT'
+                            ? 'meetings.createDirectTitle'
+                            : 'meetings.createRequestTitle',
+                        )}
                     </DialogTitle>
                     <span
                       className={cn(
@@ -618,11 +745,12 @@ export function MeetingEditorDialog({
                     </span>
                   </div>
                   <DialogDescription className="text-muted-foreground mt-1 max-w-3xl text-sm leading-6">
-                    {t(
-                      mode === 'DIRECT'
-                        ? 'meetings.createDirectDescription'
-                        : 'meetings.createRequestDescription',
-                    )}
+                    {dialogDescription ??
+                      t(
+                        mode === 'DIRECT'
+                          ? 'meetings.createDirectDescription'
+                          : 'meetings.createRequestDescription',
+                      )}
                   </DialogDescription>
                 </div>
               </div>
@@ -934,6 +1062,7 @@ export function MeetingEditorDialog({
                 participantCount={participantCount}
                 startTime={startTime}
                 endTime={endTime}
+                timeSelected={timeSelected}
                 disabled={isSaving}
                 allowBusySelection={mode === 'REQUEST'}
                 focused={focusMode === 'SCHEDULE'}
@@ -941,6 +1070,7 @@ export function MeetingEditorDialog({
                 focusField={scheduleFocusField}
                 focusRequestId={scheduleFocusRequestId}
                 onValidationClear={clearValidationError}
+                onSelectionStateChange={setScheduleSelectionState}
                 onFocusToggle={() =>
                   setFocusMode((current) => (current === 'SCHEDULE' ? 'NONE' : 'SCHEDULE'))
                 }
@@ -954,9 +1084,19 @@ export function MeetingEditorDialog({
                   clearValidationError('capacity')
                   clearValidationError('time')
                 }}
+                onDurationChange={
+                  scheduleStartsUnselected
+                    ? (minutes) => {
+                        setEndTime(addMinutes(startTime, minutes))
+                        clearValidationError('duration')
+                        clearValidationError('time')
+                      }
+                    : undefined
+                }
                 onTimeChange={(nextStart, nextEnd) => {
                   setStartTime(nextStart)
                   setEndTime(nextEnd)
+                  setTimeSelected(true)
                   clearValidationError('duration')
                   clearValidationError('time')
                 }}
@@ -970,7 +1110,7 @@ export function MeetingEditorDialog({
                   <p className="text-muted-foreground mt-4 text-[11px] font-semibold tracking-wide uppercase">
                     {t('meetings.create.scheduleTitle')}
                   </p>
-                  <p className="mt-2 text-sm font-semibold">{formatSelectedDate(date, locale)}</p>
+                  <p className="mt-2 text-sm font-semibold">{selectedDateSummary}</p>
                   <p className="mt-1 text-xs font-medium tabular-nums">{selectedTimeSummary}</p>
                   <p className="text-muted-foreground mt-2 line-clamp-2 text-xs leading-5">
                     {roomName ?? t('meetings.create.scheduleSummaryEmpty')}
@@ -1000,7 +1140,7 @@ export function MeetingEditorDialog({
                   {availabilityInput && roomName ? (
                     <>
                       <span className="text-muted-foreground">•</span>
-                      <span>{formatSelectedDate(date, locale)}</span>
+                      <span>{selectedDateSummary}</span>
                       <span className="text-muted-foreground">•</span>
                       <span className="font-medium tabular-nums">
                         {selectedTimeSummary}
@@ -1032,6 +1172,11 @@ export function MeetingEditorDialog({
                         aria-hidden="true"
                         className="text-muted-foreground mt-0.5 size-3.5 shrink-0 animate-spin"
                       />
+                    ) : scheduleSelectionState?.isPast ? (
+                      <AlertTriangle
+                        aria-hidden="true"
+                        className="text-warning mt-0.5 size-3.5 shrink-0"
+                      />
                     ) : availability.data?.canSchedule ? (
                       <CheckCircle2
                         aria-hidden="true"
@@ -1047,14 +1192,19 @@ export function MeetingEditorDialog({
                       <span
                         className={cn(
                           'font-medium',
-                          availability.data?.canSchedule ? 'text-success' : 'text-foreground',
+                          !scheduleSelectionState?.isPast && availability.data?.canSchedule
+                            ? 'text-success'
+                            : 'text-foreground',
                         )}
                       >
                         {availability.isFetching
                           ? t('meetings.availability.checking')
                           : availabilityMessage ?? t('meetings.availability.unavailable')}
                       </span>
-                      {mode === 'REQUEST' && availability.data && !availability.data.canSchedule ? (
+                      {mode === 'REQUEST' &&
+                      availability.data &&
+                      !availability.data.canSchedule &&
+                      !scheduleSelectionState?.isPast ? (
                         <span className="text-muted-foreground ms-1">
                           {t('meetings.availability.requestCanContinue')}
                         </span>
@@ -1086,3 +1236,6 @@ export function MeetingEditorDialog({
     </Dialog>
   )
 }
+
+
+

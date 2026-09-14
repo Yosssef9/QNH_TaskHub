@@ -1,6 +1,13 @@
 import { AppError } from "../../shared/errors/app-error.js";
 import type { AccessPermission } from "../access-permissions/access-permissions.types.js";
-import type { AuthMeData, LanguageCode, TaskHubRoleCode, ThemePreference, TimeFormatPreference } from "./auth.types.js";
+import type {
+  AuthMeData,
+  LanguageCode,
+  MeetingScheduleSlotInterval,
+  TaskHubRoleCode,
+  ThemePreference,
+  TimeFormatPreference,
+} from "./auth.types.js";
 import type { AccessProfileRecord, PortalUserRecord } from "./auth.repository.js";
 
 function toRoleCode(value: string): TaskHubRoleCode {
@@ -52,6 +59,20 @@ function toTimeFormat(value: string | null): TimeFormatPreference {
   });
 }
 
+
+
+function toMeetingScheduleSlotInterval(value: number | null): MeetingScheduleSlotInterval {
+  if (value === 15 || value === 30 || value === 60) {
+    return value;
+  }
+
+  throw new AppError({
+    statusCode: 500,
+    code: "INVALID_PREFERENCE_CONFIGURATION",
+    message: "TaskHub Meeting schedule slot-interval preference is missing or invalid.",
+  });
+}
+
 export function mapAuthMeData(
   portalUser: PortalUserRecord,
   access: AccessProfileRecord,
@@ -62,6 +83,7 @@ export function mapAuthMeData(
     access.calendarShowAdjacentDates === null ||
     access.meetingStartReminderEnabled === null ||
     access.timeFormat === null ||
+    access.meetingScheduleSlotInterval === null ||
     access.timezone !== "Asia/Riyadh"
   ) {
     throw new AppError({
@@ -91,6 +113,7 @@ export function mapAuthMeData(
       calendarShowAdjacentDates: access.calendarShowAdjacentDates,
       meetingStartReminderEnabled: access.meetingStartReminderEnabled,
       timeFormat: toTimeFormat(access.timeFormat),
+      meetingScheduleSlotInterval: toMeetingScheduleSlotInterval(access.meetingScheduleSlotInterval),
       timezone: access.timezone,
     },
   };

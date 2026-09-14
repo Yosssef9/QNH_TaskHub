@@ -156,7 +156,16 @@ export function MeetingRescheduleDialog({
     new Date(selectedEndAtUtc).getTime() > new Date(selectedStartAtUtc).getTime()
 
   const isPending = updateInitial.isPending || requestReschedule.isPending || editReschedule.isPending
-  const canSubmit = hasValidWindow && !isPending
+  const selectedUsesValidIncrement =
+    Number(startTime.slice(3, 5)) % 15 === 0 && Number(endTime.slice(3, 5)) % 15 === 0
+  const selectedStartIsPast =
+    selectedStartAtUtc !== null && new Date(selectedStartAtUtc).getTime() <= Date.now()
+  const canSubmit =
+    hasValidWindow &&
+    selectedUsesValidIncrement &&
+    !selectedStartIsPast &&
+    selectionState?.isPast !== true &&
+    !isPending
 
   const title =
     mode === 'CHANGE_INITIAL'
@@ -230,9 +239,11 @@ export function MeetingRescheduleDialog({
     }
   }
 
-  const availabilityClass = selectionState?.hasKnownConflict
+  const availabilityClass = selectionState?.isPast
     ? 'border-warning/40 bg-warning/5 text-warning-foreground'
-    : selectionState && !selectionState.hasCapacity
+    : selectionState?.hasKnownConflict
+      ? 'border-warning/40 bg-warning/5 text-warning-foreground'
+      : selectionState && !selectionState.hasCapacity
       ? 'border-warning/40 bg-warning/5 text-warning-foreground'
       : selectionState?.canSchedule
         ? 'border-success/30 bg-success/5 text-success'
@@ -314,11 +325,15 @@ export function MeetingRescheduleDialog({
                 <p className="font-medium">
                   {selectionState?.isChecking
                     ? t('meetings.availability.checking')
-                    : selectionState?.canSchedule
-                      ? t('meetings.availability.available')
-                      : t('meetings.availability.requestCanContinue')}
+                    : selectionState?.isPast
+                      ? t('meetings.create.selectedTimePassedHint')
+                      : selectionState?.canSchedule
+                        ? t('meetings.availability.available')
+                        : t('meetings.availability.requestCanContinue')}
                 </p>
-                {!selectionState?.canSchedule && !selectionState?.isChecking ? (
+                {!selectionState?.canSchedule &&
+                !selectionState?.isChecking &&
+                !selectionState?.isPast ? (
                   <p className="text-muted-foreground mt-1 text-xs leading-5">
                     {t('meetings.workspace.proposalDoesNotReserve')}
                   </p>

@@ -9,12 +9,16 @@ export type TaskHubRoleCode = 'USER' | 'ADMIN'
 export type LanguageCode = 'AR' | 'EN'
 export type ThemePreference = 'LIGHT' | 'DARK' | 'SYSTEM'
 export type TimeFormatPreference = '12H' | '24H'
+export type MeetingScheduleSlotInterval = 15 | 30 | 60
+export type AccessModuleCode = 'PROCUREMENT' | 'KPI_MANAGEMENT'
 export type ProcurementEntityCode = 'CONTRACTS' | 'ITEMS' | 'SUPPLIERS' | 'PRICE_QUOTES'
+export type KpiWorkCyclesEntityCode = 'KPI_WORK_CYCLES'
+export type AccessEntityCode = ProcurementEntityCode | KpiWorkCyclesEntityCode
 export type AccessPermissionCode = 'ACCESS' | 'VIEW' | 'MANAGE_ATTACHMENTS'
 
 export interface AccessPermission {
-  moduleCode: 'PROCUREMENT'
-  entityCode: ProcurementEntityCode
+  moduleCode: AccessModuleCode
+  entityCode: AccessEntityCode
   permissionCode: AccessPermissionCode
   resourceOwnerUserId: number | null
 }
@@ -33,6 +37,7 @@ export interface UserPreferences {
   calendarShowAdjacentDates: boolean
   meetingStartReminderEnabled: boolean
   timeFormat: TimeFormatPreference
+  meetingScheduleSlotInterval: MeetingScheduleSlotInterval
   timezone: 'Asia/Riyadh'
 }
 
@@ -41,3 +46,4 @@ export interface AuthMeData {
   access: TaskHubAccess
   preferences: UserPreferences
 }
+

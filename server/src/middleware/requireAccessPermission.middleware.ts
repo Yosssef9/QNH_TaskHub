@@ -3,6 +3,7 @@ import type { NextFunction, Request, Response } from "express";
 import {
   hasAccessPermission,
   hasAnyProcurementAccess,
+  hasKpiWorkCyclesAccess,
 } from "../modules/access-permissions/access-permissions.policy.js";
 import type { ProcurementEntityCode } from "../modules/access-permissions/access-permissions.types.js";
 import { AppError } from "../shared/errors/app-error.js";
@@ -63,6 +64,29 @@ export function requireAnyProcurementAccess(
 }
 
 
+export function requireKpiWorkCyclesAccess(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): void {
+  try {
+    const auth = context(req);
+    if (!hasKpiWorkCyclesAccess(auth.access.permissions)) {
+      next(
+        new AppError({
+          statusCode: 403,
+          code: "KPI_WORK_CYCLES_ACCESS_REQUIRED",
+          message: "KPI and Work Cycle access is not enabled for this user.",
+        }),
+      );
+      return;
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+}
+
 export function requireItemOptionsAccess(
   req: Request,
   _res: Response,
@@ -118,3 +142,4 @@ export function requireSupplierOptionsAccess(
     next(error);
   }
 }
+

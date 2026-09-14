@@ -79,6 +79,7 @@ export interface MeetingAvailability extends MeetingAvailabilityInput {
 }
 
 export interface MeetingAgendaItemInput {
+  id?: number | null
   topic: string
   presenterUserId: number | null
   plannedDurationMinutes: number | null
@@ -108,6 +109,7 @@ export interface SaveMeetingInput {
   organizerAttending: boolean
   attendeeUserIds: number[]
   agendaItems: MeetingAgendaItemInput[]
+  followUpOfMeetingId?: number | null
 }
 
 export interface UpdatePendingMeetingScheduleInput {
@@ -313,3 +315,5 @@ export interface UpdateMeetingTemplateInput extends SaveMeetingTemplateInput {
   templateId: number
   rowVersion: string
 }
+
+

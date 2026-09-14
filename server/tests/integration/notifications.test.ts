@@ -27,6 +27,7 @@ describe("notification endpoints", () => {
         calendarShowAdjacentDates: false,
         meetingStartReminderEnabled: true,
         timeFormat: "12H",
+        meetingScheduleSlotInterval: 30,
         timezone: "Asia/Riyadh",
       },
     });
@@ -57,7 +58,7 @@ describe("notification endpoints", () => {
       .set("Authorization", `Bearer ${token()}`);
 
     expect(response.status).toBe(200);
-    expect(list).toHaveBeenCalledWith(7, 10);
+    expect(list).toHaveBeenCalledWith(7, 10, false);
     expect(response.body.data.unreadCount).toBe(1);
   });
 
@@ -69,7 +70,7 @@ describe("notification endpoints", () => {
       .set("Authorization", `Bearer ${token()}`);
 
     expect(response.status).toBe(200);
-    expect(markRead).toHaveBeenCalledWith(7, 41);
+    expect(markRead).toHaveBeenCalledWith(7, 41, false);
   });
 
   it("marks all notifications read for the authenticated owner", async () => {
@@ -80,10 +81,11 @@ describe("notification endpoints", () => {
       .set("Authorization", `Bearer ${token()}`);
 
     expect(response.status).toBe(200);
-    expect(markAll).toHaveBeenCalledWith(7);
+    expect(markAll).toHaveBeenCalledWith(7, false);
     expect(response.body.data.updated).toBe(3);
   });
 });
+
 
 
 

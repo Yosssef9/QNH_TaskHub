@@ -7,6 +7,30 @@ import { validateRequest } from "../../middleware/validate.middleware.js";
 import { verifyPortalJwt } from "../../middleware/verifyPortalJwt.middleware.js";
 import { uploadSingleMeetingAttachment } from "./meeting-attachment-upload.middleware.js";
 import {
+  createMeetingActionItem,
+  listMeetingActionItemAssignees,
+  listMeetingActionItems,
+  reassignMeetingActionItem,
+} from "../meeting-action-items/meeting-action-items.controller.js";
+import {
+  createMeetingDecision,
+  getMeetingFollowUp,
+  listRelatedMeetings,
+  saveMeetingFollowUpNotes,
+  updateMeetingDecision,
+} from "../meeting-followup/meeting-followup.controller.js";
+import {
+  createMeetingDecisionBodySchema,
+  meetingDecisionParamsSchema,
+  saveMeetingFollowUpNotesBodySchema,
+  updateMeetingDecisionBodySchema,
+} from "../meeting-followup/meeting-followup.schemas.js";
+import {
+  createMeetingActionItemBodySchema,
+  meetingActionItemParamsSchema,
+  reassignMeetingActionItemBodySchema,
+} from "../meeting-action-items/meeting-action-items.schemas.js";
+import {
   adjustAndApproveMeetingRequest,
   adjustAndApproveMeetingReschedule,
   approveMeetingRequest,
@@ -270,6 +294,66 @@ meetingsRouter.delete(
 );
 
 meetingsRouter.get(
+  "/:meetingId/related-meetings",
+  validateRequest({ params: meetingWorkspaceParamsSchema }),
+  listRelatedMeetings,
+);
+
+meetingsRouter.get(
+  "/:meetingId/follow-up",
+  validateRequest({ params: meetingWorkspaceParamsSchema }),
+  getMeetingFollowUp,
+);
+meetingsRouter.post(
+  "/:meetingId/decisions",
+  validateRequest({
+    params: meetingWorkspaceParamsSchema,
+    body: createMeetingDecisionBodySchema,
+  }),
+  createMeetingDecision,
+);
+meetingsRouter.patch(
+  "/:meetingId/decisions/:decisionId",
+  validateRequest({
+    params: meetingDecisionParamsSchema,
+    body: updateMeetingDecisionBodySchema,
+  }),
+  updateMeetingDecision,
+);
+meetingsRouter.put(
+  "/:meetingId/follow-up-notes",
+  validateRequest({
+    params: meetingWorkspaceParamsSchema,
+    body: saveMeetingFollowUpNotesBodySchema,
+  }),
+  saveMeetingFollowUpNotes,
+);
+
+meetingsRouter.get(
+  "/:meetingId/action-item-assignees",
+  validateRequest({ params: meetingWorkspaceParamsSchema }),
+  listMeetingActionItemAssignees,
+);
+meetingsRouter.get(
+  "/:meetingId/action-items",
+  validateRequest({ params: meetingWorkspaceParamsSchema }),
+  listMeetingActionItems,
+);
+meetingsRouter.post(
+  "/:meetingId/action-items",
+  validateRequest({ params: meetingWorkspaceParamsSchema, body: createMeetingActionItemBodySchema }),
+  createMeetingActionItem,
+);
+meetingsRouter.patch(
+  "/:meetingId/action-items/:taskId/assignee",
+  validateRequest({
+    params: meetingActionItemParamsSchema,
+    body: reassignMeetingActionItemBodySchema,
+  }),
+  reassignMeetingActionItem,
+);
+
+meetingsRouter.get(
   "/:meetingId",
   validateRequest({ params: meetingWorkspaceParamsSchema }),
   getMeetingDetail,
@@ -344,3 +428,6 @@ meetingRoomsAdminRouter.put(
   }),
   updateMeetingRoom,
 );
+
+
+

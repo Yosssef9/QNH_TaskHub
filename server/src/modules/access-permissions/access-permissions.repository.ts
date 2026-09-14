@@ -1,11 +1,14 @@
 import type { DatabaseTransaction } from "../../database/types.js";
 import { getDatabasePool, sql } from "../../database/sql.js";
 import type {
+  AccessEntityCode,
+  AccessModuleCode,
   AccessPermission,
   ContractAccessAdminData,
   ContractAccessAdminUser,
   ContractAccessDelegation,
   ContractAccessScope,
+  AccessPermissionCode,
   ProcurementAccessState,
   ProcurementEntityCode,
 } from "./access-permissions.types.js";
@@ -44,18 +47,24 @@ interface ContractAccessDelegationRecord {
 }
 
 function mapPermission(record: AccessPermissionRecord): AccessPermission {
-  if (
-    record.moduleCode !== "PROCUREMENT" ||
-    !["CONTRACTS", "ITEMS", "SUPPLIERS", "PRICE_QUOTES"].includes(record.entityCode) ||
-    !["ACCESS", "VIEW", "MANAGE_ATTACHMENTS"].includes(record.permissionCode)
-  ) {
+  const procurementPermission =
+    record.moduleCode === "PROCUREMENT" &&
+    ["CONTRACTS", "ITEMS", "SUPPLIERS", "PRICE_QUOTES"].includes(record.entityCode) &&
+    ["ACCESS", "VIEW", "MANAGE_ATTACHMENTS"].includes(record.permissionCode);
+  const kpiPermission =
+    record.moduleCode === "KPI_MANAGEMENT" &&
+    record.entityCode === "KPI_WORK_CYCLES" &&
+    record.permissionCode === "ACCESS" &&
+    record.resourceOwnerUserId === null;
+
+  if (!procurementPermission && !kpiPermission) {
     throw new Error("TaskHub access permission contains an unsupported code combination.");
   }
 
   return {
-    moduleCode: "PROCUREMENT",
-    entityCode: record.entityCode as AccessPermission["entityCode"],
-    permissionCode: record.permissionCode as AccessPermission["permissionCode"],
+    moduleCode: record.moduleCode as AccessModuleCode,
+    entityCode: record.entityCode as AccessEntityCode,
+    permissionCode: record.permissionCode as AccessPermissionCode,
     resourceOwnerUserId:
       record.resourceOwnerUserId === null ? null : Number(record.resourceOwnerUserId),
   };
@@ -84,8 +93,9 @@ async function setPermission(
   input: {
     actorUserId: number;
     granteeUserId: number;
-    entityCode: ProcurementEntityCode;
-    permissionCode: "ACCESS" | "VIEW" | "MANAGE_ATTACHMENTS";
+    moduleCode: AccessModuleCode;
+    entityCode: AccessEntityCode;
+    permissionCode: AccessPermissionCode;
     resourceOwnerUserId: number | null;
     enabled: boolean;
   },
@@ -94,6 +104,7 @@ async function setPermission(
     .request()
     .input("actorUserId", sql.Int, input.actorUserId)
     .input("granteeUserId", sql.Int, input.granteeUserId)
+    .input("moduleCode", sql.VarChar(40), input.moduleCode)
     .input("entityCode", sql.VarChar(40), input.entityCode)
     .input("permissionCode", sql.VarChar(40), input.permissionCode)
     .input("resourceOwnerUserId", sql.Int, input.resourceOwnerUserId)
@@ -102,7 +113,7 @@ async function setPermission(
         SELECT 1
         FROM dbo.TM_access_permissions WITH (UPDLOCK, HOLDLOCK)
         WHERE grantee_user_id = @granteeUserId
-          AND module_code = 'PROCUREMENT'
+          AND module_code = @moduleCode
           AND entity_code = @entityCode
           AND permission_code = @permissionCode
           AND (
@@ -120,7 +131,7 @@ async function setPermission(
           revoked_at_utc = CASE WHEN @enabled = 0 THEN SYSUTCDATETIME() ELSE NULL END,
           updated_at_utc = SYSUTCDATETIME()
         WHERE grantee_user_id = @granteeUserId
-          AND module_code = 'PROCUREMENT'
+          AND module_code = @moduleCode
           AND entity_code = @entityCode
           AND permission_code = @permissionCode
           AND (
@@ -142,7 +153,7 @@ async function setPermission(
         )
         VALUES (
           @granteeUserId,
-          'PROCUREMENT',
+          @moduleCode,
           @entityCode,
           @permissionCode,
           @resourceOwnerUserId,
@@ -172,6 +183,7 @@ export async function saveProcurementAccess(
     await setPermission(transaction, {
       actorUserId: input.actorUserId,
       granteeUserId: input.granteeUserId,
+      moduleCode: "PROCUREMENT",
       entityCode,
       permissionCode: "ACCESS",
       resourceOwnerUserId: null,
@@ -200,6 +212,22 @@ export async function saveProcurementAccess(
           );
       `);
   }
+}
+
+
+export async function saveKpiWorkCyclesAccess(
+  transaction: DatabaseTransaction,
+  input: { actorUserId: number; granteeUserId: number; enabled: boolean },
+): Promise<void> {
+  await setPermission(transaction, {
+    actorUserId: input.actorUserId,
+    granteeUserId: input.granteeUserId,
+    moduleCode: "KPI_MANAGEMENT",
+    entityCode: "KPI_WORK_CYCLES",
+    permissionCode: "ACCESS",
+    resourceOwnerUserId: null,
+    enabled: input.enabled,
+  });
 }
 
 export async function listContractAccessScopes(userId: number): Promise<ContractAccessScope[]> {
@@ -363,6 +391,7 @@ export async function saveContractDelegation(
     await setPermission(transaction, {
       actorUserId: input.actorUserId,
       granteeUserId: input.granteeUserId,
+      moduleCode: "PROCUREMENT",
       entityCode: "CONTRACTS",
       permissionCode: "ACCESS",
       resourceOwnerUserId: null,
@@ -373,6 +402,7 @@ export async function saveContractDelegation(
   await setPermission(transaction, {
     actorUserId: input.actorUserId,
     granteeUserId: input.granteeUserId,
+    moduleCode: "PROCUREMENT",
     entityCode: "CONTRACTS",
     permissionCode: "VIEW",
     resourceOwnerUserId: input.ownerUserId,
@@ -381,6 +411,7 @@ export async function saveContractDelegation(
   await setPermission(transaction, {
     actorUserId: input.actorUserId,
     granteeUserId: input.granteeUserId,
+    moduleCode: "PROCUREMENT",
     entityCode: "CONTRACTS",
     permissionCode: "MANAGE_ATTACHMENTS",
     resourceOwnerUserId: input.ownerUserId,
@@ -391,7 +422,9 @@ export async function saveContractDelegation(
 export const accessPermissionsRepository = {
   listUserPermissions,
   saveProcurementAccess,
+  saveKpiWorkCyclesAccess,
   listContractAccessScopes,
   getContractAccessAdminData,
   saveContractDelegation,
 };
+

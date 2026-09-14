@@ -6,7 +6,7 @@ import type { UserPreferences } from '@/features/auth/types/auth.types'
 export type UpdatePreferencesInput = Partial<
   Pick<
     UserPreferences,
-    'languageCode' | 'theme' | 'sidebarCollapsed' | 'calendarShowAdjacentDates' | 'meetingStartReminderEnabled' | 'timeFormat'
+    'languageCode' | 'theme' | 'sidebarCollapsed' | 'calendarShowAdjacentDates' | 'meetingStartReminderEnabled' | 'timeFormat' | 'meetingScheduleSlotInterval'
   >
 >
 

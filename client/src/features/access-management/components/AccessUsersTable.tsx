@@ -3,18 +3,32 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 
 import { EmptyState } from '@/components/shared/EmptyState'
+import { SortableHeader } from '@/components/shared/SortableHeader'
 import { taskHubFadeMotion } from '@/components/shared/TaskHubMotion'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 
-import type { AccessUser } from '../types/access.types'
+import type {
+  AccessSortBy,
+  AccessSortDirection,
+  AccessUser,
+} from '../types/access.types'
 
 interface AccessUsersTableProps {
   users: AccessUser[]
+  sortBy: AccessSortBy
+  sortDirection: AccessSortDirection
+  onSort: (column: AccessSortBy) => void
   onEdit: (user: AccessUser) => void
 }
 
-export function AccessUsersTable({ onEdit, users }: AccessUsersTableProps) {
+export function AccessUsersTable({
+  onEdit,
+  onSort,
+  sortBy,
+  sortDirection,
+  users,
+}: AccessUsersTableProps) {
   const { t } = useTranslation()
 
   if (users.length === 0) {
@@ -33,24 +47,62 @@ export function AccessUsersTable({ onEdit, users }: AccessUsersTableProps) {
       <table className="w-full min-w-5xl text-sm">
         <thead className="bg-muted/60 text-muted-foreground">
           <tr>
-            <th scope="col" className="px-5 py-3 text-start font-medium">
-              {t('access.user')}
-            </th>
-            <th scope="col" className="px-5 py-3 text-start font-medium">
-              {t('access.userCode')}
-            </th>
-            <th scope="col" className="px-5 py-3 text-start font-medium">
-              {t('access.role')}
-            </th>
-            <th scope="col" className="px-5 py-3 text-start font-medium">
-              {t('access.procurementPermissions')}
-            </th>
-            <th scope="col" className="px-5 py-3 text-start font-medium">
-              {t('access.meetingPermissions')}
-            </th>
-            <th scope="col" className="px-5 py-3 text-start font-medium">
-              {t('access.status')}
-            </th>
+            <SortableHeader
+              label={t('access.user')}
+              column="userName"
+              sortColumn={sortBy}
+              sortDirection={sortDirection}
+              onSort={onSort}
+              className="px-5"
+            />
+            <SortableHeader
+              label={t('access.userCode')}
+              column="userCode"
+              sortColumn={sortBy}
+              sortDirection={sortDirection}
+              onSort={onSort}
+              className="px-5"
+            />
+            <SortableHeader
+              label={t('access.role')}
+              column="role"
+              sortColumn={sortBy}
+              sortDirection={sortDirection}
+              onSort={onSort}
+              className="px-5"
+            />
+            <SortableHeader
+              label={t('access.procurementPermissions')}
+              column="procurement"
+              sortColumn={sortBy}
+              sortDirection={sortDirection}
+              onSort={onSort}
+              className="px-5"
+            />
+            <SortableHeader
+              label={t('access.kpiWorkCyclesPermission')}
+              column="kpiWorkCycles"
+              sortColumn={sortBy}
+              sortDirection={sortDirection}
+              onSort={onSort}
+              className="px-5"
+            />
+            <SortableHeader
+              label={t('access.meetingPermissions')}
+              column="meetings"
+              sortColumn={sortBy}
+              sortDirection={sortDirection}
+              onSort={onSort}
+              className="px-5"
+            />
+            <SortableHeader
+              label={t('access.status')}
+              column="status"
+              sortColumn={sortBy}
+              sortDirection={sortDirection}
+              onSort={onSort}
+              className="px-5"
+            />
             <th scope="col" className="px-5 py-3 text-end font-medium">
               {t('access.actions')}
             </th>
@@ -67,79 +119,86 @@ export function AccessUsersTable({ onEdit, users }: AccessUsersTableProps) {
                 transition={taskHubFadeMotion.transition}
                 className="hover:bg-muted/30"
               >
-              <td className="px-5 py-4">
-                <p className="font-medium">{user.userName}</p>
-                {user.email ? (
-                  <p className="text-muted-foreground mt-0.5 text-xs">{user.email}</p>
-                ) : null}
-              </td>
-              <td className="px-5 py-4 font-mono text-xs">{user.userCode}</td>
-              <td className="px-5 py-4">
-                {user.roleCode ? (
-                  <Badge variant={user.roleCode === 'ADMIN' ? 'default' : 'secondary'}>
-                    {t(`access.roles.${user.roleCode}`)}
-                  </Badge>
-                ) : (
-                  <span className="text-muted-foreground">{t('access.notAssigned')}</span>
-                )}
-              </td>
-              <td className="px-5 py-4">
-                <div className="flex max-w-sm flex-wrap gap-1.5">
-                  {user.procurementAccess.contracts ? (
-                    <Badge variant="secondary">{t('access.procurement.contracts')}</Badge>
+                <td className="px-5 py-4">
+                  <p className="font-medium">{user.userName}</p>
+                  {user.email ? (
+                    <p className="text-muted-foreground mt-0.5 text-xs">{user.email}</p>
                   ) : null}
-                  {user.procurementAccess.items ? (
-                    <Badge variant="secondary">{t('access.procurement.items')}</Badge>
-                  ) : null}
-                  {user.procurementAccess.suppliers ? (
-                    <Badge variant="secondary">{t('access.procurement.suppliers')}</Badge>
-                  ) : null}
-                  {user.procurementAccess.priceQuotes ? (
-                    <Badge variant="secondary">{t('access.procurement.priceQuotes')}</Badge>
-                  ) : null}
-                  {!user.procurementAccess.contracts &&
-                  !user.procurementAccess.items &&
-                  !user.procurementAccess.suppliers &&
-                  !user.procurementAccess.priceQuotes ? (
-                    <span className="text-muted-foreground">{t('common.none')}</span>
-                  ) : null}
-                </div>
-              </td>
-              <td className="px-5 py-4">
-                <div className="flex flex-wrap gap-1.5">
-                  {user.meetingOrganizeEnabled ? (
-                    <Badge variant="secondary">{t('access.meetingOrganizerShort')}</Badge>
-                  ) : null}
-                  {user.meetingCoordinateEnabled ? (
-                    <Badge variant="secondary">{t('access.meetingCoordinatorShort')}</Badge>
-                  ) : null}
-                  {!user.meetingOrganizeEnabled && !user.meetingCoordinateEnabled ? (
-                    <span className="text-muted-foreground">{t('common.none')}</span>
-                  ) : null}
-                </div>
-              </td>
-              <td className="px-5 py-4">
-                <Badge variant={user.accessIsActive ? 'success' : 'secondary'}>
-                  {t(
-                    user.roleCode === null
-                      ? 'access.notAssigned'
-                      : user.accessIsActive
-                        ? 'access.active'
-                        : 'access.inactive',
+                </td>
+                <td className="px-5 py-4 font-mono text-xs">{user.userCode}</td>
+                <td className="px-5 py-4">
+                  {user.roleCode ? (
+                    <Badge variant={user.roleCode === 'ADMIN' ? 'default' : 'secondary'}>
+                      {t(`access.roles.${user.roleCode}`)}
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground">{t('access.notAssigned')}</span>
                   )}
-                </Badge>
-              </td>
-              <td className="px-5 py-4 text-end">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  aria-label={t('access.editUser', { name: user.userName })}
-                  onClick={() => onEdit(user)}
-                >
-                  <Pencil aria-hidden="true" className="size-4" />
-                  {t('common.edit')}
-                </Button>
-              </td>
+                </td>
+                <td className="px-5 py-4">
+                  <div className="flex max-w-sm flex-wrap gap-1.5">
+                    {user.procurementAccess.contracts ? (
+                      <Badge variant="secondary">{t('access.procurement.contracts')}</Badge>
+                    ) : null}
+                    {user.procurementAccess.items ? (
+                      <Badge variant="secondary">{t('access.procurement.items')}</Badge>
+                    ) : null}
+                    {user.procurementAccess.suppliers ? (
+                      <Badge variant="secondary">{t('access.procurement.suppliers')}</Badge>
+                    ) : null}
+                    {user.procurementAccess.priceQuotes ? (
+                      <Badge variant="secondary">{t('access.procurement.priceQuotes')}</Badge>
+                    ) : null}
+                    {!user.procurementAccess.contracts &&
+                    !user.procurementAccess.items &&
+                    !user.procurementAccess.suppliers &&
+                    !user.procurementAccess.priceQuotes ? (
+                      <span className="text-muted-foreground">{t('common.none')}</span>
+                    ) : null}
+                  </div>
+                </td>
+                <td className="px-5 py-4">
+                  {user.kpiWorkCyclesAccess ? (
+                    <Badge variant="secondary">{t('access.kpiWorkCyclesAccess')}</Badge>
+                  ) : (
+                    <span className="text-muted-foreground">{t('common.none')}</span>
+                  )}
+                </td>
+                <td className="px-5 py-4">
+                  <div className="flex flex-wrap gap-1.5">
+                    {user.meetingOrganizeEnabled ? (
+                      <Badge variant="secondary">{t('access.meetingOrganizerShort')}</Badge>
+                    ) : null}
+                    {user.meetingCoordinateEnabled ? (
+                      <Badge variant="secondary">{t('access.meetingCoordinatorShort')}</Badge>
+                    ) : null}
+                    {!user.meetingOrganizeEnabled && !user.meetingCoordinateEnabled ? (
+                      <span className="text-muted-foreground">{t('common.none')}</span>
+                    ) : null}
+                  </div>
+                </td>
+                <td className="px-5 py-4">
+                  <Badge variant={user.accessIsActive ? 'success' : 'secondary'}>
+                    {t(
+                      user.roleCode === null
+                        ? 'access.notAssigned'
+                        : user.accessIsActive
+                          ? 'access.active'
+                          : 'access.inactive',
+                    )}
+                  </Badge>
+                </td>
+                <td className="px-5 py-4 text-end">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    aria-label={t('access.editUser', { name: user.userName })}
+                    onClick={() => onEdit(user)}
+                  >
+                    <Pencil aria-hidden="true" className="size-4" />
+                    {t('common.edit')}
+                  </Button>
+                </td>
               </motion.tr>
             ))}
           </AnimatePresence>

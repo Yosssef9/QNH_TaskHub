@@ -1,5 +1,6 @@
 import { logger } from "../../config/logger.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
+import { hasKpiWorkCyclesAccess } from "../access-permissions/access-permissions.policy.js";
 import { accessPermissionsRepository } from "../access-permissions/access-permissions.repository.js";
 import { findAccessUserById } from "../access/access.repository.js";
 import { contractsService } from "../contracts/contracts.service.js";
@@ -372,7 +373,8 @@ async function synchronizeNotificationsForActiveUsers(): Promise<void> {
   const owners = await notificationsRepository.listActiveOwners();
   for (const ownerUserId of owners) {
     try {
-      await notificationsService.synchronize(ownerUserId);
+      const permissions = await accessPermissionsRepository.listUserPermissions(ownerUserId);
+      await notificationsService.synchronize(ownerUserId, hasKpiWorkCyclesAccess(permissions));
     } catch (error) {
       logger.warn(
         { err: error, ownerUserId },
@@ -382,11 +384,29 @@ async function synchronizeNotificationsForActiveUsers(): Promise<void> {
   }
 }
 
+function requiresKpiWorkCyclesAccess(candidate: NotificationEmailCandidate): boolean {
+  return (
+    candidate.kpiInstanceId !== null ||
+    candidate.notificationType === "CURRENT_CYCLE_ENDING_SOON" ||
+    candidate.notificationType === "CURRENT_CYCLE_PAST_END" ||
+    candidate.notificationType === "KPI_BELOW_TARGET" ||
+    candidate.notificationType === "KPI_MEASUREMENT_DUE"
+  );
+}
+
 async function processCandidate(
   candidate: NotificationEmailCandidate,
   today: string,
   tomorrow: string,
 ): Promise<void> {
+  if (requiresKpiWorkCyclesAccess(candidate)) {
+    const permissions = await accessPermissionsRepository.listUserPermissions(candidate.ownerUserId);
+    if (!hasKpiWorkCyclesAccess(permissions)) {
+      await notificationsRepository.markEmailProcessed(Number(candidate.id));
+      return;
+    }
+  }
+
   const delivery = await resolveDelivery(candidate.ownerUserId, candidate.notificationType);
 
   if (!delivery) {
@@ -469,3 +489,4 @@ export const operationalEmailService = {
     return processed;
   },
 };
+

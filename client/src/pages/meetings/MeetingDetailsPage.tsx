@@ -2,8 +2,10 @@ import {
   ArrowLeft,
   CalendarClock,
   CalendarDays,
+  CalendarPlus2,
   CheckCircle2,
   CirclePlus,
+  ClipboardCheck,
   Clock3,
   DoorOpen,
   Ellipsis,
@@ -22,7 +24,7 @@ import type { CSSProperties } from 'react'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
-import { useNavigate, useParams } from 'react-router'
+import { useNavigate, useParams, useSearchParams } from 'react-router'
 
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { ErrorState } from '@/components/shared/ErrorState'
@@ -39,6 +41,11 @@ import { MeetingAgendaDisplay } from '@/features/meetings/components/MeetingAgen
 import { MeetingAgendaWorkspace } from '@/features/meetings/components/MeetingAgendaWorkspace'
 import { MeetingFilesPanel } from '@/features/meetings/components/MeetingFilesPanel'
 import { MeetingFilesPreview } from '@/features/meetings/components/MeetingFilesPreview'
+import { MeetingFollowUpPanel } from '@/features/meetings/action-items/MeetingFollowUpPanel'
+import type {
+  MeetingFollowUpLaunchRequest,
+  MeetingFollowUpSectionKey,
+} from '@/features/meetings/follow-up/meeting-follow-up.types'
 import { MeetingRescheduleDialog } from '@/features/meetings/components/MeetingRescheduleDialog'
 import { MeetingTemplateEditorDialog } from '@/features/meetings/components/MeetingTemplateEditorDialog'
 import {
@@ -155,8 +162,16 @@ function ActivityMetadata({ item }: { item: MeetingActivityItem }) {
     typeof item.changes.schedulingNotes === 'string' && item.changes.schedulingNotes.trim()
       ? item.changes.schedulingNotes.trim()
       : null
+  const followUpMeetingTitle =
+    typeof item.changes.followUpMeetingTitle === 'string' && item.changes.followUpMeetingTitle.trim()
+      ? item.changes.followUpMeetingTitle.trim()
+      : null
+  const sourceMeetingTitle =
+    typeof item.changes.sourceMeetingTitle === 'string' && item.changes.sourceMeetingTitle.trim()
+      ? item.changes.sourceMeetingTitle.trim()
+      : null
 
-  if (!reason && !schedulingNotes) return null
+  if (!reason && !schedulingNotes && !followUpMeetingTitle && !sourceMeetingTitle) return null
 
   return (
     <div className="bg-muted/25 mt-2 space-y-1.5 rounded-lg border px-3 py-2.5 text-xs">
@@ -172,12 +187,52 @@ function ActivityMetadata({ item }: { item: MeetingActivityItem }) {
           <span>{schedulingNotes}</span>
         </p>
       ) : null}
+      {followUpMeetingTitle ? (
+        <p>
+          <span className="text-muted-foreground font-semibold">
+            {t('meetings.workspace.followUpMeeting')}: {' '}
+          </span>
+          <span>{followUpMeetingTitle}</span>
+        </p>
+      ) : null}
+      {sourceMeetingTitle ? (
+        <p>
+          <span className="text-muted-foreground font-semibold">
+            {t('meetings.workspace.followUpSourceMeeting')}: {' '}
+          </span>
+          <span>{sourceMeetingTitle}</span>
+        </p>
+      ) : null}
     </div>
   )
 }
 
 
-type MeetingDetailsTab = 'OVERVIEW' | 'AGENDA' | 'FILES' | 'ACTIVITY'
+type MeetingDetailsTab = 'OVERVIEW' | 'AGENDA' | 'FILES' | 'FOLLOW_UP' | 'ACTIVITY'
+
+function meetingDetailsTabFromSearch(value: string | null): MeetingDetailsTab {
+  if (value === 'agenda') return 'AGENDA'
+  if (value === 'files') return 'FILES'
+  if (value === 'follow-up') return 'FOLLOW_UP'
+  if (value === 'activity') return 'ACTIVITY'
+  return 'OVERVIEW'
+}
+
+function meetingDetailsTabSearchValue(tab: MeetingDetailsTab): string | null {
+  if (tab === 'AGENDA') return 'agenda'
+  if (tab === 'FILES') return 'files'
+  if (tab === 'FOLLOW_UP') return 'follow-up'
+  if (tab === 'ACTIVITY') return 'activity'
+  return null
+}
+
+function followUpSectionFromSearch(value: string | null): MeetingFollowUpSectionKey | null {
+  if (value === 'action-items') return 'action-items'
+  if (value === 'decisions') return 'decisions'
+  if (value === 'notes') return 'notes'
+  if (value === 'related-meetings') return 'related-meetings'
+  return null
+}
 
 function meetingStatusVariant(status: MeetingStatus) {
   if (status === 'SCHEDULED') return 'success' as const
@@ -234,6 +289,12 @@ function activityPresentation(activityType: string): {
       iconClassName: 'bg-violet-500/10 text-violet-600 dark:text-violet-300',
     }
   }
+  if (activityType.includes('FOLLOW_UP')) {
+    return {
+      icon: CalendarPlus2,
+      iconClassName: 'bg-primary/10 text-primary',
+    }
+  }
   if (activityType.includes('ATTACHMENT')) {
     return {
       icon: Paperclip,
@@ -257,6 +318,7 @@ export function MeetingDetailsPage() {
   const timeFormat = useTimeFormatPreference()
   const navigate = useNavigate()
   const params = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const meetingId = Number(params.meetingId)
   const query = useMeetingDetail(Number.isInteger(meetingId) && meetingId > 0 ? meetingId : null)
   const cancelMutation = useCancelMeeting()
@@ -281,7 +343,11 @@ export function MeetingDetailsPage() {
   const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
   const [templateOpen, setTemplateOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState<MeetingDetailsTab>('OVERVIEW')
+  const activeTab = meetingDetailsTabFromSearch(searchParams.get('tab'))
+  const followUpSection =
+    activeTab === 'FOLLOW_UP' ? followUpSectionFromSearch(searchParams.get('section')) : null
+  const [followUpLaunchRequest, setFollowUpLaunchRequest] =
+    useState<MeetingFollowUpLaunchRequest | null>(null)
   const [moreOpen, setMoreOpen] = useState(false)
 
   const arabic = i18n.language.startsWith('ar')
@@ -301,6 +367,8 @@ export function MeetingDetailsPage() {
       (new Date(meeting.endAtUtc).getTime() - new Date(meeting.startAtUtc).getTime()) / 60000,
     ),
   )
+  const meetingHasStarted =
+    meeting.status === 'SCHEDULED' && new Date(meeting.startAtUtc).getTime() <= Date.now()
 
   const roomById = new Map<number, MeetingRoom>()
   roomById.set(meeting.room.id, meeting.room)
@@ -466,6 +534,35 @@ export function MeetingDetailsPage() {
         }),
       )
     }
+  }
+
+  function selectDetailsTab(tab: MeetingDetailsTab) {
+    const next = new URLSearchParams(searchParams)
+    const tabValue = meetingDetailsTabSearchValue(tab)
+    if (tabValue) next.set('tab', tabValue)
+    else next.delete('tab')
+    next.delete('section')
+    setSearchParams(next)
+  }
+
+  function selectFollowUpSection(section: MeetingFollowUpSectionKey | null) {
+    const next = new URLSearchParams(searchParams)
+    next.set('tab', 'follow-up')
+    if (section) next.set('section', section)
+    else next.delete('section')
+    setSearchParams(next)
+  }
+
+  function openAgendaFollowUp(
+    kind: MeetingFollowUpLaunchRequest['kind'],
+    agendaItemId: number,
+  ) {
+    setFollowUpLaunchRequest((current) => ({
+      kind,
+      agendaItemId,
+      requestId: (current?.requestId ?? 0) + 1,
+    }))
+    selectFollowUpSection(null)
   }
 
   return (
@@ -644,6 +741,7 @@ export function MeetingDetailsPage() {
           ['OVERVIEW', LayoutGrid, t('meetings.workspace.tabs.overview')],
           ['AGENDA', ListChecks, t('meetings.workspace.tabs.agenda')],
           ['FILES', Paperclip, t('meetings.workspace.tabs.files')],
+          ['FOLLOW_UP', ClipboardCheck, t('meetings.workspace.tabs.followUp')],
           ['ACTIVITY', History, t('meetings.workspace.tabs.activity')],
         ] as const).map(([tab, Icon, label]) => (
           <button
@@ -659,7 +757,7 @@ export function MeetingDetailsPage() {
                 ? 'text-primary after:bg-primary'
                 : 'text-muted-foreground hover:text-foreground after:bg-transparent',
             )}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => selectDetailsTab(tab)}
           >
             <Icon aria-hidden="true" className="size-4" />
             {label}
@@ -825,9 +923,11 @@ export function MeetingDetailsPage() {
 
               {detail.permissions.canCancelPendingReschedule ? (
                 <div className="mt-4 flex flex-wrap justify-end gap-2 border-t pt-4">
-                  <Button variant="outline" onClick={() => setOrganizerScheduleOpen(true)}>
-                    {t('meetings.workspace.editRescheduleRequest')}
-                  </Button>
+                  {detail.permissions.canEditPendingReschedule ? (
+                    <Button variant="outline" onClick={() => setOrganizerScheduleOpen(true)}>
+                      {t('meetings.workspace.editRescheduleRequest')}
+                    </Button>
+                  ) : null}
                   <Button variant="outline" onClick={() => setWithdrawOpen(true)}>
                     {t('meetings.workspace.withdrawReschedule')}
                   </Button>
@@ -839,12 +939,16 @@ export function MeetingDetailsPage() {
                   <Button variant="outline" onClick={() => setRejectOpen(true)}>
                     {t('meetings.reject')}
                   </Button>
-                  <Button variant="outline" onClick={() => setCoordinatorAdjustOpen(true)}>
-                    {t('meetings.coordinatorSchedule.adjustAndApprove')}
-                  </Button>
-                  <Button onClick={() => setApproveOpen(true)}>
-                    {t('meetings.approveAsRequested')}
-                  </Button>
+                  {!meetingHasStarted ? (
+                    <>
+                      <Button variant="outline" onClick={() => setCoordinatorAdjustOpen(true)}>
+                        {t('meetings.coordinatorSchedule.adjustAndApprove')}
+                      </Button>
+                      <Button onClick={() => setApproveOpen(true)}>
+                        {t('meetings.approveAsRequested')}
+                      </Button>
+                    </>
+                  ) : null}
                 </div>
               ) : null}
             </Card>
@@ -864,7 +968,7 @@ export function MeetingDetailsPage() {
                     </p>
                   </div>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => setActiveTab('AGENDA')}>
+                <Button size="sm" variant="outline" onClick={() => selectDetailsTab('AGENDA')}>
                   {detail.permissions.canManageAgenda
                     ? t('meetings.workspace.manageAgenda')
                     : t('meetings.workspace.viewAgenda')}
@@ -912,7 +1016,7 @@ export function MeetingDetailsPage() {
             <MeetingFilesPreview
               meetingId={meeting.id}
               canManage={detail.permissions.canManageAttachments}
-              onOpenFull={() => setActiveTab('FILES')}
+              onOpenFull={() => selectDetailsTab('FILES')}
             />
 
             <Card className="border-border/70 p-5 shadow-sm">
@@ -975,7 +1079,7 @@ export function MeetingDetailsPage() {
               <button
                 type="button"
                 className="text-primary hover:text-primary/80 mt-4 text-xs font-semibold transition-colors"
-                onClick={() => setActiveTab('ACTIVITY')}
+                onClick={() => selectDetailsTab('ACTIVITY')}
               >
                 {t('meetings.workspace.viewAllActivity')}
               </button>
@@ -987,7 +1091,12 @@ export function MeetingDetailsPage() {
       {activeTab === 'AGENDA' ? (
         <div role="tabpanel">
           {detail.permissions.canManageAgenda ? (
-            <MeetingAgendaWorkspace detail={detail} meetingDurationMinutes={durationMinutes} />
+            <MeetingAgendaWorkspace
+              detail={detail}
+              meetingDurationMinutes={durationMinutes}
+              onAddDecision={(agendaItemId) => openAgendaFollowUp('DECISION', agendaItemId)}
+              onAddActionItem={(agendaItemId) => openAgendaFollowUp('ACTION_ITEM', agendaItemId)}
+            />
           ) : (
             <MeetingAgendaDisplay
               items={detail.agendaItems}
@@ -1001,6 +1110,18 @@ export function MeetingDetailsPage() {
       {activeTab === 'FILES' ? (
         <div role="tabpanel">
           <MeetingFilesPanel meetingId={meeting.id} canManage={detail.permissions.canManageAttachments} />
+        </div>
+      ) : null}
+
+      {activeTab === 'FOLLOW_UP' ? (
+        <div role="tabpanel">
+          <MeetingFollowUpPanel
+            detail={detail}
+            section={followUpSection}
+            onSectionChange={selectFollowUpSection}
+            launchRequest={followUpLaunchRequest}
+            onLaunchRequestHandled={() => setFollowUpLaunchRequest(null)}
+          />
         </div>
       ) : null}
 
@@ -1271,3 +1392,8 @@ export function MeetingDetailsPage() {
     </div>
   )
 }
+
+
+
+
+

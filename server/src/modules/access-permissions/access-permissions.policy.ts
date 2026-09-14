@@ -1,9 +1,28 @@
 import type {
   AccessPermission,
+  AccessEntityCode,
+  AccessModuleCode,
   AccessPermissionCode,
   ProcurementAccessState,
   ProcurementEntityCode,
 } from "./access-permissions.types.js";
+
+export function hasModuleAccessPermission(
+  permissions: readonly AccessPermission[],
+  moduleCode: AccessModuleCode,
+  entityCode: AccessEntityCode,
+  permissionCode: AccessPermissionCode = "ACCESS",
+  resourceOwnerUserId: number | null = null,
+): boolean {
+  return permissions.some(
+    (permission) =>
+      permission.moduleCode === moduleCode &&
+      permission.entityCode === entityCode &&
+      permission.permissionCode === permissionCode &&
+      permission.resourceOwnerUserId === resourceOwnerUserId,
+  );
+}
+
 
 export function hasAccessPermission(
   permissions: readonly AccessPermission[],
@@ -11,13 +30,17 @@ export function hasAccessPermission(
   permissionCode: AccessPermissionCode,
   resourceOwnerUserId: number | null = null,
 ): boolean {
-  return permissions.some(
-    (permission) =>
-      permission.moduleCode === "PROCUREMENT" &&
-      permission.entityCode === entityCode &&
-      permission.permissionCode === permissionCode &&
-      permission.resourceOwnerUserId === resourceOwnerUserId,
+  return hasModuleAccessPermission(
+    permissions,
+    "PROCUREMENT",
+    entityCode,
+    permissionCode,
+    resourceOwnerUserId,
   );
+}
+
+export function hasKpiWorkCyclesAccess(permissions: readonly AccessPermission[]): boolean {
+  return hasModuleAccessPermission(permissions, "KPI_MANAGEMENT", "KPI_WORK_CYCLES");
 }
 
 export function hasAnyProcurementAccess(permissions: readonly AccessPermission[]): boolean {
@@ -61,3 +84,4 @@ export function canManageContractOwnerAttachments(
     hasAccessPermission(permissions, "CONTRACTS", "MANAGE_ATTACHMENTS", ownerUserId)
   );
 }
+

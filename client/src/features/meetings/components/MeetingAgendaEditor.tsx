@@ -1,5 +1,7 @@
 import {
+  CheckCircle2,
   ChevronDown,
+  ClipboardCheck,
   Clock3,
   ListChecks,
   Pencil,
@@ -34,6 +36,7 @@ const DURATION_OPTIONS = [5, 10, 15, 20, 30, 45, 60, 90] as const
 
 export interface MeetingAgendaDraftItem {
   clientId: string
+  id?: number | null
   topic: string
   presenterUserId: number | null
   plannedDurationMinutes: number | null
@@ -50,6 +53,9 @@ interface MeetingAgendaEditorProps {
   focusRequestId?: number
   onChange: (items: MeetingAgendaDraftItem[]) => void
   onErrorClear?: (clientId: string) => void
+  followUpActionsEnabled?: boolean
+  onAddDecision?: (agendaItemId: number) => void
+  onAddActionItem?: (agendaItemId: number) => void
 }
 
 function createClientId(): string {
@@ -104,6 +110,9 @@ export function MeetingAgendaEditor({
   focusRequestId = 0,
   onChange,
   onErrorClear,
+  followUpActionsEnabled = false,
+  onAddDecision,
+  onAddActionItem,
 }: MeetingAgendaEditorProps) {
   const { t } = useTranslation()
   const reduceMotion = useReducedMotion()
@@ -166,6 +175,7 @@ export function MeetingAgendaEditor({
       ...items,
       {
         clientId,
+        id: null,
         topic: '',
         presenterUserId: null,
         plannedDurationMinutes: null,
@@ -284,6 +294,9 @@ export function MeetingAgendaEditor({
                           updateItem(item.clientId, { topic })
                           if (topic.trim()) onErrorClear?.(item.clientId)
                         }}
+                        followUpActionsEnabled={followUpActionsEnabled}
+                        onAddDecision={onAddDecision}
+                        onAddActionItem={onAddActionItem}
                       />
                     ))}
                   </div>
@@ -358,6 +371,9 @@ function SortableAgendaItem({
   onDelete,
   onChange,
   onTopicChange,
+  followUpActionsEnabled,
+  onAddDecision,
+  onAddActionItem,
 }: {
   item: MeetingAgendaDraftItem
   index: number
@@ -373,6 +389,9 @@ function SortableAgendaItem({
   onDelete: () => void
   onChange: (patch: Partial<MeetingAgendaDraftItem>) => void
   onTopicChange: (topic: string) => void
+  followUpActionsEnabled: boolean
+  onAddDecision?: (agendaItemId: number) => void
+  onAddActionItem?: (agendaItemId: number) => void
 }) {
   const { t } = useTranslation()
   const sortable = useTaskHubSortable({ id: item.clientId, index, disabled })
@@ -420,6 +439,39 @@ function SortableAgendaItem({
                 </span>
               ) : null}
             </div>
+            {item.id && (onAddDecision || onAddActionItem) ? (
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                {onAddDecision ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={disabled || !followUpActionsEnabled}
+                    onClick={() => onAddDecision(item.id!)}
+                  >
+                    <CheckCircle2 aria-hidden="true" className="size-3.5" />
+                    {t('meetings.followUp.agendaActions.addDecision')}
+                  </Button>
+                ) : null}
+                {onAddActionItem ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={disabled || !followUpActionsEnabled}
+                    onClick={() => onAddActionItem(item.id!)}
+                  >
+                    <ClipboardCheck aria-hidden="true" className="size-3.5" />
+                    {t('meetings.followUp.agendaActions.addActionItem')}
+                  </Button>
+                ) : null}
+                {!followUpActionsEnabled ? (
+                  <span className="text-muted-foreground self-center text-[11px]">
+                    {t('meetings.followUp.agendaActions.availableAtStart')}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <Button
@@ -543,3 +595,4 @@ function SortableAgendaItem({
     </div>
   )
 }
+

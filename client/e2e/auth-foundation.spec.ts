@@ -17,6 +17,7 @@ const authenticatedUserResponse = {
       timezone: 'Asia/Riyadh',
       meetingStartReminderEnabled: true,
       timeFormat: '12H',
+      meetingScheduleSlotInterval: 30,
     },
   },
 }

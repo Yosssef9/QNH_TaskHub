@@ -3,7 +3,7 @@ import { createBrowserRouter } from 'react-router'
 import App from '@/App'
 import { RequireAuth } from '@/features/auth/components/RequireAuth'
 import { RequireMeetingAccess } from '@/features/meetings/components/RequireMeetingAccess'
-import { RequireAccessPermission } from '@/features/auth/components/RequireAccessPermission'
+import { RequireAccessPermission, RequireKpiWorkCyclesAccess } from '@/features/auth/components/RequireAccessPermission'
 import { AdminAccessRoute } from '@/pages/admin/AdminAccessRoute'
 import { AdminHolidaysRoute } from '@/pages/admin/AdminHolidaysRoute'
 import { AdminMeetingRoomsRoute } from '@/pages/admin/AdminMeetingRoomsRoute'
@@ -14,9 +14,9 @@ import { HomePage } from '@/pages/home/HomePage'
 import { ItemDetailsPage } from '@/pages/items/ItemDetailsPage'
 import { ItemsPage } from '@/pages/items/ItemsPage'
 import { KpisPage } from '@/pages/kpis/KpisPage'
-import { loadKpiTasksPage } from '@/pages/kpi-tasks/kpi-tasks.loader'
 import { KpiTasksPage } from '@/pages/kpi-tasks/KpiTasksPage'
 import { ListPage } from '@/pages/lists/ListPage'
+import { AssignedToMePage } from '@/pages/tasks/AssignedToMePage'
 import { MeetingCoordinationPage } from '@/pages/meetings/MeetingCoordinationPage'
 import { MeetingDetailsPage } from '@/pages/meetings/MeetingDetailsPage'
 import { MeetingRequestsPage } from '@/pages/meetings/MeetingRequestsPage'
@@ -93,6 +93,8 @@ export const router = createBrowserRouter(
           element: <MeetingDetailsPage />,
         },
 
+        { path: 'assigned-to-me', element: <AssignedToMePage /> },
+
         {
           path: 'lists/:listId',
           element: <ListPage />,
@@ -100,33 +102,56 @@ export const router = createBrowserRouter(
 
         {
           path: 'work-cycles',
-          element: <WorkCyclesPage />,
+          element: (
+            <RequireKpiWorkCyclesAccess>
+              <WorkCyclesPage />
+            </RequireKpiWorkCyclesAccess>
+          ),
         },
 
         {
           path: 'work-cycles/:cycleId',
-          element: <WorkCyclePage />,
+          element: (
+            <RequireKpiWorkCyclesAccess>
+              <WorkCyclePage />
+            </RequireKpiWorkCyclesAccess>
+          ),
         },
 
         {
           path: 'work-cycles/:cycleId/kpis/:instanceId',
-          element: <KpiInstancePage />,
+          element: (
+            <RequireKpiWorkCyclesAccess>
+              <KpiInstancePage />
+            </RequireKpiWorkCyclesAccess>
+          ),
         },
 
         {
           path: 'kpis',
-          element: <KpisPage />,
+          element: (
+            <RequireKpiWorkCyclesAccess>
+              <KpisPage />
+            </RequireKpiWorkCyclesAccess>
+          ),
         },
 
         {
           path: 'kpis/:kpiId',
-          element: <KpisPage />,
+          element: (
+            <RequireKpiWorkCyclesAccess>
+              <KpisPage />
+            </RequireKpiWorkCyclesAccess>
+          ),
         },
 
         {
           path: 'kpi-tasks',
-          loader: loadKpiTasksPage,
-          element: <KpiTasksPage />,
+          element: (
+            <RequireKpiWorkCyclesAccess>
+              <KpiTasksPage />
+            </RequireKpiWorkCyclesAccess>
+          ),
         },
 
         {
@@ -246,3 +271,5 @@ export const router = createBrowserRouter(
     basename: routerBasename,
   },
 )
+
+

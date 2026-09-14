@@ -53,6 +53,7 @@ export function createAuthService(repository: AuthRepository): AuthService {
         access.calendarShowAdjacentDates === null ||
         access.meetingStartReminderEnabled === null ||
         access.timeFormat === null ||
+        access.meetingScheduleSlotInterval === null ||
         access.timezone === null ||
         !access.hasDefaultList
       ) {

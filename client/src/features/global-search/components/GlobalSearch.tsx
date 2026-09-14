@@ -18,6 +18,8 @@ import { useNavigate } from 'react-router'
 
 import { Command, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
+import { hasKpiWorkCyclesAccess } from '@/features/auth/access-permissions'
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { cn } from '@/lib/cn'
 
 import { useGlobalSearch } from '../hooks/use-global-search'
@@ -57,6 +59,8 @@ export function GlobalSearch({ className }: GlobalSearchProps) {
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const searchQuery = useGlobalSearch(debouncedQuery)
+  const currentUser = useCurrentUser()
+  const kpiWorkCyclesAccess = hasKpiWorkCyclesAccess(currentUser.data?.access)
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -143,7 +147,7 @@ export function GlobalSearch({ className }: GlobalSearchProps) {
 
             <CommandList className="max-h-[min(62vh,34rem)] p-2">
               {query.trim().length < 2 ? (
-                <QuickDestinations onOpen={openHref} />
+                <QuickDestinations kpiWorkCyclesAccess={kpiWorkCyclesAccess} onOpen={openHref} />
               ) : debouncedQuery !== query.trim() ? (
                 <SearchLoading />
               ) : searchQuery.isError ? (
@@ -204,13 +208,23 @@ function SearchLoading() {
   )
 }
 
-function QuickDestinations({ onOpen }: { onOpen: (href: string) => void }) {
+function QuickDestinations({
+  kpiWorkCyclesAccess,
+  onOpen,
+}: {
+  kpiWorkCyclesAccess: boolean
+  onOpen: (href: string) => void
+}) {
   const { t } = useTranslation()
   const destinations = [
     { href: '/', icon: House, label: t('navigation.home') },
-    { href: '/work-cycles', icon: Briefcase, label: t('workCycles.title') },
-    { href: '/kpi-tasks', icon: ListChecks, label: t('navigation.kpiTasks') },
-    { href: '/kpis', icon: Target, label: t('kpis.title') },
+    ...(kpiWorkCyclesAccess
+      ? [
+          { href: '/work-cycles', icon: Briefcase, label: t('workCycles.title') },
+          { href: '/kpi-tasks', icon: ListChecks, label: t('navigation.kpiTasks') },
+          { href: '/kpis', icon: Target, label: t('kpis.title') },
+        ]
+      : []),
     { href: '/settings', icon: Settings, label: t('navigation.settings') },
   ]
 
@@ -294,3 +308,4 @@ function SearchResultItem({
     </CommandItem>
   )
 }
+

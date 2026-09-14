@@ -18,8 +18,8 @@ import type { WorkCycle } from '../types/work-cycle.types'
 
 export const workCyclesQueryKey = ['work-cycles'] as const
 
-export function useWorkCycles() {
-  return useQuery({ queryKey: workCyclesQueryKey, queryFn: getWorkCycles })
+export function useWorkCycles(enabled = true) {
+  return useQuery({ queryKey: workCyclesQueryKey, queryFn: getWorkCycles, enabled })
 }
 
 export function useWorkCycle(cycleId: number | null) {
@@ -93,3 +93,4 @@ export function useReorderCycleInstances() {
     },
   })
 }
+

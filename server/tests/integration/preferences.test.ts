@@ -26,6 +26,7 @@ describe("PATCH /api/users/me/preferences", () => {
         calendarShowAdjacentDates: false,
         meetingStartReminderEnabled: true,
         timeFormat: "12H",
+        meetingScheduleSlotInterval: 30,
         timezone: "Asia/Riyadh",
       },
     });
@@ -39,6 +40,7 @@ describe("PATCH /api/users/me/preferences", () => {
       calendarShowAdjacentDates: true,
       meetingStartReminderEnabled: true,
       timeFormat: "12H",
+      meetingScheduleSlotInterval: 15,
       timezone: "Asia/Riyadh",
     });
 
@@ -52,6 +54,7 @@ describe("PATCH /api/users/me/preferences", () => {
         calendarShowAdjacentDates: true,
         meetingStartReminderEnabled: true,
         timeFormat: "12H",
+        meetingScheduleSlotInterval: 15,
       });
 
     expect(response.status).toBe(200);
@@ -62,6 +65,7 @@ describe("PATCH /api/users/me/preferences", () => {
       calendarShowAdjacentDates: true,
       meetingStartReminderEnabled: true,
       timeFormat: "12H",
+      meetingScheduleSlotInterval: 15,
     });
   });
 
