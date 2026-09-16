@@ -764,7 +764,12 @@ export function MeetingEditorDialog({
             )}
           >
             {focusMode !== 'SCHEDULE' ? (
-              <section className="space-y-6 border-b p-5 sm:p-6 xl:border-e xl:border-b-0 xl:p-7">
+              <section
+                className="space-y-6 border-b p-5 sm:p-6 xl:border-e xl:border-b-0 xl:p-7"
+                onClick={() => {
+                  if (!isSaving && focusMode !== 'DETAILS') setFocusMode('DETAILS')
+                }}
+              >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
                   <span className="bg-muted text-muted-foreground grid size-10 shrink-0 place-items-center rounded-xl">
@@ -782,7 +787,10 @@ export function MeetingEditorDialog({
                   size="sm"
                   aria-pressed={focusMode === 'DETAILS'}
                   disabled={isSaving}
-                  onClick={() => setFocusMode((current) => (current === 'DETAILS' ? 'NONE' : 'DETAILS'))}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setFocusMode((current) => (current === 'DETAILS' ? 'NONE' : 'DETAILS'))
+                  }}
                 >
                   {focusMode === 'DETAILS' ? (
                     <Minimize2 aria-hidden="true" className="size-4" />
@@ -1019,7 +1027,12 @@ export function MeetingEditorDialog({
               </div>
             </section>
             ) : (
-              <aside className="bg-background flex min-h-44 flex-col justify-between gap-5 border-b p-4 xl:min-h-full xl:border-e xl:border-b-0">
+              <aside
+                className="bg-background flex min-h-44 flex-col justify-between gap-5 border-b p-4 xl:min-h-full xl:border-e xl:border-b-0"
+                onClick={() => {
+                  if (!isSaving) setFocusMode('DETAILS')
+                }}
+              >
                 <div>
                   <span className="bg-muted text-muted-foreground grid size-9 place-items-center rounded-lg">
                     <UsersRound aria-hidden="true" className="size-4" />
@@ -1074,6 +1087,9 @@ export function MeetingEditorDialog({
                 onFocusToggle={() =>
                   setFocusMode((current) => (current === 'SCHEDULE' ? 'NONE' : 'SCHEDULE'))
                 }
+                onFocusRequest={() => {
+                  if (!isSaving && focusMode !== 'SCHEDULE') setFocusMode('SCHEDULE')
+                }}
                 onDateChange={(nextDate) => {
                   setDate(nextDate)
                   if (nextDate) clearValidationError('date')
@@ -1102,7 +1118,12 @@ export function MeetingEditorDialog({
                 }}
               />
             ) : (
-              <aside className="bg-muted/20 flex min-h-44 flex-col justify-between gap-5 border-b p-4 xl:min-h-full xl:border-b-0">
+              <aside
+                className="bg-muted/20 flex min-h-44 flex-col justify-between gap-5 border-b p-4 xl:min-h-full xl:border-b-0"
+                onClick={() => {
+                  if (!isSaving) setFocusMode('SCHEDULE')
+                }}
+              >
                 <div>
                   <span className="bg-primary/10 text-primary grid size-9 place-items-center rounded-lg">
                     <CalendarDays aria-hidden="true" className="size-4" />
@@ -1236,6 +1257,7 @@ export function MeetingEditorDialog({
     </Dialog>
   )
 }
+
 
 
 

@@ -74,6 +74,12 @@ export interface MeetingScheduleSelectionState {
   hasScheduleLoadError: boolean
 }
 
+export interface MeetingScheduleSupplementalBusyRange {
+  startTime: string
+  endTime: string
+  label?: string
+}
+
 interface MeetingSchedulePickerProps {
   date: string
   roomId: number | null
@@ -84,6 +90,9 @@ interface MeetingSchedulePickerProps {
   timeSelected?: boolean
   disabled?: boolean
   allowBusySelection?: boolean
+  showDurationPicker?: boolean
+  directTimeRangeSelection?: boolean
+  supplementalBusyRanges?: readonly MeetingScheduleSupplementalBusyRange[]
   excludeMeetingId?: number | null
   heading?: string
   description?: string
@@ -92,6 +101,7 @@ interface MeetingSchedulePickerProps {
   focusField?: MeetingScheduleFocusField
   focusRequestId?: number
   onFocusToggle?: () => void
+  onFocusRequest?: () => void
   onValidationClear?: (field: keyof MeetingScheduleValidationErrors) => void
   onSelectionStateChange?: (state: MeetingScheduleSelectionState) => void
   onDateChange: (date: string) => void
@@ -490,6 +500,9 @@ export function MeetingSchedulePicker({
   timeSelected = true,
   disabled = false,
   allowBusySelection = false,
+  showDurationPicker = true,
+  directTimeRangeSelection = false,
+  supplementalBusyRanges = [],
   excludeMeetingId = null,
   heading,
   description,
@@ -498,6 +511,7 @@ export function MeetingSchedulePicker({
   focusField = null,
   focusRequestId = 0,
   onFocusToggle,
+  onFocusRequest,
   onValidationClear,
   onSelectionStateChange,
   onDateChange,
@@ -628,6 +642,18 @@ export function MeetingSchedulePicker({
     [displayDate, excludeMeetingId, scheduleQuery.data],
   )
 
+  const supplementalRanges = useMemo(
+    () =>
+      supplementalBusyRanges
+        .map((item) => ({
+          ...item,
+          start: timeToMinutes(item.startTime),
+          end: timeToMinutes(item.endTime),
+        }))
+        .filter((item) => item.end > item.start),
+    [supplementalBusyRanges],
+  )
+
   const selectedRoom = rooms.find((room) => room.id === roomId) ?? null
   const orderedRooms = useMemo(
     () =>
@@ -694,6 +720,12 @@ export function MeetingSchedulePicker({
     )
   }
 
+  function hasSupplementalBusyRange(rangeStart: number, rangeEnd: number): boolean {
+    return supplementalRanges.some((range) =>
+      overlaps(rangeStart, rangeEnd, range.start, range.end),
+    )
+  }
+
   async function changeSlotViewMinutes(nextValue: MeetingScheduleSlotInterval) {
     if (nextValue === slotViewMinutes) return
     const previous = slotViewMinutes
@@ -709,9 +741,10 @@ export function MeetingSchedulePicker({
 
   const selectedHasKnownConflict =
     timeSelected &&
-    scheduleRanges.some(({ range }) =>
+    (scheduleRanges.some(({ range }) =>
       overlaps(selectedStartMinutes, selectedEndMinutes, range.start, range.end),
-    )
+    ) ||
+      hasSupplementalBusyRange(selectedStartMinutes, selectedEndMinutes))
   const selectedStartIsPast =
     timeSelected && Boolean(date) && hasStartTimePassed(date, selectedStartMinutes, nowUtcMs)
   const selectedUsesValidIncrement =
@@ -755,7 +788,10 @@ export function MeetingSchedulePicker({
   )
 
   return (
-    <section className="bg-muted/20 flex min-h-full flex-col gap-6 p-5 sm:p-6 xl:p-7">
+    <section
+      className="bg-muted/20 flex min-h-full flex-col gap-6 p-5 sm:p-6 xl:p-7"
+      onClick={onFocusRequest}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <span className="bg-primary/10 text-primary grid size-10 shrink-0 place-items-center rounded-xl">
@@ -774,7 +810,10 @@ export function MeetingSchedulePicker({
             size="sm"
             aria-pressed={focused}
             disabled={disabled}
-            onClick={onFocusToggle}
+            onClick={(event) => {
+              if (onFocusRequest) event.stopPropagation()
+              onFocusToggle()
+            }}
           >
             {focused ? (
               <Minimize2 aria-hidden="true" className="size-4" />
@@ -1002,23 +1041,25 @@ export function MeetingSchedulePicker({
         ) : null}
       </div>
 
-      <MeetingDurationPicker
-        valueMinutes={selectedDuration}
-        maxMinutes={Math.max(MIN_MEETING_DURATION_MINUTES, DAY_MINUTES - selectedStartMinutes)}
-        stepMinutes={SELECTION_STEP_MINUTES}
-        disabled={disabled || (!timeSelected && !onDurationChange)}
-        error={validationErrors.duration}
-        focusRequestId={focusField === 'duration' ? focusRequestId : 0}
-        onChange={(minutes) => {
-          onValidationClear?.('duration')
-          onValidationClear?.('time')
-          if (!timeSelected && onDurationChange) {
-            onDurationChange(minutes)
-            return
-          }
-          onTimeChange(startTime, minutesToTime(selectedStartMinutes + minutes))
-        }}
-      />
+      {showDurationPicker ? (
+        <MeetingDurationPicker
+          valueMinutes={selectedDuration}
+          maxMinutes={Math.max(MIN_MEETING_DURATION_MINUTES, DAY_MINUTES - selectedStartMinutes)}
+          stepMinutes={SELECTION_STEP_MINUTES}
+          disabled={disabled || (!timeSelected && !onDurationChange)}
+          error={validationErrors.duration}
+          focusRequestId={focusField === 'duration' ? focusRequestId : 0}
+          onChange={(minutes) => {
+            onValidationClear?.('duration')
+            onValidationClear?.('time')
+            if (!timeSelected && onDurationChange) {
+              onDurationChange(minutes)
+              return
+            }
+            onTimeChange(startTime, minutesToTime(selectedStartMinutes + minutes))
+          }}
+        />
+      ) : null}
 
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1054,6 +1095,27 @@ export function MeetingSchedulePicker({
                       width={width}
                       durationMinutes={range.end - range.start}
                       locale={locale}
+                    />
+                  )
+                })
+              : null}
+            {roomId
+              ? supplementalRanges.map((range, index) => {
+                  const left = rtl
+                    ? ((DAY_MINUTES - range.end) / DAY_MINUTES) * 100
+                    : (range.start / DAY_MINUTES) * 100
+                  const width = Math.max(0.9, ((range.end - range.start) / DAY_MINUTES) * 100)
+                  return (
+                    <span
+                      key={`${range.startTime}-${range.endTime}-${index}`}
+                      title={range.label}
+                      className="border-warning/70 bg-warning/20 absolute inset-y-1 z-10 rounded-md border"
+                      style={{
+                        left: `${left}%`,
+                        width: `${width}%`,
+                        backgroundImage:
+                          'repeating-linear-gradient(135deg, color-mix(in oklab, var(--warning) 22%, transparent) 0 4px, transparent 4px 8px)',
+                      }}
                     />
                   )
                 })
@@ -1220,7 +1282,9 @@ export function MeetingSchedulePicker({
             const isPast = date ? hasStartTimePassed(date, option.start, nowUtcMs) : false
             const busyEntry =
               roomId && canFitDuration ? busyEntryForRange(option.start, option.end) : null
-            const isBusy = busyEntry !== null
+            const supplementalBusy =
+              Boolean(roomId) && canFitDuration && hasSupplementalBusyRange(option.start, option.end)
+            const isBusy = busyEntry !== null || supplementalBusy
             const selected = Boolean(
               timeSelected && roomId && option.start === selectedStartMinutes && option.end === selectedEndMinutes,
             )
@@ -1310,76 +1374,135 @@ export function MeetingSchedulePicker({
           })}
         </div>
 
-        <div className="bg-background flex flex-wrap items-end justify-between gap-3 rounded-xl border p-3">
+        <div className="bg-background rounded-xl border p-3">
           <div className="min-w-0">
-            <p className="text-sm font-semibold">{t('meetings.create.customStartTime')}</p>
+            <p className="text-sm font-semibold">
+              {directTimeRangeSelection
+                ? t('meetings.series.redesign.timeRangeTitle')
+                : t('meetings.create.customStartTime')}
+            </p>
             <p className="text-muted-foreground mt-0.5 text-xs">
-              {t('meetings.create.customStartTimeHint')}
+              {directTimeRangeSelection
+                ? t('meetings.series.redesign.timeRangeHint')
+                : t('meetings.create.customStartTimeHint')}
             </p>
           </div>
-          <div className="w-full sm:w-56">
-            <Select
-              value={timeSelected ? startTime : ''}
-              disabled={disabled || !date}
-              onValueChange={(value) => {
-                const nextStart = timeToMinutes(value)
-                const nextEnd = nextStart + activeDuration
-                const busy =
-                  roomId && nextEnd <= DAY_MINUTES
-                    ? busyEntryForRange(nextStart, nextEnd) !== null
-                    : false
-                const accepted = chooseTime(nextStart, nextEnd, busy)
-                if (accepted) {
-                  void changeSlotViewMinutes(preferredSlotViewForStartMinutes(nextStart))
-                }
-              }}
-            >
-              <SelectTrigger aria-label={t('meetings.create.customStartTime')}>
-                <SelectValue placeholder={t('meetings.create.customStartTime')} />
-              </SelectTrigger>
-              <SelectContent>
-                {customTimeOptions.map((optionStart) => {
-                  const optionEnd = optionStart + activeDuration
-                  const canFitDuration = optionEnd <= DAY_MINUTES
-                  const isPast = date ? hasStartTimePassed(date, optionStart, nowUtcMs) : false
-                  const isBusy =
-                    roomId && canFitDuration
-                      ? busyEntryForRange(optionStart, optionEnd) !== null
-                      : false
-                  const optionDisabled =
-                    !date ||
-                    isPast ||
-                    !canFitDuration ||
-                    Boolean(roomId && isBusy && !allowBusySelection)
-                  const stateText = isPast
-                    ? t('meetings.create.slotPassed')
-                    : !canFitDuration
-                      ? t('meetings.create.timeDoesNotFit')
-                      : isBusy
-                        ? t('meetings.create.slotBusy')
-                        : null
 
-                  return (
-                    <SelectItem
-                      key={optionStart}
-                      value={minutesToTime(optionStart)}
-                      disabled={optionDisabled}
-                    >
-                      <span className="flex w-full items-center justify-between gap-3">
-                        <span className="font-medium tabular-nums">
-                          {formatClockTime(minutesToTime(optionStart), locale, timeFormat)}
-                        </span>
-                        {stateText ? (
-                          <span className="text-muted-foreground text-[11px]">
-                            {stateText}
+          <div
+            className={cn(
+              'mt-3 grid gap-3',
+              directTimeRangeSelection ? 'sm:grid-cols-2' : 'sm:grid-cols-[minmax(0,1fr)_14rem]',
+            )}
+          >
+            <div className={cn(!directTimeRangeSelection && 'sm:col-start-2')}>
+              {directTimeRangeSelection ? (
+                <label className="mb-1.5 block text-xs font-medium">
+                  {t('meetings.fields.startTime')}
+                </label>
+              ) : null}
+              <Select
+                value={timeSelected ? startTime : ''}
+                disabled={disabled || !date}
+                onValueChange={(value) => {
+                  const nextStart = timeToMinutes(value)
+                  const nextEnd = directTimeRangeSelection
+                    ? Math.max(nextStart + SELECTION_STEP_MINUTES, timeToMinutes(endTime))
+                    : nextStart + activeDuration
+                  const boundedEnd = Math.min(DAY_MINUTES - SELECTION_STEP_MINUTES, nextEnd)
+                  const busy =
+                    roomId && boundedEnd <= DAY_MINUTES
+                      ? busyEntryForRange(nextStart, boundedEnd) !== null ||
+                        hasSupplementalBusyRange(nextStart, boundedEnd)
+                      : false
+                  const accepted = chooseTime(nextStart, boundedEnd, busy)
+                  if (accepted) {
+                    void changeSlotViewMinutes(preferredSlotViewForStartMinutes(nextStart))
+                  }
+                }}
+              >
+                <SelectTrigger aria-label={t('meetings.fields.startTime')}>
+                  <SelectValue placeholder={t('meetings.fields.startTime')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {customTimeOptions.map((optionStart) => {
+                    const optionEnd = directTimeRangeSelection
+                      ? Math.max(optionStart + SELECTION_STEP_MINUTES, timeToMinutes(endTime))
+                      : optionStart + activeDuration
+                    const canFitDuration = optionEnd <= DAY_MINUTES
+                    const isPast = date ? hasStartTimePassed(date, optionStart, nowUtcMs) : false
+                    const isBusy =
+                      roomId && canFitDuration
+                        ? busyEntryForRange(optionStart, optionEnd) !== null ||
+                          hasSupplementalBusyRange(optionStart, optionEnd)
+                        : false
+                    const optionDisabled =
+                      !date ||
+                      isPast ||
+                      !canFitDuration ||
+                      Boolean(roomId && isBusy && !allowBusySelection)
+                    const stateText = isPast
+                      ? t('meetings.create.slotPassed')
+                      : !canFitDuration
+                        ? t('meetings.create.timeDoesNotFit')
+                        : isBusy
+                          ? t('meetings.create.slotBusy')
+                          : null
+
+                    return (
+                      <SelectItem
+                        key={optionStart}
+                        value={minutesToTime(optionStart)}
+                        disabled={optionDisabled}
+                      >
+                        <span className="flex w-full items-center justify-between gap-3">
+                          <span className="font-medium tabular-nums">
+                            {formatClockTime(minutesToTime(optionStart), locale, timeFormat)}
                           </span>
-                        ) : null}
-                      </span>
-                    </SelectItem>
-                  )
-                })}
-              </SelectContent>
-            </Select>
+                          {stateText ? (
+                            <span className="text-muted-foreground text-[11px]">
+                              {stateText}
+                            </span>
+                          ) : null}
+                        </span>
+                      </SelectItem>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {directTimeRangeSelection ? (
+              <div>
+                <label className="mb-1.5 block text-xs font-medium">
+                  {t('meetings.fields.endTime')}
+                </label>
+                <Select
+                  value={timeSelected ? endTime : ''}
+                  disabled={disabled || !date}
+                  onValueChange={(value) => {
+                    const nextEnd = timeToMinutes(value)
+                    if (nextEnd <= selectedStartMinutes) return
+                    onValidationClear?.('time')
+                    onTimeChange(startTime, value)
+                  }}
+                >
+                  <SelectTrigger aria-label={t('meetings.fields.endTime')}>
+                    <SelectValue placeholder={t('meetings.fields.endTime')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {customTimeOptions
+                      .filter((optionEnd) => optionEnd > selectedStartMinutes)
+                      .map((optionEnd) => (
+                        <SelectItem key={optionEnd} value={minutesToTime(optionEnd)}>
+                          <span className="font-medium tabular-nums">
+                            {formatClockTime(minutesToTime(optionEnd), locale, timeFormat)}
+                          </span>
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -1433,5 +1556,6 @@ export function MeetingSchedulePicker({
     </section>
   )
 }
+
 
 

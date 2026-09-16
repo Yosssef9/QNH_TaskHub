@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { MeetingEditorDialog } from '@/features/meetings/components/MeetingEditorDialog'
+import { MeetingScheduleChoiceDialog } from '@/features/meetings/series/MeetingScheduleChoiceDialog'
 import { MyMeetingsDashboard } from '@/features/meetings/components/MyMeetingsDashboard'
 import { useMyMeetings } from '@/features/meetings/hooks/use-meetings'
 
@@ -19,6 +20,7 @@ export function MeetingsPage() {
   const currentUser = useCurrentUser()
   const myMeetings = useMyMeetings()
   const [createOpen, setCreateOpen] = useState(false)
+  const [scheduleChoiceOpen, setScheduleChoiceOpen] = useState(false)
 
   const canCoordinate = currentUser.data?.access.meetingCoordinateEnabled === true
   const canOrganize = currentUser.data?.access.meetingOrganizeEnabled === true || canCoordinate
@@ -32,7 +34,7 @@ export function MeetingsPage() {
         description={t('meetings.myMeetingsDescription')}
         actions={
           canOrganize ? (
-            <Button onClick={() => setCreateOpen(true)}>
+            <Button onClick={() => (canCoordinate ? setScheduleChoiceOpen(true) : setCreateOpen(true))}>
               <CalendarPlus2 aria-hidden="true" className="size-4" />
               {t('meetings.createMeeting')}
             </Button>
@@ -71,6 +73,14 @@ export function MeetingsPage() {
           open
           mode={canCoordinate ? 'DIRECT' : 'REQUEST'}
           onOpenChange={(open) => setCreateOpen(open)}
+        />
+      ) : null}
+
+      {canCoordinate ? (
+        <MeetingScheduleChoiceDialog
+          open={scheduleChoiceOpen}
+          onOpenChange={setScheduleChoiceOpen}
+          onSingleMeeting={() => setCreateOpen(true)}
         />
       ) : null}
     </div>

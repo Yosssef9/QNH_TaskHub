@@ -906,6 +906,9 @@ export const meetingWorkspaceRepository = {
       mimeType: string;
       fileExtension: string;
       sizeBytes: number;
+      seriesAttachmentRequestId?: string | null;
+      seriesAttachmentScope?: "COMMON" | "OCCURRENCE" | null;
+      seriesOccurrenceKey?: string | null;
     },
   ): Promise<MeetingAttachmentRecord | null> {
     const result = await transaction
@@ -917,6 +920,9 @@ export const meetingWorkspaceRepository = {
       .input("mimeType", sql.VarChar(255), input.mimeType)
       .input("fileExtension", sql.VarChar(20), input.fileExtension)
       .input("sizeBytes", sql.BigInt, input.sizeBytes)
+      .input("seriesAttachmentRequestId", sql.UniqueIdentifier, input.seriesAttachmentRequestId ?? null)
+      .input("seriesAttachmentScope", sql.VarChar(20), input.seriesAttachmentScope ?? null)
+      .input("seriesOccurrenceKey", sql.NVarChar(120), input.seriesOccurrenceKey ?? null)
       .query<MeetingAttachmentRecord>(`
         INSERT INTO dbo.TM_meeting_attachments (
           meeting_id,
@@ -925,7 +931,10 @@ export const meetingWorkspaceRepository = {
           mime_type,
           file_extension,
           size_bytes,
-          uploaded_by_user_id
+          uploaded_by_user_id,
+          series_attachment_request_id,
+          series_attachment_scope,
+          series_occurrence_key
         )
         OUTPUT
           inserted.id,
@@ -946,7 +955,10 @@ export const meetingWorkspaceRepository = {
           @mimeType,
           @fileExtension,
           @sizeBytes,
-          @actorUserId
+          @actorUserId,
+          @seriesAttachmentRequestId,
+          @seriesAttachmentScope,
+          @seriesOccurrenceKey
         );
       `);
     return result.recordset[0] ?? null;
@@ -976,6 +988,21 @@ export const meetingWorkspaceRepository = {
         AND attachment.is_active = 1;
     `);
     return result.recordset[0] ?? null;
+  },
+
+  async countActiveStorageKeyReferences(
+    transaction: DatabaseTransaction,
+    storageKey: string,
+  ): Promise<number> {
+    const result = await transaction
+      .request()
+      .input("storageKey", sql.VarChar(500), storageKey)
+      .query<{ total: number | string }>(`
+        SELECT COUNT_BIG(1) AS total
+        FROM dbo.TM_meeting_attachments WITH (UPDLOCK, HOLDLOCK)
+        WHERE storage_key = @storageKey AND is_active = 1;
+      `);
+    return Number(result.recordset[0]?.total ?? 0);
   },
 
   async deactivateAttachment(
@@ -1171,4 +1198,5 @@ export const meetingWorkspaceRepository = {
 export function mapMeetingAttachmentRecord(record: MeetingAttachmentRecord): MeetingAttachment {
   return mapAttachment(record);
 }
+
 

@@ -3,6 +3,7 @@ import {
   CalendarClock,
   CalendarDays,
   CalendarPlus2,
+  CalendarRange,
   CheckCircle2,
   CirclePlus,
   ClipboardCheck,
@@ -34,6 +35,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { CoordinatorDirectRescheduleDialog } from '@/features/meetings/components/CoordinatorDirectRescheduleDialog'
 import { CoordinatorMeetingScheduleDialog } from '@/features/meetings/components/CoordinatorMeetingScheduleDialog'
 import { CoordinatorRescheduleDialog } from '@/features/meetings/components/CoordinatorRescheduleDialog'
@@ -69,6 +71,7 @@ import { cn } from '@/lib/cn'
 import { APP_TIME_ZONE, formatDateTime, formatTime, formatTimeRange } from '@/lib/date-time'
 import { useTimeFormatPreference } from '@/features/preferences/hooks/use-time-format'
 import { getMeetingRoomAccent } from '@/features/meetings/meeting-room-colors'
+import { useMeetingSeriesLink } from '@/features/meetings/series/use-meeting-series'
 
 function revisionVariant(status: MeetingRevisionDetail['revisionStatus']) {
   if (status === 'APPROVED') return 'success' as const
@@ -320,7 +323,11 @@ export function MeetingDetailsPage() {
   const params = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const meetingId = Number(params.meetingId)
-  const query = useMeetingDetail(Number.isInteger(meetingId) && meetingId > 0 ? meetingId : null)
+  const validMeetingId = Number.isInteger(meetingId) && meetingId > 0 ? meetingId : null
+  const currentUser = useCurrentUser()
+  const canCoordinateSeries = currentUser.data?.access.meetingCoordinateEnabled === true
+  const seriesLink = useMeetingSeriesLink(validMeetingId, canCoordinateSeries)
+  const query = useMeetingDetail(validMeetingId)
   const cancelMutation = useCancelMeeting()
   const approveInitial = useApproveMeetingRequest()
   const rejectInitial = useRejectMeetingRequest()
@@ -593,6 +600,20 @@ export function MeetingDetailsPage() {
           <p className="text-muted-foreground mt-2 max-w-3xl text-sm leading-6">
             {meeting.description ?? t('meetings.workspace.noDescription')}
           </p>
+
+          {seriesLink.data ? (
+            <button
+              type="button"
+              className="bg-primary/8 text-primary hover:bg-primary/14 mt-3 inline-flex items-center gap-2 rounded-full border border-primary/15 px-3 py-1.5 text-xs font-semibold transition-colors"
+              onClick={() => navigate(`/meetings/series/${seriesLink.data.seriesId}?meeting=${meeting.id}`)}
+            >
+              <CalendarRange aria-hidden="true" className="size-3.5" />
+              {t('meetings.seriesManagement.seriesPosition', {
+                current: seriesLink.data.sequenceNumber,
+                total: seriesLink.data.meetingCount,
+              })}
+            </button>
+          ) : null}
 
           <div className="text-muted-foreground mt-5 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
             <span className="inline-flex items-center gap-2 font-semibold text-foreground">
@@ -1392,6 +1413,7 @@ export function MeetingDetailsPage() {
     </div>
   )
 }
+
 
 
 

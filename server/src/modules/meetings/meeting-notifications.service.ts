@@ -230,6 +230,65 @@ export const meetingNotificationsService = {
     });
   },
 
+  safeSeriesScheduled(seriesId: number): Promise<void> {
+    return safe("series-scheduled", async () => {
+      const recipients = await meetingNotificationsRepository.listSeriesRecipients(seriesId);
+      if (recipients.length === 0) return;
+      await withTransaction(async (transaction) => {
+        for (const recipient of recipients) {
+          const first = recipient.meetings[0];
+          if (!first) continue;
+          await meetingNotificationsRepository.insert(transaction, {
+            ownerUserId: recipient.ownerUserId,
+            notificationType: "MEETING_SERIES_SCHEDULED",
+            dedupeKey: `MEETING_SERIES_SCHEDULED:${seriesId}:${recipient.ownerUserId}`,
+            subjectTitle: recipient.seriesTitle,
+            contextTitle: String(recipient.meetings.length),
+            meetingId: recipient.ownerUserId === recipient.organizerUserId ? null : first.meetingId,
+            meetingSeriesId: seriesId,
+            meetingRevisionId: null,
+            eventDate: dateOnly(first.startAtUtc),
+          });
+        }
+      });
+    });
+  },
+
+  async buildSeriesEmailPayload(
+    ownerUserId: number,
+    seriesId: number,
+  ): Promise<Record<string, unknown> | null> {
+    const recipient = (await meetingNotificationsRepository.listSeriesRecipients(seriesId, ownerUserId))[0];
+    if (!recipient || recipient.meetings.length === 0) return null;
+    return {
+      seriesId,
+      seriesTitle: recipient.seriesTitle,
+      organizerName: recipient.organizerUserName,
+      recipientName: recipient.ownerUserName,
+      timeFormat: recipient.timeFormat,
+      meetingCount: recipient.meetings.length,
+      meetings: recipient.meetings.map((meeting) => ({
+        meetingId: meeting.meetingId,
+        sequenceNumber: meeting.sequenceNumber,
+        title: meeting.title,
+        startAtUtc: meeting.startAtUtc.toISOString(),
+        endAtUtc: meeting.endAtUtc.toISOString(),
+        roomNameAr: meeting.roomNameAr,
+        roomNameEn: meeting.roomNameEn,
+      })),
+      opensSeries: recipient.ownerUserId === recipient.organizerUserId,
+      href: recipient.ownerUserId === recipient.organizerUserId
+        ? `/meetings/series/${seriesId}`
+        : `/meetings/${recipient.meetings[0]!.meetingId}`,
+    };
+  },
+
+  async validateSeriesEmailPayload(ownerUserId: number, payload: Record<string, unknown>): Promise<boolean> {
+    const seriesId = Number(payload.seriesId);
+    if (!Number.isSafeInteger(seriesId) || seriesId <= 0) return false;
+    return (await meetingNotificationsRepository.listSeriesRecipients(seriesId, ownerUserId)).length > 0;
+  },
+
   async syncStartReminder(ownerUserId: number): Promise<void> {
     await meetingNotificationsRepository.syncStartReminder(ownerUserId);
   },
@@ -250,6 +309,9 @@ export const meetingNotificationsService = {
     type: NotificationType,
     payload: Record<string, unknown>,
   ): Promise<boolean> {
+    if (type === "MEETING_SERIES_SCHEDULED") {
+      return meetingNotificationsService.validateSeriesEmailPayload(ownerUserId, payload);
+    }
     if (!lifecycleEmailTypes.has(type)) return false;
     const meetingId = Number(payload.meetingId);
     const revisionId = Number(payload.revisionId);
@@ -260,4 +322,5 @@ export const meetingNotificationsService = {
     return Boolean(state && isValidForType(state, type));
   },
 };
+
 

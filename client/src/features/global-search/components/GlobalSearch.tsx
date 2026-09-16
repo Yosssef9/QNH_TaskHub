@@ -1,14 +1,20 @@
 import {
   Briefcase,
+  Building2,
+  CalendarDays,
+  CalendarRange,
   CheckCircle2,
+  FileText,
   Gauge,
   House,
   ListChecks,
   ListTodo,
   Loader2,
+  PackageSearch,
   Search,
   Settings,
   Star,
+  Tags,
   Target,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -37,16 +43,14 @@ const resultIcons: Record<GlobalSearchResultType, LucideIcon> = {
   KPI_INSTANCE: Gauge,
   KPI_TEMPLATE: Target,
   LIST: ListTodo,
+  MEETING: CalendarDays,
+  MEETING_SERIES: CalendarRange,
+  CONTRACT: FileText,
+  SUPPLIER: Building2,
+  ITEM: PackageSearch,
+  PRICE_QUOTE: Tags,
 }
 
-const resultOrder: GlobalSearchResultType[] = [
-  'TASK',
-  'SUBTASK',
-  'WORK_CYCLE',
-  'KPI_INSTANCE',
-  'KPI_TEMPLATE',
-  'LIST',
-]
 
 interface GlobalSearchProps {
   className?: string
@@ -88,6 +92,16 @@ export function GlobalSearch({ className }: GlobalSearchProps) {
     () => results.filter((result) => !result.isCurrentContext),
     [results],
   )
+  const orderedResultTypes = useMemo(() => {
+    const seen = new Set<GlobalSearchResultType>()
+    const ordered: GlobalSearchResultType[] = []
+    for (const result of otherResults) {
+      if (seen.has(result.type)) continue
+      seen.add(result.type)
+      ordered.push(result.type)
+    }
+    return ordered
+  }, [otherResults])
 
   function changeOpen(nextOpen: boolean) {
     setOpen(nextOpen)
@@ -172,7 +186,7 @@ export function GlobalSearch({ className }: GlobalSearchProps) {
                     />
                   ) : null}
 
-                  {resultOrder.map((type) => {
+                  {orderedResultTypes.map((type) => {
                     const typedResults = otherResults.filter((result) => result.type === type)
                     return typedResults.length ? (
                       <ResultSection

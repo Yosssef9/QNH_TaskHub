@@ -49,6 +49,7 @@ function asTemplateKey(value: string): EmailTemplateKey {
     case "MEETING_RESCHEDULED":
     case "MEETING_RESCHEDULE_REQUEST_CANCELLED":
     case "MEETING_CANCELLED":
+    case "MEETING_SERIES_SCHEDULED":
       return value;
     default:
       throw new Error(`Unsupported email template key: ${value}`);
@@ -214,5 +215,6 @@ export function startEmailWorker(): EmailWorkerHandle {
     },
   };
 }
+
 
 

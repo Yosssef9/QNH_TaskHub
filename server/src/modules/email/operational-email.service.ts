@@ -66,6 +66,7 @@ function asEmailPreferenceEvent(type: NotificationType): EmailPreferenceEvent | 
     case "MEETING_RESCHEDULED":
     case "MEETING_RESCHEDULE_REQUEST_CANCELLED":
     case "MEETING_CANCELLED":
+    case "MEETING_SERIES_SCHEDULED":
       return type;
     case "CONTRACT_EXPIRATION_REMINDER":
     case "CONTRACT_NOTICE_DEADLINE_REMINDER":
@@ -302,6 +303,11 @@ async function buildPayload(
         revisionId,
       );
     }
+    case "MEETING_SERIES_SCHEDULED": {
+      const seriesId = id(candidate.meetingSeriesId);
+      if (seriesId === null) return null;
+      return meetingNotificationsService.buildSeriesEmailPayload(candidate.ownerUserId, seriesId);
+    }
     case "MEETING_START_REMINDER":
       return null;
   }
@@ -489,4 +495,5 @@ export const operationalEmailService = {
     return processed;
   },
 };
+
 

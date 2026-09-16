@@ -62,6 +62,7 @@ const meetingEvents: EmailPreferenceEvent[] = [
   'MEETING_RESCHEDULED',
   'MEETING_RESCHEDULE_REQUEST_CANCELLED',
   'MEETING_CANCELLED',
+  'MEETING_SERIES_SCHEDULED',
 ]
 
 function settingError(error: unknown, fallback: string): string {
@@ -473,4 +474,5 @@ function PreferenceGroup({
     </section>
   )
 }
+
 

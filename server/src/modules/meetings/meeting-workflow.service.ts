@@ -24,6 +24,20 @@ import type {
 } from "./meeting-workflow.types.js";
 import { meetingScheduleVisibility } from "./meetings.policy.js";
 
+type FollowUpSource = NonNullable<
+  Awaited<ReturnType<typeof meetingWorkflowRepository.findFollowUpSource>>
+>;
+
+export interface PreparedMeetingCreation {
+  input: CreateMeetingInput;
+  startAtUtc: Date;
+  endAtUtc: Date;
+  selectedAttendeeUserIds: number[];
+  attendeeUserIds: number[];
+  agendaItems: MeetingAgendaItemInput[];
+  followUpSource: FollowUpSource | null;
+}
+
 function invalidAttendee(): AppError {
   return new AppError({
     statusCode: 400,
@@ -168,13 +182,12 @@ async function assertActiveRequestedRoom(
   }
 }
 
-async function createPendingMeetingInTransaction(
+export async function prepareMeetingCreationInTransaction(
   transaction: DatabaseTransaction,
   actorUserId: number,
   input: CreateMeetingInput,
-  activityType: "REQUESTED" | "DIRECT_CREATED",
   creationMode: "REQUEST" | "DIRECT",
-): Promise<{ meetingId: number; revisionId: number; revisionRowVersion: string }> {
+): Promise<PreparedMeetingCreation> {
   const startAtUtc = new Date(input.startAtUtc);
   const endAtUtc = new Date(input.endAtUtc);
   assertSchedulableMeetingWindow(startAtUtc, endAtUtc);
@@ -197,6 +210,34 @@ async function createPendingMeetingInTransaction(
   if (followUpSource && creationMode === "REQUEST" && followUpSource.organizerUserId !== actorUserId) {
     throw followUpSourceNotFound();
   }
+
+  return {
+    input,
+    startAtUtc,
+    endAtUtc,
+    selectedAttendeeUserIds,
+    attendeeUserIds,
+    agendaItems,
+    followUpSource,
+  };
+}
+
+export async function createPreparedMeetingInTransaction(
+  transaction: DatabaseTransaction,
+  actorUserId: number,
+  prepared: PreparedMeetingCreation,
+  activityType: "REQUESTED" | "DIRECT_CREATED",
+  creationMode: "REQUEST" | "DIRECT",
+): Promise<{ meetingId: number; revisionId: number; revisionRowVersion: string }> {
+  const {
+    input,
+    startAtUtc,
+    endAtUtc,
+    selectedAttendeeUserIds,
+    attendeeUserIds,
+    agendaItems,
+    followUpSource,
+  } = prepared;
 
   const meeting = await meetingWorkflowRepository.createMeeting(transaction, actorUserId, input);
   if (!meeting) throw meetingCreateFailed();
@@ -269,6 +310,28 @@ async function createPendingMeetingInTransaction(
     revisionId: revision.revisionId,
     revisionRowVersion: revision.rowVersion,
   };
+}
+
+export async function createPendingMeetingInTransaction(
+  transaction: DatabaseTransaction,
+  actorUserId: number,
+  input: CreateMeetingInput,
+  activityType: "REQUESTED" | "DIRECT_CREATED",
+  creationMode: "REQUEST" | "DIRECT",
+): Promise<{ meetingId: number; revisionId: number; revisionRowVersion: string }> {
+  const prepared = await prepareMeetingCreationInTransaction(
+    transaction,
+    actorUserId,
+    input,
+    creationMode,
+  );
+  return createPreparedMeetingInTransaction(
+    transaction,
+    actorUserId,
+    prepared,
+    activityType,
+    creationMode,
+  );
 }
 
 async function requireSummary(meetingId: number): Promise<MeetingSummary> {
@@ -716,6 +779,7 @@ export const meetingWorkflowService = {
     });
   },
 };
+
 
 
 

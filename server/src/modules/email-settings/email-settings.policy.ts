@@ -21,5 +21,7 @@ export const EMAIL_EVENT_DEFAULTS: Readonly<Record<EmailPreferenceEvent, boolean
   MEETING_RESCHEDULED: true,
   MEETING_RESCHEDULE_REQUEST_CANCELLED: true,
   MEETING_CANCELLED: true,
+  MEETING_SERIES_SCHEDULED: true,
 };
+
 

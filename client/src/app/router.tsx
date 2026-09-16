@@ -21,6 +21,9 @@ import { MeetingCoordinationPage } from '@/pages/meetings/MeetingCoordinationPag
 import { MeetingDetailsPage } from '@/pages/meetings/MeetingDetailsPage'
 import { MeetingRequestsPage } from '@/pages/meetings/MeetingRequestsPage'
 import { MeetingSchedulePage } from '@/pages/meetings/MeetingSchedulePage'
+import { MeetingSeriesCreatePage } from '@/pages/meetings/MeetingSeriesCreatePage'
+import { MeetingSeriesDetailsPage } from '@/pages/meetings/MeetingSeriesDetailsPage'
+import { MeetingSeriesPage } from '@/pages/meetings/MeetingSeriesPage'
 import { MeetingTemplatesPage } from '@/pages/meetings/MeetingTemplatesPage'
 import { MeetingsPage } from '@/pages/meetings/MeetingsPage'
 import { PriceQuotesPage } from '@/pages/price-quotes/PriceQuotesPage'
@@ -84,6 +87,33 @@ export const router = createBrowserRouter(
           element: (
             <RequireMeetingAccess capability="ORGANIZE_OR_COORDINATE">
               <MeetingTemplatesPage />
+            </RequireMeetingAccess>
+          ),
+        },
+
+        {
+          path: 'meetings/series/new',
+          element: (
+            <RequireMeetingAccess capability="COORDINATOR">
+              <MeetingSeriesCreatePage />
+            </RequireMeetingAccess>
+          ),
+        },
+
+        {
+          path: 'meetings/series',
+          element: (
+            <RequireMeetingAccess capability="COORDINATOR">
+              <MeetingSeriesPage />
+            </RequireMeetingAccess>
+          ),
+        },
+
+        {
+          path: 'meetings/series/:seriesId',
+          element: (
+            <RequireMeetingAccess capability="COORDINATOR">
+              <MeetingSeriesDetailsPage />
             </RequireMeetingAccess>
           ),
         },
@@ -271,5 +301,6 @@ export const router = createBrowserRouter(
     basename: routerBasename,
   },
 )
+
 
 

@@ -16,6 +16,7 @@ export const NOTIFICATION_TYPES = [
   "MEETING_RESCHEDULED",
   "MEETING_RESCHEDULE_REQUEST_CANCELLED",
   "MEETING_CANCELLED",
+  "MEETING_SERIES_SCHEDULED",
   "MEETING_START_REMINDER",
   "MEETING_ACTION_ITEM_ASSIGNED",
   "MEETING_ACTION_ITEM_COMPLETED",
@@ -41,5 +42,6 @@ export interface NotificationListData {
   items: NotificationItem[];
   unreadCount: number;
 }
+
 
 

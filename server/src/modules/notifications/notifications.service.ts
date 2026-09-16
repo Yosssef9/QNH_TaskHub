@@ -34,6 +34,7 @@ export function notificationHref(record: NotificationRecord): string {
   const instanceId = optionalId(record.kpiInstanceId);
   const contractId = optionalId(record.contractId);
   const meetingId = optionalId(record.meetingId);
+  const meetingSeriesId = optionalId(record.meetingSeriesId);
 
   if (record.notificationType === "MEETING_ACTION_ITEM_ASSIGNED") {
     return taskId === null ? "/assigned-to-me" : `/assigned-to-me?taskId=${taskId}`;
@@ -57,6 +58,11 @@ export function notificationHref(record: NotificationRecord): string {
     return "/kpi-tasks";
   }
 
+
+  if (record.notificationType === "MEETING_SERIES_SCHEDULED") {
+    if (meetingId !== null) return `/meetings/${meetingId}`;
+    return meetingSeriesId === null ? "/meetings/series" : `/meetings/series/${meetingSeriesId}`;
+  }
 
   if (record.notificationType.startsWith("MEETING_")) {
     return meetingId === null ? "/meetings" : `/meetings/${meetingId}`;
@@ -199,6 +205,7 @@ export const notificationsService = {
     return notificationsRepository.markAllRead(owner, kpiWorkCyclesAccess);
   },
 };
+
 
 
 

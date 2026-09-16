@@ -18,6 +18,7 @@ export const OPERATIONAL_EMAIL_TEMPLATE_KEYS = [
   "MEETING_RESCHEDULED",
   "MEETING_RESCHEDULE_REQUEST_CANCELLED",
   "MEETING_CANCELLED",
+  "MEETING_SERIES_SCHEDULED",
 ] as const;
 
 export type OperationalEmailTemplateKey = (typeof OPERATIONAL_EMAIL_TEMPLATE_KEYS)[number];
@@ -77,4 +78,5 @@ export interface EmailOutboxRecord {
   templatePayloadJson: string;
   attemptCount: number;
 }
+
 

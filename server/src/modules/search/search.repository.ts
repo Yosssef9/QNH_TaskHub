@@ -1,5 +1,9 @@
 import { getDatabasePool, sql } from "../../database/sql.js";
-import type { SearchResultType } from "./search.types.js";
+import { PROCUREMENT_DB_OBJECTS } from "../procurement/procurement.config.js";
+import type { SearchAccessScope, SearchResultType } from "./search.types.js";
+
+const itemsTable = PROCUREMENT_DB_OBJECTS.itemsTable;
+const suppliersTable = PROCUREMENT_DB_OBJECTS.suppliersTable;
 
 export interface SearchResultRecord {
   resultType: SearchResultType;
@@ -20,7 +24,7 @@ export interface SearchRepository {
     prefixQuery: string,
     containsQuery: string,
     limit: number,
-    includeKpiWorkCycles: boolean,
+    access: SearchAccessScope,
   ): Promise<SearchResultRecord[]>;
 }
 
@@ -30,17 +34,22 @@ async function search(
   prefixQuery: string,
   containsQuery: string,
   limit: number,
-  includeKpiWorkCycles: boolean,
+  access: SearchAccessScope,
 ): Promise<SearchResultRecord[]> {
   const pool = await getDatabasePool();
   const result = await pool
     .request()
     .input("ownerUserId", sql.Int, ownerUserId)
-    .input("exactQuery", sql.NVarChar(120), exactQuery)
-    .input("prefixQuery", sql.NVarChar(244), prefixQuery)
-    .input("containsQuery", sql.NVarChar(246), containsQuery)
+    .input("exactQuery", sql.NVarChar(1000), exactQuery)
+    .input("prefixQuery", sql.NVarChar(1002), prefixQuery)
+    .input("containsQuery", sql.NVarChar(1002), containsQuery)
     .input("limit", sql.Int, limit)
-    .input("includeKpiWorkCycles", sql.Bit, includeKpiWorkCycles)
+    .input("includeKpiWorkCycles", sql.Bit, access.includeKpiWorkCycles)
+    .input("canCoordinateMeetings", sql.Bit, access.canCoordinateMeetings)
+    .input("includeContracts", sql.Bit, access.includeContracts)
+    .input("includeSuppliers", sql.Bit, access.includeSuppliers)
+    .input("includeItems", sql.Bit, access.includeItems)
+    .input("includePriceQuotes", sql.Bit, access.includePriceQuotes)
     .query<SearchResultRecord>(`
       ;WITH current_cycle AS (
         SELECT settings.current_work_cycle_id AS cycleId
@@ -250,6 +259,269 @@ async function search(
         WHERE list.owner_user_id = @ownerUserId
           AND list.archived_at_utc IS NULL
           AND list.name LIKE @containsQuery ESCAPE '\\'
+
+        UNION ALL
+
+        SELECT
+          CAST('MEETING' AS VARCHAR(20)) AS resultType,
+          meeting.id AS entityId,
+          meeting.title,
+          organizer.USER_NAME AS subtitle,
+          NULL AS listId,
+          NULL AS cycleId,
+          NULL AS instanceId,
+          NULL AS taskId,
+          CAST(0 AS BIT) AS isCurrentContext,
+          CASE
+            WHEN CONVERT(NVARCHAR(30), meeting.id) = @exactQuery THEN 0
+            WHEN meeting.title = @exactQuery THEN 0
+            WHEN meeting.title LIKE @prefixQuery ESCAPE '\\' THEN 1
+            WHEN meeting.title LIKE @containsQuery ESCAPE '\\' THEN 2
+            ELSE 3
+          END AS matchRank,
+          6 AS typeRank
+        FROM dbo.TM_meetings AS meeting
+        INNER JOIN dbo.users AS organizer
+          ON organizer.USER_ID = meeting.organizer_user_id
+        WHERE (
+            meeting.organizer_user_id = @ownerUserId
+            OR @canCoordinateMeetings = 1
+            OR (
+              meeting.status IN ('SCHEDULED', 'CANCELLED')
+              AND EXISTS (
+                SELECT 1
+                FROM dbo.TM_meeting_attendees AS attendee
+                WHERE attendee.meeting_id = meeting.id
+                  AND attendee.attendee_user_id = @ownerUserId
+              )
+            )
+          )
+          AND (
+            CONVERT(NVARCHAR(30), meeting.id) = @exactQuery
+            OR meeting.title LIKE @containsQuery ESCAPE '\\'
+            OR meeting.description LIKE @containsQuery ESCAPE '\\'
+            OR organizer.USER_NAME LIKE @containsQuery ESCAPE '\\'
+            OR organizer.USER_CODE LIKE @containsQuery ESCAPE '\\'
+          )
+
+        UNION ALL
+
+        SELECT
+          CAST('MEETING_SERIES' AS VARCHAR(20)) AS resultType,
+          meeting_series.id AS entityId,
+          COALESCE(NULLIF(series_defaults.title, N''), N'Meeting Series') AS title,
+          series_defaults.description AS subtitle,
+          NULL AS listId,
+          NULL AS cycleId,
+          NULL AS instanceId,
+          NULL AS taskId,
+          CAST(0 AS BIT) AS isCurrentContext,
+          CASE
+            WHEN CONVERT(NVARCHAR(30), meeting_series.id) = @exactQuery THEN 0
+            WHEN series_defaults.title = @exactQuery THEN 0
+            WHEN series_defaults.title LIKE @prefixQuery ESCAPE '\\' THEN 1
+            WHEN series_defaults.title LIKE @containsQuery ESCAPE '\\' THEN 2
+            ELSE 3
+          END AS matchRank,
+          7 AS typeRank
+        FROM dbo.TM_meeting_series AS meeting_series
+        OUTER APPLY OPENJSON(meeting_series.defaults_json)
+          WITH (
+            title NVARCHAR(1000) '$.title',
+            description NVARCHAR(MAX) '$.description'
+          ) AS series_defaults
+        WHERE @canCoordinateMeetings = 1
+          AND meeting_series.created_by_user_id = @ownerUserId
+          AND (
+            CONVERT(NVARCHAR(30), meeting_series.id) = @exactQuery
+            OR series_defaults.title LIKE @containsQuery ESCAPE '\\'
+            OR series_defaults.description LIKE @containsQuery ESCAPE '\\'
+          )
+
+        UNION ALL
+
+        SELECT
+          CAST('CONTRACT' AS VARCHAR(20)) AS resultType,
+          contract.id AS entityId,
+          contract.title,
+          CASE
+            WHEN NULLIF(LTRIM(RTRIM(contract.contract_number)), N'') IS NOT NULL
+              THEN CONCAT(contract.contract_number, N' · ', CONVERT(NVARCHAR(250), supplier.SUPPLIER_NAME))
+            ELSE CONVERT(NVARCHAR(250), supplier.SUPPLIER_NAME)
+          END AS subtitle,
+          NULL AS listId,
+          NULL AS cycleId,
+          NULL AS instanceId,
+          NULL AS taskId,
+          CAST(0 AS BIT) AS isCurrentContext,
+          CASE
+            WHEN CONVERT(NVARCHAR(30), contract.id) = @exactQuery THEN 0
+            WHEN contract.contract_number = @exactQuery THEN 0
+            WHEN contract.title = @exactQuery
+              OR CONVERT(NVARCHAR(100), supplier.SUPPLIER_CODE) = @exactQuery THEN 1
+            WHEN contract.contract_number LIKE @prefixQuery ESCAPE '\\' THEN 2
+            WHEN contract.title LIKE @prefixQuery ESCAPE '\\' THEN 2
+            WHEN contract.contract_number LIKE @containsQuery ESCAPE '\\'
+              OR contract.title LIKE @containsQuery ESCAPE '\\' THEN 3
+            ELSE 4
+          END AS matchRank,
+          8 AS typeRank
+        FROM dbo.TM_contracts AS contract
+        INNER JOIN ${suppliersTable} AS supplier
+          ON CONVERT(BIGINT, supplier.SUPPLIER_ID) = contract.supplier_id
+        WHERE @includeContracts = 1
+          AND (
+            contract.owner_user_id = @ownerUserId
+            OR EXISTS (
+              SELECT 1
+              FROM dbo.TM_access_permissions AS contract_permission
+              WHERE contract_permission.grantee_user_id = @ownerUserId
+                AND contract_permission.module_code = 'PROCUREMENT'
+                AND contract_permission.entity_code = 'CONTRACTS'
+                AND contract_permission.permission_code = 'VIEW'
+                AND contract_permission.resource_owner_user_id = contract.owner_user_id
+                AND contract_permission.is_active = 1
+            )
+          )
+          AND (
+            CONVERT(NVARCHAR(30), contract.id) = @exactQuery
+            OR contract.title LIKE @containsQuery ESCAPE '\\'
+            OR contract.contract_number LIKE @containsQuery ESCAPE '\\'
+            OR contract.notes LIKE @containsQuery ESCAPE '\\'
+            OR CONVERT(NVARCHAR(250), supplier.SUPPLIER_NAME) LIKE @containsQuery ESCAPE '\\'
+            OR CONVERT(NVARCHAR(100), supplier.SUPPLIER_CODE) LIKE @containsQuery ESCAPE '\\'
+          )
+
+        UNION ALL
+
+        SELECT
+          CAST('SUPPLIER' AS VARCHAR(20)) AS resultType,
+          CONVERT(BIGINT, supplier.SUPPLIER_ID) AS entityId,
+          COALESCE(NULLIF(LTRIM(RTRIM(CONVERT(NVARCHAR(500), supplier.SUPPLIER_NAME))), N''), N'—') AS title,
+          CASE
+            WHEN NULLIF(LTRIM(RTRIM(CONVERT(NVARCHAR(500), supplier.SUPPLIER_NAME_S))), N'') IS NOT NULL
+              THEN CONCAT(CONVERT(NVARCHAR(100), supplier.SUPPLIER_CODE), N' · ', CONVERT(NVARCHAR(500), supplier.SUPPLIER_NAME_S))
+            ELSE CONVERT(NVARCHAR(100), supplier.SUPPLIER_CODE)
+          END AS subtitle,
+          NULL AS listId,
+          NULL AS cycleId,
+          NULL AS instanceId,
+          NULL AS taskId,
+          CAST(0 AS BIT) AS isCurrentContext,
+          CASE
+            WHEN CONVERT(NVARCHAR(30), supplier.SUPPLIER_ID) = @exactQuery THEN 0
+            WHEN CONVERT(NVARCHAR(100), supplier.SUPPLIER_CODE) = @exactQuery THEN 0
+            WHEN CONVERT(NVARCHAR(500), supplier.SUPPLIER_NAME) = @exactQuery THEN 1
+            WHEN CONVERT(NVARCHAR(100), supplier.SUPPLIER_CODE) LIKE @prefixQuery ESCAPE '\\' THEN 2
+            WHEN CONVERT(NVARCHAR(500), supplier.SUPPLIER_NAME) LIKE @prefixQuery ESCAPE '\\' THEN 2
+            WHEN CONVERT(NVARCHAR(100), supplier.SUPPLIER_CODE) LIKE @containsQuery ESCAPE '\\'
+              OR CONVERT(NVARCHAR(500), supplier.SUPPLIER_NAME) LIKE @containsQuery ESCAPE '\\' THEN 3
+            ELSE 4
+          END AS matchRank,
+          9 AS typeRank
+        FROM ${suppliersTable} AS supplier
+        WHERE @includeSuppliers = 1
+          AND CONVERT(BIGINT, supplier.SUPPLIER_ID) <> 0
+          AND (
+            CONVERT(NVARCHAR(30), supplier.SUPPLIER_ID) = @exactQuery
+            OR CONVERT(NVARCHAR(100), supplier.SUPPLIER_CODE) LIKE @containsQuery ESCAPE '\\'
+            OR CONVERT(NVARCHAR(500), supplier.SUPPLIER_NAME) LIKE @containsQuery ESCAPE '\\'
+            OR CONVERT(NVARCHAR(500), supplier.SUPPLIER_NAME_S) LIKE @containsQuery ESCAPE '\\'
+            OR CONVERT(NVARCHAR(100), supplier.MANUAL_FILE_NO) LIKE @containsQuery ESCAPE '\\'
+          )
+
+        UNION ALL
+
+        SELECT
+          CAST('ITEM' AS VARCHAR(20)) AS resultType,
+          CONVERT(BIGINT, item.ITEM_NO) AS entityId,
+          COALESCE(NULLIF(LTRIM(RTRIM(CONVERT(NVARCHAR(500), item.ITEM_NAME))), N''), N'—') AS title,
+          CASE
+            WHEN NULLIF(LTRIM(RTRIM(CONVERT(NVARCHAR(250), item.CATEGORY_NAME))), N'') IS NOT NULL
+              THEN CONCAT(CONVERT(NVARCHAR(100), item.ITEM_CODE), N' · ', CONVERT(NVARCHAR(250), item.CATEGORY_NAME))
+            ELSE CONVERT(NVARCHAR(100), item.ITEM_CODE)
+          END AS subtitle,
+          NULL AS listId,
+          NULL AS cycleId,
+          NULL AS instanceId,
+          NULL AS taskId,
+          CAST(0 AS BIT) AS isCurrentContext,
+          CASE
+            WHEN CONVERT(NVARCHAR(30), item.ITEM_NO) = @exactQuery THEN 0
+            WHEN CONVERT(NVARCHAR(100), item.ITEM_CODE) = @exactQuery THEN 0
+            WHEN CONVERT(NVARCHAR(500), item.ITEM_NAME) = @exactQuery THEN 1
+            WHEN CONVERT(NVARCHAR(100), item.ITEM_CODE) LIKE @prefixQuery ESCAPE '\\' THEN 2
+            WHEN CONVERT(NVARCHAR(500), item.ITEM_NAME) LIKE @prefixQuery ESCAPE '\\' THEN 2
+            WHEN CONVERT(NVARCHAR(100), item.ITEM_CODE) LIKE @containsQuery ESCAPE '\\'
+              OR CONVERT(NVARCHAR(500), item.ITEM_NAME) LIKE @containsQuery ESCAPE '\\' THEN 3
+            ELSE 4
+          END AS matchRank,
+          10 AS typeRank
+        FROM ${itemsTable} AS item
+        WHERE @includeItems = 1
+          AND CONVERT(BIGINT, item.ITEM_NO) <> 0
+          AND (
+            CONVERT(NVARCHAR(30), item.ITEM_NO) = @exactQuery
+            OR CONVERT(NVARCHAR(100), item.ITEM_CODE) LIKE @containsQuery ESCAPE '\\'
+            OR CONVERT(NVARCHAR(500), item.ITEM_NAME) LIKE @containsQuery ESCAPE '\\'
+            OR CONVERT(NVARCHAR(500), item.ITEM_PARENT_NAME) LIKE @containsQuery ESCAPE '\\'
+            OR CONVERT(NVARCHAR(250), item.CATEGORY_NAME) LIKE @containsQuery ESCAPE '\\'
+          )
+
+        UNION ALL
+
+        SELECT
+          CAST('PRICE_QUOTE' AS VARCHAR(20)) AS resultType,
+          quote_row.id AS entityId,
+          COALESCE(
+            NULLIF(LTRIM(RTRIM(quote_row.quote_number)), N''),
+            NULLIF(LTRIM(RTRIM(CONVERT(NVARCHAR(500), item.ITEM_NAME))), N''),
+            CONVERT(NVARCHAR(30), quote_row.id)
+          ) AS title,
+          CONCAT(
+            COALESCE(NULLIF(LTRIM(RTRIM(CONVERT(NVARCHAR(500), item.ITEM_NAME))), N''), N'—'),
+            N' · ',
+            COALESCE(NULLIF(LTRIM(RTRIM(CONVERT(NVARCHAR(500), quote_supplier.SUPPLIER_NAME))), N''), N'—')
+          ) AS subtitle,
+          NULL AS listId,
+          NULL AS cycleId,
+          NULL AS instanceId,
+          NULL AS taskId,
+          CAST(0 AS BIT) AS isCurrentContext,
+          CASE
+            WHEN CONVERT(NVARCHAR(30), quote_row.id) = @exactQuery THEN 0
+            WHEN quote_row.quote_number = @exactQuery THEN 0
+            WHEN CONVERT(NVARCHAR(100), item.ITEM_CODE) = @exactQuery
+              OR CONVERT(NVARCHAR(100), quote_supplier.SUPPLIER_CODE) = @exactQuery
+              OR CONVERT(NVARCHAR(500), item.ITEM_NAME) = @exactQuery
+              OR CONVERT(NVARCHAR(500), quote_supplier.SUPPLIER_NAME) = @exactQuery THEN 1
+            WHEN quote_row.quote_number LIKE @prefixQuery ESCAPE '\\' THEN 2
+            WHEN CONVERT(NVARCHAR(500), item.ITEM_NAME) LIKE @prefixQuery ESCAPE '\\'
+              OR CONVERT(NVARCHAR(500), quote_supplier.SUPPLIER_NAME) LIKE @prefixQuery ESCAPE '\\' THEN 2
+            WHEN quote_row.quote_number LIKE @containsQuery ESCAPE '\\'
+              OR CONVERT(NVARCHAR(100), item.ITEM_CODE) LIKE @containsQuery ESCAPE '\\'
+              OR CONVERT(NVARCHAR(100), quote_supplier.SUPPLIER_CODE) LIKE @containsQuery ESCAPE '\\'
+              OR CONVERT(NVARCHAR(500), item.ITEM_NAME) LIKE @containsQuery ESCAPE '\\'
+              OR CONVERT(NVARCHAR(500), quote_supplier.SUPPLIER_NAME) LIKE @containsQuery ESCAPE '\\' THEN 3
+            ELSE 4
+          END AS matchRank,
+          11 AS typeRank
+        FROM dbo.TM_price_quotes AS quote_row
+        LEFT JOIN ${itemsTable} AS item
+          ON CONVERT(BIGINT, item.ITEM_NO) = quote_row.item_id
+        LEFT JOIN ${suppliersTable} AS quote_supplier
+          ON CONVERT(BIGINT, quote_supplier.SUPPLIER_ID) = quote_row.supplier_id
+        WHERE @includePriceQuotes = 1
+          AND quote_row.owner_user_id = @ownerUserId
+          AND (
+            CONVERT(NVARCHAR(30), quote_row.id) = @exactQuery
+            OR quote_row.quote_number LIKE @containsQuery ESCAPE '\\'
+            OR quote_row.notes LIKE @containsQuery ESCAPE '\\'
+            OR CONVERT(NVARCHAR(100), item.ITEM_CODE) LIKE @containsQuery ESCAPE '\\'
+            OR CONVERT(NVARCHAR(500), item.ITEM_NAME) LIKE @containsQuery ESCAPE '\\'
+            OR CONVERT(NVARCHAR(100), quote_supplier.SUPPLIER_CODE) LIKE @containsQuery ESCAPE '\\'
+            OR CONVERT(NVARCHAR(500), quote_supplier.SUPPLIER_NAME) LIKE @containsQuery ESCAPE '\\'
+          )
       ),
       ranked AS (
         SELECT

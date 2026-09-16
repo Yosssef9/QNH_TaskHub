@@ -26,6 +26,23 @@ import type {
   UpdateMeetingRoomBody,
 } from "./meetings.schemas.js";
 import { meetingSchedulingService } from "./meeting-scheduling.service.js";
+import { meetingSeriesService } from "./meeting-series.service.js";
+import type {
+  CreateMeetingSeriesBody,
+  MeetingSeriesAttachmentBody,
+  MeetingSeriesListQuery,
+  MeetingSeriesMeetingParams,
+  MeetingSeriesParams,
+  MeetingSeriesPreviewBody,
+} from "./meeting-series.schemas.js";
+import type {
+  MeetingSeriesAttachmentUploadResult,
+  MeetingSeriesCreateResult,
+  MeetingSeriesDetail,
+  MeetingSeriesListResult,
+  MeetingSeriesMembershipLink,
+  MeetingSeriesPreview,
+} from "./meeting-series.types.js";
 import { meetingsService } from "./meetings.service.js";
 import type { MeetingAvailability } from "./meeting-scheduling.types.js";
 import type { MeetingRoom } from "./meetings.types.js";
@@ -185,6 +202,68 @@ export const createDirectMeeting: RequestHandler = async (req, res) => {
     data: { meeting },
   };
   res.status(201).json(body);
+};
+
+
+export const listMeetingSeries: RequestHandler = async (req, res) => {
+  const query = getValidatedRequestPart<MeetingSeriesListQuery>(req, "query");
+  const series = await meetingSeriesService.list(actorUserId(req), query);
+  const body: ApiSuccessResponse<{ series: MeetingSeriesListResult }> = {
+    success: true,
+    data: { series },
+  };
+  res.status(200).json(body);
+};
+
+export const getMeetingSeriesDetail: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingSeriesParams>(req, "params");
+  const series = await meetingSeriesService.getDetail(actorUserId(req), params.seriesId);
+  const body: ApiSuccessResponse<{ series: MeetingSeriesDetail }> = {
+    success: true,
+    data: { series },
+  };
+  res.status(200).json(body);
+};
+
+export const getMeetingSeriesLinkForMeeting: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingSeriesMeetingParams>(req, "params");
+  const link = await meetingSeriesService.getMeetingLink(actorUserId(req), params.meetingId);
+  const body: ApiSuccessResponse<{ link: MeetingSeriesMembershipLink | null }> = {
+    success: true,
+    data: { link },
+  };
+  res.status(200).json(body);
+};
+
+export const previewMeetingSeries: RequestHandler = async (req, res) => {
+  const input = getValidatedRequestPart<MeetingSeriesPreviewBody>(req, "body");
+  const preview = await meetingSeriesService.preview(actorUserId(req), input);
+  const body: ApiSuccessResponse<{ preview: MeetingSeriesPreview }> = {
+    success: true,
+    data: { preview },
+  };
+  res.status(200).json(body);
+};
+
+export const createMeetingSeries: RequestHandler = async (req, res) => {
+  const input = getValidatedRequestPart<CreateMeetingSeriesBody>(req, "body");
+  const series = await meetingSeriesService.create(actorUserId(req), input);
+  const body: ApiSuccessResponse<{ series: MeetingSeriesCreateResult }> = {
+    success: true,
+    data: { series },
+  };
+  res.status(series.replayed ? 200 : 201).json(body);
+};
+
+export const uploadMeetingSeriesAttachment: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingSeriesParams>(req, "params");
+  const input = getValidatedRequestPart<MeetingSeriesAttachmentBody>(req, "body");
+  if (!req.file) {
+    throw new AppError({ statusCode: 400, code: "MEETING_ATTACHMENT_REQUIRED", message: "Choose a Meeting attachment file." });
+  }
+  const attachment = await meetingSeriesService.uploadAttachment(actorUserId(req), params.seriesId, input, req.file);
+  const body: ApiSuccessResponse<{ attachment: MeetingSeriesAttachmentUploadResult }> = { success: true, data: { attachment } };
+  res.status(attachment.replayed ? 200 : 201).json(body);
 };
 
 export const listCoordinatorMeetingQueue: RequestHandler = async (_req, res) => {
@@ -541,5 +620,8 @@ export const archiveMeetingTemplate: RequestHandler = async (req, res) => {
   await meetingWorkspaceService.archiveTemplate(actorUserId(req), params.templateId, input.rowVersion);
   res.status(200).json({ success: true, data: { templateId: params.templateId } });
 };
+
+
+
 
 

@@ -2,10 +2,14 @@ import type { NotificationType } from "../notifications/notifications.types.js";
 import type { EmailTemplateKey, OperationalEmailTemplateKey } from "./email.types.js";
 
 export function templateKeyForNotification(type: NotificationType): OperationalEmailTemplateKey {
-  if (type === "MEETING_START_REMINDER") {
-    throw new Error("Meeting start reminders are in-app only and do not have an email template.");
+  switch (type) {
+    case "MEETING_START_REMINDER":
+    case "MEETING_ACTION_ITEM_ASSIGNED":
+    case "MEETING_ACTION_ITEM_COMPLETED":
+      throw new Error(`${type} is in-app only and does not have an operational email template.`);
+    default:
+      return type;
   }
-  return type;
 }
 
 export function notificationTypeForTemplate(
@@ -29,6 +33,7 @@ export function notificationTypeForTemplate(
     case "MEETING_RESCHEDULED":
     case "MEETING_RESCHEDULE_REQUEST_CANCELLED":
     case "MEETING_CANCELLED":
+    case "MEETING_SERIES_SCHEDULED":
       return templateKey;
     case "TEST":
     case "VERIFY_ALTERNATE_EMAIL":
@@ -43,4 +48,5 @@ export function isContractNotificationType(
 ): type is "CONTRACT_EXPIRATION_REMINDER" | "CONTRACT_NOTICE_DEADLINE_REMINDER" {
   return type === "CONTRACT_EXPIRATION_REMINDER" || type === "CONTRACT_NOTICE_DEADLINE_REMINDER";
 }
+
 

@@ -283,6 +283,16 @@ export const meetingSchedulingService = {
     await assertCoordinatorPermission(transaction, actorUserId);
   },
 
+  async acquireRoomLocksInTransaction(
+    transaction: DatabaseTransaction,
+    roomIds: readonly number[],
+  ): Promise<void> {
+    const orderedRoomIds = [...new Set(roomIds)].sort((left, right) => left - right);
+    for (const roomId of orderedRoomIds) {
+      assertRoomLock(await meetingSchedulingRepository.acquireRoomLock(transaction, roomId));
+    }
+  },
+
   async assertLockedScheduleAvailable(
     transaction: DatabaseTransaction,
     input: LockedScheduleInput,
@@ -323,4 +333,5 @@ export const meetingSchedulingService = {
     );
   },
 };
+
 

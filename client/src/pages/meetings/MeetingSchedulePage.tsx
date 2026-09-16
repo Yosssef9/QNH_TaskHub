@@ -25,6 +25,7 @@ import {
   type MeetingEditorInitialSchedule,
 } from '@/features/meetings/components/MeetingEditorDialog'
 import { MeetingRoomColorLegend } from '@/features/meetings/components/MeetingRoomColorLegend'
+import { MeetingScheduleChoiceDialog } from '@/features/meetings/series/MeetingScheduleChoiceDialog'
 import { useActiveMeetingRooms } from '@/features/meetings/hooks/use-meeting-rooms'
 import { getMeetingRoomAccent } from '@/features/meetings/meeting-room-colors'
 import { useMeetingSchedule } from '@/features/meetings/hooks/use-meetings'
@@ -46,6 +47,7 @@ export function MeetingSchedulePage() {
   const [roomId, setRoomId] = useState<number | null>(null)
   const [showAdjacentDates, setShowAdjacentDates] = useState(true)
   const [createSeed, setCreateSeed] = useState<CreateSeed | null>(null)
+  const [scheduleChoiceOpen, setScheduleChoiceOpen] = useState(false)
 
   const canCoordinate = currentUser.data?.access.meetingCoordinateEnabled === true
 
@@ -92,7 +94,11 @@ export function MeetingSchedulePage() {
         description={t('meetings.schedulePage.description')}
         actions={
           <Button
-            onClick={() =>
+            onClick={() => {
+              if (canCoordinate) {
+                setScheduleChoiceOpen(true)
+                return
+              }
               setCreateSeed({
                 id: Date.now(),
                 schedule: {
@@ -102,7 +108,7 @@ export function MeetingSchedulePage() {
                   roomId,
                 },
               })
-            }
+            }}
           >
             <CalendarPlus2 aria-hidden="true" className="size-4" />
             {t('meetings.createMeeting')}
@@ -230,6 +236,24 @@ export function MeetingSchedulePage() {
           mode={canCoordinate ? 'DIRECT' : 'REQUEST'}
           initialSchedule={createSeed.schedule}
           onOpenChange={(open) => !open && setCreateSeed(null)}
+        />
+      ) : null}
+
+      {canCoordinate ? (
+        <MeetingScheduleChoiceDialog
+          open={scheduleChoiceOpen}
+          onOpenChange={setScheduleChoiceOpen}
+          onSingleMeeting={() =>
+            setCreateSeed({
+              id: Date.now(),
+              schedule: {
+                date: formatRiyadhDateInput(new Date()),
+                startTime: '09:00',
+                endTime: '10:00',
+                roomId,
+              },
+            })
+          }
         />
       ) : null}
     </div>

@@ -5,6 +5,12 @@ export type GlobalSearchResultType =
   | 'KPI_INSTANCE'
   | 'KPI_TEMPLATE'
   | 'LIST'
+  | 'MEETING'
+  | 'MEETING_SERIES'
+  | 'CONTRACT'
+  | 'SUPPLIER'
+  | 'ITEM'
+  | 'PRICE_QUOTE'
 
 export interface GlobalSearchResult {
   type: GlobalSearchResultType

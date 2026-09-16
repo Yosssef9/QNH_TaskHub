@@ -43,6 +43,7 @@ const notificationIcons: Record<NotificationType, LucideIcon> = {
   MEETING_INVITED: CalendarClock,
   MEETING_RESCHEDULED: CalendarClock,
   MEETING_CANCELLED: AlertTriangle,
+  MEETING_SERIES_SCHEDULED: CalendarClock,
   MEETING_START_REMINDER: Clock3,
   MEETING_ACTION_ITEM_ASSIGNED: CalendarClock,
   MEETING_ACTION_ITEM_COMPLETED: CheckCheck,
@@ -66,6 +67,7 @@ const notificationTones: Record<NotificationType, string> = {
   MEETING_INVITED: 'bg-primary/10 text-primary',
   MEETING_RESCHEDULED: 'bg-info/10 text-info-foreground',
   MEETING_CANCELLED: 'bg-destructive/10 text-destructive',
+  MEETING_SERIES_SCHEDULED: 'bg-primary/10 text-primary',
   MEETING_START_REMINDER: 'bg-warning/10 text-warning-foreground',
   MEETING_ACTION_ITEM_ASSIGNED: 'bg-primary/10 text-primary',
   MEETING_ACTION_ITEM_COMPLETED: 'bg-success/10 text-success',
@@ -236,6 +238,10 @@ function NotificationRow({
   const Icon = notificationIcons[item.type]
   const eventDate = formatDate(item.eventDate, locale)
   const unread = item.readAtUtc === null
+  const contextTitle =
+    item.type === 'MEETING_SERIES_SCHEDULED' && item.contextTitle
+      ? t('notifications.seriesMeetingCount', { count: Number(item.contextTitle) })
+      : item.contextTitle
 
   return (
     <button
@@ -264,9 +270,9 @@ function NotificationRow({
           {t(`notifications.types.${item.type}`)}
         </span>
         <span className="mt-0.5 block truncate text-sm font-semibold">{item.subjectTitle}</span>
-        {item.contextTitle ? (
+        {contextTitle ? (
           <span className="text-muted-foreground mt-0.5 block truncate text-xs">
-            {item.contextTitle}
+            {contextTitle}
           </span>
         ) : null}
         <NotificationDetail item={item} eventDate={eventDate} locale={locale} />
@@ -334,6 +340,7 @@ function NotificationDetail({
 
   return null
 }
+
 
 
 

@@ -37,10 +37,31 @@ export interface InsertMeetingNotificationInput {
   dedupeKey: string;
   subjectTitle: string;
   contextTitle?: string | null;
-  meetingId: number;
+  meetingId?: number | null;
+  meetingSeriesId?: number | null;
   meetingRevisionId?: number | null;
   eventDate?: Date | null;
   suppressEmail?: boolean;
+}
+
+export interface MeetingSeriesNotificationMeeting {
+  meetingId: number;
+  sequenceNumber: number;
+  title: string;
+  startAtUtc: Date;
+  endAtUtc: Date;
+  roomNameAr: string;
+  roomNameEn: string;
+}
+
+export interface MeetingSeriesNotificationRecipient {
+  ownerUserId: number;
+  ownerUserName: string;
+  organizerUserId: number;
+  organizerUserName: string;
+  seriesTitle: string;
+  timeFormat: "12H" | "24H";
+  meetings: MeetingSeriesNotificationMeeting[];
 }
 
 interface NumberRecord { value: number | string }
@@ -246,6 +267,104 @@ export const meetingNotificationsRepository = {
     return result.recordset.map((row) => Number(row.value));
   },
 
+  async listSeriesRecipients(
+    seriesId: number,
+    ownerUserId?: number,
+  ): Promise<MeetingSeriesNotificationRecipient[]> {
+    const pool = await getDatabasePool();
+    const result = await pool
+      .request()
+      .input("seriesId", sql.BigInt, seriesId)
+      .input("ownerUserId", sql.Int, ownerUserId ?? null)
+      .query<{
+        ownerUserId: number | string;
+        ownerUserName: string;
+        organizerUserId: number | string;
+        organizerUserName: string;
+        seriesTitle: string;
+        timeFormat: "12H" | "24H" | null;
+        meetingId: number | string;
+        sequenceNumber: number;
+        title: string;
+        startAtUtc: Date;
+        endAtUtc: Date;
+        roomNameAr: string;
+        roomNameEn: string;
+      }>(`
+        WITH series_meetings AS (
+          SELECT
+            s.id AS seriesId,
+            s.created_by_user_id AS organizerUserId,
+            COALESCE(NULLIF(JSON_VALUE(s.defaults_json, '$.title'), ''), N'Meeting Series') AS seriesTitle,
+            sm.meeting_id AS meetingId,
+            sm.sequence_number AS sequenceNumber
+          FROM dbo.TM_meeting_series AS s
+          INNER JOIN dbo.TM_meeting_series_members AS sm ON sm.series_id = s.id
+          WHERE s.id = @seriesId
+        ), recipient_meetings AS (
+          SELECT organizerUserId AS ownerUserId, meetingId, sequenceNumber, seriesTitle
+          FROM series_meetings
+          UNION
+          SELECT attendee.attendee_user_id, source.meetingId, source.sequenceNumber, source.seriesTitle
+          FROM series_meetings AS source
+          INNER JOIN dbo.TM_meeting_attendees AS attendee ON attendee.meeting_id = source.meetingId
+        )
+        SELECT
+          recipient.ownerUserId,
+          ownerPortal.USER_NAME AS ownerUserName,
+          series.created_by_user_id AS organizerUserId,
+          organizer.USER_NAME AS organizerUserName,
+          recipient.seriesTitle,
+          COALESCE(settings.time_format_preference, '12H') AS timeFormat,
+          meeting.id AS meetingId,
+          recipient.sequenceNumber,
+          meeting.title,
+          revision.start_at_utc AS startAtUtc,
+          revision.end_at_utc AS endAtUtc,
+          room.name_ar AS roomNameAr,
+          room.name_en AS roomNameEn
+        FROM recipient_meetings AS recipient
+        INNER JOIN dbo.TM_meetings AS meeting ON meeting.id = recipient.meetingId
+        INNER JOIN dbo.TM_meeting_revisions AS revision
+          ON revision.id = meeting.current_revision_id AND revision.meeting_id = meeting.id
+        INNER JOIN dbo.TM_meeting_rooms AS room ON room.id = revision.room_id
+        INNER JOIN dbo.TM_meeting_series AS series ON series.id = @seriesId
+        INNER JOIN dbo.users AS organizer ON organizer.USER_ID = series.created_by_user_id
+        INNER JOIN dbo.users AS ownerPortal ON ownerPortal.USER_ID = recipient.ownerUserId AND ownerPortal.IS_ACTIVE = 1
+        INNER JOIN dbo.TM_user_access AS access ON access.portal_user_id = recipient.ownerUserId AND access.is_active = 1
+        LEFT JOIN dbo.TM_user_settings AS settings ON settings.portal_user_id = recipient.ownerUserId
+        WHERE (@ownerUserId IS NULL OR recipient.ownerUserId = @ownerUserId)
+          AND meeting.status = 'SCHEDULED'
+          AND revision.revision_status = 'APPROVED'
+        ORDER BY recipient.ownerUserId, revision.start_at_utc, recipient.sequenceNumber;
+      `);
+
+    const byOwner = new Map<number, MeetingSeriesNotificationRecipient>();
+    for (const row of result.recordset) {
+      const owner = Number(row.ownerUserId);
+      const current = byOwner.get(owner) ?? {
+        ownerUserId: owner,
+        ownerUserName: row.ownerUserName,
+        organizerUserId: Number(row.organizerUserId),
+        organizerUserName: row.organizerUserName,
+        seriesTitle: row.seriesTitle,
+        timeFormat: row.timeFormat ?? "12H",
+        meetings: [],
+      };
+      current.meetings.push({
+        meetingId: Number(row.meetingId),
+        sequenceNumber: row.sequenceNumber,
+        title: row.title,
+        startAtUtc: row.startAtUtc,
+        endAtUtc: row.endAtUtc,
+        roomNameAr: row.roomNameAr,
+        roomNameEn: row.roomNameEn,
+      });
+      byOwner.set(owner, current);
+    }
+    return [...byOwner.values()];
+  },
+
   async insert(transaction: DatabaseTransaction, input: InsertMeetingNotificationInput): Promise<void> {
     await transaction.request()
       .input("owner", sql.Int, input.ownerUserId)
@@ -253,7 +372,8 @@ export const meetingNotificationsRepository = {
       .input("dedupe", sql.VarChar(220), input.dedupeKey)
       .input("subject", sql.NVarChar(250), input.subjectTitle)
       .input("context", sql.NVarChar(500), input.contextTitle ?? null)
-      .input("meetingId", sql.BigInt, input.meetingId)
+      .input("meetingId", sql.BigInt, input.meetingId ?? null)
+      .input("seriesId", sql.BigInt, input.meetingSeriesId ?? null)
       .input("revisionId", sql.BigInt, input.meetingRevisionId ?? null)
       .input("eventDate", sql.Date, input.eventDate ?? null)
       .input("emailProcessed", sql.DateTime2, input.suppressEmail ? new Date() : null)
@@ -266,11 +386,11 @@ export const meetingNotificationsRepository = {
         BEGIN
           INSERT dbo.TM_notifications (
             owner_user_id, notification_type, dedupe_key, subject_title, context_title,
-            meeting_id, meeting_revision_id, event_date, email_processed_at_utc
+            meeting_id, meeting_series_id, meeting_revision_id, event_date, email_processed_at_utc
           )
           VALUES (
             @owner, @type, @dedupe, @subject, @context,
-            @meetingId, @revisionId, @eventDate, @emailProcessed
+            @meetingId, @seriesId, @revisionId, @eventDate, @emailProcessed
           );
         END;
       `);
@@ -434,5 +554,6 @@ export const meetingNotificationsRepository = {
     };
   },
 };
+
 
 

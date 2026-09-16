@@ -6,6 +6,7 @@ import {
   Handshake,
   LayoutTemplate,
   Plus,
+  Repeat2,
   ShieldCheck,
 } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
@@ -18,6 +19,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/cn'
 
 import { MeetingEditorDialog } from './MeetingEditorDialog'
+import { MeetingScheduleChoiceDialog } from '../series/MeetingScheduleChoiceDialog'
 
 interface MeetingsSidebarSectionProps {
   collapsed: boolean
@@ -39,6 +41,7 @@ export function MeetingsSidebarSection({
   const { i18n, t } = useTranslation()
   const shouldReduceMotion = useReducedMotion()
   const [createOpen, setCreateOpen] = useState(false)
+  const [scheduleChoiceOpen, setScheduleChoiceOpen] = useState(false)
   const canCreate = organizerEnabled || coordinatorEnabled
 
   const items = [
@@ -75,6 +78,13 @@ export function MeetingsSidebarSection({
       label: t('meetings.sidebar.templates'),
       icon: LayoutTemplate,
       visible: canCreate,
+      end: true,
+    },
+    {
+      to: '/meetings/series',
+      label: t('meetings.seriesManagement.title'),
+      icon: Repeat2,
+      visible: coordinatorEnabled,
       end: true,
     },
   ].filter((item) => item.visible)
@@ -160,7 +170,7 @@ export function MeetingsSidebarSection({
                   <button
                     type="button"
                     className="text-sidebar-muted hover:bg-sidebar-hover flex h-8 w-full items-center justify-center gap-1 rounded-md text-xs"
-                    onClick={() => setCreateOpen(true)}
+                    onClick={() => (coordinatorEnabled ? setScheduleChoiceOpen(true) : setCreateOpen(true))}
                   >
                     <Plus aria-hidden="true" className="size-4" />
                     {t('meetings.createMeeting')}
@@ -179,6 +189,15 @@ export function MeetingsSidebarSection({
           onOpenChange={setCreateOpen}
         />
       ) : null}
+
+      {coordinatorEnabled ? (
+        <MeetingScheduleChoiceDialog
+          open={scheduleChoiceOpen}
+          onOpenChange={setScheduleChoiceOpen}
+          onSingleMeeting={() => setCreateOpen(true)}
+        />
+      ) : null}
     </>
   )
 }
+

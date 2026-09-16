@@ -40,22 +40,27 @@ import {
   cancelOrganizerMeetingReschedule,
   checkMeetingAvailability,
   createDirectMeeting,
+  createMeetingSeries,
   createMeetingRequest,
   createMeetingRoom,
   createMeetingTemplate,
   coordinatorDirectRescheduleMeeting,
   downloadMeetingAttachment,
   getMeetingDetail,
+  getMeetingSeriesDetail,
+  getMeetingSeriesLinkForMeeting,
   listActiveMeetingRooms,
   listAdminMeetingRooms,
   listCoordinatorMeetingQueue,
   listCoordinatorReschedules,
   listMeetingAttachments,
   listMeetingSchedule,
+  listMeetingSeries,
   listMeetingTemplates,
   listMyMeetingRequests,
   listMyMeetings,
   previewMeetingAttachment,
+  previewMeetingSeries,
   rejectMeetingRequest,
   rejectMeetingReschedule,
   removeMeetingAttachment,
@@ -69,7 +74,16 @@ import {
   updateMeetingRoom,
   updateMeetingTemplate,
   uploadMeetingAttachment,
+  uploadMeetingSeriesAttachment,
 } from "./meetings.controller.js";
+import {
+  createMeetingSeriesBodySchema,
+  meetingSeriesAttachmentBodySchema,
+  meetingSeriesListQuerySchema,
+  meetingSeriesMeetingParamsSchema,
+  meetingSeriesParamsSchema,
+  meetingSeriesPreviewBodySchema,
+} from "./meeting-series.schemas.js";
 import {
   createMeetingBodySchema,
   decideMeetingRequestBodySchema,
@@ -153,6 +167,46 @@ meetingsRouter.post(
   requireMeetingPermission("MEETING_COORDINATE"),
   validateRequest({ body: createMeetingBodySchema }),
   createDirectMeeting,
+);
+
+meetingsRouter.get(
+  "/series",
+  requireMeetingPermission("MEETING_COORDINATE"),
+  validateRequest({ query: meetingSeriesListQuerySchema }),
+  listMeetingSeries,
+);
+meetingsRouter.get(
+  "/series/by-meeting/:meetingId",
+  requireMeetingPermission("MEETING_COORDINATE"),
+  validateRequest({ params: meetingSeriesMeetingParamsSchema }),
+  getMeetingSeriesLinkForMeeting,
+);
+meetingsRouter.get(
+  "/series/:seriesId",
+  requireMeetingPermission("MEETING_COORDINATE"),
+  validateRequest({ params: meetingSeriesParamsSchema }),
+  getMeetingSeriesDetail,
+);
+
+meetingsRouter.post(
+  "/series/preview",
+  requireMeetingPermission("MEETING_COORDINATE"),
+  validateRequest({ body: meetingSeriesPreviewBodySchema }),
+  previewMeetingSeries,
+);
+meetingsRouter.post(
+  "/series",
+  requireMeetingPermission("MEETING_COORDINATE"),
+  validateRequest({ body: createMeetingSeriesBodySchema }),
+  createMeetingSeries,
+);
+meetingsRouter.post(
+  "/series/:seriesId/attachments",
+  requireMeetingPermission("MEETING_COORDINATE"),
+  validateRequest({ params: meetingSeriesParamsSchema }),
+  uploadSingleMeetingAttachment,
+  validateRequest({ body: meetingSeriesAttachmentBodySchema }),
+  uploadMeetingSeriesAttachment,
 );
 
 meetingsRouter.get(
@@ -428,6 +482,9 @@ meetingRoomsAdminRouter.put(
   }),
   updateMeetingRoom,
 );
+
+
+
 
 
 

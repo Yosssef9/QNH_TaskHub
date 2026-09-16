@@ -1,6 +1,11 @@
 import { parsePositiveIntegerId } from "../../shared/utils/id.utils.js";
 import { searchRepository, type SearchResultRecord } from "./search.repository.js";
-import type { GlobalSearchData, GlobalSearchResult } from "./search.types.js";
+import type {
+  GlobalSearchData,
+  GlobalSearchResult,
+  SearchAccessScope,
+  SearchResultType,
+} from "./search.types.js";
 
 function escapeLike(value: string): string {
   return value
@@ -14,8 +19,22 @@ function optionalId(value: number | string | null, label: string): number | null
   return value == null ? null : parsePositiveIntegerId(value, label);
 }
 
-function hrefFor(record: SearchResultRecord): string {
-  const id = parsePositiveIntegerId(record.entityId, "search result id");
+function parseSearchEntityId(
+  value: number | string,
+  resultType: SearchResultType,
+): number {
+  if (resultType === "ITEM" || resultType === "SUPPLIER") {
+    const parsed = Number(value);
+    if (!Number.isSafeInteger(parsed) || parsed === 0) {
+      throw new TypeError(`Search ${resultType.toLowerCase()} id must be a non-zero integer.`);
+    }
+    return parsed;
+  }
+
+  return parsePositiveIntegerId(value, "search result id");
+}
+
+function hrefFor(record: SearchResultRecord, id: number): string {
   const listId = optionalId(record.listId, "search list id");
   const cycleId = optionalId(record.cycleId, "search cycle id");
   const instanceId = optionalId(record.instanceId, "search KPI instance id");
@@ -41,16 +60,29 @@ function hrefFor(record: SearchResultRecord): string {
       return `/kpis/${id}`;
     case "LIST":
       return `/lists/${id}`;
+    case "MEETING":
+      return `/meetings/${id}`;
+    case "MEETING_SERIES":
+      return `/meetings/series/${id}`;
+    case "CONTRACT":
+      return `/contracts/${id}`;
+    case "SUPPLIER":
+      return `/suppliers/${id}`;
+    case "ITEM":
+      return `/items/${id}`;
+    case "PRICE_QUOTE":
+      return `/price-quotes?quoteId=${id}`;
   }
 }
 
 function mapResult(record: SearchResultRecord): GlobalSearchResult {
+  const id = parseSearchEntityId(record.entityId, record.resultType);
   return {
     type: record.resultType,
-    id: parsePositiveIntegerId(record.entityId, "search result id"),
+    id,
     title: record.title,
     subtitle: record.subtitle,
-    href: hrefFor(record),
+    href: hrefFor(record, id),
     isCurrentContext: record.isCurrentContext,
   };
 }
@@ -60,7 +92,7 @@ export const searchService = {
     ownerUserId: number,
     query: string,
     limit: number,
-    includeKpiWorkCycles = true,
+    access: SearchAccessScope,
   ): Promise<GlobalSearchData> {
     const normalized = query.trim();
     const escaped = escapeLike(normalized);
@@ -70,7 +102,7 @@ export const searchService = {
       `${escaped}%`,
       `%${escaped}%`,
       limit,
-      includeKpiWorkCycles,
+      access,
     );
 
     return {
@@ -79,4 +111,3 @@ export const searchService = {
     };
   },
 };
-

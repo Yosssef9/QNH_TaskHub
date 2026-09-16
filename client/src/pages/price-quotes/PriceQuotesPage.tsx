@@ -1,7 +1,8 @@
 import { ArrowDown, ArrowUp, History, Pencil, Plus, RotateCcw, SearchX, Tags } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
@@ -31,6 +32,7 @@ import {
 import { PriceQuoteEditorDialog } from '@/features/price-quotes/components/PriceQuoteEditorDialog'
 import { PriceQuoteHistoryDialog } from '@/features/price-quotes/components/PriceQuoteHistoryDialog'
 import {
+  usePriceQuote,
   usePriceQuoteSummary,
   usePriceQuotes,
   useSetPriceQuoteActive,
@@ -50,6 +52,10 @@ export function PriceQuotesPage() {
   const { i18n, t } = useTranslation()
   const locale = i18n.language
   const currentUser = useCurrentUser()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const quoteParam = Number(searchParams.get('quoteId'))
+  const focusedQuoteId = Number.isSafeInteger(quoteParam) && quoteParam > 0 ? quoteParam : null
+  const focusedQuote = usePriceQuote(focusedQuoteId)
   const canAccessItems = hasAccessPermission(currentUser.data?.access, 'ITEMS')
   const canAccessSuppliers = hasAccessPermission(currentUser.data?.access, 'SUPPLIERS')
   const [search, setSearch] = useState('')
@@ -77,6 +83,20 @@ export function PriceQuotesPage() {
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / pageSize))
   const startRow = data?.total ? (page - 1) * pageSize + 1 : 0
   const endRow = Math.min(page * pageSize, data?.total ?? 0)
+
+  useEffect(() => {
+    if (focusedQuote.data) setEditing(focusedQuote.data)
+  }, [focusedQuote.data])
+
+  function changeEditingOpen(open: boolean) {
+    if (open) return
+    setEditing(null)
+    if (focusedQuoteId !== null) {
+      const next = new URLSearchParams(searchParams)
+      next.delete('quoteId')
+      setSearchParams(next, { replace: true })
+    }
+  }
 
   async function toggleLifecycle() {
     if (!lifecycle) return
@@ -418,7 +438,7 @@ export function PriceQuotesPage() {
       <PriceQuoteEditorDialog
         open={editing !== null}
         quote={editing ?? undefined}
-        onOpenChange={(open) => !open && setEditing(null)}
+        onOpenChange={changeEditingOpen}
       />
       {history ? (
         <PriceQuoteHistoryDialog

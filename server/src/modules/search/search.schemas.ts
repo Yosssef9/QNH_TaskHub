@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const globalSearchQuerySchema = z.object({
   q: z.string().trim().min(1).max(1000),
-  limit: z.coerce.number().int().min(1).max(30).default(18),
+  limit: z.coerce.number().int().min(1).max(30).default(30),
 });
 
 export type GlobalSearchQuery = z.infer<typeof globalSearchQuerySchema>;

@@ -54,6 +54,7 @@ interface MeetingAgendaEditorProps {
   onChange: (items: MeetingAgendaDraftItem[]) => void
   onErrorClear?: (clientId: string) => void
   followUpActionsEnabled?: boolean
+  preserveInvalidPresenters?: boolean
   onAddDecision?: (agendaItemId: number) => void
   onAddActionItem?: (agendaItemId: number) => void
 }
@@ -111,6 +112,7 @@ export function MeetingAgendaEditor({
   onChange,
   onErrorClear,
   followUpActionsEnabled = false,
+  preserveInvalidPresenters = false,
   onAddDecision,
   onAddActionItem,
 }: MeetingAgendaEditorProps) {
@@ -139,6 +141,7 @@ export function MeetingAgendaEditor({
     : 0
 
   useEffect(() => {
+    if (preserveInvalidPresenters) return
     const invalidPresenterExists = items.some(
       (item) => item.presenterUserId !== null && !allowedPresenterIds.has(item.presenterUserId),
     )
@@ -151,7 +154,7 @@ export function MeetingAgendaEditor({
           : item,
       ),
     )
-  }, [allowedPresenterIds, items, onChange])
+  }, [allowedPresenterIds, items, onChange, preserveInvalidPresenters])
 
   useEffect(() => {
     if (!focusItemId || focusRequestId <= 0) return
@@ -595,4 +598,5 @@ function SortableAgendaItem({
     </div>
   )
 }
+
 
