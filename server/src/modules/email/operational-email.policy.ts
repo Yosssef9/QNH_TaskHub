@@ -4,8 +4,6 @@ import type { EmailTemplateKey, OperationalEmailTemplateKey } from "./email.type
 export function templateKeyForNotification(type: NotificationType): OperationalEmailTemplateKey {
   switch (type) {
     case "MEETING_START_REMINDER":
-    case "MEETING_ACTION_ITEM_ASSIGNED":
-    case "MEETING_ACTION_ITEM_COMPLETED":
       throw new Error(`${type} is in-app only and does not have an operational email template.`);
     default:
       return type;
@@ -34,6 +32,8 @@ export function notificationTypeForTemplate(
     case "MEETING_RESCHEDULE_REQUEST_CANCELLED":
     case "MEETING_CANCELLED":
     case "MEETING_SERIES_SCHEDULED":
+    case "MEETING_ACTION_ITEM_ASSIGNED":
+    case "MEETING_ACTION_ITEM_COMPLETED":
       return templateKey;
     case "TEST":
     case "VERIFY_ALTERNATE_EMAIL":

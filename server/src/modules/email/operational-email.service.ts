@@ -72,6 +72,9 @@ function asEmailPreferenceEvent(type: NotificationType): EmailPreferenceEvent | 
     case "CONTRACT_NOTICE_DEADLINE_REMINDER":
     case "MEETING_START_REMINDER":
       return null;
+    case "MEETING_ACTION_ITEM_ASSIGNED":
+    case "MEETING_ACTION_ITEM_COMPLETED":
+      return { taskTitle: candidate.subjectTitle, contextTitle: candidate.contextTitle, href: notificationHref(candidate) };
     default:
       return null;
   }
@@ -312,6 +315,9 @@ async function buildPayload(
     }
     case "MEETING_START_REMINDER":
       return null;
+    case "MEETING_ACTION_ITEM_ASSIGNED":
+    case "MEETING_ACTION_ITEM_COMPLETED":
+      return { taskTitle: candidate.subjectTitle, contextTitle: candidate.contextTitle, href: notificationHref(candidate) };
     default:
       return null;
   }

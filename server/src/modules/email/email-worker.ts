@@ -50,6 +50,8 @@ function asTemplateKey(value: string): EmailTemplateKey {
     case "MEETING_RESCHEDULE_REQUEST_CANCELLED":
     case "MEETING_CANCELLED":
     case "MEETING_SERIES_SCHEDULED":
+    case "MEETING_ACTION_ITEM_ASSIGNED":
+    case "MEETING_ACTION_ITEM_COMPLETED":
       return value;
     default:
       throw new Error(`Unsupported email template key: ${value}`);
