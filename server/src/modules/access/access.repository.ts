@@ -183,9 +183,7 @@ export async function listAccessUsers(query: AccessListQuery): Promise<AccessUse
           OR portal.email LIKE N'%' + @search + N'%'
         )
         ${filters}
-   ORDER BY ${sortExpression} ${sortDirection},
-     portal.USER_NAME ASC,
-     portal.USER_ID ASC
+  ORDER BY ${sortExpression} ${sortDirection}, portal.USER_ID ASC
       OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;
     `),
     baseRequest().query<CountRecord>(`
