@@ -25,7 +25,8 @@ function permissionExistsExpression(
   moduleCode: "PROCUREMENT" | "KPI_MANAGEMENT",
   entityCode: string | null = null,
 ): string {
-  const entityPredicate = entityCode === null ? "" : `\n        AND permission.entity_code = '${entityCode}'`;
+  const entityPredicate =
+    entityCode === null ? "" : `\n        AND permission.entity_code = '${entityCode}'`;
   return `EXISTS (
       SELECT 1
       FROM dbo.TM_access_permissions AS permission
@@ -182,7 +183,9 @@ export async function listAccessUsers(query: AccessListQuery): Promise<AccessUse
           OR portal.email LIKE N'%' + @search + N'%'
         )
         ${filters}
-      ORDER BY ${sortExpression} ${sortDirection}, portal.USER_NAME ASC, portal.USER_ID ASC
+    ORDER BY ${sortExpression} ${sortDirection},
+         CASE WHEN ${sortExpression} = portal.USER_NAME THEN NULL ELSE portal.USER_NAME END ASC,
+         portal.USER_ID ASC
       OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;
     `),
     baseRequest().query<CountRecord>(`
@@ -228,7 +231,8 @@ export async function findPortalUserForUpdate(
   transaction: DatabaseTransaction,
   userId: number,
 ): Promise<PortalUserRecord | null> {
-  const result = await transaction.request().input("userId", sql.Int, userId).query<PortalUserRecord>(`
+  const result = await transaction.request().input("userId", sql.Int, userId)
+    .query<PortalUserRecord>(`
     SELECT TOP (1)
       USER_ID AS userId,
       USER_CODE AS userCode,
@@ -245,7 +249,8 @@ export async function findCurrentAccessForUpdate(
   transaction: DatabaseTransaction,
   userId: number,
 ): Promise<CurrentAccessRecord | null> {
-  const result = await transaction.request().input("userId", sql.Int, userId).query<CurrentAccessRecord>(`
+  const result = await transaction.request().input("userId", sql.Int, userId)
+    .query<CurrentAccessRecord>(`
     SELECT
       role_code AS roleCode,
       CAST(is_active AS BIT) AS isActive,
@@ -267,7 +272,9 @@ export async function findCurrentAccessForUpdate(
   return result.recordset[0] ?? null;
 }
 
-export async function countActiveAdminsForUpdate(transaction: DatabaseTransaction): Promise<number> {
+export async function countActiveAdminsForUpdate(
+  transaction: DatabaseTransaction,
+): Promise<number> {
   const result = await transaction.request().query<CountRecord>(`
     SELECT COUNT_BIG(1) AS total
     FROM dbo.TM_user_access WITH (UPDLOCK, HOLDLOCK)
@@ -340,8 +347,7 @@ async function saveMeetingPermission(
     .input("actorUserId", sql.Int, input.actorUserId)
     .input("targetUserId", sql.Int, input.targetUserId)
     .input("permissionCode", sql.VarChar(40), input.permissionCode)
-    .input("enabled", sql.Bit, input.enabled)
-    .query(`
+    .input("enabled", sql.Bit, input.enabled).query(`
       IF EXISTS (
         SELECT 1 FROM dbo.TM_meeting_user_permissions WITH (UPDLOCK, HOLDLOCK)
         WHERE portal_user_id = @targetUserId AND permission_code = @permissionCode
@@ -409,7 +415,8 @@ export async function findDelegationParticipantForUpdate(
   transaction: DatabaseTransaction,
   userId: number,
 ): Promise<DelegationParticipantRecord | null> {
-  const result = await transaction.request().input("userId", sql.Int, userId).query<DelegationParticipantRecord>(`
+  const result = await transaction.request().input("userId", sql.Int, userId)
+    .query<DelegationParticipantRecord>(`
     SELECT TOP (1)
       portal.USER_ID AS userId,
       CAST(CASE WHEN EXISTS (
@@ -443,5 +450,3 @@ export const accessRepository = {
   ensureContractSettingsInTransaction,
   findDelegationParticipantForUpdate,
 };
-
-
