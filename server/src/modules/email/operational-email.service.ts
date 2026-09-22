@@ -74,7 +74,7 @@ function asEmailPreferenceEvent(type: NotificationType): EmailPreferenceEvent | 
       return null;
     case "MEETING_ACTION_ITEM_ASSIGNED":
     case "MEETING_ACTION_ITEM_COMPLETED":
-      return { taskTitle: candidate.subjectTitle, contextTitle: candidate.contextTitle, href: notificationHref(candidate) };
+      return type;
     default:
       return null;
   }
