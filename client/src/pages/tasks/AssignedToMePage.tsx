@@ -55,17 +55,6 @@ import { cn } from '@/lib/cn'
 
 const ALL = 'ALL'
 
-function TaskDate({ item }: { item: MeetingActionItem }) {
-  const { i18n, t } = useTranslation()
-  if (!item.dueDate) return <span>{t('tasks.noDueDate')}</span>
-  const date = parseDateOnly(item.dueDate)
-  return (
-    <span className={item.isOverdue ? 'text-destructive font-medium' : undefined}>
-      {item.isOverdue ? t('tasks.overdue') : t('tasks.due')} ·{' '}
-      {date?.toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' })}
-    </span>
-  )
-}
 
 function SummaryButton({
   active,

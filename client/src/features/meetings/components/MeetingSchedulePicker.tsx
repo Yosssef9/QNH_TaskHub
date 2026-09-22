@@ -106,7 +106,7 @@ interface MeetingSchedulePickerProps {
   onSelectionStateChange?: (state: MeetingScheduleSelectionState) => void
   onDateChange: (date: string) => void
   onRoomChange: (roomId: number | null) => void
-  onDurationChange?: (minutes: number) => void
+  onDurationChange?: ((minutes: number) => void) | undefined
   onTimeChange: (startTime: string, endTime: string) => void
 }
 

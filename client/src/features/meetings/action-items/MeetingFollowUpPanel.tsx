@@ -568,12 +568,13 @@ export function MeetingFollowUpPanel({
     )
   }
 
-  const activeFilterChips: Array<{ key: string; label: string; onRemove: () => void }> = []
+  const activeFilterChips: Array<{ key: string; label: string; removeLabel: string; onRemove: () => void }> = []
 
   if (statusFilter) {
     activeFilterChips.push({
       key: 'status',
       label: `${t('meetings.followUp.filters.status')}: ${t(`tasks.statuses.${statusFilter}`)}`,
+      removeLabel: t('common.remove'),
       onRemove: () => setStatusFilter(undefined),
     })
   }
@@ -582,6 +583,7 @@ export function MeetingFollowUpPanel({
     activeFilterChips.push({
       key: 'priority',
       label: `${t('meetings.followUp.filters.priority')}: ${t(`tasks.priorities.${priorityFilter}`)}`,
+      removeLabel: t('common.remove'),
       onRemove: () => setPriorityFilter(undefined),
     })
   }
@@ -590,6 +592,7 @@ export function MeetingFollowUpPanel({
     activeFilterChips.push({
       key: 'assignee',
       label: `${t('meetings.followUp.filters.assignee')}: ${selectedAssigneeFilterName}`,
+      removeLabel: t('common.remove'),
       onRemove: () => setAssigneeFilter(undefined),
     })
   }
@@ -598,6 +601,7 @@ export function MeetingFollowUpPanel({
     activeFilterChips.push({
       key: 'due',
       label: `${t('meetings.followUp.filters.due')}: ${t(`tasks.dueFilters.${dueFilter}`)}`,
+      removeLabel: t('common.remove'),
       onRemove: () => setDueFilter('ALL'),
     })
   }
@@ -606,6 +610,7 @@ export function MeetingFollowUpPanel({
     activeFilterChips.push({
       key: 'agenda',
       label: `${t('meetings.followUp.filters.agenda')}: ${selectedAgendaFilterName}`,
+      removeLabel: t('common.remove'),
       onRemove: () => setAgendaFilter(undefined),
     })
   }
@@ -1144,13 +1149,16 @@ export function MeetingFollowUpPanel({
                                 item={item}
                                 onOpen={() => setTaskId(item.taskId)}
                                 canChangeStatus={currentUserId === item.assigneeUserId}
-                                completionBlockedMessage={
-                                  isOrganizer && currentUserId !== item.assigneeUserId
-                                    ? t('meetings.followUp.onlyAssigneeCanComplete', {
-                                        name: item.assigneeName,
-                                      })
-                                    : undefined
-                                }
+                                {...(isOrganizer && currentUserId !== item.assigneeUserId
+                                  ? {
+                                      completionBlockedMessage: t(
+                                        'meetings.followUp.onlyAssigneeCanComplete',
+                                        {
+                                          name: item.assigneeName,
+                                        },
+                                      ),
+                                    }
+                                  : {})}
                                 statusPending={statusMutation.isPending}
                                 onStatusChange={(nextStatus) => changeStatus(item, nextStatus)}
                                 showAssignee={isOrganizer}

@@ -101,7 +101,7 @@ interface MeetingEditorDialogProps {
   description?: string
   template?: MeetingTemplate | null
   initialSchedule?: MeetingEditorInitialSchedule | null
-  initialValues?: MeetingEditorInitialValues | null
+  initialValues?: MeetingEditorInitialValues | null | undefined
   onOpenChange: (open: boolean) => void
 }
 

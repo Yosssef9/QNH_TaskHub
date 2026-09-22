@@ -605,7 +605,10 @@ export function MeetingDetailsPage() {
             <button
               type="button"
               className="bg-primary/8 text-primary hover:bg-primary/14 mt-3 inline-flex items-center gap-2 rounded-full border border-primary/15 px-3 py-1.5 text-xs font-semibold transition-colors"
-              onClick={() => navigate(`/meetings/series/${seriesLink.data.seriesId}?meeting=${meeting.id}`)}
+              onClick={() => {
+                if (!seriesLink.data) return
+                navigate(`/meetings/series/${seriesLink.data.seriesId}?meeting=${meeting.id}`)
+              }}
             >
               <CalendarRange aria-hidden="true" className="size-3.5" />
               {t('meetings.seriesManagement.seriesPosition', {

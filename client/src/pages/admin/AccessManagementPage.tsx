@@ -104,7 +104,7 @@ export function AccessManagementPage() {
     setPage(1)
   }
 
-  function changeFilter<T extends string>(setter: (value: T) => void, value: string) {
+  function changeFilter<T extends string>(setter: (value: T | ((current: T) => T)) => void, value: string) {
     setter(value as T)
     setPage(1)
   }

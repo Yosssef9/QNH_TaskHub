@@ -3,7 +3,6 @@ import {
   CalendarClock,
   CalendarDays,
   CalendarPlus2,
-  CheckCircle2,
   ClipboardList,
   Clock3,
   ListChecks,

@@ -42,8 +42,8 @@ export function MeetingAgendaWorkspace({
 }: {
   detail: MeetingDetail
   meetingDurationMinutes: number
-  onAddDecision?: (agendaItemId: number) => void
-  onAddActionItem?: (agendaItemId: number) => void
+  onAddDecision?: ((agendaItemId: number) => void) | undefined
+  onAddActionItem?: ((agendaItemId: number) => void) | undefined
 }) {
   const { t } = useTranslation()
   const updateAgenda = useUpdateMeetingAgenda()

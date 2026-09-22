@@ -55,8 +55,8 @@ interface MeetingAgendaEditorProps {
   onErrorClear?: (clientId: string) => void
   followUpActionsEnabled?: boolean
   preserveInvalidPresenters?: boolean
-  onAddDecision?: (agendaItemId: number) => void
-  onAddActionItem?: (agendaItemId: number) => void
+  onAddDecision?: ((agendaItemId: number) => void) | undefined
+  onAddActionItem?: ((agendaItemId: number) => void) | undefined
 }
 
 function createClientId(): string {
@@ -393,8 +393,8 @@ function SortableAgendaItem({
   onChange: (patch: Partial<MeetingAgendaDraftItem>) => void
   onTopicChange: (topic: string) => void
   followUpActionsEnabled: boolean
-  onAddDecision?: (agendaItemId: number) => void
-  onAddActionItem?: (agendaItemId: number) => void
+  onAddDecision?: ((agendaItemId: number) => void) | undefined
+  onAddActionItem?: ((agendaItemId: number) => void) | undefined
 }) {
   const { t } = useTranslation()
   const sortable = useTaskHubSortable({ id: item.clientId, index, disabled })

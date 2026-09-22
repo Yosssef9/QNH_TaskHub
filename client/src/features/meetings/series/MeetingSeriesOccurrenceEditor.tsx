@@ -107,8 +107,6 @@ export function MeetingSeriesOccurrenceEditor({
   onRememberParticipantOptions,
   onSaveSchedule,
   onSaveDetails,
-  onResetSchedule,
-  onResetDetails,
   onResetAll,
   onRemove,
   onDuplicate,

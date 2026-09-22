@@ -16,7 +16,7 @@ interface MeetingActionTaskCardProps {
   item: MeetingActionItem
   onOpen: () => void
   canChangeStatus?: boolean
-  completionBlockedMessage?: string
+  completionBlockedMessage?: string | undefined
   statusPending?: boolean
   onStatusChange?: (nextStatus: TaskStatus) => void
   showMeeting?: boolean

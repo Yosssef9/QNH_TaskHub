@@ -43,7 +43,7 @@ export function MeetingSeriesPage() {
   const [page, setPage] = useState(1)
   const pageSize = 12
 
-  const query = useMeetingSeriesList({ search: search || undefined, state, page, pageSize })
+  const query = useMeetingSeriesList({ ...(search ? { search } : {}), state, page, pageSize })
   const totalPages = Math.max(1, Math.ceil((query.data?.total ?? 0) / pageSize))
   const items = query.data?.items ?? []
   const futureMeetings = useMemo(() => items.reduce((sum, item) => sum + item.upcomingCount, 0), [items])
