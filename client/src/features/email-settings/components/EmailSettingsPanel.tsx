@@ -63,6 +63,8 @@ const meetingEvents: EmailPreferenceEvent[] = [
   'MEETING_RESCHEDULE_REQUEST_CANCELLED',
   'MEETING_CANCELLED',
   'MEETING_SERIES_SCHEDULED',
+  'MEETING_ACTION_ITEM_ASSIGNED',
+  'MEETING_ACTION_ITEM_COMPLETED',
 ]
 
 function settingError(error: unknown, fallback: string): string {

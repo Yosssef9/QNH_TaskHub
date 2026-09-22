@@ -3409,6 +3409,14 @@ export const arTranslation = {
           title: 'جدولة سلسلة اجتماعات',
           description: 'أرسل لي ملخصاً واحداً مجمعاً عند جدولة عدة اجتماعات لي ضمن سلسلة.',
         },
+        MEETING_ACTION_ITEM_ASSIGNED: {
+          title: 'تم إسناد بند متابعة للاجتماع',
+          description: 'استلام بريد إلكتروني عند إسناد بند متابعة للاجتماع إليك.',
+        },
+        MEETING_ACTION_ITEM_COMPLETED: {
+          title: 'تم إنجاز بند متابعة للاجتماع',
+          description: 'استلام بريد إلكتروني عند إكمال بند متابعة للاجتماع.',
+        },
       },
     },
     test: {

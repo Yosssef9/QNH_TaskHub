@@ -110,6 +110,7 @@ async function getRequiredRecord(ownerUserId: number): Promise<EmailSettingsReco
 }
 
 async function buildSettings(ownerUserId: number): Promise<EmailSettingsData> {
+  await emailSettingsRepository.ensureDefaultPreferences(ownerUserId, EMAIL_EVENT_DEFAULTS);
   const [record, storedPreferences] = await Promise.all([
     getRequiredRecord(ownerUserId),
     emailSettingsRepository.listPreferences(ownerUserId),
@@ -291,6 +292,8 @@ async function resolveOperationalDelivery(
   eventType: EmailPreferenceEvent,
 ): Promise<OperationalEmailDelivery | null> {
   if (!env.EMAIL_ENABLED) return null;
+
+  await emailSettingsRepository.ensureDefaultPreferences(ownerUserId, EMAIL_EVENT_DEFAULTS);
 
   const [record, storedPreferences] = await Promise.all([
     getRequiredRecord(ownerUserId),

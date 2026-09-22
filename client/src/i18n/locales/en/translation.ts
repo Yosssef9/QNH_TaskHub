@@ -3483,6 +3483,14 @@ export const enTranslation = {
           title: 'Meeting Series scheduled',
           description: 'Email me one grouped summary when multiple Meetings are scheduled for me as a Series.',
         },
+        MEETING_ACTION_ITEM_ASSIGNED: {
+          title: 'Meeting action item assigned',
+          description: 'Email me when a meeting action item is assigned to me.',
+        },
+        MEETING_ACTION_ITEM_COMPLETED: {
+          title: 'Meeting action item completed',
+          description: 'Email me when a meeting action item is completed.',
+        },
       },
     },
     test: {

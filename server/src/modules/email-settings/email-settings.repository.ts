@@ -94,6 +94,36 @@ export const emailSettingsRepository = {
     return result.recordset;
   },
 
+
+  async ensureDefaultPreferences(
+    ownerUserId: number,
+    defaults: Readonly<Record<EmailPreferenceEvent, boolean>>,
+  ): Promise<void> {
+    await withTransaction(async (transaction) => {
+      for (const [eventType, enabled] of Object.entries(defaults)) {
+        await transaction
+          .request()
+          .input("owner", sql.Int, ownerUserId)
+          .input("eventType", sql.VarChar(100), eventType)
+          .input("enabled", sql.Bit, enabled)
+          .query(`
+            IF NOT EXISTS (
+              SELECT 1
+              FROM dbo.TM_email_preferences
+              WHERE owner_user_id = @owner
+                AND event_type = @eventType
+            )
+            BEGIN
+              INSERT dbo.TM_email_preferences
+                (owner_user_id, event_type, is_enabled)
+              VALUES
+                (@owner, @eventType, @enabled);
+            END;
+          `);
+      }
+    });
+  },
+
   async updateSettings(
     ownerUserId: number,
     input: {
