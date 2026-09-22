@@ -17,6 +17,9 @@ export const EMAIL_PREFERENCE_EVENTS = [
   "MEETING_RESCHEDULE_REQUEST_CANCELLED",
   "MEETING_CANCELLED",
   "MEETING_SERIES_SCHEDULED",
+
+  "MEETING_ACTION_ITEM_ASSIGNED",
+  "MEETING_ACTION_ITEM_COMPLETED",
 ] as const;
 
 export type EmailPreferenceEvent = (typeof EMAIL_PREFERENCE_EVENTS)[number];
@@ -56,5 +59,3 @@ export interface OperationalEmailDelivery {
   recipient: ResolvedEmailRecipient;
   language: "ar" | "en";
 }
-
-

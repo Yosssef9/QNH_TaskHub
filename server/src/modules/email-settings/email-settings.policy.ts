@@ -13,6 +13,7 @@ export const EMAIL_EVENT_DEFAULTS: Readonly<Record<EmailPreferenceEvent, boolean
   CURRENT_CYCLE_PAST_END: true,
   KPI_BELOW_TARGET: true,
   KPI_MEASUREMENT_DUE: true,
+
   MEETING_REQUEST_SUBMITTED: true,
   MEETING_REQUEST_UPDATED: true,
   MEETING_APPROVED: true,
@@ -22,6 +23,7 @@ export const EMAIL_EVENT_DEFAULTS: Readonly<Record<EmailPreferenceEvent, boolean
   MEETING_RESCHEDULE_REQUEST_CANCELLED: true,
   MEETING_CANCELLED: true,
   MEETING_SERIES_SCHEDULED: true,
+
+  MEETING_ACTION_ITEM_ASSIGNED: true,
+  MEETING_ACTION_ITEM_COMPLETED: true,
 };
-
-

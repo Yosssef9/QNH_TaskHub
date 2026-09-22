@@ -343,6 +343,7 @@ async function resolveDelivery(
   return event ? emailSettingsService.resolveOperationalDelivery(ownerUserId, event) : null;
 }
 
+
 async function validateContractPayloadAtSend(
   ownerUserId: number,
   type: "CONTRACT_EXPIRATION_REMINDER" | "CONTRACT_NOTICE_DEADLINE_REMINDER",
