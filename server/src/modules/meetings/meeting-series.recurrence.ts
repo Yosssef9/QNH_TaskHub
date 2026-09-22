@@ -226,7 +226,16 @@ function agendaEquals(
   left: readonly MeetingSeriesPreviewBody["defaults"]["agendaItems"][number][],
   right: readonly MeetingSeriesPreviewBody["defaults"]["agendaItems"][number][],
 ): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+  const normalize = (
+    items: readonly MeetingSeriesPreviewBody["defaults"]["agendaItems"][number][],
+  ) =>
+    items.map((item) => ({
+      topic: item.topic,
+      presenterUserId: item.presenterUserId ?? null,
+      plannedDurationMinutes: item.plannedDurationMinutes ?? null,
+    }));
+
+  return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right));
 }
 
 function overrideKindsFor(
@@ -466,3 +475,4 @@ export function findMeetingSeriesInternalConflicts(
 
   return conflicts;
 }
+

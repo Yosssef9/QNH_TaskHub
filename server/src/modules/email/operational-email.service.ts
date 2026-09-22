@@ -72,6 +72,8 @@ function asEmailPreferenceEvent(type: NotificationType): EmailPreferenceEvent | 
     case "CONTRACT_NOTICE_DEADLINE_REMINDER":
     case "MEETING_START_REMINDER":
       return null;
+    default:
+      return null;
   }
 }
 
@@ -495,5 +497,6 @@ export const operationalEmailService = {
     return processed;
   },
 };
+
 
 
