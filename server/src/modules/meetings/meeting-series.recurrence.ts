@@ -223,11 +223,15 @@ function equalNumberArrays(left: readonly number[], right: readonly number[]): b
 }
 
 function agendaEquals(
-  left: readonly MeetingSeriesPreviewBody["defaults"]["agendaItems"][number][],
-  right: readonly MeetingSeriesPreviewBody["defaults"]["agendaItems"][number][],
+  left: readonly { topic: string; presenterUserId?: number | null; plannedDurationMinutes?: number | null }[],
+  right: readonly { topic: string; presenterUserId?: number | null; plannedDurationMinutes?: number | null }[],
 ): boolean {
   const normalize = (
-    items: readonly MeetingSeriesPreviewBody["defaults"]["agendaItems"][number][],
+    items: readonly {
+      topic: string
+      presenterUserId?: number | null
+      plannedDurationMinutes?: number | null
+    }[],
   ) =>
     items.map((item) => ({
       topic: item.topic,

@@ -312,6 +312,8 @@ async function buildPayload(
     }
     case "MEETING_START_REMINDER":
       return null;
+    default:
+      return null;
   }
 }
 
