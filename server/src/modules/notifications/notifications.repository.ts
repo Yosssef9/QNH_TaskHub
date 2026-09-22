@@ -119,7 +119,7 @@ export const notificationsRepository = {
             @taskId,
             @listId,
             @meetingId,
-            SYSUTCDATETIME()
+            NULL
           );
         END;
       `);
