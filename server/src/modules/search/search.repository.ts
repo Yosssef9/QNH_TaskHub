@@ -523,14 +523,29 @@ async function search(
             OR CONVERT(NVARCHAR(500), quote_supplier.SUPPLIER_NAME) LIKE @containsQuery ESCAPE '\\'
           )
       ),
+      normalized_matches AS (
+        SELECT
+          resultType,
+          entityId,
+          title COLLATE DATABASE_DEFAULT AS title,
+          subtitle COLLATE DATABASE_DEFAULT AS subtitle,
+          listId,
+          cycleId,
+          instanceId,
+          taskId,
+          isCurrentContext,
+          matchRank,
+          typeRank
+        FROM matches
+      ),
       ranked AS (
         SELECT
-          matches.*,
+          normalized_matches.*,
           ROW_NUMBER() OVER (
             PARTITION BY resultType
             ORDER BY matchRank, isCurrentContext DESC, title, entityId
           ) AS typeRow
-        FROM matches
+        FROM normalized_matches
       )
       SELECT TOP (@limit)
         resultType,
