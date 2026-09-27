@@ -266,7 +266,12 @@ export function HomePage() {
       </div>
 
       {organizerEnabled || coordinatorEnabled ? (
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div
+          className={cn(
+            'grid gap-5',
+            organizerEnabled && coordinatorEnabled && 'lg:grid-cols-2',
+          )}
+        >
           {organizerEnabled ? (
             <Card>
               <CardHeader className="flex-row items-start justify-between gap-3">
