@@ -1,5 +1,6 @@
 import { withTransaction } from "../../database/transaction.js";
 import { AppError } from "../../shared/errors/app-error.js";
+import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
 import type { TaskHubAccess } from "../auth/auth.types.js";
 import { meetingWorkspaceRepository } from "../meetings/meeting-workspace.repository.js";
 import { requireMeetingContentAccess } from "../meetings/meeting-content-access.js";
@@ -305,6 +306,43 @@ export const meetingActionItemsService = {
     const item = items.find((candidate) => candidate.taskId === taskId);
     if (!item) throw actionItemNotFound();
     return { item };
+  },
+
+  async validateEmailPayload(
+    ownerUserId: number,
+    type: "MEETING_ACTION_ITEM_ASSIGNED" | "MEETING_ACTION_ITEM_COMPLETED",
+    payload: Record<string, unknown>,
+  ): Promise<boolean> {
+    const taskId = Number(payload.taskId);
+    const meetingId = Number(payload.meetingId);
+    if (
+      !Number.isSafeInteger(taskId) ||
+      taskId <= 0 ||
+      !Number.isSafeInteger(meetingId) ||
+      meetingId <= 0
+    ) {
+      return false;
+    }
+
+    const relation = await meetingActionItemsRepository.findContext(taskId);
+    if (!relation || relation.meetingId !== meetingId) return false;
+
+    const task = await tasksRepository.findOwnedById(
+      relation.ownerUserId,
+      taskId,
+      getCurrentDateInAppTimeZone(),
+    );
+    if (!task) return false;
+
+    if (type === "MEETING_ACTION_ITEM_ASSIGNED") {
+      return (
+        relation.assigneeUserId === ownerUserId &&
+        task.status !== "DONE" &&
+        task.status !== "CANCELLED"
+      );
+    }
+
+    return relation.ownerUserId === ownerUserId && task.status === "DONE";
   },
 
   async assigned(

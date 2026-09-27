@@ -19,6 +19,7 @@ import {
 } from "../notifications/notifications.repository.js";
 import type { NotificationType } from "../notifications/notifications.types.js";
 import { workCyclesService } from "../work-cycles/work-cycles.service.js";
+import { meetingActionItemsService } from "../meeting-action-items/meeting-action-items.service.js";
 import { meetingNotificationsService } from "../meetings/meeting-notifications.service.js";
 import { emailService } from "./email.service.js";
 import {
@@ -316,8 +317,27 @@ async function buildPayload(
     case "MEETING_START_REMINDER":
       return null;
     case "MEETING_ACTION_ITEM_ASSIGNED":
-    case "MEETING_ACTION_ITEM_COMPLETED":
-      return { taskTitle: candidate.subjectTitle, contextTitle: candidate.contextTitle, href: notificationHref(candidate) };
+    case "MEETING_ACTION_ITEM_COMPLETED": {
+      const taskId = id(candidate.taskId);
+      const meetingId = id(candidate.meetingId);
+      if (taskId === null || meetingId === null) return null;
+
+      const payload = {
+        taskId,
+        meetingId,
+        taskTitle: candidate.subjectTitle,
+        contextTitle: candidate.contextTitle,
+        href: notificationHref(candidate),
+      };
+
+      return (await meetingActionItemsService.validateEmailPayload(
+        candidate.ownerUserId,
+        candidate.notificationType,
+        payload,
+      ))
+        ? payload
+        : null;
+    }
     default:
       return null;
   }
@@ -462,6 +482,14 @@ export const operationalEmailService = {
     if (!delivery) return null;
     if (isContractNotificationType(type)) {
       return (await validateContractPayloadAtSend(ownerUserId, type, payload)) ? delivery : null;
+    }
+    if (
+      type === "MEETING_ACTION_ITEM_ASSIGNED" ||
+      type === "MEETING_ACTION_ITEM_COMPLETED"
+    ) {
+      return (await meetingActionItemsService.validateEmailPayload(ownerUserId, type, payload))
+        ? delivery
+        : null;
     }
     if (type.startsWith("MEETING_")) {
       return (await meetingNotificationsService.validateEmailPayload(ownerUserId, type, payload))
