@@ -335,15 +335,15 @@ export const meetingActionItemsRepository = {
     return updated ? normalizedRowVersion(updated.rowVersion) : null;
   },
 
+  // Call only after requireMeetingContentAccess. All current Meeting viewers
+  // share this non-deleted Action Item projection; editing is resolved separately.
   async listForMeeting(
     meetingId: number,
-    actorUserId: number,
   ): Promise<MeetingActionItemListItem[]> {
     const pool = await getDatabasePool();
     const result = await pool
       .request()
       .input("meetingId", sql.BigInt, meetingId)
-      .input("actorUserId", sql.Int, actorUserId)
       .input("today", sql.Date, getCurrentDateInAppTimeZone())
       .query<ListRecord>(`
         SELECT ${relationshipSelect}, ${taskColumns}
@@ -352,24 +352,19 @@ export const meetingActionItemsRepository = {
         ${subtaskSummary}
         WHERE relation.meeting_id = @meetingId
           AND task.deleted_at_utc IS NULL
-          AND (
-            meeting.organizer_user_id = @actorUserId
-            OR relation.assignee_user_id = @actorUserId
-          )
         ORDER BY relation.assigned_at_utc DESC, relation.task_id DESC;
       `);
     return result.recordset.map(mapListItem);
   },
 
+  // Same authorized population as listForMeeting: never an assignee-only total.
   async summarizeForMeeting(
     meetingId: number,
-    actorUserId: number,
   ): Promise<MeetingActionItemMeetingSummary> {
     const pool = await getDatabasePool();
     const result = await pool
       .request()
       .input("meetingId", sql.BigInt, meetingId)
-      .input("actorUserId", sql.Int, actorUserId)
       .input("today", sql.Date, getCurrentDateInAppTimeZone())
       .query<{ total: number | string; completed: number | string; overdue: number | string }>(`
         SELECT
@@ -383,11 +378,7 @@ export const meetingActionItemsRepository = {
         INNER JOIN dbo.TM_tasks AS task ON task.id = relation.task_id
         INNER JOIN dbo.TM_meetings AS meeting ON meeting.id = relation.meeting_id
         WHERE relation.meeting_id = @meetingId
-          AND task.deleted_at_utc IS NULL
-          AND (
-            meeting.organizer_user_id = @actorUserId
-            OR relation.assignee_user_id = @actorUserId
-          );
+          AND task.deleted_at_utc IS NULL;
       `);
     const row = result.recordset[0];
     return {
@@ -438,8 +429,29 @@ export const meetingActionItemsRepository = {
         .input("priority", sql.VarChar(10), query.priority ?? null)
         .input("due", sql.VarChar(20), query.due);
 
+    // SQL projection of the shared Meeting content policy, restricted further
+    // to this actor's assignments. Keep in sync with canReadMeetingByRelationship.
+    const readableMeeting = `(
+      meeting.organizer_user_id = @actorUserId
+      OR (
+        meeting.status IN ('SCHEDULED', 'CANCELLED')
+        AND EXISTS (
+          SELECT 1 FROM dbo.TM_meeting_attendees AS attendee
+          WHERE attendee.meeting_id = meeting.id
+            AND attendee.attendee_user_id = @actorUserId
+        )
+      )
+      OR EXISTS (
+        SELECT 1 FROM dbo.TM_meeting_user_permissions AS permission
+        WHERE permission.portal_user_id = @actorUserId
+          AND permission.permission_code = 'MEETING_COORDINATE'
+          AND permission.is_active = 1
+      )
+    )`;
+
     const filteredWhere = `
       relation.assignee_user_id = @actorUserId
+      AND ${readableMeeting}
       AND task.deleted_at_utc IS NULL
       AND (@search IS NULL OR task.title LIKE @search OR task.description LIKE @search OR meeting.title LIKE @search)
       AND (@meetingId IS NULL OR relation.meeting_id = @meetingId)
@@ -499,6 +511,7 @@ export const meetingActionItemsRepository = {
           COALESCE(SUM(ISNULL(subtasks.completed, 0)), 0) AS subtaskCompleted
         FROM dbo.TM_meeting_action_items AS relation
         INNER JOIN dbo.TM_tasks AS task ON task.id = relation.task_id
+        INNER JOIN dbo.TM_meetings AS meeting ON meeting.id = relation.meeting_id
         OUTER APPLY (
           SELECT COUNT_BIG(*) AS total,
             COALESCE(SUM(CASE WHEN subtask.is_completed = 1 THEN 1 ELSE 0 END), 0) AS completed
@@ -508,6 +521,7 @@ export const meetingActionItemsRepository = {
             AND subtask.deleted_at_utc IS NULL
         ) AS subtasks
         WHERE relation.assignee_user_id = @actorUserId
+          AND ${readableMeeting}
           AND task.deleted_at_utc IS NULL;
       `);
     const summaryRow = summaryResult.recordset[0];
@@ -531,6 +545,7 @@ export const meetingActionItemsRepository = {
         INNER JOIN dbo.TM_tasks AS task ON task.id = relation.task_id
         INNER JOIN dbo.TM_meetings AS meeting ON meeting.id = relation.meeting_id
         WHERE relation.assignee_user_id = @actorUserId
+          AND ${readableMeeting}
           AND task.deleted_at_utc IS NULL
         ORDER BY meetingTitle, meetingId;
       `);
@@ -547,4 +562,5 @@ export const meetingActionItemsRepository = {
     };
   },
 };
+
 

@@ -101,6 +101,17 @@ export const updateMeetingAgendaBodySchema = z.object({
   agendaItems: z.array(meetingAgendaItemBodySchema).max(50),
 });
 
+const meetingAttendanceStatusSchema = z.enum(["NOT_MARKED", "ATTENDED", "ABSENT"]);
+
+export const updateMeetingAttendanceBodySchema = z.object({
+  participantUserId: z.coerce.number().int().positive(),
+  status: meetingAttendanceStatusSchema,
+});
+
+export const bulkUpdateMeetingAttendanceBodySchema = z.object({
+  status: z.enum(["NOT_MARKED", "ATTENDED"]),
+});
+
 const meetingTemplateFields = {
   name: z.string().trim().min(1).max(150),
   title: z.string().trim().min(1).max(250),
@@ -130,6 +141,8 @@ export type RejectMeetingRescheduleBody = z.infer<typeof rejectMeetingReschedule
 export type CancelMeetingRescheduleRequestBody = z.infer<typeof cancelMeetingRescheduleRequestBodySchema>;
 export type CancelMeetingBody = z.infer<typeof cancelMeetingBodySchema>;
 export type UpdateMeetingAgendaBody = z.infer<typeof updateMeetingAgendaBodySchema>;
+export type UpdateMeetingAttendanceBody = z.infer<typeof updateMeetingAttendanceBodySchema>;
+export type BulkUpdateMeetingAttendanceBody = z.infer<typeof bulkUpdateMeetingAttendanceBodySchema>;
 export type CreateMeetingTemplateBody = z.infer<typeof createMeetingTemplateBodySchema>;
 export type UpdateMeetingTemplateBody = z.infer<typeof updateMeetingTemplateBodySchema>;
 export type ArchiveMeetingTemplateBody = z.infer<typeof archiveMeetingTemplateBodySchema>;

@@ -109,7 +109,7 @@ export const emailSettingsRepository = {
           .query(`
             IF NOT EXISTS (
               SELECT 1
-              FROM dbo.TM_email_preferences
+              FROM dbo.TM_email_preferences WITH (UPDLOCK, HOLDLOCK)
               WHERE owner_user_id = @owner
                 AND event_type = @eventType
             )
@@ -510,3 +510,4 @@ export const emailSettingsRepository = {
     });
   },
 };
+

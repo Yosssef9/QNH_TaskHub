@@ -62,6 +62,7 @@ function arrangeDetail(childIsAttendee: boolean) {
   vi.spyOn(meetingWorkflowRepository, "findSummary").mockResolvedValue(summary(1));
   vi.spyOn(meetingWorkspaceRepository, "listAgendaItems").mockResolvedValue([]);
   vi.spyOn(meetingWorkspaceRepository, "listRevisions").mockResolvedValue([]);
+  vi.spyOn(meetingWorkspaceRepository, "listAttendance").mockResolvedValue([]);
   vi.spyOn(meetingWorkspaceRepository, "listActivity").mockResolvedValue([
     {
       id: 1,

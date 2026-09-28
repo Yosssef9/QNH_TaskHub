@@ -1,0 +1,38 @@
+/* Component-scoped layout; row breakpoint follows CARD width, not the whole screen. */
+.meeting-participants-panel {
+  container-type: inline-size;
+}
+
+.meeting-participants-list {
+  max-block-size: min(24rem, 50vh);
+  max-block-size: min(24rem, 50dvh);
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Small inset keeps keyboard focus rings clear of the scrollport's clip edge. */
+  padding: 0.25rem;
+}
+
+.meeting-participant-row {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.meeting-participant-attendance {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+  inline-size: 100%;
+}
+
+@container (min-width: 26rem) {
+  .meeting-participant-row {
+    grid-template-columns: 2.5rem minmax(0, 1fr) 10rem;
+  }
+
+  .meeting-participant-attendance {
+    grid-column: auto;
+    justify-self: end;
+    text-align: end;
+  }
+}

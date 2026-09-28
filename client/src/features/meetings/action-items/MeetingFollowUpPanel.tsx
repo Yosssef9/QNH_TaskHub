@@ -677,38 +677,36 @@ export function MeetingFollowUpPanel({
         </Select>
       </div>
 
-      {isOrganizer ? (
-        <div className="space-y-1.5">
-          <label className="text-muted-foreground text-xs font-medium">
-            {t('meetings.followUp.filters.assignee')}
-          </label>
-          <Select
-            value={assigneeFilter ? String(assigneeFilter) : ALL}
-            onValueChange={(value) =>
-              setAssigneeFilter(value === ALL ? undefined : Number(value))
-            }
-          >
-            <SelectTrigger className="h-10 min-w-0" aria-label={t('meetings.followUp.filters.assignee')}>
-              <SelectValue>
-                <span className="block min-w-0 truncate">
-                  {selectedAssigneeFilterName || t('meetings.followUp.filters.allShort')}
+      <div className="space-y-1.5">
+        <label className="text-muted-foreground text-xs font-medium">
+          {t('meetings.followUp.filters.assignee')}
+        </label>
+        <Select
+          value={assigneeFilter ? String(assigneeFilter) : ALL}
+          onValueChange={(value) =>
+            setAssigneeFilter(value === ALL ? undefined : Number(value))
+          }
+        >
+          <SelectTrigger className="h-10 min-w-0" aria-label={t('meetings.followUp.filters.assignee')}>
+            <SelectValue>
+              <span className="block min-w-0 truncate">
+                {selectedAssigneeFilterName || t('meetings.followUp.filters.allShort')}
+              </span>
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>{t('meetings.followUp.filters.allShort')}</SelectItem>
+            {filterAssignees.map((item) => (
+              <SelectItem key={item.userId} value={String(item.userId)}>
+                <span className="flex min-w-0 items-center gap-2">
+                  <UserRound className="size-4 shrink-0" />
+                  <span className="truncate">{item.name}</span>
                 </span>
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>{t('meetings.followUp.filters.allShort')}</SelectItem>
-              {filterAssignees.map((item) => (
-                <SelectItem key={item.userId} value={String(item.userId)}>
-                  <span className="flex min-w-0 items-center gap-2">
-                    <UserRound className="size-4 shrink-0" />
-                    <span className="truncate">{item.name}</span>
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      ) : null}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       <div className="space-y-1.5">
         <label className="text-muted-foreground text-xs font-medium">
@@ -906,7 +904,7 @@ export function MeetingFollowUpPanel({
                       <ActionItemPreviewRow
                         key={item.taskId}
                         item={item}
-                        showAssignee={isOrganizer}
+                        showAssignee
                         onOpen={() => setTaskId(item.taskId)}
                       />
                     ))}
@@ -1161,7 +1159,7 @@ export function MeetingFollowUpPanel({
                                   : {})}
                                 statusPending={statusMutation.isPending}
                                 onStatusChange={(nextStatus) => changeStatus(item, nextStatus)}
-                                showAssignee={isOrganizer}
+                                showAssignee
                                 actionMenu={
                                   isOrganizer && item.status !== 'CANCELLED' ? (
                                     <Popover>
@@ -1556,6 +1554,7 @@ export function MeetingFollowUpPanel({
     </div>
   )
 }
+
 
 
 

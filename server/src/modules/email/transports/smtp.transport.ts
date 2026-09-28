@@ -44,6 +44,13 @@ export class SmtpEmailTransport implements EmailTransport {
   }
 
   async send(message: EmailMessage): Promise<EmailSendResult> {
+    for (const attachment of message.attachments ?? []) {
+      if (!Buffer.isBuffer(attachment.content) || attachment.contentType !== "application/pdf" ||
+          !/^Meeting-\d+-Report-(AR|EN)\.pdf$/.test(attachment.filename) ||
+          attachment.content.subarray(0, 5).toString("ascii") !== "%PDF-") {
+        throw new Error("Invalid trusted PDF attachment.");
+      }
+    }
     const info = await this.transporter.sendMail({
       from: {
         name: env.EMAIL_FROM_NAME,
@@ -56,23 +63,29 @@ export class SmtpEmailTransport implements EmailTransport {
             address: message.to,
           }
         : message.to,
+      ...(message.messageId ? { messageId: message.messageId } : {}),
       subject: message.subject,
       html: message.html,
       text: message.text,
-      ...(message.html.includes(QNH_TASKHUB_LOGO_SOURCE)
-        ? {
-            attachments: [
-              {
-                filename: "fullLogo.png",
-                path: QNH_TASKHUB_LOGO_PATH,
-                cid: QNH_TASKHUB_LOGO_CID,
-                contentType: "image/png",
-              },
-            ],
-          }
-        : {}),
+      attachments: [
+        ...(message.html.includes(QNH_TASKHUB_LOGO_SOURCE) ? [{
+          filename: "fullLogo.png",
+          path: QNH_TASKHUB_LOGO_PATH,
+          cid: QNH_TASKHUB_LOGO_CID,
+          contentType: "image/png",
+        }] : []),
+        ...(message.attachments ?? []).map((attachment) => ({
+          filename: attachment.filename,
+          content: attachment.content,
+          contentType: attachment.contentType,
+          contentDisposition: "attachment" as const,
+        })),
+      ],
     });
 
+    if (Array.isArray(info.rejected) && info.rejected.length > 0) {
+      throw new Error("SMTP did not accept the recipient.");
+    }
     return {
       provider: this.name,
       messageId: typeof info.messageId === "string" && info.messageId ? info.messageId : null,
@@ -83,3 +96,4 @@ export class SmtpEmailTransport implements EmailTransport {
     await this.transporter.verify();
   }
 }
+

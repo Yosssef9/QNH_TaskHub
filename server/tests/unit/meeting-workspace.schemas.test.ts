@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  bulkUpdateMeetingAttendanceBodySchema,
   cancelMeetingBodySchema,
   createMeetingRescheduleBodySchema,
   createMeetingTemplateBodySchema,
+  updateMeetingAttendanceBodySchema,
   updateMeetingTemplateBodySchema,
 } from "../../src/modules/meetings/meeting-workspace.schemas.js";
 
@@ -58,4 +60,19 @@ describe("Meeting workspace schemas", () => {
     expect(createMeetingTemplateBodySchema.safeParse({ ...values, durationMinutes: 0 }).success).toBe(false);
     expect(createMeetingTemplateBodySchema.safeParse({ ...values, organizerAttending: undefined }).success).toBe(false);
   });
+  it("validates Meeting attendance statuses and bulk actions", () => {
+    expect(
+      updateMeetingAttendanceBodySchema.safeParse({ participantUserId: 77, status: "ATTENDED" }).success,
+    ).toBe(true);
+    expect(
+      updateMeetingAttendanceBodySchema.safeParse({ participantUserId: 77, status: "ABSENT" }).success,
+    ).toBe(true);
+    expect(
+      updateMeetingAttendanceBodySchema.safeParse({ participantUserId: 77, status: "MAYBE" }).success,
+    ).toBe(false);
+    expect(bulkUpdateMeetingAttendanceBodySchema.safeParse({ status: "ATTENDED" }).success).toBe(true);
+    expect(bulkUpdateMeetingAttendanceBodySchema.safeParse({ status: "NOT_MARKED" }).success).toBe(true);
+    expect(bulkUpdateMeetingAttendanceBodySchema.safeParse({ status: "ABSENT" }).success).toBe(false);
+  });
+
 });

@@ -39,6 +39,26 @@ export interface UpdateMeetingAgendaInput {
   agendaItems: MeetingAgendaItemInput[];
 }
 
+export type MeetingAttendanceStatus = "NOT_MARKED" | "ATTENDED" | "ABSENT";
+export type MeetingAttendanceRole = "ORGANIZER" | "ATTENDEE";
+
+export interface MeetingAttendanceParticipant {
+  participant: MeetingParticipant;
+  role: MeetingAttendanceRole;
+  status: MeetingAttendanceStatus;
+  markedBy: MeetingParticipant | null;
+  markedAtUtc: string | null;
+}
+
+export interface UpdateMeetingAttendanceInput {
+  participantUserId: number;
+  status: MeetingAttendanceStatus;
+}
+
+export interface BulkUpdateMeetingAttendanceInput {
+  status: Extract<MeetingAttendanceStatus, "NOT_MARKED" | "ATTENDED">;
+}
+
 export interface MeetingActivityItem {
   id: number;
   activityType: string;
@@ -59,6 +79,7 @@ export interface MeetingDetailPermissions {
   canManageAgenda: boolean;
   canManageAttachments: boolean;
   canSaveAsTemplate: boolean;
+  canManageAttendance: boolean;
 }
 
 export interface MeetingDetail {
@@ -66,6 +87,7 @@ export interface MeetingDetail {
   agendaItems: MeetingAgendaItem[];
   revisions: MeetingRevisionDetail[];
   activity: MeetingActivityItem[];
+  attendance: MeetingAttendanceParticipant[];
   pendingReschedule: MeetingRevisionDetail | null;
   permissions: MeetingDetailPermissions;
 }

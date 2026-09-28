@@ -8,6 +8,9 @@ import type {
   MeetingAgendaItem,
   MeetingAgendaItemInput,
   MeetingAttachment,
+  MeetingAttendanceParticipant,
+  MeetingAttendanceRole,
+  MeetingAttendanceStatus,
   MeetingRevisionDetail,
   MeetingTemplate,
   SaveMeetingTemplateInput,
@@ -66,6 +69,26 @@ interface ActivityRecord {
   actorUserId: number | string;
   actorUserCode: string;
   actorUserName: string;
+}
+
+interface AttendanceRecord {
+  participantUserId: number | string;
+  participantUserCode: string;
+  participantUserName: string;
+  role: MeetingAttendanceRole;
+  status: MeetingAttendanceStatus;
+  markedByUserId: number | string | null;
+  markedByUserCode: string | null;
+  markedByUserName: string | null;
+  markedAtUtc: Date | null;
+}
+
+export interface AttendanceForUpdateRecord {
+  participantUserId: number;
+  participantUserCode: string;
+  participantUserName: string;
+  role: MeetingAttendanceRole;
+  status: MeetingAttendanceStatus;
 }
 
 interface AgendaItemRecord {
@@ -196,6 +219,24 @@ function mapRevision(record: RevisionRecord): MeetingRevisionDetail | null {
     createdAtUtc: record.createdAtUtc.toISOString(),
     decidedAtUtc: record.decidedAtUtc?.toISOString() ?? null,
     rowVersion,
+  };
+}
+
+function mapAttendance(record: AttendanceRecord): MeetingAttendanceParticipant {
+  return {
+    participant: participant(
+      record.participantUserId,
+      record.participantUserCode,
+      record.participantUserName,
+    ),
+    role: record.role,
+    status: record.status,
+    markedBy: optionalParticipant(
+      record.markedByUserId,
+      record.markedByUserCode,
+      record.markedByUserName,
+    ),
+    markedAtUtc: record.markedAtUtc?.toISOString() ?? null,
   };
 }
 
@@ -359,6 +400,169 @@ export const meetingWorkspaceRepository = {
           AND revision_status = 'APPROVED';
       `);
     return result.recordset[0]?.startAtUtc ?? null;
+  },
+
+  async listAttendance(meetingId: number): Promise<MeetingAttendanceParticipant[]> {
+    const pool = await getDatabasePool();
+    const result = await pool
+      .request()
+      .input("meetingId", sql.BigInt, meetingId)
+      .query<AttendanceRecord>(`
+        SELECT
+          attendee.attendee_user_id AS participantUserId,
+          portal.USER_CODE AS participantUserCode,
+          portal.USER_NAME AS participantUserName,
+          CASE
+            WHEN attendee.attendee_user_id = meeting.organizer_user_id THEN 'ORGANIZER'
+            ELSE 'ATTENDEE'
+          END AS role,
+          attendee.attendance_status AS status,
+          markedBy.USER_ID AS markedByUserId,
+          markedBy.USER_CODE AS markedByUserCode,
+          markedBy.USER_NAME AS markedByUserName,
+          attendee.attendance_marked_at_utc AS markedAtUtc
+        FROM dbo.TM_meeting_attendees AS attendee
+        INNER JOIN dbo.TM_meetings AS meeting
+          ON meeting.id = attendee.meeting_id
+        INNER JOIN dbo.users AS portal
+          ON portal.USER_ID = attendee.attendee_user_id
+        LEFT JOIN dbo.users AS markedBy
+          ON markedBy.USER_ID = attendee.attendance_marked_by_user_id
+        WHERE attendee.meeting_id = @meetingId
+        ORDER BY
+          CASE WHEN attendee.attendee_user_id = meeting.organizer_user_id THEN 0 ELSE 1 END,
+          portal.USER_NAME,
+          portal.USER_ID;
+      `);
+    return result.recordset.map(mapAttendance);
+  },
+
+  async findAttendanceParticipantForUpdate(
+    transaction: DatabaseTransaction,
+    meetingId: number,
+    participantUserId: number,
+  ): Promise<AttendanceForUpdateRecord | null> {
+    const result = await transaction
+      .request()
+      .input("meetingId", sql.BigInt, meetingId)
+      .input("participantUserId", sql.Int, participantUserId)
+      .query<AttendanceRecord>(`
+        SELECT TOP (1)
+          attendee.attendee_user_id AS participantUserId,
+          portal.USER_CODE AS participantUserCode,
+          portal.USER_NAME AS participantUserName,
+          CASE
+            WHEN attendee.attendee_user_id = meeting.organizer_user_id THEN 'ORGANIZER'
+            ELSE 'ATTENDEE'
+          END AS role,
+          attendee.attendance_status AS status,
+          CAST(NULL AS INT) AS markedByUserId,
+          CAST(NULL AS NVARCHAR(100)) AS markedByUserCode,
+          CAST(NULL AS NVARCHAR(250)) AS markedByUserName,
+          CAST(NULL AS DATETIME2(3)) AS markedAtUtc
+        FROM dbo.TM_meeting_attendees AS attendee WITH (UPDLOCK, HOLDLOCK)
+        INNER JOIN dbo.TM_meetings AS meeting
+          ON meeting.id = attendee.meeting_id
+        INNER JOIN dbo.users AS portal
+          ON portal.USER_ID = attendee.attendee_user_id
+        WHERE attendee.meeting_id = @meetingId
+          AND attendee.attendee_user_id = @participantUserId;
+      `);
+    const record = result.recordset[0];
+    if (!record) return null;
+    return {
+      participantUserId: Number(record.participantUserId),
+      participantUserCode: record.participantUserCode,
+      participantUserName: record.participantUserName,
+      role: record.role,
+      status: record.status,
+    };
+  },
+
+  async listAttendanceForUpdate(
+    transaction: DatabaseTransaction,
+    meetingId: number,
+  ): Promise<AttendanceForUpdateRecord[]> {
+    const result = await transaction
+      .request()
+      .input("meetingId", sql.BigInt, meetingId)
+      .query<AttendanceRecord>(`
+        SELECT
+          attendee.attendee_user_id AS participantUserId,
+          portal.USER_CODE AS participantUserCode,
+          portal.USER_NAME AS participantUserName,
+          CASE
+            WHEN attendee.attendee_user_id = meeting.organizer_user_id THEN 'ORGANIZER'
+            ELSE 'ATTENDEE'
+          END AS role,
+          attendee.attendance_status AS status,
+          CAST(NULL AS INT) AS markedByUserId,
+          CAST(NULL AS NVARCHAR(100)) AS markedByUserCode,
+          CAST(NULL AS NVARCHAR(250)) AS markedByUserName,
+          CAST(NULL AS DATETIME2(3)) AS markedAtUtc
+        FROM dbo.TM_meeting_attendees AS attendee WITH (UPDLOCK, HOLDLOCK)
+        INNER JOIN dbo.TM_meetings AS meeting
+          ON meeting.id = attendee.meeting_id
+        INNER JOIN dbo.users AS portal
+          ON portal.USER_ID = attendee.attendee_user_id
+        WHERE attendee.meeting_id = @meetingId
+        ORDER BY portal.USER_ID;
+      `);
+    return result.recordset.map((record) => ({
+      participantUserId: Number(record.participantUserId),
+      participantUserCode: record.participantUserCode,
+      participantUserName: record.participantUserName,
+      role: record.role,
+      status: record.status,
+    }));
+  },
+
+  async updateAttendance(
+    transaction: DatabaseTransaction,
+    meetingId: number,
+    participantUserId: number,
+    actorUserId: number,
+    status: MeetingAttendanceStatus,
+  ): Promise<boolean> {
+    const result = await transaction
+      .request()
+      .input("meetingId", sql.BigInt, meetingId)
+      .input("participantUserId", sql.Int, participantUserId)
+      .input("actorUserId", sql.Int, actorUserId)
+      .input("status", sql.VarChar(20), status)
+      .query(`
+        UPDATE dbo.TM_meeting_attendees
+        SET
+          attendance_status = @status,
+          attendance_marked_by_user_id = @actorUserId,
+          attendance_marked_at_utc = SYSUTCDATETIME()
+        WHERE meeting_id = @meetingId
+          AND attendee_user_id = @participantUserId;
+      `);
+    return Number(result.rowsAffected[0] ?? 0) === 1;
+  },
+
+  async bulkUpdateAttendance(
+    transaction: DatabaseTransaction,
+    meetingId: number,
+    actorUserId: number,
+    status: Extract<MeetingAttendanceStatus, "NOT_MARKED" | "ATTENDED">,
+  ): Promise<number> {
+    const result = await transaction
+      .request()
+      .input("meetingId", sql.BigInt, meetingId)
+      .input("actorUserId", sql.Int, actorUserId)
+      .input("status", sql.VarChar(20), status)
+      .query(`
+        UPDATE dbo.TM_meeting_attendees
+        SET
+          attendance_status = @status,
+          attendance_marked_by_user_id = @actorUserId,
+          attendance_marked_at_utc = SYSUTCDATETIME()
+        WHERE meeting_id = @meetingId
+          AND attendance_status <> @status;
+      `);
+    return Number(result.rowsAffected[0] ?? 0);
   },
 
   async listRevisions(meetingId: number): Promise<MeetingRevisionDetail[]> {

@@ -19,6 +19,7 @@ export const EMAIL_PREFERENCE_EVENTS = [
   'MEETING_SERIES_SCHEDULED',
   'MEETING_ACTION_ITEM_ASSIGNED',
   'MEETING_ACTION_ITEM_COMPLETED',
+  'MEETING_REPORT_AVAILABLE',
 ] as const
 
 export type EmailPreferenceEvent = (typeof EMAIL_PREFERENCE_EVENTS)[number]
@@ -53,5 +54,6 @@ export interface UpdateEmailSettingsInput {
   activeEmailSource?: EmailAddressSource
   preferences?: EmailEventPreference[]
 }
+
 
 

@@ -1698,6 +1698,131 @@ export const enTranslation = {
     },
   },
   meetings: {
+    report: {
+      automatic: {
+        compact: {
+          "title": "Meeting report",
+          "viewDetails": "View details",
+          "detailsTitle": "Report delivery details",
+          "detailsDescription": "Current automatic report timing and recorded email delivery results.",
+          "unavailable": "Status unavailable",
+          "retry": "Retry",
+          "originalDue": "Original report due time",
+          "audienceTitle": "Audience",
+          "summaryTitle": "Delivery summary",
+          "noDelivery": "No report emails have been queued.",
+          "notEnabled": "Automatic email disabled",
+          "schedule": {
+            "WAITING": "Scheduled",
+            "DUE": "Waiting to queue",
+            "AWAITING_APPROVAL": "Awaiting approval",
+            "REJECTED": "Not scheduled — Meeting rejected",
+            "CANCELLED": "Not scheduled — Meeting cancelled",
+            "INVALID_SCHEDULE": "Schedule unavailable",
+            "BEFORE_ACTIVATION": "Not scheduled — Before activation"
+          },
+          "delivery": {
+            "NOT_QUEUED": "Not queued",
+            "QUEUED": "Queued",
+            "PROCESSING": "Sending",
+            "RETRYING": "Retrying",
+            "SENT": "Sent",
+            "PARTIAL": "Partially sent",
+            "FAILED": "Failed",
+            "SKIPPED": "Skipped",
+            "REVIEW_REQUIRED": "Needs review"
+          },
+          "counts": {
+            "sent": "{{count}} sent",
+            "queued": "{{count}} queued",
+            "processing": "{{count}} processing",
+            "retrying": "{{count}} retrying",
+            "failed": "{{count}} failed",
+            "skipped": "{{count}} skipped",
+            "notQueued": "{{count}} not queued",
+            "needsReview": "{{count}} need review"
+          },
+          "countLabels": {
+            "sent": "Sent",
+            "queued": "Queued",
+            "processing": "Processing",
+            "retrying": "Retrying",
+            "failed": "Failed",
+            "skipped": "Skipped",
+            "notQueued": "Not queued",
+            "needsReview": "Needs review"
+          }
+        },
+        availability: {
+          ENABLED: 'Automatic report email is enabled.',
+          DISABLED: 'Automatic report emailing is paused by the administrator. Manual export is still available.',
+          EMAIL_DISABLED: 'TaskHub email delivery is disabled. Reports will not be sent until email delivery is enabled.',
+          MIGRATION_REQUIRED: 'Automatic reports are not ready: database migration 044 must be applied by the administrator.',
+        },
+        activation: 'Automatic reports cover Meetings ending on or after',
+        lastScan: 'Last successful automatic-report scan',
+        awaitingScan: 'Automatic email is enabled, but no successful scan has been recorded yet. This does not mean a report was queued or sent.',
+
+        "title": "Meeting report & automatic email",
+        "manualHint": "Export the latest PDF at any time using Export PDF above.",
+        "refresh": "Refresh report status",
+        "loading": "Loading report timing…",
+        "loadFailed": "Report status could not be refreshed. No current delivery status is being shown. Manual PDF export is still available.",
+        "notEnabled": "Automatic email not enabled",
+        "disabledNotice": "Automatic report emailing is currently paused. Manual export remains available.",
+        "calculatedFor": "Calculated report time",
+        "scheduledFor": "Automatic report due",
+        "grace": "{{minutes}} minutes after the approved Meeting end",
+        "preparation": "Attendance, Decisions, Notes and Action Items recorded before report generation will be included. Empty sections do not block the report.",
+        "pendingReschedule": "A reschedule request is pending. This calculation continues to use the current approved schedule until the change is approved.",
+        "audience": "Planned audience: Organizer and invited participants ({{count}} unique users), including absent participants. Actual email delivery follows access, email settings and valid destinations.",
+        "counts": "Sent: {{sent}} · Queued: {{queued}} · Processing: {{processing}} · Retrying: {{retrying}} · Failed: {{failed}} · Skipped: {{skipped}} · Not queued: {{notQueued}} · Needs review: {{needsReview}}",
+        "lastSent": "Last recorded send",
+        "nextAttempt": "Next queued attempt",
+        "deliveryNote": "Sent means the mail server accepted the message, not that it was read or reached the inbox. Counts concern the current recipient roster and approved schedule.",
+        "checkedAt": "Last checked",
+        "schedule": {
+          "WAITING": "Waiting for report time",
+          "DUE": "Report time reached — not yet queued",
+          "AWAITING_APPROVAL": "Awaiting Meeting approval",
+          "REJECTED": "Meeting rejected",
+          "CANCELLED": "Meeting cancelled",
+          "INVALID_SCHEDULE": "Approved schedule unavailable",
+          "BEFORE_ACTIVATION": "Before automatic report activation"
+        },
+        "reason": {
+          "BEFORE_ACTIVATION": "This Meeting ended before automatic reports were activated. No historical email will be sent; export the PDF manually.",
+          "AWAITING_APPROVAL": "Report timing is available after the Meeting is approved.",
+          "REJECTED": "Rejected Meetings are not eligible for the automatic post-Meeting report.",
+          "CANCELLED": "Cancelled Meetings are not eligible for the automatic post-Meeting report.",
+          "INVALID_SCHEDULE": "No valid approved schedule is available. Ask the Coordinator to review the Meeting."
+        },
+        "delivery": {
+          "NOT_QUEUED": "Not queued",
+          "QUEUED": "Email queued",
+          "PROCESSING": "Email processing",
+          "RETRYING": "Email retry pending",
+          "SENT": "Sent to all current recipients",
+          "PARTIAL": "Partially sent or skipped",
+          "FAILED": "Email delivery failed",
+          "SKIPPED": "Email skipped for all current recipients",
+          "REVIEW_REQUIRED": "Report delivery needs review"
+        }
+      },
+      export: 'Export PDF',
+      generating: 'Generating report…',
+      hint: 'Export the current Meeting report at any time, including incomplete sections.',
+      downloadStarted: 'Meeting report download started.',
+      failed: 'The Meeting report could not be generated. Please try again.',
+      errors: {
+        MEETING_NOT_FOUND: 'This Meeting is no longer available or you no longer have access to it.',
+        MEETING_REPORT_BUSY: 'A report is already being generated or the PDF service is busy. Please try again shortly.',
+        MEETING_REPORT_RENDERER_UNAVAILABLE: 'PDF export is not ready on the server. Ask the administrator to install or configure the report browser.',
+        MEETING_REPORT_TIMEOUT: 'Report generation took too long. Please try again.',
+        MEETING_REPORT_TOO_LARGE: 'This Meeting report exceeds the supported PDF size. Please contact the administrator.',
+        MEETING_REPORT_FAILED: 'The Meeting report could not be generated. Please try again.',
+      },
+    },
     eyebrow: 'Meetings',
     title: 'Meetings',
     description:
@@ -2416,6 +2541,24 @@ export const enTranslation = {
       participantCount: '{{count}} participant(s)',
       organizerAttending: 'Attending',
       organizerNotAttending: 'Not attending',
+      attendance: {
+        participantList: "Participants and attendance list",
+        statusLabel: 'Attendance for {{name}}',
+        status: {
+          NOT_MARKED: 'Not marked',
+          ATTENDED: 'Attended',
+          ABSENT: 'Absent',
+        },
+        availableAtStart: 'Attendance can be recorded by the Meeting Organizer when the approved Meeting start time is reached.',
+        markAll: 'Mark all attended',
+        clear: 'Clear attendance',
+        updated: 'Attendance updated.',
+        updateError: 'Attendance could not be updated.',
+        markAllSuccess: 'All Meeting participants were marked as attended.',
+        clearSuccess: 'Attendance was cleared.',
+        activityParticipant: '{{name}}: {{from}} → {{to}}',
+        activityBulk: '{{count}} participant(s) updated to {{status}}.',
+      },
       activityTimelineDescription: 'A unified history of schedule revisions and Meeting activity.',
       activityPreviewDescription: 'The latest activity from this Meeting.',
       noActivity: 'No activity has been recorded for this Meeting yet.',
@@ -2537,6 +2680,13 @@ export const enTranslation = {
         ATTACHMENT_REMOVED: 'File removed',
         FOLLOW_UP_MEETING_CREATED: 'Follow-up Meeting created',
         CREATED_AS_FOLLOW_UP: 'Created as a follow-up Meeting',
+        ATTENDANCE_UPDATED: 'Attendance updated',
+        ACTION_ITEM_CREATED: 'Action Item created',
+        ACTION_ITEM_REASSIGNED: 'Action Item reassigned',
+        ACTION_ITEM_STATUS_CHANGED: 'Action Item status changed',
+        DECISION_CREATED: 'Decision recorded',
+        DECISION_UPDATED: 'Decision updated',
+        NOTES_UPDATED: 'Meeting Notes updated',
       },
     },
     templates: {
@@ -2603,7 +2753,7 @@ export const enTranslation = {
       workspace: {
         eyebrow: 'Follow-up workspace',
         actionItemsPreview: 'Priority work and the latest Action Items from this Meeting.',
-        actionItemsDetail: 'Search, filter, group, and manage the Action Items you are authorized to access.',
+        actionItemsDetail: 'All Meeting viewers can read every Action Item. Management and execution permissions remain with the Organizer and the assigned participant.',
         viewAll: 'View all',
         viewMoreItems: 'View {{count}} more items',
         backToOverview: 'Back to Follow-up',
@@ -2692,7 +2842,7 @@ export const enTranslation = {
       contentReadOnly: 'Follow-up content is read-only for this Meeting.',
       summarySection: {
         title: 'Summary',
-        description: 'A permission-aware snapshot of the Follow-up content you can access.',
+        description: 'A snapshot of this Meeting’s Action Items, completion, overdue work, and Decisions.',
         collapsed:
           '{{actions}} action items · {{completed}} completed · {{overdue}} overdue · {{decisions}} decisions',
         expand: 'Open Follow-up summary',
@@ -2814,7 +2964,10 @@ export const enTranslation = {
       INVALID_MEETING_AGENDA_TOPIC: 'Every agenda item needs a topic.',
       INVALID_MEETING_AGENDA_ITEM:
         'One or more Agenda topics changed after you opened the Meeting. Reload and try again.',
-      MEETING_ORGANIZER_REQUIRED: 'Only the Meeting Organizer can change this Follow-up content.',
+      MEETING_ORGANIZER_REQUIRED: 'Only the Meeting Organizer can make this change.',
+      MEETING_ATTENDANCE_NOT_AVAILABLE: 'Attendance can be recorded only for a scheduled Meeting.',
+      MEETING_ATTENDANCE_NOT_STARTED: 'Attendance can be recorded when the Meeting starts.',
+      MEETING_ATTENDANCE_PARTICIPANT_NOT_FOUND: 'This person is not an attendance participant for this Meeting.',
       MEETING_FOLLOWUP_READ_ONLY: 'Follow-up content is read-only unless the Meeting is scheduled.',
       MEETING_FOLLOWUP_NOT_STARTED:
         'Follow-up becomes available when the approved Meeting start time is reached.',
@@ -3028,6 +3181,9 @@ export const enTranslation = {
     },
     actionItem: {
       badge: 'Meeting action item',
+      readOnly: 'Read only',
+      viewerDescription:
+        'You can read this Action Item because you can view the Meeting. It is assigned to {{name}}. You may view subtasks and download files, but cannot make changes or upload attachments.',
       assignedBy: 'Assigned by {{name}}',
       assignedTo: 'Assigned to {{name}}',
       uploadedBy: 'Uploaded by {{name}}',
@@ -3491,6 +3647,10 @@ export const enTranslation = {
           title: 'Meeting action item completed',
           description: 'Email me when a meeting action item is completed.',
         },
+        MEETING_REPORT_AVAILABLE: {
+          title: 'Meeting report after the Meeting',
+          description: 'Email me the current PDF report 30 minutes after the approved end, including when I was absent. Manual export remains available.',
+        },
       },
     },
     test: {
@@ -3546,6 +3706,11 @@ export const enTranslation = {
     backHome: 'Back to home',
   },
 } as const
+
+
+
+
+
 
 
 

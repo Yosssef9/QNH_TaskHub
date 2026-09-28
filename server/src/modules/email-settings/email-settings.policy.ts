@@ -26,4 +26,6 @@ export const EMAIL_EVENT_DEFAULTS: Readonly<Record<EmailPreferenceEvent, boolean
 
   MEETING_ACTION_ITEM_ASSIGNED: true,
   MEETING_ACTION_ITEM_COMPLETED: true,
+  MEETING_REPORT_AVAILABLE: true,
 };
+

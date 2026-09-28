@@ -1,4 +1,7 @@
 import os from "node:os";
+import { emailRetryDelaySeconds } from "./email-retry.policy.js";
+import { randomUUID } from "node:crypto";
+import { meetingReportEmailService } from "../meeting-reports/meeting-report-email.service.js";
 
 import { env } from "../../config/env.js";
 import { logger } from "../../config/logger.js";
@@ -11,13 +14,6 @@ import { renderEmailTemplate } from "./templates/email-template.registry.js";
 
 export interface EmailWorkerHandle {
   stop(): Promise<void>;
-}
-
-function retryDelaySeconds(attemptCount: number): number {
-  if (attemptCount <= 1) return 60;
-  if (attemptCount === 2) return 5 * 60;
-  if (attemptCount === 3) return 30 * 60;
-  return 2 * 60 * 60;
 }
 
 function parsePayload(value: string): Record<string, unknown> {
@@ -76,15 +72,19 @@ export async function processEmailOutboxOnce(workerId: string): Promise<number> 
     logger.error({ err: error }, "Operational email synchronization failed; queued email delivery will continue");
   }
 
+  try {
+    await meetingReportEmailService.synchronize();
+  } catch (error) {
+    logger.error({ err: error }, "Meeting report dispatch scan failed; other email delivery continues");
+  }
+
   const rows = await emailRepository.claimBatch(
     workerId,
     env.EMAIL_WORKER_BATCH_SIZE,
     env.EMAIL_PROCESSING_TIMEOUT_MINUTES,
     env.EMAIL_MAX_ATTEMPTS,
+    "OTHER",
   );
-  if (rows.length === 0) {
-    return 0;
-  }
 
   const transport = getEmailTransport();
 
@@ -134,6 +134,7 @@ export async function processEmailOutboxOnce(workerId: string): Promise<number> 
         );
       }
 
+      if (!recipientEmail) throw new Error("An email destination is required for this template.");
       const document = renderEmailTemplate(templateKey, payload, language);
       const sendResult = await transport.send({
         to: recipientEmail,
@@ -155,7 +156,7 @@ export async function processEmailOutboxOnce(workerId: string): Promise<number> 
         workerId,
         row.attemptCount,
         env.EMAIL_MAX_ATTEMPTS,
-        retryDelaySeconds(row.attemptCount),
+        emailRetryDelaySeconds(row.attemptCount),
         message,
       );
       logger.error(
@@ -167,7 +168,26 @@ export async function processEmailOutboxOnce(workerId: string): Promise<number> 
     }
   }
 
-  return rows.length;
+  // PDF work is bounded and claimed one row at a time. Do not lease a whole batch
+  // and leave its later rows waiting while earlier recipients are being rendered.
+  let reportCount = 0;
+  try {
+    for (let index = 0; index < Math.min(env.EMAIL_WORKER_BATCH_SIZE, 5); index += 1) {
+      if (!(await meetingReportEmailService.runtime()).automaticDeliveryEnabled) break;
+      // A distinct token per claim prevents a restarted worker/PID from reusing an old lease.
+      const leaseId = `${workerId.slice(0, 70)}:report:${randomUUID()}`;
+      const [report] = await emailRepository.claimBatch(leaseId, 1,
+        env.EMAIL_PROCESSING_TIMEOUT_MINUTES, env.EMAIL_MAX_ATTEMPTS, "REPORT");
+      if (!report) break;
+      const outcome = await meetingReportEmailService.process(report, leaseId);
+      logger.info({ outboxId: Number(report.id), outcome }, "Meeting report email attempt completed");
+      reportCount += 1;
+    }
+  } catch {
+    // Do not log raw report/SMTP errors, which may contain report text or email addresses.
+    logger.error("Meeting report email iteration failed; the outbox lease/retry state is retained");
+  }
+  return rows.length + reportCount;
 }
 
 export function startEmailWorker(): EmailWorkerHandle {
@@ -217,6 +237,7 @@ export function startEmailWorker(): EmailWorkerHandle {
     },
   };
 }
+
 
 
 

@@ -3,6 +3,7 @@ import { AppError } from "../../shared/errors/app-error.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
 import { resolveKpiTaskDates } from "../kpis/kpi-task-dates.js";
 import { resolveTaskAccess } from "../meeting-action-items/meeting-action-items.access.js";
+import { meetingSchedulingRepository } from "../meetings/meeting-scheduling.repository.js";
 import { notificationsRepository } from "../notifications/notifications.repository.js";
 import { workCyclesService } from "../work-cycles/work-cycles.service.js";
 import { mapTask } from "./tasks.mapper.js";
@@ -93,7 +94,8 @@ export const tasksService = {
   async get(actorUserId: number, taskId: number): Promise<PersonalTask> {
     const access = await resolveTaskAccess(actorUserId, taskId);
     if (!access) throw notFound();
-    return loadTask(access.ownerUserId, taskId);
+    const task = await loadTask(access.ownerUserId, taskId);
+    return { ...task, isReadOnly: task.isReadOnly || access.capabilities.role === "VIEWER" };
   },
 
   async create(ownerUserId: number, listId: number, input: CreateTaskInput): Promise<PersonalTask> {
@@ -132,7 +134,7 @@ export const tasksService = {
       if (!access.capabilities.canEditDetails) {
         throw forbidden(
           "TASK_EDIT_FORBIDDEN",
-          "The Action Item assignee cannot change administrative Task details.",
+          "You cannot change administrative Task details.",
         );
       }
 
@@ -258,6 +260,15 @@ export const tasksService = {
         }
       }
 
+      // Read access is not permission to change status. A new VIEWER role must
+      // not fall through the OWNER/ASSIGNEE-specific checks above.
+      const canChangeStatus = input.status === "DONE"
+        ? access.capabilities.canCompleteTask
+        : access.capabilities.canChangeNonCompletionStatus;
+      if (!canChangeStatus) {
+        throw forbidden("TASK_STATUS_FORBIDDEN", "You cannot change this Task's status.");
+      }
+
       const current = await tasksRepository.findOwnedForUpdate(
         transaction,
         ownerUserId,
@@ -286,6 +297,13 @@ export const tasksService = {
         { from: currentStatus, to: input.status },
         actorUserId,
       );
+
+      if (access.context) {
+        await meetingSchedulingRepository.addActivity(transaction, access.context.meetingId, actorUserId,
+          "ACTION_ITEM_STATUS_CHANGED", {
+            taskId, taskTitle: current.title, fromTaskStatus: currentStatus, toTaskStatus: input.status,
+          });
+      }
 
       if (
         access.context &&
@@ -320,7 +338,7 @@ export const tasksService = {
       if (!access.capabilities.canDeleteRestoreTask) {
         throw forbidden(
           "TASK_DELETE_FORBIDDEN",
-          "The Action Item assignee cannot delete this Task.",
+          "You cannot delete this Task.",
         );
       }
 
@@ -354,7 +372,7 @@ export const tasksService = {
       if (!access.capabilities.canDeleteRestoreTask) {
         throw forbidden(
           "TASK_RESTORE_FORBIDDEN",
-          "The Action Item assignee cannot restore this Task.",
+          "You cannot restore this Task.",
         );
       }
 
@@ -408,3 +426,5 @@ export const tasksService = {
     return loadTask(ownerUserId, taskId);
   },
 };
+
+

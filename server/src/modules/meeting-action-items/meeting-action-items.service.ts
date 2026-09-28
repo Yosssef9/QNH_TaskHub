@@ -2,6 +2,7 @@ import { withTransaction } from "../../database/transaction.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
 import type { TaskHubAccess } from "../auth/auth.types.js";
+import { meetingSchedulingRepository } from "../meetings/meeting-scheduling.repository.js";
 import { meetingWorkspaceRepository } from "../meetings/meeting-workspace.repository.js";
 import { requireMeetingContentAccess } from "../meetings/meeting-content-access.js";
 import { notificationsRepository } from "../notifications/notifications.repository.js";
@@ -62,7 +63,7 @@ export const meetingActionItemsService = {
   ): Promise<MeetingActionItemListData> {
     const context = await accessContext(actorUserId, access, meetingId);
     const [items, canCreate] = await Promise.all([
-      meetingActionItemsRepository.listForMeeting(meetingId, actorUserId),
+      meetingActionItemsRepository.listForMeeting(meetingId),
       canCreateNow(actorUserId, context),
     ]);
     return { items, canCreate };
@@ -195,6 +196,12 @@ export const meetingActionItemsService = {
         actorUserId,
       );
 
+      await meetingSchedulingRepository.addActivity(transaction, meetingId, actorUserId,
+        "ACTION_ITEM_CREATED", {
+          taskId: created, taskTitle: input.title,
+          assigneeUserId: input.assigneeUserId, agendaItemId: input.agendaItemId ?? null,
+        });
+
       const sourceMeetingTitle =
         (await meetingActionItemsRepository.meetingTitle(meetingId, transaction)) ?? "Meeting";
       await notificationsRepository.ensureMeetingActionItemNotification(
@@ -213,7 +220,7 @@ export const meetingActionItemsService = {
       return created;
     });
 
-    const items = await meetingActionItemsRepository.listForMeeting(meetingId, actorUserId);
+    const items = await meetingActionItemsRepository.listForMeeting(meetingId);
     const item = items.find((candidate) => candidate.taskId === taskId);
     if (!item) throw actionItemNotFound();
     return { item };
@@ -288,6 +295,11 @@ export const meetingActionItemsService = {
 
       const task = await tasksRepository.findOwnedForUpdate(transaction, actorUserId, taskId);
       if (!task) throw actionItemNotFound();
+      await meetingSchedulingRepository.addActivity(transaction, meetingId, actorUserId,
+        "ACTION_ITEM_REASSIGNED", {
+          taskId, taskTitle: task.title,
+          fromAssigneeUserId: relation.assigneeUserId, toAssigneeUserId: input.assigneeUserId,
+        });
       await notificationsRepository.ensureMeetingActionItemNotification(
         input.assigneeUserId,
         {
@@ -302,7 +314,7 @@ export const meetingActionItemsService = {
       );
     });
 
-    const items = await meetingActionItemsRepository.listForMeeting(meetingId, actorUserId);
+    const items = await meetingActionItemsRepository.listForMeeting(meetingId);
     const item = items.find((candidate) => candidate.taskId === taskId);
     if (!item) throw actionItemNotFound();
     return { item };
@@ -353,4 +365,6 @@ export const meetingActionItemsService = {
     return { ...result, page: query.page, pageSize: query.pageSize };
   },
 };
+
+
 

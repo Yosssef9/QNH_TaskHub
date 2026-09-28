@@ -35,6 +35,8 @@ export function notificationTypeForTemplate(
     case "MEETING_ACTION_ITEM_ASSIGNED":
     case "MEETING_ACTION_ITEM_COMPLETED":
       return templateKey;
+    // Reports are email-only jobs, handled by the report processor, not notification sync.
+    case "MEETING_REPORT_AVAILABLE":
     case "TEST":
     case "VERIFY_ALTERNATE_EMAIL":
       return null;
@@ -48,5 +50,6 @@ export function isContractNotificationType(
 ): type is "CONTRACT_EXPIRATION_REMINDER" | "CONTRACT_NOTICE_DEADLINE_REMINDER" {
   return type === "CONTRACT_EXPIRATION_REMINDER" || type === "CONTRACT_NOTICE_DEADLINE_REMINDER";
 }
+
 
 

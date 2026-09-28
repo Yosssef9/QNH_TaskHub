@@ -25,6 +25,7 @@ import {
   mapMeetingAttachmentRecord,
 } from "./meeting-workspace.repository.js";
 import type {
+  BulkUpdateMeetingAttendanceInput,
   CancelMeetingInput,
   CancelMeetingRescheduleRequestInput,
   CoordinatorDirectRescheduleInput,
@@ -38,6 +39,7 @@ import type {
   RejectMeetingRescheduleInput,
   SaveMeetingTemplateInput,
   UpdateMeetingAgendaInput,
+  UpdateMeetingAttendanceInput,
   UpdateMeetingRescheduleInput,
   UpdateMeetingTemplateInput,
   UpdateOrganizerRescheduleInput,
@@ -214,6 +216,48 @@ async function filterRelationshipActivity(
   });
 }
 
+async function assertAttendanceWritable(
+  transaction: DatabaseTransaction,
+  actorUserId: number,
+  meetingId: number,
+) {
+  const context = await meetingWorkspaceRepository.findAccessContext(
+    meetingId,
+    actorUserId,
+    transaction,
+  );
+  if (!context) throw notFound();
+  if (context.organizerUserId !== actorUserId) {
+    throw new AppError({
+      statusCode: 403,
+      code: "MEETING_ORGANIZER_REQUIRED",
+      message: "Only the Meeting Organizer can record attendance.",
+    });
+  }
+  if (context.status !== "SCHEDULED" || context.currentRevisionId === null) {
+    throw new AppError({
+      statusCode: 409,
+      code: "MEETING_ATTENDANCE_NOT_AVAILABLE",
+      message: "Attendance can be recorded only for a scheduled Meeting.",
+    });
+  }
+
+  const approvedStartAtUtc = await meetingWorkspaceRepository.approvedStart(
+    meetingId,
+    context.currentRevisionId,
+    transaction,
+  );
+  if (!approvedStartAtUtc) throw stale();
+  if (approvedStartAtUtc.getTime() > Date.now()) {
+    throw new AppError({
+      statusCode: 409,
+      code: "MEETING_ATTENDANCE_NOT_STARTED",
+      message: "Attendance can be recorded when the approved Meeting start time is reached.",
+    });
+  }
+  return context;
+}
+
 async function loadDetail(
   actorUserId: number,
   access: TaskHubAccess,
@@ -227,11 +271,12 @@ async function loadDetail(
 
   if (!canReadMeetingContent(context, actorUserId, access)) throw notFound();
 
-  const [meeting, agendaItems, revisions, rawActivity] = await Promise.all([
+  const [meeting, agendaItems, revisions, rawActivity, attendance] = await Promise.all([
     meetingWorkflowRepository.findSummary(meetingId),
     meetingWorkspaceRepository.listAgendaItems(meetingId),
     meetingWorkspaceRepository.listRevisions(meetingId),
     meetingWorkspaceRepository.listActivity(meetingId),
+    meetingWorkspaceRepository.listAttendance(meetingId),
   ]);
   if (!meeting) throw notFound();
 
@@ -249,6 +294,7 @@ async function loadDetail(
     agendaItems,
     revisions,
     activity,
+    attendance,
     pendingReschedule,
     permissions: {
       canCancel:
@@ -278,6 +324,7 @@ async function loadDetail(
       canManageAttachments:
         isOrganizer && ["PENDING_APPROVAL", "SCHEDULED"].includes(context.status),
       canSaveAsTemplate: isOrganizer && hasMeetingPermission(access, "MEETING_ORGANIZE"),
+      canManageAttendance: isOrganizer && context.status === "SCHEDULED",
     },
   };
 }
@@ -367,6 +414,104 @@ async function listPendingReschedulesInternal(): Promise<MeetingRescheduleQueueI
 
 export const meetingWorkspaceService = {
   getDetail: loadDetail,
+
+  async updateAttendance(
+    actorUserId: number,
+    access: TaskHubAccess,
+    meetingId: number,
+    input: UpdateMeetingAttendanceInput,
+  ): Promise<MeetingDetail> {
+    await withTransaction(async (transaction) => {
+      await assertAttendanceWritable(transaction, actorUserId, meetingId);
+      const participant = await meetingWorkspaceRepository.findAttendanceParticipantForUpdate(
+        transaction,
+        meetingId,
+        input.participantUserId,
+      );
+      if (!participant) {
+        throw new AppError({
+          statusCode: 404,
+          code: "MEETING_ATTENDANCE_PARTICIPANT_NOT_FOUND",
+          message: "This person is not an attendance participant for the Meeting.",
+        });
+      }
+      if (participant.status === input.status) return;
+
+      const updated = await meetingWorkspaceRepository.updateAttendance(
+        transaction,
+        meetingId,
+        input.participantUserId,
+        actorUserId,
+        input.status,
+      );
+      if (!updated) throw stale();
+
+      await meetingSchedulingRepository.addActivity(
+        transaction,
+        meetingId,
+        actorUserId,
+        "ATTENDANCE_UPDATED",
+        {
+          scope: "PARTICIPANT",
+          participantUserId: participant.participantUserId,
+          participantUserCode: participant.participantUserCode,
+          participantName: participant.participantUserName,
+          participantRole: participant.role,
+          fromStatus: participant.status,
+          toStatus: input.status,
+        },
+      );
+    });
+
+    return loadDetail(actorUserId, access, meetingId);
+  },
+
+  async bulkUpdateAttendance(
+    actorUserId: number,
+    access: TaskHubAccess,
+    meetingId: number,
+    input: BulkUpdateMeetingAttendanceInput,
+  ): Promise<MeetingDetail> {
+    await withTransaction(async (transaction) => {
+      await assertAttendanceWritable(transaction, actorUserId, meetingId);
+      const participants = await meetingWorkspaceRepository.listAttendanceForUpdate(
+        transaction,
+        meetingId,
+      );
+      const changed = participants.filter((participant) => participant.status !== input.status);
+      if (changed.length === 0) return;
+
+      const changedCount = await meetingWorkspaceRepository.bulkUpdateAttendance(
+        transaction,
+        meetingId,
+        actorUserId,
+        input.status,
+      );
+      if (changedCount !== changed.length) throw stale();
+
+      await meetingSchedulingRepository.addActivity(
+        transaction,
+        meetingId,
+        actorUserId,
+        "ATTENDANCE_UPDATED",
+        {
+          scope: "ALL",
+          toStatus: input.status,
+          changedCount,
+          participants: changed.map((participant) => ({
+            participantUserId: participant.participantUserId,
+            participantUserCode: participant.participantUserCode,
+            participantName: participant.participantUserName,
+            participantRole: participant.role,
+            fromStatus: participant.status,
+            toStatus: input.status,
+          })),
+        },
+      );
+    });
+
+    return loadDetail(actorUserId, access, meetingId);
+  },
 
   async updateAgenda(
     actorUserId: number,

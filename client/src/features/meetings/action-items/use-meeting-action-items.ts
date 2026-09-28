@@ -33,6 +33,7 @@ function invalidateActionItemQueries(queryClient: ReturnType<typeof useQueryClie
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: ['meetings', 'action-items', meetingId] }),
     queryClient.invalidateQueries({ queryKey: ['meetings', 'follow-up', meetingId] }),
+    queryClient.invalidateQueries({ queryKey: ['meetings', 'detail', meetingId] }),
     queryClient.invalidateQueries({ queryKey: ['tasks'] }),
     queryClient.invalidateQueries({ queryKey: ['task-details'] }),
     queryClient.invalidateQueries({ queryKey: ['assigned-action-items'] }),
@@ -68,4 +69,5 @@ export function useAssignedMeetingActionItems(query: AssignedMeetingActionItemsQ
     placeholderData: (previous) => previous,
   })
 }
+
 

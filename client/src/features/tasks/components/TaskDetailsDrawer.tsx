@@ -125,7 +125,7 @@ function SortableSubtaskRow({
   onDeleteAttachment: (attachment: TaskAttachment) => void
 }) {
   const { i18n, t } = useTranslation()
-  const sortable = useTaskHubSortable({ id: item.id, index })
+  const sortable = useTaskHubSortable({ id: item.id, index, disabled: dragDisabled })
   const dueDate = formatDate(item.dueDate, i18n.language)
 
   return (
@@ -337,8 +337,9 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
     return () => window.cancelAnimationFrame(frame)
   }, [focusSubtaskId, query.data])
 
-  const readOnly = query.data?.task.isReadOnly ?? false
   const capabilities = query.data?.capabilities
+  const isMeetingViewer = capabilities?.role === 'VIEWER'
+  const readOnly = (query.data?.task.isReadOnly ?? false) || isMeetingViewer
   const canManageSubtasks = !readOnly && (capabilities?.canManageSubtasks ?? true)
   const canCompleteSubtasks = !readOnly && (capabilities?.canCompleteSubtasks ?? true)
   const canUploadAttachments = !readOnly && (capabilities?.canUploadAttachments ?? true)
@@ -468,7 +469,16 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                   </div>
                 </header>
 
-                {readOnly ? (
+                {isMeetingViewer ? (
+                  <div className="border-primary/20 bg-primary/5 mb-5 rounded-xl border p-4 text-sm">
+                    <p className="font-semibold">{t('tasks.actionItem.readOnly')}</p>
+                    <p className="text-muted-foreground mt-1 leading-6">
+                      {t('tasks.actionItem.viewerDescription', {
+                        name: query.data.actionItem?.assigneeName ?? '',
+                      })}
+                    </p>
+                  </div>
+                ) : readOnly ? (
                   <div className="border-warning/30 bg-warning/10 text-warning-foreground mb-5 rounded-xl border p-4 text-sm">
                     {t('workCycles.readOnlyDescription')}
                   </div>
@@ -897,5 +907,6 @@ function InfoRow({
     </div>
   )
 }
+
 
 

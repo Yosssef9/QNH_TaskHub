@@ -80,6 +80,7 @@ export const emailRepository = {
     batchSize: number,
     staleMinutes: number,
     maxAttempts: number,
+    scope: "ALL" | "OTHER" | "REPORT" = "ALL",
   ): Promise<EmailOutboxRecord[]> {
     const pool = await getDatabasePool();
     const result = await pool
@@ -88,6 +89,7 @@ export const emailRepository = {
       .input("batchSize", sql.Int, batchSize)
       .input("staleMinutes", sql.Int, staleMinutes)
       .input("maxAttempts", sql.Int, maxAttempts)
+      .input("scope", sql.VarChar(10), scope)
       .query<EmailOutboxRecord>(`
         SET NOCOUNT ON;
 
@@ -100,15 +102,19 @@ export const emailRepository = {
           updated_at_utc = SYSUTCDATETIME()
         WHERE status = 'PROCESSING'
           AND attempt_count >= @maxAttempts
-          AND locked_at_utc < DATEADD(MINUTE, -@staleMinutes, SYSUTCDATETIME());
+          AND locked_at_utc < DATEADD(MINUTE, -@staleMinutes, SYSUTCDATETIME())
+          AND (@scope = 'ALL' OR (@scope = 'REPORT' AND template_key = 'MEETING_REPORT_AVAILABLE')
+            OR (@scope = 'OTHER' AND template_key <> 'MEETING_REPORT_AVAILABLE'));
 
         ;WITH candidates AS (
           SELECT TOP (@batchSize) id
-          FROM dbo.TM_email_outbox WITH (UPDLOCK, READPAST, ROWLOCK)
-          WHERE
+          FROM dbo.TM_email_outbox WITH (UPDLOCK, READPAST, READCOMMITTEDLOCK)
+          WHERE (
             (status = 'PENDING' AND attempt_count < @maxAttempts AND next_attempt_at_utc <= SYSUTCDATETIME())
             OR
             (status = 'PROCESSING' AND attempt_count < @maxAttempts AND locked_at_utc < DATEADD(MINUTE, -@staleMinutes, SYSUTCDATETIME()))
+          ) AND (@scope = 'ALL' OR (@scope = 'REPORT' AND template_key = 'MEETING_REPORT_AVAILABLE')
+            OR (@scope = 'OTHER' AND template_key <> 'MEETING_REPORT_AVAILABLE'))
           ORDER BY next_attempt_at_utc, id
         )
         UPDATE outbox
@@ -126,6 +132,7 @@ export const emailRepository = {
           inserted.language_code AS languageCode,
           inserted.template_key AS templateKey,
           inserted.template_payload_json AS templatePayloadJson,
+          inserted.dedupe_key AS dedupeKey,
           inserted.attempt_count AS attemptCount
         FROM dbo.TM_email_outbox outbox
         INNER JOIN candidates ON candidates.id = outbox.id;
@@ -183,14 +190,14 @@ export const emailRepository = {
       `);
   },
 
-  async markSent(id: number, workerId: string, providerMessageId: string | null): Promise<void> {
+  async markSent(id: number, workerId: string, providerMessageId: string | null): Promise<boolean> {
     const pool = await getDatabasePool();
-    await pool
+    const result = await pool
       .request()
       .input("id", sql.BigInt, id)
       .input("workerId", sql.VarChar(120), workerId)
       .input("providerMessageId", sql.NVarChar(255), providerMessageId)
-      .query(`
+      .query<{ affected: number }>(`
         UPDATE dbo.TM_email_outbox
         SET
           status = 'SENT',
@@ -201,7 +208,20 @@ export const emailRepository = {
           locked_by = NULL,
           updated_at_utc = SYSUTCDATETIME()
         WHERE id = @id AND status = 'PROCESSING' AND locked_by = @workerId;
+        SELECT @@ROWCOUNT AS affected;
       `);
+    return Number(result.recordset[0]?.affected ?? 0) === 1;
+  },
+
+  async renewProcessingLease(id: number, workerId: string): Promise<boolean> {
+    const pool = await getDatabasePool();
+    const result = await pool.request().input("id", sql.BigInt, id).input("workerId", sql.VarChar(120), workerId)
+      .query<{ affected: number }>(`
+        UPDATE dbo.TM_email_outbox SET locked_at_utc = SYSUTCDATETIME()
+        WHERE id = @id AND status = 'PROCESSING' AND locked_by = @workerId;
+        SELECT @@ROWCOUNT AS affected;
+      `);
+    return Number(result.recordset[0]?.affected ?? 0) === 1;
   },
 
   async markAttemptFailed(
@@ -237,3 +257,4 @@ export const emailRepository = {
       `);
   },
 };
+

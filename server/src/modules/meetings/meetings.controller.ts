@@ -48,6 +48,7 @@ import type { MeetingAvailability } from "./meeting-scheduling.types.js";
 import type { MeetingRoom } from "./meetings.types.js";
 import type {
   ArchiveMeetingTemplateBody,
+  BulkUpdateMeetingAttendanceBody,
   CancelMeetingBody,
   CancelMeetingRescheduleRequestBody,
   CoordinatorDirectRescheduleBody,
@@ -59,6 +60,7 @@ import type {
   MeetingWorkspaceParams,
   RejectMeetingRescheduleBody,
   UpdateMeetingAgendaBody,
+  UpdateMeetingAttendanceBody,
   UpdateMeetingRescheduleBody,
   UpdateOrganizerRescheduleBody,
   UpdateMeetingTemplateBody,
@@ -372,6 +374,32 @@ export const getMeetingDetail: RequestHandler = async (req, res) => {
     actorUserId(req),
     currentAccess(req),
     params.meetingId,
+  );
+  const body: ApiSuccessResponse<{ meeting: MeetingDetail }> = { success: true, data: { meeting } };
+  res.status(200).json(body);
+};
+
+export const updateMeetingAttendance: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
+  const input = getValidatedRequestPart<UpdateMeetingAttendanceBody>(req, "body");
+  const meeting = await meetingWorkspaceService.updateAttendance(
+    actorUserId(req),
+    currentAccess(req),
+    params.meetingId,
+    input,
+  );
+  const body: ApiSuccessResponse<{ meeting: MeetingDetail }> = { success: true, data: { meeting } };
+  res.status(200).json(body);
+};
+
+export const bulkUpdateMeetingAttendance: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
+  const input = getValidatedRequestPart<BulkUpdateMeetingAttendanceBody>(req, "body");
+  const meeting = await meetingWorkspaceService.bulkUpdateAttendance(
+    actorUserId(req),
+    currentAccess(req),
+    params.meetingId,
+    input,
   );
   const body: ApiSuccessResponse<{ meeting: MeetingDetail }> = { success: true, data: { meeting } };
   res.status(200).json(body);

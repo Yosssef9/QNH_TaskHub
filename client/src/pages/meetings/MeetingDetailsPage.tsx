@@ -16,13 +16,12 @@ import {
   Paperclip,
   RefreshCcw,
   Save,
-  UserRound,
   UsersRound,
   XCircle,
   type LucideIcon,
 } from 'lucide-react'
 import type { CSSProperties } from 'react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
@@ -43,6 +42,8 @@ import { MeetingAgendaDisplay } from '@/features/meetings/components/MeetingAgen
 import { MeetingAgendaWorkspace } from '@/features/meetings/components/MeetingAgendaWorkspace'
 import { MeetingFilesPanel } from '@/features/meetings/components/MeetingFilesPanel'
 import { MeetingFilesPreview } from '@/features/meetings/components/MeetingFilesPreview'
+import { MeetingReportStatusPanel } from '@/features/meetings/reports/MeetingReportStatusPanel'
+import { MeetingParticipantsPanel } from '@/features/meetings/components/MeetingParticipantsPanel'
 import { MeetingFollowUpPanel } from '@/features/meetings/action-items/MeetingFollowUpPanel'
 import type {
   MeetingFollowUpLaunchRequest,
@@ -53,15 +54,17 @@ import { MeetingTemplateEditorDialog } from '@/features/meetings/components/Meet
 import {
   useApproveMeetingRequest,
   useApproveMeetingReschedule,
+  useBulkUpdateMeetingAttendance,
   useCancelMeeting,
   useMeetingDetail,
   useRejectMeetingRequest,
   useRejectMeetingReschedule,
   useCancelMeetingRescheduleRequest,
+  useUpdateMeetingAttendance,
 } from '@/features/meetings/hooks/use-meetings'
 import type {
   MeetingActivityItem,
-  MeetingParticipant,
+  MeetingAttendanceStatus,
   MeetingRevisionDetail,
   MeetingRoom,
   MeetingStatus,
@@ -158,6 +161,18 @@ function ActivityScheduleDetails({
 function ActivityMetadata({ item }: { item: MeetingActivityItem }) {
   const { t } = useTranslation()
   if (!item.changes) return null
+  const attendanceScope =
+    item.activityType === 'ATTENDANCE_UPDATED' && typeof item.changes.scope === 'string'
+      ? item.changes.scope
+      : null
+  const attendanceParticipantName =
+    typeof item.changes.participantName === 'string' ? item.changes.participantName : null
+  const attendanceFromStatus =
+    typeof item.changes.fromStatus === 'string' ? item.changes.fromStatus : null
+  const attendanceToStatus =
+    typeof item.changes.toStatus === 'string' ? item.changes.toStatus : null
+  const attendanceChangedCount =
+    typeof item.changes.changedCount === 'number' ? item.changes.changedCount : null
   const reason = typeof item.changes.reason === 'string' && item.changes.reason.trim()
     ? item.changes.reason.trim()
     : null
@@ -174,10 +189,43 @@ function ActivityMetadata({ item }: { item: MeetingActivityItem }) {
       ? item.changes.sourceMeetingTitle.trim()
       : null
 
-  if (!reason && !schedulingNotes && !followUpMeetingTitle && !sourceMeetingTitle) return null
+  const attendanceDetail =
+    attendanceScope === 'PARTICIPANT' &&
+    attendanceParticipantName &&
+    attendanceFromStatus &&
+    attendanceToStatus
+      ? t('meetings.workspace.attendance.activityParticipant', {
+          name: attendanceParticipantName,
+          from: t(`meetings.workspace.attendance.status.${attendanceFromStatus}`, {
+            defaultValue: attendanceFromStatus,
+          }),
+          to: t(`meetings.workspace.attendance.status.${attendanceToStatus}`, {
+            defaultValue: attendanceToStatus,
+          }),
+        })
+      : attendanceScope === 'ALL' && attendanceToStatus && attendanceChangedCount !== null
+        ? t('meetings.workspace.attendance.activityBulk', {
+            count: attendanceChangedCount,
+            status: t(`meetings.workspace.attendance.status.${attendanceToStatus}`, {
+              defaultValue: attendanceToStatus,
+            }),
+          })
+        : null
+
+  const taskTitle = typeof item.changes.taskTitle === 'string' ? item.changes.taskTitle : null
+  const validTaskStatus = (value: unknown): value is string =>
+    value === 'TODO' || value === 'IN_PROGRESS' || value === 'DONE' || value === 'CANCELLED'
+  const taskStatusChange = validTaskStatus(item.changes.fromTaskStatus) && validTaskStatus(item.changes.toTaskStatus)
+    ? `${t(`tasks.statuses.${item.changes.fromTaskStatus}`)} → ${t(`tasks.statuses.${item.changes.toTaskStatus}`)}` : null
+  const decisionId = typeof item.changes.decisionId === 'number' ? item.changes.decisionId : null
+  if (!attendanceDetail && !reason && !schedulingNotes && !followUpMeetingTitle && !sourceMeetingTitle && !taskTitle && !taskStatusChange && decisionId === null) return null
 
   return (
     <div className="bg-muted/25 mt-2 space-y-1.5 rounded-lg border px-3 py-2.5 text-xs">
+      {attendanceDetail ? <p>{attendanceDetail}</p> : null}
+      {taskTitle ? <p>{taskTitle}</p> : null}
+      {taskStatusChange ? <p>{taskStatusChange}</p> : null}
+      {decisionId !== null ? <p>{t('meetings.followUp.decisions.textLabel')} #{decisionId}</p> : null}
       {reason ? (
         <p>
           <span className="text-muted-foreground font-semibold">{t('meetings.workspace.historyReason')}: </span>
@@ -244,16 +292,6 @@ function meetingStatusVariant(status: MeetingStatus) {
   return 'secondary' as const
 }
 
-function participantInitials(participant: MeetingParticipant): string {
-  const parts = participant.userName.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return participant.userCode.slice(0, 2).toUpperCase()
-  return parts
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase()
-}
-
 function roomAccentSurface(room: MeetingRoom, arabic: boolean): CSSProperties {
   const accent = getMeetingRoomAccent(room.colorKey)
   const direction = arabic ? 'to right' : 'to left'
@@ -270,6 +308,12 @@ function activityPresentation(activityType: string): {
   icon: LucideIcon
   iconClassName: string
 } {
+  if (activityType === 'ATTENDANCE_UPDATED') {
+    return {
+      icon: UsersRound,
+      iconClassName: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300',
+    }
+  }
   if (activityType.includes('APPROVED')) {
     return {
       icon: CheckCircle2,
@@ -334,6 +378,8 @@ export function MeetingDetailsPage() {
   const withdrawReschedule = useCancelMeetingRescheduleRequest()
   const approveReschedule = useApproveMeetingReschedule()
   const rejectReschedule = useRejectMeetingReschedule()
+  const updateAttendance = useUpdateMeetingAttendance()
+  const bulkUpdateAttendance = useBulkUpdateMeetingAttendance()
 
   const [organizerScheduleOpen, setOrganizerScheduleOpen] = useState(false)
   const [coordinatorInitialAdjustOpen, setCoordinatorInitialAdjustOpen] = useState(false)
@@ -356,6 +402,12 @@ export function MeetingDetailsPage() {
   const [followUpLaunchRequest, setFollowUpLaunchRequest] =
     useState<MeetingFollowUpLaunchRequest | null>(null)
   const [moreOpen, setMoreOpen] = useState(false)
+  const [nowMs, setNowMs] = useState(() => Date.now())
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 30_000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const arabic = i18n.language.startsWith('ar')
   const locale = arabic ? 'ar-SA' : 'en-SA'
@@ -375,7 +427,10 @@ export function MeetingDetailsPage() {
     ),
   )
   const meetingHasStarted =
-    meeting.status === 'SCHEDULED' && new Date(meeting.startAtUtc).getTime() <= Date.now()
+    meeting.status === 'SCHEDULED' && new Date(meeting.startAtUtc).getTime() <= nowMs
+
+  const attendanceMutationPending = updateAttendance.isPending || bulkUpdateAttendance.isPending
+  const currentUserIsOrganizer = currentUser.data?.user.userId === meeting.organizer.userId
 
   const roomById = new Map<number, MeetingRoom>()
   roomById.set(meeting.room.id, meeting.room)
@@ -418,6 +473,40 @@ export function MeetingDetailsPage() {
       revision,
     })),
   ].sort((left, right) => new Date(right.at).getTime() - new Date(left.at).getTime())
+
+  async function changeAttendance(participantUserId: number, status: MeetingAttendanceStatus) {
+    try {
+      await updateAttendance.mutateAsync({ meetingId: meeting.id, participantUserId, status })
+      toast.success(t('meetings.workspace.attendance.updated'))
+    } catch (error) {
+      const apiError = toApiClientError(error)
+      toast.error(
+        t(`meetings.errors.${apiError.code}`, {
+          defaultValue: t('meetings.workspace.attendance.updateError'),
+        }),
+      )
+    }
+  }
+
+  async function changeAllAttendance(status: 'ATTENDED' | 'NOT_MARKED') {
+    try {
+      await bulkUpdateAttendance.mutateAsync({ meetingId: meeting.id, status })
+      toast.success(
+        t(
+          status === 'ATTENDED'
+            ? 'meetings.workspace.attendance.markAllSuccess'
+            : 'meetings.workspace.attendance.clearSuccess',
+        ),
+      )
+    } catch (error) {
+      const apiError = toApiClientError(error)
+      toast.error(
+        t(`meetings.errors.${apiError.code}`, {
+          defaultValue: t('meetings.workspace.attendance.updateError'),
+        }),
+      )
+    }
+  }
 
   async function cancel() {
     try {
@@ -574,7 +663,8 @@ export function MeetingDetailsPage() {
 
   return (
     <div className="space-y-5">
-      <section className="grid gap-8 pb-1 xl:grid-cols-[minmax(0,1fr)_minmax(19rem,0.72fr)] xl:items-start">
+      <section className="space-y-5 pb-1">
+        <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(19rem,0.72fr)] xl:items-start">
         <div className="min-w-0">
           <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs font-semibold">
             <button
@@ -754,6 +844,8 @@ export function MeetingDetailsPage() {
             ) : null}
           </div>
         </div>
+        </div>
+        <MeetingReportStatusPanel key={meeting.id} meetingId={meeting.id} meetingRowVersion={meeting.meetingRowVersion} />
       </section>
 
       <div
@@ -862,61 +954,15 @@ export function MeetingDetailsPage() {
               </div>
             </Card>
 
-            <Card className="border-border/70 p-5 shadow-sm sm:p-6">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 grid size-10 place-items-center rounded-xl">
-                    <UsersRound aria-hidden="true" className="size-5" />
-                  </span>
-                  <div>
-                    <h2 className="font-bold">{t('meetings.workspace.participants')}</h2>
-                    <p className="text-muted-foreground mt-0.5 text-xs">
-                      {t('meetings.workspace.participantCount', { count: meeting.participantCount })}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-5 space-y-2">
-                {[meeting.organizer, ...meeting.attendees].map((participant) => {
-                  const organizer = participant.userId === meeting.organizer.userId
-                  return (
-                    <div
-                      key={`${organizer ? 'organizer' : 'attendee'}-${participant.userId}`}
-                      className="hover:bg-muted/25 flex items-center gap-3 rounded-xl border border-border/70 px-3.5 py-3 transition-colors"
-                    >
-                      <span className="bg-primary/10 text-primary grid size-10 shrink-0 place-items-center rounded-full text-xs font-bold">
-                        {participantInitials(participant)}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="truncate text-sm font-semibold">{participant.userName}</p>
-                          {organizer ? (
-                            <>
-                              <Badge variant="secondary" className="text-[10px]">
-                                {t('meetings.organizer')}
-                              </Badge>
-                              <Badge
-                                variant={meeting.organizerAttending ? 'success' : 'secondary'}
-                                className="text-[10px]"
-                              >
-                                {t(
-                                  meeting.organizerAttending
-                                    ? 'meetings.workspace.organizerAttending'
-                                    : 'meetings.workspace.organizerNotAttending',
-                                )}
-                              </Badge>
-                            </>
-                          ) : null}
-                        </div>
-                        <p className="text-muted-foreground mt-0.5 text-xs">{participant.userCode}</p>
-                      </div>
-                      <UserRound aria-hidden="true" className="text-muted-foreground size-4" />
-                    </div>
-                  )
-                })}
-              </div>
-            </Card>
+            <MeetingParticipantsPanel
+              meeting={meeting}
+              attendance={detail.attendance}
+              canManageAttendance={detail.permissions.canManageAttendance && meetingHasStarted}
+              showStartNotice={currentUserIsOrganizer && meeting.status === 'SCHEDULED' && !meetingHasStarted}
+              isSaving={attendanceMutationPending}
+              onChangeAttendance={changeAttendance}
+              onChangeAllAttendance={changeAllAttendance}
+            />
           </div>
 
           {pendingReschedule ? (
@@ -1416,6 +1462,9 @@ export function MeetingDetailsPage() {
     </div>
   )
 }
+
+
+
 
 
 

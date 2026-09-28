@@ -6,6 +6,9 @@ import { resolveTaskHubAccess } from "../../middleware/resolveTaskHubAccess.midd
 import { validateRequest } from "../../middleware/validate.middleware.js";
 import { verifyPortalJwt } from "../../middleware/verifyPortalJwt.middleware.js";
 import { uploadSingleMeetingAttachment } from "./meeting-attachment-upload.middleware.js";
+import { getMeetingReportSchedule } from "../meeting-reports/meeting-report-schedule.controller.js";
+import { exportMeetingReportPdf } from "../meeting-reports/meeting-report.controller.js";
+import { meetingReportParamsSchema, meetingReportQuerySchema, meetingReportScheduleQuerySchema } from "../meeting-reports/meeting-report.schemas.js";
 import {
   createMeetingActionItem,
   listMeetingActionItemAssignees,
@@ -36,6 +39,7 @@ import {
   approveMeetingRequest,
   approveMeetingReschedule,
   archiveMeetingTemplate,
+  bulkUpdateMeetingAttendance,
   cancelMeeting,
   cancelOrganizerMeetingReschedule,
   checkMeetingAvailability,
@@ -69,6 +73,7 @@ import {
   updateCoordinatorMeetingSchedule,
   updateCoordinatorReschedule,
   updateMeetingAgenda,
+  updateMeetingAttendance,
   updateOrganizerMeetingReschedule,
   updateOrganizerPendingMeetingSchedule,
   updateMeetingRoom,
@@ -95,6 +100,7 @@ import {
 } from "./meeting-workflow.schemas.js";
 import {
   archiveMeetingTemplateBodySchema,
+  bulkUpdateMeetingAttendanceBodySchema,
   cancelMeetingBodySchema,
   cancelMeetingRescheduleRequestBodySchema,
   coordinatorDirectRescheduleBodySchema,
@@ -106,6 +112,7 @@ import {
   meetingWorkspaceParamsSchema,
   rejectMeetingRescheduleBodySchema,
   updateMeetingAgendaBodySchema,
+  updateMeetingAttendanceBodySchema,
   updateMeetingRescheduleBodySchema,
   updateMeetingTemplateBodySchema,
   updateOrganizerRescheduleBodySchema,
@@ -407,11 +414,42 @@ meetingsRouter.patch(
   reassignMeetingActionItem,
 );
 
+// Read-only report plan/status. This route neither queues nor sends email.
+meetingsRouter.get(
+  "/:meetingId/report-status",
+  validateRequest({ params: meetingReportParamsSchema, query: meetingReportScheduleQuerySchema }),
+  getMeetingReportSchedule,
+);
+
+// Export uses normal Meeting visibility, not Organizer/Coordinator-only permission.
+meetingsRouter.get(
+  "/:meetingId/report.pdf",
+  validateRequest({ params: meetingReportParamsSchema, query: meetingReportQuerySchema }),
+  exportMeetingReportPdf,
+);
+
 meetingsRouter.get(
   "/:meetingId",
   validateRequest({ params: meetingWorkspaceParamsSchema }),
   getMeetingDetail,
 );
+meetingsRouter.patch(
+  "/:meetingId/attendance",
+  validateRequest({
+    params: meetingWorkspaceParamsSchema,
+    body: updateMeetingAttendanceBodySchema,
+  }),
+  updateMeetingAttendance,
+);
+meetingsRouter.put(
+  "/:meetingId/attendance",
+  validateRequest({
+    params: meetingWorkspaceParamsSchema,
+    body: bulkUpdateMeetingAttendanceBodySchema,
+  }),
+  bulkUpdateMeetingAttendance,
+);
+
 meetingsRouter.put(
   "/:meetingId/agenda",
   validateRequest({
@@ -482,6 +520,8 @@ meetingRoomsAdminRouter.put(
   }),
   updateMeetingRoom,
 );
+
+
 
 
 

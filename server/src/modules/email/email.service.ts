@@ -18,6 +18,9 @@ export const emailService = {
 
   async sendNow(input: SendEmailNowInput): Promise<{ provider: string; messageId: string | null }> {
     assertEmailEnabled();
+    if (input.templateKey === "MEETING_REPORT_AVAILABLE") {
+      throw new Error("Meeting reports must use the access-checked outbox PDF processor.");
+    }
     const document = renderEmailTemplate(input.templateKey, input.payload, input.language);
     return getEmailTransport().send({
       to: input.recipientEmail,
@@ -33,3 +36,4 @@ export const emailService = {
     await getEmailTransport().verify();
   },
 };
+

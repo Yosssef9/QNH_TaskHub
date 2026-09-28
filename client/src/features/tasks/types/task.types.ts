@@ -143,7 +143,7 @@ export interface TaskActionItemContext {
 }
 
 export interface TaskCapabilities {
-  role: 'OWNER' | 'ASSIGNEE'
+  role: 'OWNER' | 'ASSIGNEE' | 'VIEWER'
   canEditDetails: boolean
   canManageSubtasks: boolean
   canCompleteSubtasks: boolean
@@ -163,4 +163,5 @@ export interface TaskDetails {
   activity: TaskActivity[]
   progress: { completed: number; total: number; percentage: number }
 }
+
 

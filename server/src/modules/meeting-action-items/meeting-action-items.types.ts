@@ -1,6 +1,6 @@
 import type { TaskPriority, TaskStatus } from "../tasks/tasks.constants.js";
 
-export type MeetingActionItemActorRole = "OWNER" | "ASSIGNEE";
+export type MeetingActionItemActorRole = "OWNER" | "ASSIGNEE" | "VIEWER";
 
 export interface MeetingActionItemCapabilities {
   role: MeetingActionItemActorRole;
@@ -130,4 +130,5 @@ export interface AssignedMeetingActionItemListData {
   summary: AssignedMeetingActionItemSummary;
   meetings: AssignedMeetingOption[];
 }
+
 

@@ -3,6 +3,7 @@ import type { TimeFormatPreference } from '@/features/auth/types/auth.types'
 export const APP_TIME_ZONE = 'Asia/Riyadh'
 
 interface TimeFormatOptions {
+  timeZone?: string | undefined
   timeFormat?: TimeFormatPreference
   includeDate?: boolean
   dateStyle?: 'short' | 'medium' | 'long' | 'full'
@@ -84,7 +85,7 @@ export function formatDateTime(
     ...datePartsOptions(options.dateStyle ?? 'medium'),
     ...timePartsOptions(options.timeFormat ?? timeFormat),
     numberingSystem: 'latn',
-    timeZone: APP_TIME_ZONE,
+    timeZone: options.timeZone ?? APP_TIME_ZONE,
   }).format(new Date(value))
 }
 
@@ -156,3 +157,4 @@ export function riyadhLocalDateTimeToUtcIso(date: string, time: string): string 
   }
   return value.toISOString()
 }
+

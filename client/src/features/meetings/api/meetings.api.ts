@@ -2,6 +2,7 @@ import { apiClient } from '@/lib/api-client'
 import type { ApiSuccessResponse } from '@/types/api.types'
 
 import type {
+  BulkUpdateMeetingAttendanceInput,
   CancelMeetingInput,
   CancelMeetingRescheduleRequestInput,
   DecideMeetingRequestInput,
@@ -24,6 +25,7 @@ import type {
   SaveMeetingRoomInput,
   SaveMeetingTemplateInput,
   UpdateMeetingAgendaInput,
+  UpdateMeetingAttendanceInput,
   UpdateMeetingRescheduleInput,
   UpdateOrganizerRescheduleInput,
   UpdateMeetingRoomInput,
@@ -179,6 +181,28 @@ export async function getMeetingSchedule(input: {
 export async function getMeetingDetail(meetingId: number): Promise<MeetingDetail> {
   const response = await apiClient.get<ApiSuccessResponse<{ meeting: MeetingDetail }>>(
     `/meetings/${meetingId}`,
+  )
+  return response.data.data.meeting
+}
+
+export async function updateMeetingAttendance(
+  input: UpdateMeetingAttendanceInput,
+): Promise<MeetingDetail> {
+  const { meetingId, ...body } = input
+  const response = await apiClient.patch<ApiSuccessResponse<{ meeting: MeetingDetail }>>(
+    `/meetings/${meetingId}/attendance`,
+    body,
+  )
+  return response.data.data.meeting
+}
+
+export async function bulkUpdateMeetingAttendance(
+  input: BulkUpdateMeetingAttendanceInput,
+): Promise<MeetingDetail> {
+  const { meetingId, ...body } = input
+  const response = await apiClient.put<ApiSuccessResponse<{ meeting: MeetingDetail }>>(
+    `/meetings/${meetingId}/attendance`,
+    body,
   )
   return response.data.data.meeting
 }

@@ -2,6 +2,9 @@ import type { DatabaseTransaction } from "../../database/types.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
 import { hasKpiWorkCyclesAccess } from "../access-permissions/access-permissions.policy.js";
 import { accessPermissionsRepository } from "../access-permissions/access-permissions.repository.js";
+import { authRepository } from "../auth/auth.repository.js";
+import { canReadMeetingContent } from "../meetings/meeting-content-access.js";
+import { meetingWorkspaceRepository } from "../meetings/meeting-workspace.repository.js";
 import { tasksRepository } from "../tasks/tasks.repository.js";
 import { meetingActionItemsRepository } from "./meeting-action-items.repository.js";
 import type {
@@ -51,6 +54,18 @@ const actionAssigneeCapabilities: MeetingActionItemCapabilities = {
   canDeleteRestoreTask: false,
 };
 
+const actionViewerCapabilities: MeetingActionItemCapabilities = {
+  role: "VIEWER",
+  canEditDetails: false,
+  canManageSubtasks: false,
+  canCompleteSubtasks: false,
+  canUploadAttachments: false,
+  canDeleteAnyAttachment: false,
+  canCompleteTask: false,
+  canChangeNonCompletionStatus: false,
+  canDeleteRestoreTask: false,
+};
+
 export async function resolveTaskAccess(
   actorUserId: number,
   taskId: number,
@@ -68,15 +83,44 @@ export async function resolveTaskAccess(
       };
     }
 
-    if (actorUserId === relation.assigneeUserId && !includeDeleted) {
-      return {
-        ownerUserId: relation.ownerUserId,
-        context: relation,
-        capabilities: actionAssigneeCapabilities,
-      };
+    // Deleted tasks stay owner-only. Meeting visibility does not grant restore access.
+    if (includeDeleted) return null;
+
+    // Generic Task/attachment endpoints receive an actor ID, not Meeting access.
+    // Resolve current grants server-side, then reuse the normal Meeting content policy.
+    // ADMIN and the ability to organize other Meetings must never imply read access.
+    const profile = await authRepository.findAccessProfile(actorUserId);
+    if (
+      !profile?.isActive ||
+      (profile.roleCode !== "USER" && profile.roleCode !== "ADMIN")
+    ) {
+      return null;
+    }
+    const meeting = await meetingWorkspaceRepository.findAccessContext(
+      relation.meetingId,
+      actorUserId,
+      transaction,
+    );
+    if (
+      !meeting ||
+      !canReadMeetingContent(meeting, actorUserId, {
+        roleCode: profile.roleCode,
+        permissions: [], // Meeting content uses its dedicated grants and relationships.
+        meetingOrganizeEnabled: profile.meetingOrganizeEnabled === true,
+        meetingCoordinateEnabled: profile.meetingCoordinateEnabled === true,
+      })
+    ) {
+      return null;
     }
 
-    return null;
+    return {
+      ownerUserId: relation.ownerUserId,
+      context: relation,
+      capabilities:
+        actorUserId === relation.assigneeUserId
+          ? actionAssigneeCapabilities
+          : actionViewerCapabilities,
+    };
   }
 
   const owned = transaction
@@ -101,4 +145,5 @@ export async function resolveTaskAccess(
     capabilities: normalOwnerCapabilities,
   };
 }
+
 

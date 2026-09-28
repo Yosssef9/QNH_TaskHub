@@ -21,6 +21,7 @@ export const OPERATIONAL_EMAIL_TEMPLATE_KEYS = [
   "MEETING_SERIES_SCHEDULED",
   "MEETING_ACTION_ITEM_ASSIGNED",
   "MEETING_ACTION_ITEM_COMPLETED",
+  "MEETING_REPORT_AVAILABLE",
 ] as const;
 
 export type OperationalEmailTemplateKey = (typeof OPERATIONAL_EMAIL_TEMPLATE_KEYS)[number];
@@ -39,9 +40,18 @@ export interface EmailRenderContext {
   logoUrl: string;
 }
 
+/** Trusted in-memory attachment only: no caller-provided paths, URLs or streams. */
+export interface EmailAttachment {
+  filename: string;
+  content: Buffer;
+  contentType: "application/pdf";
+}
+
 export interface EmailMessage {
   to: string;
   toName?: string;
+  messageId?: string;
+  attachments?: readonly EmailAttachment[];
   subject: string;
   html: string;
   text: string;
@@ -73,12 +83,14 @@ export interface SendEmailNowInput {
 export interface EmailOutboxRecord {
   id: number | string;
   ownerUserId: number | null;
-  recipientEmail: string;
+  recipientEmail: string | null;
   recipientName: string | null;
   languageCode: EmailLanguage;
   templateKey: string;
   templatePayloadJson: string;
+  dedupeKey: string;
   attemptCount: number;
 }
+
 
 

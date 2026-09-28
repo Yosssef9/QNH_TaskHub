@@ -43,10 +43,25 @@ const envSchema = z
 
     ATTACHMENT_STORAGE_PATH: z.string().trim().min(1).default("storage/attachments"),
 
+    // Manual Meeting PDF export. Empty channel/executable uses the installed Playwright Chromium.
+    MEETING_REPORT_BROWSER_EXECUTABLE: optionalTrimmedString,
+    MEETING_REPORT_BROWSER_CHANNEL: z.preprocess(
+      (value) => (typeof value === "string" ? value.trim() || undefined : value),
+      z.enum(["chromium", "msedge", "chrome"]).optional(),
+    ),
+    MEETING_REPORT_LOGO_PATH: optionalTrimmedString,
+    MEETING_REPORT_TIMEOUT_MS: z.coerce.number().int().min(5000).max(120000).default(45000),
+    MEETING_REPORT_MAX_CONCURRENT: z.coerce.number().int().min(1).max(4).default(2),
+
+
     PROCUREMENT_SYNC_ENABLED: booleanString.prefault("false"),
     PROCUREMENT_SYNC_INTERVAL_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
     PROCUREMENT_SYNC_RUN_ON_START: booleanString.prefault("true"),
     PROCUREMENT_SYNC_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(60_000).max(3_600_000).default(600_000),
+
+    // Uses the existing email worker. The SQL activation cutoff prevents historical mail floods.
+    MEETING_REPORT_EMAIL_ENABLED: booleanString.prefault("true"),
+    MEETING_REPORT_EMAIL_MAX_PDF_BYTES: z.coerce.number().int().min(1_048_576).max(20_971_520).default(10_485_760),
 
     EMAIL_ENABLED: booleanString.prefault("false"),
     EMAIL_PROVIDER: z.enum(["SMTP"]).default("SMTP"),
@@ -104,3 +119,5 @@ const envSchema = z
   });
 
 export const env = envSchema.parse(process.env);
+
+

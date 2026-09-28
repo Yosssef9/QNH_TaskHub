@@ -35,7 +35,10 @@ function useFollowUpMutation<TInput, TResult>(
   return useMutation({
     mutationFn,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: meetingFollowUpQueryKey(meetingId) })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: meetingFollowUpQueryKey(meetingId) }),
+        queryClient.invalidateQueries({ queryKey: ['meetings', 'detail', meetingId] }),
+      ])
     },
   })
 }
@@ -67,3 +70,4 @@ export function useRelatedMeetings(meetingId: number | null) {
     enabled: meetingId !== null,
   })
 }
+

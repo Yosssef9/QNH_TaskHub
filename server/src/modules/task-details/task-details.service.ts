@@ -21,6 +21,18 @@ const subtaskNotFound = () =>
 const attachmentNotFound = () =>
   new AppError({ statusCode: 404, code: "ATTACHMENT_NOT_FOUND", message: "Attachment not found." });
 
+function mayDeleteAttachment(
+  access: NonNullable<Awaited<ReturnType<typeof resolveTaskAccess>>>,
+  actorUserId: number,
+  uploadedByUserId: number,
+): boolean {
+  // Being a historical uploader is not authority after reassignment. A VIEWER
+  // must not regain mutation rights through the old delete-own-upload shortcut.
+  return access.capabilities.canDeleteAnyAttachment || (
+    access.capabilities.role === "ASSIGNEE" && uploadedByUserId === actorUserId
+  );
+}
+
 
 async function assertSubtaskDueDateAllowed(
   ownerUserId: number,
@@ -61,8 +73,12 @@ export const taskDetailsService = {
       taskDetailsRepository.listActivity(resolved.ownerUserId, taskId),
     ]);
     const completed = subtasks.filter((item) => item.isCompleted).length;
+    const mappedTask = mapTask(task);
     return {
-      task: mapTask(task),
+      task: {
+        ...mappedTask,
+        isReadOnly: mappedTask.isReadOnly || resolved.capabilities.role === "VIEWER",
+      },
       actionItem: resolved.context,
       capabilities: resolved.capabilities,
       subtasks: subtasks.map(mapSubtask),
@@ -89,7 +105,7 @@ export const taskDetailsService = {
         throw new AppError({
           statusCode: 403,
           code: "SUBTASK_MANAGEMENT_FORBIDDEN",
-          message: "The Action Item assignee cannot create or redefine subtasks.",
+          message: "You cannot create, edit, or delete subtasks for this Task.",
         });
       }
       ownerUserId = access.ownerUserId;
@@ -135,7 +151,7 @@ export const taskDetailsService = {
         throw new AppError({
           statusCode: 403,
           code: "SUBTASK_MANAGEMENT_FORBIDDEN",
-          message: "The Action Item assignee cannot create or redefine subtasks.",
+          message: "You cannot create, edit, or delete subtasks for this Task.",
         });
       }
       ownerUserId = access.ownerUserId;
@@ -228,7 +244,7 @@ export const taskDetailsService = {
         throw new AppError({
           statusCode: 403,
           code: "SUBTASK_MANAGEMENT_FORBIDDEN",
-          message: "The Action Item assignee cannot create or redefine subtasks.",
+          message: "You cannot create, edit, or delete subtasks for this Task.",
         });
       }
       const current = await taskDetailsRepository.findSubtask(
@@ -257,7 +273,7 @@ export const taskDetailsService = {
         throw new AppError({
           statusCode: 403,
           code: "SUBTASK_MANAGEMENT_FORBIDDEN",
-          message: "The Action Item assignee cannot reorder subtasks.",
+          message: "You cannot reorder subtasks for this Task.",
         });
       }
       const task = await tasksRepository.findOwnedForUpdate(
@@ -389,8 +405,8 @@ export const taskDetailsService = {
     if (!accessRow) throw attachmentNotFound();
     const resolved = await resolveTaskAccess(actorUserId, accessRow.taskId);
     if (!resolved) throw attachmentNotFound();
-    const mayDelete = resolved.capabilities.canDeleteAnyAttachment || accessRow.uploadedByUserId === actorUserId;
-    if (!mayDelete) throw new AppError({ statusCode: 403, code: "ATTACHMENT_DELETE_FORBIDDEN", message: "You may delete only files you uploaded." });
+    const mayDelete = mayDeleteAttachment(resolved, actorUserId, accessRow.uploadedByUserId);
+    if (!mayDelete) throw new AppError({ statusCode: 403, code: "ATTACHMENT_DELETE_FORBIDDEN", message: "Only the Task owner or the current assignee who uploaded the file may delete it." });
     const record = await withTransaction(async (transaction) => {
       const currentAccess = await resolveTaskAccess(
         actorUserId,
@@ -399,14 +415,14 @@ export const taskDetailsService = {
         transaction,
       );
       if (!currentAccess) throw attachmentNotFound();
-      const canDelete =
-        currentAccess.capabilities.canDeleteAnyAttachment ||
-        accessRow.uploadedByUserId === actorUserId;
+      const canDelete = mayDeleteAttachment(
+        currentAccess, actorUserId, accessRow.uploadedByUserId,
+      );
       if (!canDelete) {
         throw new AppError({
           statusCode: 403,
           code: "ATTACHMENT_DELETE_FORBIDDEN",
-          message: "You may delete only files you uploaded.",
+          message: "Only the Task owner or the current assignee who uploaded the file may delete it.",
         });
       }
 
@@ -441,4 +457,5 @@ export const taskDetailsService = {
     await removeStoredAttachment(record.storageKey);
   },
 };
+
 

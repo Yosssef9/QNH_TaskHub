@@ -6,6 +6,7 @@ import {
   approveMeetingRequest,
   approveMeetingReschedule,
   archiveMeetingTemplate,
+  bulkUpdateMeetingAttendance,
   cancelMeeting,
   cancelMeetingRescheduleRequest,
   checkMeetingAvailability,
@@ -28,6 +29,7 @@ import {
   requestMeetingReschedule,
   searchMeetingParticipants,
   updateMeetingAgenda,
+  updateMeetingAttendance,
   updateMeetingReschedule,
   updateOrganizerRequestedSchedule,
   updateMeetingTemplate,
@@ -176,6 +178,26 @@ export function useMeetingTemplates(enabled: boolean) {
     queryKey: [...meetingsQueryKey, 'templates'],
     queryFn: getMeetingTemplates,
     enabled,
+  })
+}
+
+export function useUpdateMeetingAttendance() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: updateMeetingAttendance,
+    onSuccess: (detail, input) => {
+      client.setQueryData([...meetingsQueryKey, 'detail', input.meetingId], detail)
+    },
+  })
+}
+
+export function useBulkUpdateMeetingAttendance() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: bulkUpdateMeetingAttendance,
+    onSuccess: (detail, input) => {
+      client.setQueryData([...meetingsQueryKey, 'detail', input.meetingId], detail)
+    },
   })
 }
 

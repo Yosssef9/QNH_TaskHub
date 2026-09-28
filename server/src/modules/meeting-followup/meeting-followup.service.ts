@@ -8,6 +8,7 @@ import {
   meetingNotFoundError,
   requireMeetingContentAccess,
 } from "../meetings/meeting-content-access.js";
+import { meetingSchedulingRepository } from "../meetings/meeting-scheduling.repository.js";
 import { meetingWorkspaceRepository } from "../meetings/meeting-workspace.repository.js";
 import { meetingWorkflowRepository } from "../meetings/meeting-workflow.repository.js";
 import { meetingFollowUpRepository } from "./meeting-followup.repository.js";
@@ -141,7 +142,7 @@ export const meetingFollowUpService = {
     const [decisions, notes, actionSummary, canManageContent] = await Promise.all([
       meetingFollowUpRepository.listDecisions(meetingId),
       meetingFollowUpRepository.getNotes(meetingId),
-      meetingActionItemsRepository.summarizeForMeeting(meetingId, actorUserId),
+      meetingActionItemsRepository.summarizeForMeeting(meetingId),
       canManageContentNow(actorUserId, resolved.context),
     ]);
 
@@ -210,10 +211,13 @@ export const meetingFollowUpService = {
     const decisionId = await withTransaction(async (transaction) => {
       await requireWritableFollowUp(actorUserId, access, meetingId, transaction);
       await assertAgendaRelationship(transaction, meetingId, input.agendaItemId);
-      return meetingFollowUpRepository.createDecision(transaction, meetingId, actorUserId, {
+      const id = await meetingFollowUpRepository.createDecision(transaction, meetingId, actorUserId, {
         decisionText: input.decisionText.trim(),
         agendaItemId: input.agendaItemId ?? null,
       });
+      await meetingSchedulingRepository.addActivity(transaction, meetingId, actorUserId,
+        "DECISION_CREATED", { decisionId: id, agendaItemId: input.agendaItemId ?? null });
+      return id;
     });
 
     const decision = (await meetingFollowUpRepository.listDecisions(meetingId)).find(
@@ -253,6 +257,8 @@ export const meetingFollowUpService = {
         },
       );
       if (!updated) throw staleDecision();
+      await meetingSchedulingRepository.addActivity(transaction, meetingId, actorUserId,
+        "DECISION_UPDATED", { decisionId, agendaItemId: input.agendaItemId ?? null });
     });
 
     const decision = (await meetingFollowUpRepository.listDecisions(meetingId)).find(
@@ -281,6 +287,8 @@ export const meetingFollowUpService = {
           actorUserId,
           notesText,
         );
+        await meetingSchedulingRepository.addActivity(transaction, meetingId, actorUserId,
+          "NOTES_UPDATED", { created: true });
         return;
       }
 
@@ -293,6 +301,8 @@ export const meetingFollowUpService = {
         input.rowVersion,
       );
       if (!updated) throw staleNotes();
+      await meetingSchedulingRepository.addActivity(transaction, meetingId, actorUserId,
+        "NOTES_UPDATED", { created: false });
     });
 
     const notes = await meetingFollowUpRepository.getNotes(meetingId);
@@ -300,4 +310,6 @@ export const meetingFollowUpService = {
     return { notes };
   },
 };
+
+
 
