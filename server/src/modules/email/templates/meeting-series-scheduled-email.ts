@@ -4,6 +4,10 @@ import type { EmailLanguage, EmailRenderContext, EmailTemplateDocument } from ".
 import { renderEmailLayout } from "./email-layout.js";
 import { joinAbsoluteUrl } from "./email-template.helpers.js";
 import { infoPanel } from "./operational-email.helpers.js";
+import {
+  meetingScheduleConflictSchema,
+  renderMeetingScheduleConflictWarning,
+} from "./meeting-schedule-conflict-email.js";
 
 const meetingSchema = z.object({
   meetingId: z.number().int().positive(),
@@ -13,6 +17,7 @@ const meetingSchema = z.object({
   endAtUtc: z.string().datetime(),
   roomNameAr: z.string(),
   roomNameEn: z.string(),
+  scheduleConflict: meetingScheduleConflictSchema.nullable().optional(),
 });
 
 const schema = z.object({
@@ -49,12 +54,28 @@ export function renderMeetingSeriesScheduledEmail(
   const ar = language === "ar";
   const href = joinAbsoluteUrl(context.taskHubUrl, data.href);
   const visible = data.meetings.slice(0, 10);
+  const conflicting = data.meetings.filter((meeting) => meeting.scheduleConflict);
+  const conflictWarning = renderMeetingScheduleConflictWarning({
+    items: conflicting.slice(0, 10).map((meeting) => ({
+      label: `#${meeting.sequenceNumber} — ${meeting.title}`,
+      conflict: meeting.scheduleConflict!,
+    })),
+    language,
+    formatDateTime: (value) => formatDateTime(value, language, data.timeFormat),
+  });
+  const hiddenConflictMeetings = Math.max(0, conflicting.length - 10);
+  const conflictOverflowText = hiddenConflictMeetings > 0
+    ? ar
+      ? `هناك ${hiddenConflictMeetings} اجتماعات أخرى في السلسلة لديها تعارضات في الموعد.`
+      : `${hiddenConflictMeetings} more Series Meetings have schedule conflicts.`
+    : "";
+
   const rows = [
     { label: ar ? "المنظم" : "Organizer", value: data.organizerName },
     { label: ar ? "عدد الاجتماعات" : "Meetings", value: String(data.meetingCount) },
     ...visible.map((meeting) => ({
       label: `#${meeting.sequenceNumber}`,
-      value: `${formatDateTime(meeting.startAtUtc, language, data.timeFormat)} · ${ar ? meeting.roomNameAr : meeting.roomNameEn}`,
+      value: `${formatDateTime(meeting.startAtUtc, language, data.timeFormat)} · ${ar ? meeting.roomNameAr : meeting.roomNameEn}${meeting.scheduleConflict ? (ar ? " · ⚠ تعارض في الموعد" : " · ⚠ Schedule conflict") : ""}`,
     })),
     ...(data.meetingCount > visible.length
       ? [{ label: ar ? "المزيد" : "More", value: ar ? `و${data.meetingCount - visible.length} اجتماعات أخرى` : `${data.meetingCount - visible.length} more Meetings` }]
@@ -76,7 +97,7 @@ export function renderMeetingSeriesScheduledEmail(
     title: data.seriesTitle,
     intro,
     accent: "primary",
-    bodyHtml: infoPanel(rows, language),
+    bodyHtml: `${infoPanel(rows, language)}${conflictWarning.html}${conflictOverflowText ? `<p style="margin:8px 0 18px;font-size:12px;line-height:19px;color:#8B691D;">${conflictOverflowText}</p>` : ""}`,
     cta: {
       label: data.opensSeries
         ? ar ? "فتح سلسلة الاجتماعات" : "Open Meeting Series"
@@ -86,14 +107,18 @@ export function renderMeetingSeriesScheduledEmail(
   });
 
   const meetingText = visible
-    .map((meeting) => `#${meeting.sequenceNumber} — ${formatDateTime(meeting.startAtUtc, language, data.timeFormat)} — ${ar ? meeting.roomNameAr : meeting.roomNameEn}`)
+    .map((meeting) => `#${meeting.sequenceNumber} — ${formatDateTime(meeting.startAtUtc, language, data.timeFormat)} — ${ar ? meeting.roomNameAr : meeting.roomNameEn}${meeting.scheduleConflict ? (ar ? " — ⚠ تعارض في الموعد" : " — ⚠ Schedule conflict") : ""}`)
     .join("\n");
+  const warningText = conflictWarning.text
+    ? `\n\n${conflictWarning.text}${conflictOverflowText ? `\n${conflictOverflowText}` : ""}`
+    : "";
   const openLabel = data.opensSeries
     ? ar ? "فتح سلسلة الاجتماعات" : "Open Meeting Series"
     : ar ? "فتح الاجتماع" : "Open Meeting";
   const text = ar
-    ? `QNH TaskHub\n\nسلسلة اجتماعات\n${data.seriesTitle}\n${intro}\nالمنظم: ${data.organizerName}\n\n${meetingText}\n\n${openLabel}: ${href}`
-    : `QNH TaskHub\n\nMeeting Series\n${data.seriesTitle}\n${intro}\nOrganizer: ${data.organizerName}\n\n${meetingText}\n\n${openLabel}: ${href}`;
+    ? `QNH TaskHub\n\nسلسلة اجتماعات\n${data.seriesTitle}\n${intro}\nالمنظم: ${data.organizerName}\n\n${meetingText}${warningText}\n\n${openLabel}: ${href}`
+    : `QNH TaskHub\n\nMeeting Series\n${data.seriesTitle}\n${intro}\nOrganizer: ${data.organizerName}\n\n${meetingText}${warningText}\n\n${openLabel}: ${href}`;
 
   return { subject, preheader: intro, html, text };
 }
+

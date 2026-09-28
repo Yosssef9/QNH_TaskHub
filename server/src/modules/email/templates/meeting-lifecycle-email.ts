@@ -9,6 +9,10 @@ import type {
 import { renderEmailLayout } from "./email-layout.js";
 import { joinAbsoluteUrl } from "./email-template.helpers.js";
 import { infoPanel } from "./operational-email.helpers.js";
+import {
+  meetingScheduleConflictSchema,
+  renderMeetingScheduleConflictWarning,
+} from "./meeting-schedule-conflict-email.js";
 
 const meetingTypes = [
   "MEETING_REQUEST_SUBMITTED",
@@ -38,6 +42,7 @@ const schema = z.object({
   previousRoomNameEn: z.string().nullable().optional(),
   previousStartAtUtc: z.string().datetime().nullable().optional(),
   previousEndAtUtc: z.string().datetime().nullable().optional(),
+  scheduleConflict: meetingScheduleConflictSchema.nullable().optional(),
   href: z.string().min(1),
 });
 
@@ -119,6 +124,14 @@ export function renderMeetingLifecycleEmail(
     : null;
   const showBeforeAfter = type === "MEETING_RESCHEDULED" && previousRoom && previousStart && previousEnd;
 
+  const conflictWarning = data.scheduleConflict && (type === "MEETING_INVITED" || type === "MEETING_RESCHEDULED")
+    ? renderMeetingScheduleConflictWarning({
+        items: [{ conflict: data.scheduleConflict }],
+        language,
+        formatDateTime: (value) => formatMeetingDateTime(value, language, data.timeFormat),
+      })
+    : { html: "", text: "" };
+
   const bodyRows = showBeforeAfter
     ? [
         { label: ar ? "المنظم" : "Organizer", value: data.organizerName },
@@ -148,7 +161,7 @@ export function renderMeetingLifecycleEmail(
       type === "MEETING_RESCHEDULE_REQUEST_CANCELLED"
         ? "warning"
         : "primary",
-    bodyHtml: infoPanel(bodyRows, language),
+    bodyHtml: `${infoPanel(bodyRows, language)}${conflictWarning.html}`,
     cta: { label: ar ? "فتح الاجتماع" : "Open Meeting", href },
   });
 
@@ -166,10 +179,12 @@ export function renderMeetingLifecycleEmail(
       : `\nChanged by: ${data.changedByName}`
     : "";
 
+  const warningText = conflictWarning.text ? `\n\n${conflictWarning.text}` : "";
   const text = ar
-    ? `QNH TaskHub\n\n${copy.eyebrow}\n${data.meetingTitle}\n${copy.intro}\nالمنظم: ${data.organizerName}${changedByText}\n${scheduleText}\n\nفتح الاجتماع: ${href}`
-    : `QNH TaskHub\n\n${copy.eyebrow}\n${data.meetingTitle}\n${copy.intro}\nOrganizer: ${data.organizerName}${changedByText}\n${scheduleText}\n\nOpen Meeting: ${href}`;
+    ? `QNH TaskHub\n\n${copy.eyebrow}\n${data.meetingTitle}\n${copy.intro}\nالمنظم: ${data.organizerName}${changedByText}\n${scheduleText}${warningText}\n\nفتح الاجتماع: ${href}`
+    : `QNH TaskHub\n\n${copy.eyebrow}\n${data.meetingTitle}\n${copy.intro}\nOrganizer: ${data.organizerName}${changedByText}\n${scheduleText}${warningText}\n\nOpen Meeting: ${href}`;
 
   return { subject, preheader, html, text };
 }
+
 

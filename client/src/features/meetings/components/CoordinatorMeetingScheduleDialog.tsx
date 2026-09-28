@@ -5,6 +5,7 @@ import { toApiClientError } from '@/lib/api-error'
 
 import { useActiveMeetingRooms } from '../hooks/use-meeting-rooms'
 import { useAdjustAndApproveMeetingRequest } from '../hooks/use-meetings'
+import { participantUserIdsFromMeeting } from '../meeting-participant-availability'
 import type { MeetingSummary } from '../types/meeting.types'
 import { CoordinatorScheduleEditorDialog } from './CoordinatorScheduleEditorDialog'
 
@@ -64,6 +65,7 @@ export function CoordinatorMeetingScheduleDialog({
       description={t('meetings.coordinatorEditDescription', { title: meeting.title })}
       meetingTitle={meeting.title}
       participantCount={meeting.participantCount}
+      participantUserIds={participantUserIdsFromMeeting(meeting)}
       rooms={rooms.data ?? []}
       roomsPending={rooms.isPending}
       roomsError={rooms.isError}

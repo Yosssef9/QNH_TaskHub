@@ -43,6 +43,7 @@ import {
   cancelMeeting,
   cancelOrganizerMeetingReschedule,
   checkMeetingAvailability,
+  checkMeetingParticipantAvailability,
   createDirectMeeting,
   createMeetingSeries,
   createMeetingRequest,
@@ -120,6 +121,7 @@ import {
 import {
   createMeetingRoomBodySchema,
   meetingAvailabilityBodySchema,
+  meetingParticipantAvailabilityBodySchema,
   meetingRoomParamsSchema,
   updateMeetingRoomBodySchema,
 } from "./meetings.schemas.js";
@@ -147,6 +149,13 @@ meetingsRouter.post(
   requireMeetingPermission("MEETING_ORGANIZE"),
   validateRequest({ body: meetingAvailabilityBodySchema }),
   checkMeetingAvailability,
+);
+
+meetingsRouter.post(
+  "/participant-availability",
+  requireMeetingPermission("MEETING_ORGANIZE"),
+  validateRequest({ body: meetingParticipantAvailabilityBodySchema }),
+  checkMeetingParticipantAvailability,
 );
 
 meetingsRouter.get(

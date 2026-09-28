@@ -1706,7 +1706,7 @@ export const arTranslation = {
             "needsReview": "تحتاج مراجعة"
           }
         },
-        availability: {
+    availability: {
           ENABLED: 'الإرسال التلقائي لتقرير الاجتماع مفعّل.',
           DISABLED: 'أوقف المسؤول الإرسال التلقائي مؤقتاً. لا يزال التصدير اليدوي متاحاً.',
           EMAIL_DISABLED: 'إرسال البريد في TaskHub معطّل. لن تُرسل التقارير حتى تفعيله.',
@@ -2457,6 +2457,23 @@ export const arTranslation = {
       noSelected: 'لم يتم اختيار مشاركين بعد.',
       clearAll: 'مسح الكل',
       done: 'تم',
+    },
+    participantAvailability: {
+      checking: 'جارٍ التحقق من جداول المشاركين…',
+      checkingShort: 'جارٍ فحص الجدول…',
+      checkFailed: 'تعذر التحقق من جداول المشاركين.',
+      nonBlocking: 'هذا تنبيه للجدولة فقط ولا يمنع إنشاء الاجتماع أو إعادة جدولته.',
+      summary: 'يوجد لدى {{count}} مشارك اجتماع مجدول آخر يتعارض مع هذا الوقت.',
+      conflictLabel: 'تعارض في الجدول',
+      moreConflicts: '+{{count}} اجتماع متعارض إضافي',
+      showAll: 'عرض جميع التعارضات ({{count}})',
+      showLess: 'عرض تعارضات أقل',
+      seriesSummary: 'يوجد في {{count}} اجتماع من هذه السلسلة تعارض في جداول المشاركين.',
+      seriesCheckFailed: 'تعذر التحقق من جداول المشاركين لهذا الاجتماع.',
+      seriesCheckFailedCount: 'تعذر التحقق من جداول المشاركين في {{count}} اجتماع.',
+      filterConflicts: 'التعارضات ({{count}})',
+      conflictCountShort: '{{count}} تعارض',
+      checkUnavailableShort: 'فحص الجدول غير متاح',
     },
     availability: {
       checking: 'جارٍ التحقق من توفر القاعة…',

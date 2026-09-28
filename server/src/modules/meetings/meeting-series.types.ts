@@ -1,4 +1,5 @@
 import type { MeetingAgendaItemInput, MeetingParticipant } from "./meeting-workflow.types.js";
+import type { MeetingParticipantAvailability } from "./meeting-scheduling.types.js";
 import type { MeetingSeriesPreviewBody } from "./meeting-series.schemas.js";
 
 export const MEETING_SERIES_TIME_ZONE = "Asia/Riyadh" as const;
@@ -68,6 +69,8 @@ export interface MeetingSeriesValidationIssue {
 export interface MeetingSeriesPreviewOccurrence extends MeetingSeriesResolvedOccurrence {
   participantCount: number;
   roomCapacity: number | null;
+  participantAvailability: MeetingParticipantAvailability | null;
+  participantAvailabilityCheckFailed: boolean;
   validation: {
     isValid: boolean;
     issues: MeetingSeriesValidationIssue[];

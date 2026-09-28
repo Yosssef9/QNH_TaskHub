@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   Check,
   ChevronDown,
   Loader2,
@@ -20,6 +21,8 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/cn'
 
+import type { MeetingParticipantScheduleConflict } from '../types/meeting.types'
+
 interface MeetingParticipantPickerProps {
   values: readonly number[]
   options: readonly SearchableSelectOption[]
@@ -31,6 +34,8 @@ interface MeetingParticipantPickerProps {
   loadingMore?: boolean
   hasMore?: boolean
   disabled?: boolean
+  participantConflicts?: readonly MeetingParticipantScheduleConflict[]
+  participantConflictsLoading?: boolean
   onSearchChange: (value: string) => void
   onLoadMore: () => void
   onChange: (values: number[]) => void
@@ -76,6 +81,8 @@ export function MeetingParticipantPicker({
   loadingMore = false,
   hasMore = false,
   disabled = false,
+  participantConflicts = [],
+  participantConflictsLoading = false,
   onSearchChange,
   onLoadMore,
   onChange,
@@ -105,6 +112,10 @@ export function MeetingParticipantPicker({
   const selectedKeys = useMemo(
     () => new Set(values.map((value) => valueKey(value))),
     [values],
+  )
+  const conflictsByUserId = useMemo(
+    () => new Map(participantConflicts.map((conflict) => [conflict.participant.userId, conflict])),
+    [participantConflicts],
   )
   const visibleSelected = selectedOptions.slice(0, 3)
   const hiddenSelectedCount = Math.max(0, selectedOptions.length - visibleSelected.length)
@@ -176,6 +187,12 @@ export function MeetingParticipantPicker({
                         {initials(option)}
                       </span>
                       <span className="min-w-0 flex-1 truncate font-medium">{option.label}</span>
+                      {conflictsByUserId.has(Number(option.value)) ? (
+                        <AlertTriangle
+                          aria-label={t('meetings.participantAvailability.conflictLabel')}
+                          className="text-warning-foreground size-3.5 shrink-0"
+                        />
+                      ) : null}
                       <button
                         type="button"
                         disabled={disabled}
@@ -322,6 +339,17 @@ export function MeetingParticipantPicker({
                             {option.description}
                           </span>
                         ) : null}
+                        {selected && conflictsByUserId.has(Number(option.value)) ? (
+                          <span className="text-warning-foreground mt-1 inline-flex items-center gap-1 text-xs font-semibold">
+                            <AlertTriangle aria-hidden="true" className="size-3" />
+                            {t('meetings.participantAvailability.conflictLabel')}
+                          </span>
+                        ) : selected && participantConflictsLoading ? (
+                          <span className="text-muted-foreground mt-1 inline-flex items-center gap-1 text-xs">
+                            <Loader2 aria-hidden="true" className="size-3 animate-spin" />
+                            {t('meetings.participantAvailability.checkingShort')}
+                          </span>
+                        ) : null}
                       </span>
                     </CommandItem>
                   )
@@ -377,6 +405,17 @@ export function MeetingParticipantPicker({
                           {option.description ? (
                             <span className="text-muted-foreground mt-0.5 block truncate text-xs">
                               {option.description}
+                            </span>
+                          ) : null}
+                          {conflictsByUserId.has(Number(option.value)) ? (
+                            <span className="text-warning-foreground mt-1 inline-flex items-center gap-1 text-xs font-semibold">
+                              <AlertTriangle aria-hidden="true" className="size-3" />
+                              {t('meetings.participantAvailability.conflictLabel')}
+                            </span>
+                          ) : participantConflictsLoading ? (
+                            <span className="text-muted-foreground mt-1 inline-flex items-center gap-1 text-xs">
+                              <Loader2 aria-hidden="true" className="size-3 animate-spin" />
+                              {t('meetings.participantAvailability.checkingShort')}
                             </span>
                           ) : null}
                         </span>

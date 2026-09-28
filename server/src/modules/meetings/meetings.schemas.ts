@@ -59,3 +59,24 @@ export const meetingAvailabilityBodySchema = z
 
 export type MeetingAvailabilityBody = z.infer<typeof meetingAvailabilityBodySchema>;
 
+export const meetingParticipantAvailabilityBodySchema = z
+  .object({
+    startAtUtc: utcDateTimeSchema,
+    endAtUtc: utcDateTimeSchema,
+    participantUserIds: z.array(z.coerce.number().int().positive()).max(500).default([]),
+    excludeMeetingId: z.coerce.number().int().positive().nullable().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (new Date(value.endAtUtc).getTime() <= new Date(value.startAtUtc).getTime()) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["endAtUtc"],
+        message: "Meeting end time must be after its start time.",
+      });
+    }
+  });
+
+export type MeetingParticipantAvailabilityBody = z.infer<
+  typeof meetingParticipantAvailabilityBodySchema
+>;
+

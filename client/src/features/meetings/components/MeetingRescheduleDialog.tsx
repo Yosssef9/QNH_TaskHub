@@ -19,10 +19,16 @@ import {
 import { useActiveMeetingRooms } from '../hooks/use-meeting-rooms'
 import {
   useEditMeetingRescheduleRequest,
+  useMeetingParticipantAvailability,
   useRequestMeetingReschedule,
   useUpdateOrganizerRequestedSchedule,
 } from '../hooks/use-meetings'
 import type { MeetingDetail, MeetingRevisionDetail, MeetingRoom } from '../types/meeting.types'
+import {
+  buildParticipantAvailabilityInput,
+  participantUserIdsFromMeeting,
+} from '../meeting-participant-availability'
+import { MeetingParticipantConflictNotice } from './MeetingParticipantConflictNotice'
 import {
   MeetingSchedulePicker,
   type MeetingScheduleSelectionState,
@@ -154,6 +160,16 @@ export function MeetingRescheduleDialog({
     selectedStartAtUtc !== null &&
     selectedEndAtUtc !== null &&
     new Date(selectedEndAtUtc).getTime() > new Date(selectedStartAtUtc).getTime()
+
+  const participantAvailabilityInput = buildParticipantAvailabilityInput({
+    startAtUtc: selectedStartAtUtc,
+    endAtUtc: selectedEndAtUtc,
+    participantUserIds: participantUserIdsFromMeeting(meeting),
+    excludeMeetingId: meeting.id,
+  })
+  const participantAvailability = useMeetingParticipantAvailability(
+    open ? participantAvailabilityInput : null,
+  )
 
   const isPending = updateInitial.isPending || requestReschedule.isPending || editReschedule.isPending
   const selectedUsesValidIncrement =
@@ -341,6 +357,11 @@ export function MeetingRescheduleDialog({
               </div>
             </div>
           ) : null}
+          <MeetingParticipantConflictNotice
+            availability={participantAvailability.data}
+            isChecking={participantAvailability.isFetching}
+            isError={participantAvailability.isError}
+          />
         </div>
 
         <footer className="bg-background/95 sticky bottom-0 z-10 border-t px-5 py-4 backdrop-blur sm:px-6">

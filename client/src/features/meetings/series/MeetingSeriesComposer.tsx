@@ -2133,10 +2133,17 @@ function RepeatStage(props: RepeatStageProps) {
 function PreviewStage(props: PreviewStageProps) {
   const { t } = useTranslation()
   const [showAll, setShowAll] = useState(false)
-  const [filter, setFilter] = useState<'ALL' | 'ATTENTION' | 'CHANGED'>('ALL')
+  const [filter, setFilter] = useState<'ALL' | 'ATTENTION' | 'CONFLICTS' | 'CHANGED'>('ALL')
   const bulkSelected = new Set(props.bulkSelectedKeys)
   const invalidOccurrences = props.occurrences.filter((item) => !item.validation.isValid)
   const invalidCount = invalidOccurrences.length
+  const conflictOccurrences = props.occurrences.filter(
+    (item) => (item.participantAvailability?.conflictParticipantCount ?? 0) > 0,
+  )
+  const conflictCount = conflictOccurrences.length
+  const conflictCheckFailedCount = props.occurrences.filter(
+    (item) => item.participantAvailabilityCheckFailed,
+  ).length
   const readyCount = props.occurrences.length - invalidCount
   const isCustomized = (item: MeetingSeriesPreviewOccurrence) =>
     item.isCustomized || (props.occurrenceFiles[item.occurrenceKey]?.length ?? 0) > 0
@@ -2144,9 +2151,11 @@ function PreviewStage(props: PreviewStageProps) {
   const filteredOccurrences =
     filter === 'ATTENTION'
       ? props.occurrences.filter((item) => !item.validation.isValid)
-      : filter === 'CHANGED'
-        ? props.occurrences.filter(isCustomized)
-        : props.occurrences
+      : filter === 'CONFLICTS'
+        ? conflictOccurrences
+        : filter === 'CHANGED'
+          ? props.occurrences.filter(isCustomized)
+          : props.occurrences
   const visibleOccurrences = showAll
     ? filteredOccurrences
     : filteredOccurrences.slice(0, 12)
@@ -2168,6 +2177,11 @@ function PreviewStage(props: PreviewStageProps) {
               {invalidCount > 0 ? (
                 <Badge variant="destructive">
                   {t('meetings.series.redesign.attentionCount', { count: invalidCount })}
+                </Badge>
+              ) : null}
+              {conflictCount > 0 ? (
+                <Badge variant="warning">
+                  {t('meetings.participantAvailability.seriesSummary', { count: conflictCount })}
                 </Badge>
               ) : null}
               {customizedCount > 0 ? (
@@ -2199,6 +2213,17 @@ function PreviewStage(props: PreviewStageProps) {
                 }}
               >
                 {t('meetings.series.redesign.filterAttention', { count: invalidCount })}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={filter === 'CONFLICTS' ? 'default' : 'outline'}
+                onClick={() => {
+                  setFilter('CONFLICTS')
+                  setShowAll(false)
+                }}
+              >
+                {t('meetings.participantAvailability.filterConflicts', { count: conflictCount })}
               </Button>
               <Button
                 type="button"
@@ -2286,6 +2311,33 @@ function PreviewStage(props: PreviewStageProps) {
               </p>
               <p className="text-muted-foreground mt-0.5 text-xs">
                 {t('meetings.series.redesign.allReadyDescription')}
+              </p>
+            </div>
+          </div>
+        </Card>
+      ) : null}
+
+      {conflictCount > 0 || conflictCheckFailedCount > 0 ? (
+        <Card className="border-warning/30 bg-warning/[0.04] p-4">
+          <div className="flex items-start gap-3">
+            <span className="bg-warning/15 text-warning-foreground grid size-9 shrink-0 place-items-center rounded-lg">
+              <AlertTriangle aria-hidden="true" className="size-4" />
+            </span>
+            <div className="min-w-0">
+              {conflictCount > 0 ? (
+                <p className="text-sm font-semibold">
+                  {t('meetings.participantAvailability.seriesSummary', { count: conflictCount })}
+                </p>
+              ) : null}
+              {conflictCheckFailedCount > 0 ? (
+                <p className="text-sm font-semibold">
+                  {t('meetings.participantAvailability.seriesCheckFailedCount', {
+                    count: conflictCheckFailedCount,
+                  })}
+                </p>
+              ) : null}
+              <p className="text-muted-foreground mt-1 text-xs">
+                {t('meetings.participantAvailability.nonBlocking')}
               </p>
             </div>
           </div>
@@ -2418,7 +2470,19 @@ function PreviewStage(props: PreviewStageProps) {
                       {props.roomName(occurrence.roomId)}
                     </span>
 
-                    <span className="flex items-center gap-2 sm:justify-end">
+                    <span className="flex flex-wrap items-center gap-2 sm:justify-end">
+                      {(occurrence.participantAvailability?.conflictParticipantCount ?? 0) > 0 ? (
+                        <Badge variant="warning">
+                          <AlertTriangle aria-hidden="true" className="me-1 size-3" />
+                          {t('meetings.participantAvailability.conflictCountShort', {
+                            count: occurrence.participantAvailability?.conflictParticipantCount ?? 0,
+                          })}
+                        </Badge>
+                      ) : occurrence.participantAvailabilityCheckFailed ? (
+                        <Badge variant="secondary">
+                          {t('meetings.participantAvailability.checkUnavailableShort')}
+                        </Badge>
+                      ) : null}
                       <Badge variant={occurrenceStateVariant(occurrence)}>
                         {!occurrence.validation.isValid
                           ? t('meetings.series.redesign.statusAttention')

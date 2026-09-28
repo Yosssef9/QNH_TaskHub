@@ -1,4 +1,9 @@
-import type { MeetingAgendaItemInput, MeetingParticipant, MeetingStatus } from '../types/meeting.types'
+import type {
+  MeetingAgendaItemInput,
+  MeetingParticipant,
+  MeetingParticipantAvailability,
+  MeetingStatus,
+} from '../types/meeting.types'
 
 export const MEETING_SERIES_TIME_ZONE = 'Asia/Riyadh' as const
 export const MEETING_SERIES_MAX_OCCURRENCES = 100
@@ -137,6 +142,8 @@ export interface MeetingSeriesPreviewOccurrence {
   isCustomized: boolean
   participantCount: number
   roomCapacity: number | null
+  participantAvailability: MeetingParticipantAvailability | null
+  participantAvailabilityCheckFailed: boolean
   validation: {
     isValid: boolean
     issues: MeetingSeriesValidationIssue[]

@@ -197,6 +197,9 @@ export function MeetingSeriesOccurrenceCalendar({
           const dayOccurrences = occurrencesByDate.get(date) ?? []
           const hasMeeting = dayOccurrences.length > 0
           const hasAttention = dayOccurrences.some((occurrence) => !occurrence.validation.isValid)
+          const hasConflict = dayOccurrences.some(
+            (occurrence) => (occurrence.participantAvailability?.conflictParticipantCount ?? 0) > 0,
+          )
           const hasCustomized = dayOccurrences.some((occurrence) => occurrence.isCustomized)
           const isToday = date === today
 
@@ -207,11 +210,13 @@ export function MeetingSeriesOccurrenceCalendar({
                 'min-h-28 border-b border-e p-2 last:border-e-0 sm:min-h-32',
                 hasAttention
                   ? 'bg-destructive/[0.055]'
-                  : hasCustomized
-                    ? 'bg-primary/[0.055]'
-                    : hasMeeting
-                      ? 'bg-primary/[0.025]'
-                      : 'bg-background',
+                  : hasConflict
+                    ? 'bg-warning/[0.06]'
+                    : hasCustomized
+                      ? 'bg-primary/[0.055]'
+                      : hasMeeting
+                        ? 'bg-primary/[0.025]'
+                        : 'bg-background',
               )}
             >
               <div className="mb-2 flex items-center justify-between gap-1">
@@ -220,11 +225,13 @@ export function MeetingSeriesOccurrenceCalendar({
                     'grid size-7 place-items-center rounded-full text-xs font-bold',
                     hasAttention
                       ? 'bg-destructive/12 text-destructive'
-                      : hasCustomized
-                        ? 'bg-primary/12 text-primary'
-                        : hasMeeting
-                          ? 'bg-primary/10 text-primary'
-                          : 'text-muted-foreground',
+                      : hasConflict
+                        ? 'bg-warning/15 text-warning-foreground'
+                        : hasCustomized
+                          ? 'bg-primary/12 text-primary'
+                          : hasMeeting
+                            ? 'bg-primary/10 text-primary'
+                            : 'text-muted-foreground',
                     isToday && 'ring-primary ring-2 ring-offset-1 ring-offset-background',
                   )}
                 >
@@ -233,6 +240,8 @@ export function MeetingSeriesOccurrenceCalendar({
 
                 {hasAttention ? (
                   <AlertTriangle aria-hidden="true" className="text-destructive size-3.5" />
+                ) : hasConflict ? (
+                  <AlertTriangle aria-hidden="true" className="text-warning-foreground size-3.5" />
                 ) : hasCustomized ? (
                   <Sparkles aria-hidden="true" className="text-primary size-3.5" />
                 ) : hasMeeting ? (
@@ -243,6 +252,8 @@ export function MeetingSeriesOccurrenceCalendar({
               <div className="space-y-1.5">
                 {dayOccurrences.slice(0, 3).map((occurrence) => {
                   const invalid = !occurrence.validation.isValid
+                  const hasParticipantConflict =
+                    (occurrence.participantAvailability?.conflictParticipantCount ?? 0) > 0
                   const selected = selectedOccurrenceKey === occurrence.occurrenceKey
                   return (
                     <button
@@ -253,9 +264,11 @@ export function MeetingSeriesOccurrenceCalendar({
                         'w-full rounded-lg border px-2 py-1.5 text-start text-[10px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring',
                         invalid
                           ? 'border-destructive/40 bg-destructive/10 text-destructive'
-                          : occurrence.isCustomized
-                            ? 'border-primary/35 bg-primary/10 text-primary'
-                            : 'border-primary/20 bg-background text-foreground hover:border-primary/40',
+                          : hasParticipantConflict
+                            ? 'border-warning/45 bg-warning/10 text-foreground'
+                            : occurrence.isCustomized
+                              ? 'border-primary/35 bg-primary/10 text-primary'
+                              : 'border-primary/20 bg-background text-foreground hover:border-primary/40',
                         selected && 'ring-2 ring-ring/50',
                       )}
                       onClick={() => onSelect(occurrence.occurrenceKey)}
@@ -291,6 +304,10 @@ export function MeetingSeriesOccurrenceCalendar({
         <span className="flex items-center gap-1.5">
           <span className="bg-destructive/10 border-destructive/35 size-3 rounded border" />
           {t('meetings.series.redesign.statusAttention')}
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="bg-warning/10 border-warning/40 size-3 rounded border" />
+          {t('meetings.participantAvailability.conflictLabel')}
         </span>
         <span className="flex items-center gap-1.5">
           <span className="bg-primary/10 border-primary/35 size-3 rounded border" />

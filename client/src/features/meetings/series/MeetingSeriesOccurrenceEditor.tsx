@@ -18,11 +18,15 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/cn'
+import { riyadhLocalDateTimeToUtcIso } from '@/lib/date-time'
 import { formatMeetingAttachmentBytes } from '../meeting-attachment-policy'
 
 import { MeetingAgendaEditor, type MeetingAgendaDraftItem } from '../components/MeetingAgendaEditor'
+import { MeetingParticipantConflictNotice } from '../components/MeetingParticipantConflictNotice'
 import { MeetingParticipantPicker } from '../components/MeetingParticipantPicker'
 import { MeetingSchedulePicker } from '../components/MeetingSchedulePicker'
+import { useMeetingParticipantAvailability } from '../hooks/use-meetings'
+import { buildParticipantAvailabilityInput } from '../meeting-participant-availability'
 import type { MeetingParticipant, MeetingRoom } from '../types/meeting.types'
 import { MeetingSeriesFilePicker, type MeetingSeriesDraftFile } from './MeetingSeriesFilePicker'
 import type {
@@ -214,6 +218,18 @@ export function MeetingSeriesOccurrenceEditor({
     }
   }, [attendeeUserIds, defaults.attendeeUserIds])
   const participantCount = attendeeUserIds.length + (organizerAttending ? 1 : 0)
+  const participantAvailabilityInput = useMemo(() => {
+    if (!date || invalidTime) return null
+    return buildParticipantAvailabilityInput({
+      startAtUtc: riyadhLocalDateTimeToUtcIso(date, startTime),
+      endAtUtc: riyadhLocalDateTimeToUtcIso(date, endTime),
+      participantUserIds: [
+        ...attendeeUserIds,
+        ...(organizerAttending && organizer ? [organizer.userId] : []),
+      ],
+    })
+  }, [attendeeUserIds, date, endTime, invalidTime, organizer, organizerAttending, startTime])
+  const participantAvailability = useMeetingParticipantAvailability(participantAvailabilityInput)
   const detailsStructurallyValid =
     title.trim().length > 0 &&
     agendaItems.every((item) => item.topic.trim().length > 0) &&
@@ -389,6 +405,8 @@ export function MeetingSeriesOccurrenceEditor({
                   selectedOptions={selectedOptions}
                   searchValue={participantSearch}
                   participantCount={participantCount}
+                  participantConflicts={participantAvailability.isError ? [] : (participantAvailability.data?.conflicts ?? [])}
+                  participantConflictsLoading={participantAvailability.isFetching}
                   loading={participantLoading}
                   loadingMore={participantLoadingMore}
                   hasMore={participantHasMore}
@@ -398,6 +416,12 @@ export function MeetingSeriesOccurrenceEditor({
                     setAttendeeUserIds(values)
                     onRememberParticipantOptions(values)
                   }}
+                />
+                <MeetingParticipantConflictNotice
+                  availability={participantAvailability.data}
+                  isChecking={participantAvailability.isFetching}
+                  isError={participantAvailability.isError}
+                  className="mt-3"
                 />
                 {attendeeDelta.added > 0 || attendeeDelta.removed > 0 ? (
                   <p className="text-primary mt-2 text-xs font-medium">

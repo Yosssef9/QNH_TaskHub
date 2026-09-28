@@ -5,6 +5,7 @@ import { toApiClientError } from '@/lib/api-error'
 
 import { useActiveMeetingRooms } from '../hooks/use-meeting-rooms'
 import { useAdjustAndApproveMeetingReschedule } from '../hooks/use-meetings'
+import { participantUserIdsFromMeeting } from '../meeting-participant-availability'
 import type { MeetingRescheduleQueueItem } from '../types/meeting.types'
 import { CoordinatorScheduleEditorDialog } from './CoordinatorScheduleEditorDialog'
 
@@ -70,6 +71,7 @@ export function CoordinatorRescheduleDialog({
       description={t('meetings.coordinatorSchedule.rescheduleDescription')}
       meetingTitle={item.meeting.title}
       participantCount={item.meeting.participantCount}
+      participantUserIds={participantUserIdsFromMeeting(item.meeting)}
       rooms={rooms.data ?? []}
       roomsPending={rooms.isPending}
       roomsError={rooms.isError}

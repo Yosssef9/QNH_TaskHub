@@ -5,6 +5,7 @@ import { toApiClientError } from '@/lib/api-error'
 
 import { useActiveMeetingRooms } from '../hooks/use-meeting-rooms'
 import { useDirectCoordinatorReschedule } from '../hooks/use-meetings'
+import { participantUserIdsFromMeeting } from '../meeting-participant-availability'
 import type { MeetingDetail } from '../types/meeting.types'
 import { CoordinatorScheduleEditorDialog } from './CoordinatorScheduleEditorDialog'
 
@@ -61,6 +62,7 @@ export function CoordinatorDirectRescheduleDialog({
       description={t('meetings.workspace.directRescheduleDescription')}
       meetingTitle={meeting.title}
       participantCount={meeting.participantCount}
+      participantUserIds={participantUserIdsFromMeeting(meeting)}
       rooms={rooms.data ?? []}
       roomsPending={rooms.isPending}
       roomsError={rooms.isError}

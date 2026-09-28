@@ -40,6 +40,7 @@ import {
   useCreateDirectMeeting,
   useCreateMeetingRequest,
   useMeetingAvailability,
+  useMeetingParticipantAvailability,
   useMeetingParticipants,
   useMeetingTemplates,
   useUploadMeetingAttachment,
@@ -56,11 +57,13 @@ import type {
   MeetingParticipant,
   MeetingTemplate,
 } from '../types/meeting.types'
+import { buildParticipantAvailabilityInput } from '../meeting-participant-availability'
 import {
   MeetingAgendaEditor,
   type MeetingAgendaDraftItem,
 } from './MeetingAgendaEditor'
 import { MeetingParticipantPicker } from './MeetingParticipantPicker'
+import { MeetingParticipantConflictNotice } from './MeetingParticipantConflictNotice'
 import {
   MeetingSchedulePicker,
   type MeetingScheduleFocusField,
@@ -380,6 +383,24 @@ export function MeetingEditorDialog({
       })
     : null
   const availability = useMeetingAvailability(open ? availabilityInput : null)
+  const participantAvailabilityInput = (() => {
+    if (!timeSelected || !date) return null
+    try {
+      return buildParticipantAvailabilityInput({
+        startAtUtc: riyadhLocalDateTimeToUtcIso(date, startTime),
+        endAtUtc: riyadhLocalDateTimeToUtcIso(date, endTime),
+        participantUserIds: [
+          ...attendeeUserIds,
+          ...(organizerAttending && currentUserId ? [currentUserId] : []),
+        ],
+      })
+    } catch {
+      return null
+    }
+  })()
+  const participantAvailability = useMeetingParticipantAvailability(
+    open ? participantAvailabilityInput : null,
+  )
   const saveMutation = mode === 'DIRECT' ? createDirect : createRequest
   const isSaving = saveMutation.isPending || uploadAttachment.isPending
 
@@ -929,11 +950,19 @@ export function MeetingEditorDialog({
                   loadingMore={participantQuery.isFetchingNextPage}
                   hasMore={participantQuery.hasNextPage}
                   disabled={isSaving}
+                  participantConflicts={participantAvailability.isError ? [] : (participantAvailability.data?.conflicts ?? [])}
+                  participantConflictsLoading={participantAvailability.isFetching}
                   onSearchChange={setParticipantSearch}
                   onLoadMore={() => {
                     void participantQuery.fetchNextPage()
                   }}
                   onChange={updateAttendees}
+                />
+                <MeetingParticipantConflictNotice
+                  availability={participantAvailability.data}
+                  isChecking={participantAvailability.isFetching}
+                  isError={participantAvailability.isError}
+                  className="mt-2"
                 />
                 {validationErrors.attendees ? (
                   <p role="alert" className="text-destructive mt-2 text-xs font-medium">

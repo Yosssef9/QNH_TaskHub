@@ -25,7 +25,10 @@ import {
   riyadhLocalDateTimeToUtcIso,
 } from '@/lib/date-time'
 
+import { useMeetingParticipantAvailability } from '../hooks/use-meetings'
+import { buildParticipantAvailabilityInput } from '../meeting-participant-availability'
 import type { MeetingRoom } from '../types/meeting.types'
+import { MeetingParticipantConflictNotice } from './MeetingParticipantConflictNotice'
 import {
   MeetingSchedulePicker,
   type MeetingScheduleSelectionState,
@@ -46,6 +49,7 @@ interface CoordinatorScheduleEditorDialogProps {
   description: string
   meetingTitle: string
   participantCount: number
+  participantUserIds: readonly number[]
   rooms: MeetingRoom[]
   roomsPending?: boolean
   roomsError?: boolean
@@ -131,6 +135,7 @@ export function CoordinatorScheduleEditorDialog({
   description,
   meetingTitle,
   participantCount,
+  participantUserIds,
   rooms,
   roomsPending = false,
   roomsError = false,
@@ -199,6 +204,16 @@ export function CoordinatorScheduleEditorDialog({
       return null
     }
   }, [date, endTime])
+
+  const participantAvailabilityInput = buildParticipantAvailabilityInput({
+    startAtUtc: selectedStartAtUtc,
+    endAtUtc: selectedEndAtUtc,
+    participantUserIds,
+    excludeMeetingId,
+  })
+  const participantAvailability = useMeetingParticipantAvailability(
+    open ? participantAvailabilityInput : null,
+  )
 
   const newSnapshot: ScheduleSnapshot | null =
     selectedRoom && selectedStartAtUtc && selectedEndAtUtc
@@ -379,6 +394,12 @@ export function CoordinatorScheduleEditorDialog({
                 </div>
               </div>
             ) : null}
+
+            <MeetingParticipantConflictNotice
+              availability={participantAvailability.data}
+              isChecking={participantAvailability.isFetching}
+              isError={participantAvailability.isError}
+            />
 
             {newSnapshot && hasScheduleChanged ? (
               <section className="rounded-2xl border bg-background p-4 sm:p-5">

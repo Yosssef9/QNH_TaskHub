@@ -16,6 +16,22 @@ interface ParticipantRecord {
   participantCount: number | string;
 }
 
+export interface ParticipantScheduleConflictRecord {
+  userId: number | string;
+  userCode: string;
+  userName: string;
+  meetingId: number | string;
+  startAtUtc: Date;
+  endAtUtc: Date;
+}
+
+export interface ParticipantMeetingConflictRecord {
+  targetMeetingId: number | string;
+  conflictCount: number | string;
+  startAtUtc: Date;
+  endAtUtc: Date;
+}
+
 interface RoomCapacityRecord {
   maximumParticipantCount: number | string | null;
 }
@@ -167,6 +183,119 @@ export const meetingSchedulingRepository = {
       `);
 
     return result.recordset[0] ?? null;
+  },
+
+  async findParticipantScheduleConflicts(input: {
+    participantUserIds: readonly number[];
+    startAtUtc: Date;
+    endAtUtc: Date;
+    excludeMeetingId: number | null;
+  }): Promise<ParticipantScheduleConflictRecord[]> {
+    const participantUserIds = [...new Set(input.participantUserIds)];
+    if (participantUserIds.length === 0) return [];
+
+    const pool = await getDatabasePool();
+    const request = pool
+      .request()
+      .input("startAtUtc", sql.DateTime2(3), input.startAtUtc)
+      .input("endAtUtc", sql.DateTime2(3), input.endAtUtc)
+      .input("excludeMeetingId", sql.BigInt, input.excludeMeetingId);
+
+    const selectedValues = participantUserIds.map((userId, index) => {
+      const parameter = `participantUserId${index}`;
+      request.input(parameter, sql.Int, userId);
+      return `(@${parameter})`;
+    });
+
+    const result = await request.query<ParticipantScheduleConflictRecord>(`
+      WITH selected_participants (user_id) AS (
+        SELECT user_id
+        FROM (VALUES ${selectedValues.join(", ")}) AS selected(user_id)
+      )
+      SELECT
+        attendee.attendee_user_id AS userId,
+        portal.USER_CODE AS userCode,
+        portal.USER_NAME AS userName,
+        meeting.id AS meetingId,
+        revision.start_at_utc AS startAtUtc,
+        revision.end_at_utc AS endAtUtc
+      FROM selected_participants AS selected
+      INNER JOIN dbo.TM_meeting_attendees AS attendee
+        ON attendee.attendee_user_id = selected.user_id
+      INNER JOIN dbo.TM_meetings AS meeting
+        ON meeting.id = attendee.meeting_id
+      INNER JOIN dbo.TM_meeting_revisions AS revision
+        ON revision.id = meeting.current_revision_id
+       AND revision.meeting_id = meeting.id
+      INNER JOIN dbo.users AS portal
+        ON portal.USER_ID = attendee.attendee_user_id
+      WHERE portal.IS_ACTIVE = 1
+        AND meeting.status = 'SCHEDULED'
+        AND revision.revision_status = 'APPROVED'
+        AND revision.start_at_utc < @endAtUtc
+        AND revision.end_at_utc > @startAtUtc
+        AND (@excludeMeetingId IS NULL OR meeting.id <> @excludeMeetingId)
+      ORDER BY attendee.attendee_user_id, revision.start_at_utc, meeting.id;
+    `);
+
+    return result.recordset;
+  },
+
+  async findParticipantScheduleConflictsForMeetings(input: {
+    participantUserId: number;
+    meetings: readonly { meetingId: number; startAtUtc: Date; endAtUtc: Date }[];
+  }): Promise<ParticipantMeetingConflictRecord[]> {
+    const meetings = [...new Map(input.meetings.map((meeting) => [meeting.meetingId, meeting])).values()];
+    if (meetings.length === 0) return [];
+
+    const pool = await getDatabasePool();
+    const request = pool.request().input("participantUserId", sql.Int, input.participantUserId);
+    const values = meetings.map((meeting, index) => {
+      const id = `targetMeetingId${index}`;
+      const start = `targetStartAtUtc${index}`;
+      const end = `targetEndAtUtc${index}`;
+      request
+        .input(id, sql.BigInt, meeting.meetingId)
+        .input(start, sql.DateTime2(3), meeting.startAtUtc)
+        .input(end, sql.DateTime2(3), meeting.endAtUtc);
+      return `(@${id}, @${start}, @${end})`;
+    });
+
+    const result = await request.query<ParticipantMeetingConflictRecord>(`
+      WITH target_windows (meeting_id, start_at_utc, end_at_utc) AS (
+        SELECT meeting_id, start_at_utc, end_at_utc
+        FROM (VALUES ${values.join(", ")}) AS target(meeting_id, start_at_utc, end_at_utc)
+      ), ranked_conflicts AS (
+        SELECT
+          target.meeting_id AS targetMeetingId,
+          revision.start_at_utc AS startAtUtc,
+          revision.end_at_utc AS endAtUtc,
+          COUNT_BIG(1) OVER (PARTITION BY target.meeting_id) AS conflictCount,
+          ROW_NUMBER() OVER (
+            PARTITION BY target.meeting_id
+            ORDER BY revision.start_at_utc, meeting.id
+          ) AS rowNumber
+        FROM target_windows AS target
+        INNER JOIN dbo.TM_meeting_attendees AS attendee
+          ON attendee.attendee_user_id = @participantUserId
+        INNER JOIN dbo.TM_meetings AS meeting
+          ON meeting.id = attendee.meeting_id
+        INNER JOIN dbo.TM_meeting_revisions AS revision
+          ON revision.id = meeting.current_revision_id
+         AND revision.meeting_id = meeting.id
+        WHERE meeting.status = 'SCHEDULED'
+          AND revision.revision_status = 'APPROVED'
+          AND meeting.id <> target.meeting_id
+          AND revision.start_at_utc < target.end_at_utc
+          AND revision.end_at_utc > target.start_at_utc
+      )
+      SELECT targetMeetingId, conflictCount, startAtUtc, endAtUtc
+      FROM ranked_conflicts
+      WHERE rowNumber <= 3
+      ORDER BY targetMeetingId, rowNumber;
+    `);
+
+    return result.recordset;
   },
 
   async countConflicts(

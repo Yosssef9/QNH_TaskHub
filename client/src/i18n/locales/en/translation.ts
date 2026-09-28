@@ -1753,7 +1753,7 @@ export const enTranslation = {
             "needsReview": "Needs review"
           }
         },
-        availability: {
+    availability: {
           ENABLED: 'Automatic report email is enabled.',
           DISABLED: 'Automatic report emailing is paused by the administrator. Manual export is still available.',
           EMAIL_DISABLED: 'TaskHub email delivery is disabled. Reports will not be sent until email delivery is enabled.',
@@ -2511,6 +2511,23 @@ export const enTranslation = {
       noSelected: 'No participants selected yet.',
       clearAll: 'Clear all',
       done: 'Done',
+    },
+    participantAvailability: {
+      checking: 'Checking participant schedules…',
+      checkingShort: 'Checking schedule…',
+      checkFailed: 'Participant schedules could not be checked.',
+      nonBlocking: 'This is only a scheduling note and does not prevent creating or rescheduling the Meeting.',
+      summary: '{{count}} participant(s) have another scheduled Meeting that overlaps this time.',
+      conflictLabel: 'Schedule conflict',
+      moreConflicts: '+{{count}} more overlapping Meeting(s)',
+      showAll: 'Show all {{count}} conflicts',
+      showLess: 'Show fewer conflicts',
+      seriesSummary: '{{count}} Meeting(s) in this Series have participant schedule conflicts.',
+      seriesCheckFailed: 'Participant schedules could not be checked for this Meeting.',
+      seriesCheckFailedCount: 'Participant schedules could not be checked for {{count}} Meeting(s).',
+      filterConflicts: 'Conflicts ({{count}})',
+      conflictCountShort: '{{count}} conflict(s)',
+      checkUnavailableShort: 'Schedule check unavailable',
     },
     availability: {
       checking: 'Checking room availability…',

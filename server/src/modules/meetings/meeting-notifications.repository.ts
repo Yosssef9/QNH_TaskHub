@@ -52,6 +52,7 @@ export interface MeetingSeriesNotificationMeeting {
   endAtUtc: Date;
   roomNameAr: string;
   roomNameEn: string;
+  ownerIsAttendee: boolean;
 }
 
 export interface MeetingSeriesNotificationRecipient {
@@ -290,6 +291,7 @@ export const meetingNotificationsRepository = {
         endAtUtc: Date;
         roomNameAr: string;
         roomNameEn: string;
+        ownerIsAttendee: boolean | number;
       }>(`
         WITH series_meetings AS (
           SELECT
@@ -322,7 +324,13 @@ export const meetingNotificationsRepository = {
           revision.start_at_utc AS startAtUtc,
           revision.end_at_utc AS endAtUtc,
           room.name_ar AS roomNameAr,
-          room.name_en AS roomNameEn
+          room.name_en AS roomNameEn,
+          CAST(CASE WHEN EXISTS (
+            SELECT 1
+            FROM dbo.TM_meeting_attendees AS attendee
+            WHERE attendee.meeting_id = meeting.id
+              AND attendee.attendee_user_id = recipient.ownerUserId
+          ) THEN 1 ELSE 0 END AS BIT) AS ownerIsAttendee
         FROM recipient_meetings AS recipient
         INNER JOIN dbo.TM_meetings AS meeting ON meeting.id = recipient.meetingId
         INNER JOIN dbo.TM_meeting_revisions AS revision
@@ -359,6 +367,7 @@ export const meetingNotificationsRepository = {
         endAtUtc: row.endAtUtc,
         roomNameAr: row.roomNameAr,
         roomNameEn: row.roomNameEn,
+        ownerIsAttendee: Boolean(row.ownerIsAttendee),
       });
       byOwner.set(owner, current);
     }
@@ -554,6 +563,7 @@ export const meetingNotificationsRepository = {
     };
   },
 };
+
 
 
 

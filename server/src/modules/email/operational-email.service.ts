@@ -473,30 +473,43 @@ async function processCandidate(
 }
 
 export const operationalEmailService = {
-  async resolveSendTimeDelivery(
+  async resolveSendTimeContext(
     ownerUserId: number,
     type: NotificationType,
     payload: Record<string, unknown>,
-  ): Promise<OperationalEmailDelivery | null> {
+  ): Promise<{ delivery: OperationalEmailDelivery; payload: Record<string, unknown> } | null> {
     const delivery = await resolveDelivery(ownerUserId, type);
     if (!delivery) return null;
     if (isContractNotificationType(type)) {
-      return (await validateContractPayloadAtSend(ownerUserId, type, payload)) ? delivery : null;
+      return (await validateContractPayloadAtSend(ownerUserId, type, payload))
+        ? { delivery, payload }
+        : null;
     }
     if (
       type === "MEETING_ACTION_ITEM_ASSIGNED" ||
       type === "MEETING_ACTION_ITEM_COMPLETED"
     ) {
       return (await meetingActionItemsService.validateEmailPayload(ownerUserId, type, payload))
-        ? delivery
+        ? { delivery, payload }
         : null;
     }
     if (type.startsWith("MEETING_")) {
-      return (await meetingNotificationsService.validateEmailPayload(ownerUserId, type, payload))
-        ? delivery
-        : null;
+      const refreshedPayload = await meetingNotificationsService.refreshEmailPayloadAtSend(
+        ownerUserId,
+        type,
+        payload,
+      );
+      return refreshedPayload ? { delivery, payload: refreshedPayload } : null;
     }
-    return delivery;
+    return { delivery, payload };
+  },
+
+  async resolveSendTimeDelivery(
+    ownerUserId: number,
+    type: NotificationType,
+    payload: Record<string, unknown>,
+  ): Promise<OperationalEmailDelivery | null> {
+    return (await operationalEmailService.resolveSendTimeContext(ownerUserId, type, payload))?.delivery ?? null;
   },
 
   async synchronize(): Promise<number> {
@@ -534,6 +547,7 @@ export const operationalEmailService = {
     return processed;
   },
 };
+
 
 
 

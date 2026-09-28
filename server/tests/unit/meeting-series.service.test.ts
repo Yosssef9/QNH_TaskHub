@@ -14,6 +14,7 @@ const schedulingService = vi.hoisted(() => ({
   assertLockedScheduleAvailable: vi.fn(),
   commitPendingRevisionInTransaction: vi.fn(),
   getAvailability: vi.fn(),
+  getParticipantAvailability: vi.fn(),
 }));
 
 const schedulingRepository = vi.hoisted(() => ({
@@ -102,6 +103,24 @@ describe("Meeting Series service", () => {
     );
     schedulingService.acquireRoomLocksInTransaction.mockResolvedValue(undefined);
     schedulingService.assertLockedScheduleAvailable.mockResolvedValue(undefined);
+    schedulingService.getAvailability.mockResolvedValue({
+      roomId: 7,
+      startAtUtc: "2027-01-05T05:00:00.000Z",
+      endAtUtc: "2027-01-05T06:00:00.000Z",
+      participantCount: 1,
+      roomCapacity: 10,
+      isRoomActive: true,
+      hasCapacity: true,
+      isAvailable: true,
+      canSchedule: true,
+    });
+    schedulingService.getParticipantAvailability.mockResolvedValue({
+      startAtUtc: "2027-01-05T05:00:00.000Z",
+      endAtUtc: "2027-01-05T06:00:00.000Z",
+      participantCount: 1,
+      conflictParticipantCount: 0,
+      conflicts: [],
+    });
     seriesRepository.createSeries.mockResolvedValue({
       seriesId: 9,
       creationRequestId: "7d4d41be-6a75-4ab6-8325-63539c8012a4",
@@ -194,6 +213,33 @@ describe("Meeting Series service", () => {
     });
     expect(seriesRepository.createSeries).not.toHaveBeenCalled();
     expect(workflow.createPreparedMeetingInTransaction).not.toHaveBeenCalled();
+  });
+
+  it("keeps participant schedule conflicts advisory in Series preview", async () => {
+    schedulingService.getParticipantAvailability.mockResolvedValue({
+      startAtUtc: "2027-01-05T05:00:00.000Z",
+      endAtUtc: "2027-01-05T06:00:00.000Z",
+      participantCount: 1,
+      conflictParticipantCount: 1,
+      conflicts: [
+        {
+          participant: { userId: 101, userCode: "U101", userName: "Participant" },
+          conflictCount: 1,
+          overlaps: [
+            {
+              startAtUtc: "2027-01-05T05:30:00.000Z",
+              endAtUtc: "2027-01-05T06:30:00.000Z",
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = await meetingSeriesService.preview(10, input());
+
+    expect(result.canCreate).toBe(true);
+    expect(result.occurrences[0]?.validation.isValid).toBe(true);
+    expect(result.occurrences[0]?.participantAvailability?.conflictParticipantCount).toBe(1);
   });
 
   it("creates normal Meetings only after batch validation succeeds", async () => {

@@ -78,6 +78,32 @@ export interface MeetingAvailability extends MeetingAvailabilityInput {
   canSchedule: boolean
 }
 
+export interface MeetingParticipantConflictInput {
+  startAtUtc: string
+  endAtUtc: string
+  participantUserIds: number[]
+  excludeMeetingId?: number | null
+}
+
+export interface MeetingParticipantConflictWindow {
+  startAtUtc: string
+  endAtUtc: string
+}
+
+export interface MeetingParticipantScheduleConflict {
+  participant: MeetingParticipant
+  conflictCount: number
+  overlaps: MeetingParticipantConflictWindow[]
+}
+
+export interface MeetingParticipantAvailability {
+  startAtUtc: string
+  endAtUtc: string
+  participantCount: number
+  conflictParticipantCount: number
+  conflicts: MeetingParticipantScheduleConflict[]
+}
+
 export interface MeetingAgendaItemInput {
   id?: number | null
   topic: string

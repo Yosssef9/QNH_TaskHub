@@ -33,6 +33,7 @@ import {
   type MeetingSeriesResolvedOccurrence,
   type MeetingSeriesValidationIssue,
 } from "./meeting-series.types.js";
+import type { MeetingParticipantAvailability } from "./meeting-scheduling.types.js";
 import { meetingSchedulingRepository } from "./meeting-scheduling.repository.js";
 import { meetingSchedulingService } from "./meeting-scheduling.service.js";
 import { meetingNotificationsService } from "./meeting-notifications.service.js";
@@ -310,6 +311,8 @@ export const meetingSeriesService = {
         ...(preparedResult?.issues ?? []),
       ];
       let roomCapacity: number | null = null;
+      let participantAvailability: MeetingParticipantAvailability | null = null;
+      let participantAvailabilityCheckFailed = false;
       const participantCount = preparedResult?.prepared
         ? preparedResult.prepared.attendeeUserIds.length
         : estimatedParticipantCount(actorUserId, occurrence);
@@ -346,6 +349,20 @@ export const meetingSeriesService = {
         }
       }
 
+      if (preparedResult?.prepared) {
+        try {
+          participantAvailability = await meetingSchedulingService.getParticipantAvailability({
+            startAtUtc: occurrence.startAtUtc,
+            endAtUtc: occurrence.endAtUtc,
+            participantUserIds: preparedResult.prepared.attendeeUserIds,
+            excludeMeetingId: null,
+          });
+        } catch {
+          // Participant conflicts are advisory only. Keep Series preview/create eligibility independent.
+          participantAvailabilityCheckFailed = true;
+        }
+      }
+
       const uniqueIssues = issues.filter(
         (issue, index, all) => all.findIndex((candidate) => candidate.code === issue.code) === index,
       );
@@ -353,6 +370,8 @@ export const meetingSeriesService = {
         ...occurrence,
         participantCount,
         roomCapacity,
+        participantAvailability,
+        participantAvailabilityCheckFailed,
         validation: { isValid: uniqueIssues.length === 0, issues: uniqueIssues },
       });
     }

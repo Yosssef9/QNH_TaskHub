@@ -98,18 +98,19 @@ export async function processEmailOutboxOnce(workerId: string): Promise<number> 
       }
 
       const payload = parsePayload(row.templatePayloadJson);
+      let renderPayload = payload;
       let recipientEmail = row.recipientEmail;
       let recipientName = row.recipientName;
       let language = asLanguage(row.languageCode);
       const operationalEvent = notificationTypeForTemplate(templateKey);
 
       if (operationalEvent && row.ownerUserId !== null) {
-        const delivery = await operationalEmailService.resolveSendTimeDelivery(
+        const sendTime = await operationalEmailService.resolveSendTimeContext(
           row.ownerUserId,
           operationalEvent,
           payload,
         );
-        if (!delivery) {
+        if (!sendTime) {
           await emailRepository.markCanceled(
             Number(row.id),
             workerId,
@@ -122,9 +123,10 @@ export async function processEmailOutboxOnce(workerId: string): Promise<number> 
           continue;
         }
 
-        recipientEmail = delivery.recipient.email;
-        recipientName = delivery.recipient.name;
-        language = delivery.language;
+        recipientEmail = sendTime.delivery.recipient.email;
+        recipientName = sendTime.delivery.recipient.name;
+        language = sendTime.delivery.language;
+        renderPayload = sendTime.payload;
         await emailRepository.updateProcessingDelivery(
           Number(row.id),
           workerId,
@@ -135,7 +137,7 @@ export async function processEmailOutboxOnce(workerId: string): Promise<number> 
       }
 
       if (!recipientEmail) throw new Error("An email destination is required for this template.");
-      const document = renderEmailTemplate(templateKey, payload, language);
+      const document = renderEmailTemplate(templateKey, renderPayload, language);
       const sendResult = await transport.send({
         to: recipientEmail,
         ...(recipientName ? { toName: recipientName } : {}),
@@ -237,6 +239,7 @@ export function startEmailWorker(): EmailWorkerHandle {
     },
   };
 }
+
 
 
 

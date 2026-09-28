@@ -15,6 +15,11 @@ import type {
   LockedScheduleInput,
   MeetingAvailability,
   MeetingAvailabilityInput,
+  MeetingParticipantAvailability,
+  MeetingParticipantConflictInput,
+  MeetingParticipantConflictMeetingResult,
+  MeetingParticipantConflictMeetingWindow,
+  MeetingParticipantScheduleConflict,
   ScheduledRevisionResult,
 } from "./meeting-scheduling.types.js";
 
@@ -242,6 +247,43 @@ async function commitPendingRevisionInTransaction(
 
 }
 
+const MAX_CONFLICT_WINDOWS_PER_PARTICIPANT = 3;
+
+function projectParticipantConflicts(
+  rows: readonly import("./meeting-scheduling.repository.js").ParticipantScheduleConflictRecord[],
+): MeetingParticipantScheduleConflict[] {
+  const byUser = new Map<number, MeetingParticipantScheduleConflict>();
+
+  for (const row of rows) {
+    const userId = Number(row.userId);
+    let conflict = byUser.get(userId);
+    if (!conflict) {
+      conflict = {
+        participant: {
+          userId,
+          userCode: row.userCode,
+          userName: row.userName,
+        },
+        conflictCount: 0,
+        overlaps: [],
+      };
+      byUser.set(userId, conflict);
+    }
+
+    conflict.conflictCount += 1;
+    if (conflict.overlaps.length < MAX_CONFLICT_WINDOWS_PER_PARTICIPANT) {
+      conflict.overlaps.push({
+        startAtUtc: row.startAtUtc.toISOString(),
+        endAtUtc: row.endAtUtc.toISOString(),
+      });
+    }
+  }
+
+  return [...byUser.values()].sort((left, right) =>
+    left.participant.userName.localeCompare(right.participant.userName),
+  );
+}
+
 export const meetingSchedulingService = {
   async getAvailability(input: MeetingAvailabilityInput): Promise<MeetingAvailability> {
     const startAtUtc = new Date(input.startAtUtc);
@@ -274,6 +316,72 @@ export const meetingSchedulingService = {
       isAvailable,
       canSchedule: isRoomActive && hasCapacity && isAvailable,
     };
+  },
+
+  async getParticipantAvailability(
+    input: MeetingParticipantConflictInput,
+  ): Promise<MeetingParticipantAvailability> {
+    const startAtUtc = new Date(input.startAtUtc);
+    const endAtUtc = new Date(input.endAtUtc);
+    assertScheduleWindow(startAtUtc, endAtUtc);
+
+    const participantUserIds = [...new Set(input.participantUserIds)].filter(
+      (userId) => Number.isSafeInteger(userId) && userId > 0,
+    );
+
+    const conflicts = projectParticipantConflicts(
+      await meetingSchedulingRepository.findParticipantScheduleConflicts({
+        participantUserIds,
+        startAtUtc,
+        endAtUtc,
+        excludeMeetingId: input.excludeMeetingId ?? null,
+      }),
+    );
+
+    return {
+      startAtUtc: startAtUtc.toISOString(),
+      endAtUtc: endAtUtc.toISOString(),
+      participantCount: participantUserIds.length,
+      conflictParticipantCount: conflicts.length,
+      conflicts,
+    };
+  },
+
+  async getParticipantConflictsForMeetingWindows(input: {
+    participantUserId: number;
+    meetings: readonly MeetingParticipantConflictMeetingWindow[];
+  }): Promise<MeetingParticipantConflictMeetingResult[]> {
+    const meetings = input.meetings
+      .filter((meeting) => Number.isSafeInteger(meeting.meetingId) && meeting.meetingId > 0)
+      .map((meeting) => ({
+        meetingId: meeting.meetingId,
+        startAtUtc: new Date(meeting.startAtUtc),
+        endAtUtc: new Date(meeting.endAtUtc),
+      }));
+
+    for (const meeting of meetings) assertScheduleWindow(meeting.startAtUtc, meeting.endAtUtc);
+    if (meetings.length === 0) return [];
+
+    const rows = await meetingSchedulingRepository.findParticipantScheduleConflictsForMeetings({
+      participantUserId: input.participantUserId,
+      meetings,
+    });
+    const byMeeting = new Map<number, MeetingParticipantConflictMeetingResult>();
+    for (const row of rows) {
+      const meetingId = Number(row.targetMeetingId);
+      const current = byMeeting.get(meetingId) ?? {
+        meetingId,
+        conflictCount: Number(row.conflictCount),
+        overlaps: [],
+      };
+      current.conflictCount = Number(row.conflictCount);
+      current.overlaps.push({
+        startAtUtc: row.startAtUtc.toISOString(),
+        endAtUtc: row.endAtUtc.toISOString(),
+      });
+      byMeeting.set(meetingId, current);
+    }
+    return [...byMeeting.values()];
   },
 
   async assertCoordinatorPermission(

@@ -12,6 +12,7 @@ import type { TimeFormatPreference } from '@/features/auth/types/auth.types'
 import { formatClockTime } from '@/lib/date-time'
 import { cn } from '@/lib/cn'
 
+import { MeetingParticipantConflictNotice } from '../components/MeetingParticipantConflictNotice'
 import { MeetingSchedulePicker } from '../components/MeetingSchedulePicker'
 import { MeetingTimeRangePicker } from '../components/MeetingTimeRangePicker'
 import type { MeetingRoom } from '../types/meeting.types'
@@ -306,6 +307,9 @@ export function MeetingSeriesBulkScheduleWorkspace({
     (occurrence) => occurrence.validation.isValid,
   ).length
   const attentionCount = orderedImpact.length - validCount
+  const conflictCount = orderedImpact.filter(
+    (occurrence) => (occurrence.participantAvailability?.conflictParticipantCount ?? 0) > 0,
+  ).length
 
   const rankedRooms = rooms
     .map((room, index) => {
@@ -420,6 +424,12 @@ export function MeetingSeriesBulkScheduleWorkspace({
                     })}
                   </Badge>
                 )}
+                {conflictCount > 0 ? (
+                  <Badge variant="warning">
+                    <AlertTriangle aria-hidden="true" className="me-1 size-3" />
+                    {t('meetings.participantAvailability.seriesSummary', { count: conflictCount })}
+                  </Badge>
+                ) : null}
               </div>
             </div>
           </div>
@@ -627,15 +637,24 @@ export function MeetingSeriesBulkScheduleWorkspace({
                           {roomNameById(rooms, occurrence.roomId, arabic)}
                         </span>
 
-                        {occurrence.validation.isValid ? (
-                          <Badge variant="success">
-                            {t('meetings.series.redesign.statusReady')}
-                          </Badge>
-                        ) : (
-                          <Badge variant="destructive">
-                            {t('meetings.series.redesign.statusAttention')}
-                          </Badge>
-                        )}
+                        <span className="flex flex-wrap items-center justify-end gap-1.5">
+                          {(occurrence.participantAvailability?.conflictParticipantCount ?? 0) > 0 ? (
+                            <Badge variant="warning">
+                              {t('meetings.participantAvailability.conflictCountShort', {
+                                count: occurrence.participantAvailability?.conflictParticipantCount ?? 0,
+                              })}
+                            </Badge>
+                          ) : null}
+                          {occurrence.validation.isValid ? (
+                            <Badge variant="success">
+                              {t('meetings.series.redesign.statusReady')}
+                            </Badge>
+                          ) : (
+                            <Badge variant="destructive">
+                              {t('meetings.series.redesign.statusAttention')}
+                            </Badge>
+                          )}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -674,6 +693,11 @@ export function MeetingSeriesBulkScheduleWorkspace({
                       </Badge>
                     )}
                   </div>
+
+                  <MeetingParticipantConflictNotice
+                    availability={focusedOccurrence.participantAvailability ?? undefined}
+                    isError={focusedOccurrence.participantAvailabilityCheckFailed}
+                  />
 
                   <MeetingSchedulePicker
                     date={focusedOccurrence.date}

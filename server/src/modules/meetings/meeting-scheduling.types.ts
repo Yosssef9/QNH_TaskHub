@@ -19,6 +19,49 @@ export interface MeetingAvailability {
   canSchedule: boolean;
 }
 
+
+export interface MeetingParticipantConflictInput {
+  startAtUtc: string;
+  endAtUtc: string;
+  participantUserIds: number[];
+  excludeMeetingId?: number | null;
+}
+
+export interface MeetingParticipantConflictWindow {
+  startAtUtc: string;
+  endAtUtc: string;
+}
+
+export interface MeetingParticipantScheduleConflict {
+  participant: {
+    userId: number;
+    userCode: string;
+    userName: string;
+  };
+  conflictCount: number;
+  overlaps: MeetingParticipantConflictWindow[];
+}
+
+export interface MeetingParticipantAvailability {
+  startAtUtc: string;
+  endAtUtc: string;
+  participantCount: number;
+  conflictParticipantCount: number;
+  conflicts: MeetingParticipantScheduleConflict[];
+}
+
+export interface MeetingParticipantConflictMeetingWindow {
+  meetingId: number;
+  startAtUtc: string;
+  endAtUtc: string;
+}
+
+export interface MeetingParticipantConflictMeetingResult {
+  meetingId: number;
+  conflictCount: number;
+  overlaps: MeetingParticipantConflictWindow[];
+}
+
 export interface LockedScheduleInput {
   roomId: number;
   startAtUtc: Date;

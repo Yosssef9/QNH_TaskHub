@@ -1,6 +1,7 @@
 import { logger } from "../../config/logger.js";
 import { withTransaction } from "../../database/transaction.js";
 import type { NotificationType } from "../notifications/notifications.types.js";
+import { meetingSchedulingService } from "./meeting-scheduling.service.js";
 import {
   meetingNotificationsRepository,
   type MeetingEmailState,
@@ -93,7 +94,46 @@ function isValidForType(state: MeetingEmailState, type: NotificationType): boole
   }
 }
 
-function toPayload(state: MeetingEmailState): Record<string, unknown> {
+function scheduleConflictPayload(conflict: {
+  conflictCount: number;
+  overlaps: readonly { startAtUtc: string; endAtUtc: string }[];
+} | null): Record<string, unknown> | null {
+  if (!conflict || conflict.conflictCount < 1) return null;
+  return {
+    conflictCount: conflict.conflictCount,
+    overlaps: conflict.overlaps.map((overlap) => ({
+      startAtUtc: overlap.startAtUtc,
+      endAtUtc: overlap.endAtUtc,
+    })),
+  };
+}
+
+async function recipientScheduleConflict(
+  ownerUserId: number,
+  type: NotificationType,
+  state: MeetingEmailState,
+): Promise<Record<string, unknown> | null> {
+  if ((type !== "MEETING_INVITED" && type !== "MEETING_RESCHEDULED") || !state.ownerIsAttendee) {
+    return null;
+  }
+
+  const availability = await meetingSchedulingService.getParticipantAvailability({
+    startAtUtc: state.startAtUtc.toISOString(),
+    endAtUtc: state.endAtUtc.toISOString(),
+    participantUserIds: [ownerUserId],
+    excludeMeetingId: state.meetingId,
+  });
+  const conflict = availability.conflicts.find(
+    (item) => item.participant.userId === ownerUserId,
+  ) ?? null;
+  return scheduleConflictPayload(conflict);
+}
+
+async function toPayload(
+  ownerUserId: number,
+  type: NotificationType,
+  state: MeetingEmailState,
+): Promise<Record<string, unknown>> {
   return {
     meetingId: state.meetingId,
     revisionId: state.revisionId,
@@ -109,6 +149,7 @@ function toPayload(state: MeetingEmailState): Record<string, unknown> {
     previousRoomNameEn: state.previousRoomNameEn,
     previousStartAtUtc: state.previousStartAtUtc?.toISOString() ?? null,
     previousEndAtUtc: state.previousEndAtUtc?.toISOString() ?? null,
+    scheduleConflict: await recipientScheduleConflict(ownerUserId, type, state),
     href: `/meetings/${state.meetingId}`,
   };
 }
@@ -260,6 +301,17 @@ export const meetingNotificationsService = {
   ): Promise<Record<string, unknown> | null> {
     const recipient = (await meetingNotificationsRepository.listSeriesRecipients(seriesId, ownerUserId))[0];
     if (!recipient || recipient.meetings.length === 0) return null;
+    const attendedMeetings = recipient.meetings.filter((meeting) => meeting.ownerIsAttendee);
+    const conflicts = await meetingSchedulingService.getParticipantConflictsForMeetingWindows({
+      participantUserId: ownerUserId,
+      meetings: attendedMeetings.map((meeting) => ({
+        meetingId: meeting.meetingId,
+        startAtUtc: meeting.startAtUtc.toISOString(),
+        endAtUtc: meeting.endAtUtc.toISOString(),
+      })),
+    });
+    const conflictByMeetingId = new Map(conflicts.map((conflict) => [conflict.meetingId, conflict]));
+
     return {
       seriesId,
       seriesTitle: recipient.seriesTitle,
@@ -275,6 +327,9 @@ export const meetingNotificationsService = {
         endAtUtc: meeting.endAtUtc.toISOString(),
         roomNameAr: meeting.roomNameAr,
         roomNameEn: meeting.roomNameEn,
+        scheduleConflict: meeting.ownerIsAttendee
+          ? scheduleConflictPayload(conflictByMeetingId.get(meeting.meetingId) ?? null)
+          : null,
       })),
       opensSeries: recipient.ownerUserId === recipient.organizerUserId,
       href: recipient.ownerUserId === recipient.organizerUserId
@@ -301,7 +356,31 @@ export const meetingNotificationsService = {
   ): Promise<Record<string, unknown> | null> {
     if (!lifecycleEmailTypes.has(type)) return null;
     const state = await meetingNotificationsRepository.getEmailState(ownerUserId, meetingId, revisionId);
-    return state && isValidForType(state, type) ? toPayload(state) : null;
+    return state && isValidForType(state, type)
+      ? toPayload(ownerUserId, type, state)
+      : null;
+  },
+
+  async refreshEmailPayloadAtSend(
+    ownerUserId: number,
+    type: NotificationType,
+    payload: Record<string, unknown>,
+  ): Promise<Record<string, unknown> | null> {
+    if (type === "MEETING_SERIES_SCHEDULED") {
+      const seriesId = Number(payload.seriesId);
+      if (!Number.isSafeInteger(seriesId) || seriesId <= 0) return null;
+      return meetingNotificationsService.buildSeriesEmailPayload(ownerUserId, seriesId);
+    }
+    if (!lifecycleEmailTypes.has(type)) return null;
+    const meetingId = Number(payload.meetingId);
+    const revisionId = Number(payload.revisionId);
+    if (!Number.isSafeInteger(meetingId) || meetingId <= 0 || !Number.isSafeInteger(revisionId) || revisionId <= 0) {
+      return null;
+    }
+    const state = await meetingNotificationsRepository.getEmailState(ownerUserId, meetingId, revisionId);
+    return state && isValidForType(state, type)
+      ? toPayload(ownerUserId, type, state)
+      : null;
   },
 
   async validateEmailPayload(
@@ -322,5 +401,6 @@ export const meetingNotificationsService = {
     return Boolean(state && isValidForType(state, type));
   },
 };
+
 
 

@@ -11,6 +11,8 @@ import type {
   MeetingAttachment,
   MeetingAvailability,
   MeetingAvailabilityInput,
+  MeetingParticipantAvailability,
+  MeetingParticipantConflictInput,
   MeetingDetail,
   MeetingParticipantList,
   MeetingRescheduleQueueItem,
@@ -101,6 +103,15 @@ export async function checkMeetingAvailability(
     '/meetings/availability',
     input,
   )
+  return response.data.data.availability
+}
+
+export async function checkMeetingParticipantAvailability(
+  input: MeetingParticipantConflictInput,
+): Promise<MeetingParticipantAvailability> {
+  const response = await apiClient.post<
+    ApiSuccessResponse<{ availability: MeetingParticipantAvailability }>
+  >('/meetings/participant-availability', input)
   return response.data.data.availability
 }
 

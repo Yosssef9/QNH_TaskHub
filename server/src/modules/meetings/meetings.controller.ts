@@ -22,6 +22,7 @@ import type {
 import type {
   CreateMeetingRoomBody,
   MeetingAvailabilityBody,
+  MeetingParticipantAvailabilityBody,
   MeetingRoomParams,
   UpdateMeetingRoomBody,
 } from "./meetings.schemas.js";
@@ -44,7 +45,7 @@ import type {
   MeetingSeriesPreview,
 } from "./meeting-series.types.js";
 import { meetingsService } from "./meetings.service.js";
-import type { MeetingAvailability } from "./meeting-scheduling.types.js";
+import type { MeetingAvailability, MeetingParticipantAvailability } from "./meeting-scheduling.types.js";
 import type { MeetingRoom } from "./meetings.types.js";
 import type {
   ArchiveMeetingTemplateBody,
@@ -154,6 +155,17 @@ export const checkMeetingAvailability: RequestHandler = async (req, res) => {
   const input = getValidatedRequestPart<MeetingAvailabilityBody>(req, "body");
   const availability = await meetingSchedulingService.getAvailability(input);
   const body: ApiSuccessResponse<{ availability: MeetingAvailability }> = {
+    success: true,
+    data: { availability },
+  };
+
+  res.status(200).json(body);
+};
+
+export const checkMeetingParticipantAvailability: RequestHandler = async (req, res) => {
+  const input = getValidatedRequestPart<MeetingParticipantAvailabilityBody>(req, "body");
+  const availability = await meetingSchedulingService.getParticipantAvailability(input);
+  const body: ApiSuccessResponse<{ availability: MeetingParticipantAvailability }> = {
     success: true,
     data: { availability },
   };

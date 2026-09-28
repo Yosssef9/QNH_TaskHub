@@ -10,6 +10,7 @@ import {
   cancelMeeting,
   cancelMeetingRescheduleRequest,
   checkMeetingAvailability,
+  checkMeetingParticipantAvailability,
   createDirectMeeting,
   createMeetingRequest,
   createMeetingTemplate,
@@ -36,7 +37,7 @@ import {
   updatePendingMeetingSchedule,
   uploadMeetingAttachment,
 } from '../api/meetings.api'
-import type { MeetingAvailabilityInput } from '../types/meeting.types'
+import type { MeetingAvailabilityInput, MeetingParticipantConflictInput } from '../types/meeting.types'
 
 export const meetingsQueryKey = ['meetings'] as const
 export const myMeetingsQueryKey = [...meetingsQueryKey, 'mine'] as const
@@ -92,6 +93,16 @@ export function useMeetingAvailability(input: MeetingAvailabilityInput | null) {
     queryFn: () => checkMeetingAvailability(input as MeetingAvailabilityInput),
     enabled: input !== null,
     staleTime: 0,
+  })
+}
+
+export function useMeetingParticipantAvailability(input: MeetingParticipantConflictInput | null) {
+  return useQuery({
+    queryKey: [...meetingsQueryKey, 'participant-availability', input],
+    queryFn: () => checkMeetingParticipantAvailability(input as MeetingParticipantConflictInput),
+    enabled: input !== null && input.participantUserIds.length > 0,
+    staleTime: 0,
+    retry: 1,
   })
 }
 
