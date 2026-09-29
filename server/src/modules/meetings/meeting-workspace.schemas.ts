@@ -133,7 +133,7 @@ const meetingTemplateFields = {
   attendeeUserIds: z.array(z.coerce.number().int().positive()).max(500).default([]),
 };
 
-const validateTemplateLocation = (value: { meetingMode: "ROOM" | "ZOOM"; defaultRoomId?: number | null }, ctx: z.RefinementCtx) => {
+const validateTemplateLocation = (value: { meetingMode: "ROOM" | "ZOOM"; defaultRoomId?: number | null | undefined }, ctx: z.RefinementCtx) => {
   if (value.meetingMode === "ZOOM" && value.defaultRoomId != null) {
     ctx.addIssue({ code: "custom", path: ["defaultRoomId"], message: "Zoom Meeting Templates cannot reserve a physical room." });
   }

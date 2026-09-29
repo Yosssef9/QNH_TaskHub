@@ -13,7 +13,7 @@ export function sampleMeetingReport(language: MeetingReportLanguage = "en"): Mee
   const meeting = {
     id: 127, title: ar ? "المراجعة التشغيلية الشهرية" : "Monthly Operations Review",
     description: ar ? "مراجعة مؤشرات الأداء التشغيلي وتجربة المريض وخطة القوى العاملة. جميع البيانات في هذا النموذج افتراضية." : "Review operational performance, patient experience and the staffing plan. All information in this demonstration is fictional.",
-    status: "SCHEDULED" as const, organizer: people[0], room,
+    status: "SCHEDULED" as const, organizer: people[0], meetingMode: "ROOM" as const, room, onlineJoinUrl: null,
     startAtUtc: "2026-09-27T06:00:00.000Z", endAtUtc: "2026-09-27T07:00:00.000Z",
     schedulingNotes: ar ? "يرجى إحضار ملخص الإدارة وتحديث الإجراءات المفتوحة." : "Bring the departmental summary and update open Action Items.",
     participantCount: 4, organizerAttending: true, attendees: [...people], hasPendingReschedule: false,
@@ -41,7 +41,7 @@ export function sampleMeetingReport(language: MeetingReportLanguage = "en"): Mee
       assigneeUserId: 400, assigneeName: people[3].userName, assignedByUserId: 100, assignedByName: people[0].userName,
       agendaItemId: 3, agendaTitle: agendaItems[2]!.topic, assignedAtUtc: "2026-09-27T06:50:00.000Z", rowVersion: "0x0000000000000001" },
   ];
-  const revisionBase = { revisionType: "INITIAL" as const, revisionStatus: "APPROVED" as const, room,
+  const revisionBase = { revisionType: "INITIAL" as const, revisionStatus: "APPROVED" as const, meetingMode: "ROOM" as const, room, onlineJoinUrl: null,
     schedulingNotes: null, requestedBy: people[0], approvedBy: people[1], rejectedBy: null,
     createdAtUtc: "2026-09-20T07:00:00.000Z", decidedAtUtc: "2026-09-20T08:00:00.000Z", rowVersion: "0x0000000000000001" };
   return {
@@ -77,6 +77,6 @@ export function sampleMeetingReport(language: MeetingReportLanguage = "en"): Mee
       { id: "11111111-1111-4111-8111-111111111111", meetingId: 127, originalFileName: "Operations-summary.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileExtension: ".xlsx", sizeBytes: 185_000, uploadedBy: people[0], createdAtUtc: "2026-09-26T08:00:00.000Z" },
       { id: "22222222-2222-4222-8222-222222222222", meetingId: 127, originalFileName: ar ? "خطة-تجربة-المريض.pdf" : "Patient-experience-plan.pdf", mimeType: "application/pdf", fileExtension: ".pdf", sizeBytes: 1_200_000, uploadedBy: people[0], createdAtUtc: "2026-09-26T08:30:00.000Z" },
     ],
-    relatedMeetings: [{ id: 128, title: ar ? "متابعة الإجراءات التشغيلية" : "Operations Action Item Follow-up", status: "SCHEDULED", organizer: people[0], room, startAtUtc: "2026-10-04T06:00:00.000Z", endAtUtc: "2026-10-04T07:00:00.000Z", participantCount: 4, isCurrent: false }],
+    relatedMeetings: [{ id: 128, title: ar ? "متابعة الإجراءات التشغيلية" : "Operations Action Item Follow-up", status: "SCHEDULED", organizer: people[0], meetingMode: "ROOM", room, startAtUtc: "2026-10-04T06:00:00.000Z", endAtUtc: "2026-10-04T07:00:00.000Z", participantCount: 4, isCurrent: false }],
   };
 }

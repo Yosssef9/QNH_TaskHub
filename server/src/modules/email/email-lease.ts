@@ -1,5 +1,14 @@
+export interface EmailLeaseGuard {
+  signal: AbortSignal;
+  assertOwned(): Promise<void>;
+  stop(): Promise<void>;
+}
+
 /** Prevent a slow PDF/SMTP operation from outliving its outbox ownership lease. */
-export function startEmailLeaseGuard(renew: () => Promise<boolean>, intervalMs = 10_000) {
+export function startEmailLeaseGuard(
+  renew: () => Promise<boolean>,
+  intervalMs = 10_000,
+): EmailLeaseGuard {
   const controller = new AbortController();
   let stopped = false;
   let pending: Promise<void> | undefined;

@@ -165,7 +165,13 @@ export const checkMeetingAvailability: RequestHandler = async (req, res) => {
 export const checkMeetingParticipantAvailability: RequestHandler = async (req, res) => {
   const input = getValidatedRequestPart<MeetingParticipantAvailabilityBody>(req, "body");
   const access = currentAccess(req);
-  const availability = await meetingSchedulingService.getParticipantAvailability(input, {
+  const participantAvailabilityInput = {
+    startAtUtc: input.startAtUtc,
+    endAtUtc: input.endAtUtc,
+    participantUserIds: input.participantUserIds,
+    excludeMeetingId: input.excludeMeetingId ?? null,
+  };
+  const availability = await meetingSchedulingService.getParticipantAvailability(participantAvailabilityInput, {
     userId: actorUserId(req),
     canCoordinateMeetings: access.meetingCoordinateEnabled === true,
     canPreviewRoomMeetings: access.meetingRoomOrganizeEnabled === true,
