@@ -44,6 +44,39 @@ describe("Participant schedule conflict query contract", () => {
     assert.equal(request.input.mock.calls.find((args) => args[0] === "excludeMeetingId")?.[2], 127);
   });
 
+
+  it("returns conflict Meeting metadata only through the viewer-authorized detail query", async () => {
+    const { query, request } = capture();
+
+    await meetingSchedulingRepository.findVisibleParticipantConflictMeetings({
+      viewerUserId: 99,
+      participantUserIds: [21, 22],
+      startAtUtc: new Date("2026-09-28T07:00:00.000Z"),
+      endAtUtc: new Date("2026-09-28T08:00:00.000Z"),
+      excludeMeetingId: 127,
+      canCoordinateMeetings: false,
+      canPreviewRoomMeetings: true,
+    });
+
+    const text = query.mock.calls[0]![0];
+    assert.match(text, /meeting\.organizer_user_id = @viewerUserId/);
+    assert.match(text, /viewerAttendee\.attendee_user_id = @viewerUserId/);
+    assert.match(text, /@canCoordinateMeetings = 1/);
+    assert.match(text, /@canPreviewRoomMeetings = 1/);
+    assert.match(text, /revision\.meeting_mode = 'ROOM'/);
+    assert.match(text, /THEN 'FULL'/);
+    assert.match(text, /ELSE 'PREVIEW'/);
+    assert.match(text, /meeting\.status = 'SCHEDULED'/);
+    assert.match(text, /revision\.revision_status = 'APPROVED'/);
+    assert.match(text, /meeting\.title/);
+    assert.match(text, /organizer\.USER_NAME/);
+    assert.match(text, /room\.name_en/);
+    assert.doesNotMatch(text, /description|scheduling_notes|online_join_url/i);
+
+    assert.equal(request.input.mock.calls.find((args) => args[0] === "viewerUserId")?.[2], 99);
+    assert.equal(request.input.mock.calls.find((args) => args[0] === "canPreviewRoomMeetings")?.[2], true);
+  });
+
   it("does not select private Meeting content", async () => {
     const { query } = capture();
 

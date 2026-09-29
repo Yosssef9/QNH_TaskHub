@@ -230,6 +230,7 @@ function BusyMeetingBlock({
   const [open, setOpen] = useState(false)
   const inspectable = entry.visibility === 'FULL'
   const detailQuery = useMeetingDetail(open && inspectable ? entry.meetingId : null)
+  if (!entry.room) return null
   const roomName = i18n.language.startsWith('ar') ? entry.room.nameAr : entry.room.nameEn
   const quickTitle = entry.visibility === 'BUSY' ? t('meetings.create.slotBusy') : entry.title
   const timeText = `${formatTime(entry.startAtUtc, locale, timeFormat)} – ${formatTime(entry.endAtUtc, locale, timeFormat)}`
@@ -1406,7 +1407,7 @@ export function MeetingSchedulePicker({
                 onValueChange={(value) => {
                   const nextStart = timeToMinutes(value)
                   const nextEnd = directTimeRangeSelection
-                    ? Math.max(nextStart + SELECTION_STEP_MINUTES, timeToMinutes(endTime))
+                    ? Math.max(nextStart + MIN_MEETING_DURATION_MINUTES, timeToMinutes(endTime))
                     : nextStart + activeDuration
                   const boundedEnd = Math.min(DAY_MINUTES - SELECTION_STEP_MINUTES, nextEnd)
                   const busy =
@@ -1426,7 +1427,7 @@ export function MeetingSchedulePicker({
                 <SelectContent>
                   {customTimeOptions.map((optionStart) => {
                     const optionEnd = directTimeRangeSelection
-                      ? Math.max(optionStart + SELECTION_STEP_MINUTES, timeToMinutes(endTime))
+                      ? Math.max(optionStart + MIN_MEETING_DURATION_MINUTES, timeToMinutes(endTime))
                       : optionStart + activeDuration
                     const canFitDuration = optionEnd <= DAY_MINUTES
                     const isPast = date ? hasStartTimePassed(date, optionStart, nowUtcMs) : false
@@ -1491,7 +1492,7 @@ export function MeetingSchedulePicker({
                   </SelectTrigger>
                   <SelectContent>
                     {customTimeOptions
-                      .filter((optionEnd) => optionEnd > selectedStartMinutes)
+                      .filter((optionEnd) => optionEnd >= selectedStartMinutes + MIN_MEETING_DURATION_MINUTES)
                       .map((optionEnd) => (
                         <SelectItem key={optionEnd} value={minutesToTime(optionEnd)}>
                           <span className="font-medium tabular-nums">
@@ -1504,6 +1505,17 @@ export function MeetingSchedulePicker({
               </div>
             ) : null}
           </div>
+
+          {directTimeRangeSelection && timeSelected ? (
+            <div className="bg-muted/30 mt-3 flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5">
+              <span className="text-muted-foreground text-xs font-medium">
+                {t('meetings.create.duration')}
+              </span>
+              <span className="text-sm font-semibold tabular-nums">
+                {formatMeetingDuration(selectedDuration, t)}
+              </span>
+            </div>
+          ) : null}
         </div>
 
         {validationErrors.time ? (
@@ -1556,6 +1568,7 @@ export function MeetingSchedulePicker({
     </section>
   )
 }
+
 
 
 

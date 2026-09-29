@@ -4,6 +4,7 @@ import {
   ChevronRight,
   Clock3,
   DoorOpen,
+  Video,
   RotateCcw,
   SearchX,
   UserRound,
@@ -66,8 +67,14 @@ function isUserAttending(meeting: MeetingSummary, userId: number): boolean {
   return meeting.attendees.some((attendee) => attendee.userId === userId)
 }
 
+function meetingAccent(meeting: MeetingSummary): string {
+  return meeting.meetingMode === 'ZOOM' || !meeting.room
+    ? '#2D8CFF'
+    : getMeetingRoomAccent(meeting.room.colorKey)
+}
+
 function meetingRoomSurface(meeting: MeetingSummary): CSSProperties {
-  const accent = getMeetingRoomAccent(meeting.room.colorKey)
+  const accent = meetingAccent(meeting)
   return {
     borderInlineStart: `4px solid ${accent}`,
     background: `color-mix(in oklab, ${accent} 5%, var(--card))`,
@@ -75,13 +82,12 @@ function meetingRoomSurface(meeting: MeetingSummary): CSSProperties {
 }
 
 function meetingRoomAccentStyle(meeting: MeetingSummary): CSSProperties {
-  return { color: getMeetingRoomAccent(meeting.room.colorKey) }
+  return { color: meetingAccent(meeting) }
 }
 
 function meetingListRoomSurface(meeting: MeetingSummary, isRtl: boolean): CSSProperties {
-  const accent = getMeetingRoomAccent(meeting.room.colorKey)
+  const accent = meetingAccent(meeting)
   const direction = isRtl ? 'to right' : 'to left'
-
   return {
     borderInlineEnd: `4px solid ${accent}`,
     background: `linear-gradient(${direction},
@@ -93,9 +99,8 @@ function meetingListRoomSurface(meeting: MeetingSummary, isRtl: boolean): CSSPro
 }
 
 function meetingListHoverSurface(meeting: MeetingSummary, isRtl: boolean): CSSProperties {
-  const accent = getMeetingRoomAccent(meeting.room.colorKey)
+  const accent = meetingAccent(meeting)
   const direction = isRtl ? 'to right' : 'to left'
-
   return {
     background: `linear-gradient(${direction},
       color-mix(in oklab, ${accent} 18%, var(--card)) 0%,
@@ -141,8 +146,8 @@ export function MyMeetingsDashboard({
   )
 
   const rooms = useMemo(() => {
-    const roomMap = new Map<number, MeetingSummary['room']>()
-    for (const meeting of meetings) roomMap.set(meeting.room.id, meeting.room)
+    const roomMap = new Map<number, NonNullable<MeetingSummary['room']>>()
+    for (const meeting of meetings) if (meeting.room) roomMap.set(meeting.room.id, meeting.room)
     return [...roomMap.values()].sort((left, right) => {
       const leftName = i18n.language.startsWith('ar') ? left.nameAr : left.nameEn
       const rightName = i18n.language.startsWith('ar') ? right.nameAr : right.nameEn
@@ -209,7 +214,7 @@ export function MyMeetingsDashboard({
       }
       if (tab === 'PAST' && endTime >= nowTime) return false
 
-      if (roomFilter !== 'ALL' && meeting.room.id !== Number(roomFilter)) return false
+      if (roomFilter !== 'ALL' && meeting.room?.id !== Number(roomFilter)) return false
       if (roleFilter === 'ORGANIZER' && meeting.organizer.userId !== currentUserId) return false
       if (roleFilter === 'PARTICIPANT' && !isUserAttending(meeting, currentUserId)) return false
 
@@ -217,9 +222,10 @@ export function MyMeetingsDashboard({
       const searchable = [
         meeting.title,
         meeting.description ?? '',
-        meeting.room.nameAr,
-        meeting.room.nameEn,
-        meeting.room.locationText ?? '',
+        meeting.room?.nameAr ?? '',
+        meeting.room?.nameEn ?? '',
+        meeting.room?.locationText ?? '',
+        meeting.meetingMode === 'ZOOM' ? 'Zoom Online' : '',
         meeting.organizer.userName,
         ...meeting.attendees.map((attendee) => attendee.userName),
       ].join(' ')
@@ -255,7 +261,7 @@ export function MyMeetingsDashboard({
   }, [filteredMeetings])
 
   function roomName(meeting: MeetingSummary): string {
-    return i18n.language.startsWith('ar') ? meeting.room.nameAr : meeting.room.nameEn
+    return meeting.meetingMode === 'ZOOM' || !meeting.room ? t('meetings.zoom.zoomType') : (i18n.language.startsWith('ar') ? meeting.room.nameAr : meeting.room.nameEn)
   }
 
   function groupLabel(dateKey: string): string {
@@ -698,15 +704,15 @@ function MeetingListRow({
         </div>
 
         <div className="flex min-w-0 items-center gap-2">
-          <DoorOpen
-            aria-hidden="true"
-            className="size-4 shrink-0"
-            style={meetingRoomAccentStyle(meeting)}
-          />
+          {meeting.meetingMode === 'ZOOM' ? (
+            <Video aria-hidden="true" className="size-4 shrink-0" style={meetingRoomAccentStyle(meeting)} />
+          ) : (
+            <DoorOpen aria-hidden="true" className="size-4 shrink-0" style={meetingRoomAccentStyle(meeting)} />
+          )}
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold">{roomName}</p>
             <p className="text-muted-foreground mt-0.5 truncate text-xs">
-              {meeting.room.locationText ?? t('meetings.noRoomLocation')}
+              {meeting.meetingMode === 'ZOOM' ? t('meetings.zoom.online') : (meeting.room?.locationText ?? t('meetings.noRoomLocation'))}
             </p>
           </div>
         </div>
@@ -745,4 +751,5 @@ function MeetingListRow({
     </button>
   )
 }
+
 

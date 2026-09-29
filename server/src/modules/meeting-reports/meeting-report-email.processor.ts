@@ -77,7 +77,11 @@ export function createReportEmailProcessor(deps: ReportEmailProcessorDependencie
       const meeting = data.detail.meeting;
       const document = deps.template({
         meetingId: meeting.id, title: meeting.title,
-        room: data.language === "ar" ? meeting.room.nameAr : meeting.room.nameEn,
+        room: meeting.meetingMode === "ZOOM"
+          ? (data.language === "ar" ? "اجتماع Zoom · عبر الإنترنت" : "Zoom Meeting · Online")
+          : meeting.room
+            ? (data.language === "ar" ? meeting.room.nameAr : meeting.room.nameEn)
+            : (data.language === "ar" ? "غير محدد" : "Not provided"),
         startAtUtc: meeting.startAtUtc, endAtUtc: meeting.endAtUtc,
         generatedAtUtc: data.generatedAtUtc, timeZone: data.timeZone, timeFormat: data.timeFormat,
         attended: data.attendanceSummary.ATTENDED, absent: data.attendanceSummary.ABSENT,
@@ -125,3 +129,4 @@ export function createReportEmailProcessor(deps: ReportEmailProcessorDependencie
     }
   };
 }
+

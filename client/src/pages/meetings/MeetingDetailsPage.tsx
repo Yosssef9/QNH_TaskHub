@@ -16,7 +16,10 @@ import {
   Paperclip,
   RefreshCcw,
   Save,
+  UserRound,
   UsersRound,
+  Video,
+  ExternalLink,
   XCircle,
   type LucideIcon,
 } from 'lucide-react'
@@ -32,8 +35,10 @@ import { LoadingState } from '@/components/shared/LoadingState'
 import { TextareaField } from '@/components/shared/Input'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { buttonStyles } from '@/components/ui/button.styles'
 import { Card } from '@/components/ui/card'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { CoordinatorDirectRescheduleDialog } from '@/features/meetings/components/CoordinatorDirectRescheduleDialog'
 import { CoordinatorMeetingScheduleDialog } from '@/features/meetings/components/CoordinatorMeetingScheduleDialog'
@@ -43,7 +48,6 @@ import { MeetingAgendaWorkspace } from '@/features/meetings/components/MeetingAg
 import { MeetingFilesPanel } from '@/features/meetings/components/MeetingFilesPanel'
 import { MeetingFilesPreview } from '@/features/meetings/components/MeetingFilesPreview'
 import { MeetingReportStatusPanel } from '@/features/meetings/reports/MeetingReportStatusPanel'
-import { MeetingParticipantsPanel } from '@/features/meetings/components/MeetingParticipantsPanel'
 import { MeetingFollowUpPanel } from '@/features/meetings/action-items/MeetingFollowUpPanel'
 import type {
   MeetingFollowUpLaunchRequest,
@@ -65,6 +69,8 @@ import {
 import type {
   MeetingActivityItem,
   MeetingAttendanceStatus,
+  MeetingMode,
+  MeetingParticipant,
   MeetingRevisionDetail,
   MeetingRoom,
   MeetingStatus,
@@ -87,6 +93,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 interface ActivityScheduleSnapshot {
+  meetingMode: MeetingMode
   roomId: number | null
   startAtUtc: string
   endAtUtc: string
@@ -98,6 +105,7 @@ function scheduleSnapshot(value: unknown): ActivityScheduleSnapshot | null {
   const endAtUtc = typeof value.endAtUtc === 'string' ? value.endAtUtc : null
   if (!startAtUtc || !endAtUtc) return null
   return {
+    meetingMode: value.meetingMode === 'ZOOM' ? 'ZOOM' : 'ROOM',
     roomId: typeof value.roomId === 'number' ? value.roomId : null,
     startAtUtc,
     endAtUtc,
@@ -130,7 +138,7 @@ function ActivityScheduleDetails({
   const snapshots: Array<{ key: string; labelKey: string; snapshot: ActivityScheduleSnapshot }> = []
   for (const [key, labelKey] of candidates) {
     const snapshot = scheduleSnapshot(item.changes[key])
-    if (snapshot && !snapshots.some((entry) => entry.snapshot.startAtUtc === snapshot.startAtUtc && entry.snapshot.endAtUtc === snapshot.endAtUtc && entry.snapshot.roomId === snapshot.roomId)) {
+    if (snapshot && !snapshots.some((entry) => entry.snapshot.startAtUtc === snapshot.startAtUtc && entry.snapshot.endAtUtc === snapshot.endAtUtc && entry.snapshot.roomId === snapshot.roomId && entry.snapshot.meetingMode === snapshot.meetingMode)) {
       snapshots.push({ key, labelKey, snapshot })
     }
   }
@@ -146,11 +154,13 @@ function ActivityScheduleDetails({
             <p className="mt-1 font-medium">
               {formatDateTime(snapshot.startAtUtc, locale, timeFormat)} → {formatDateTime(snapshot.endAtUtc, locale, timeFormat)}
             </p>
-            {room ? (
-              <p className="text-muted-foreground mt-1">
-                {arabic ? room.nameAr : room.nameEn}
-              </p>
-            ) : null}
+            <p className="text-muted-foreground mt-1">
+              {snapshot.meetingMode === 'ZOOM'
+                ? t('meetings.zoom.zoomType')
+                : room
+                  ? arabic ? room.nameAr : room.nameEn
+                  : t('meetings.noRoomLocation')}
+            </p>
           </div>
         )
       })}
@@ -292,8 +302,18 @@ function meetingStatusVariant(status: MeetingStatus) {
   return 'secondary' as const
 }
 
-function roomAccentSurface(room: MeetingRoom, arabic: boolean): CSSProperties {
-  const accent = getMeetingRoomAccent(room.colorKey)
+function participantInitials(participant: MeetingParticipant): string {
+  const parts = participant.userName.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return participant.userCode.slice(0, 2).toUpperCase()
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase()
+}
+
+function roomAccentSurface(room: MeetingRoom | null, arabic: boolean): CSSProperties {
+  const accent = room ? getMeetingRoomAccent(room.colorKey) : 'var(--primary)'
   const direction = arabic ? 'to right' : 'to left'
   return {
     borderInlineEnd: `4px solid ${accent}`,
@@ -429,13 +449,23 @@ export function MeetingDetailsPage() {
   const meetingHasStarted =
     meeting.status === 'SCHEDULED' && new Date(meeting.startAtUtc).getTime() <= nowMs
 
+  const attendanceByUserId = new Map(
+    detail.attendance.map((item) => [item.participant.userId, item] as const),
+  )
+  const attendanceCounts = detail.attendance.reduce(
+    (counts, item) => {
+      counts[item.status] += 1
+      return counts
+    },
+    { NOT_MARKED: 0, ATTENDED: 0, ABSENT: 0 } as Record<MeetingAttendanceStatus, number>,
+  )
   const attendanceMutationPending = updateAttendance.isPending || bulkUpdateAttendance.isPending
   const currentUserIsOrganizer = currentUser.data?.user.userId === meeting.organizer.userId
 
   const roomById = new Map<number, MeetingRoom>()
-  roomById.set(meeting.room.id, meeting.room)
-  for (const revision of detail.revisions) roomById.set(revision.room.id, revision.room)
-  if (pendingReschedule) roomById.set(pendingReschedule.room.id, pendingReschedule.room)
+  if (meeting.room) roomById.set(meeting.room.id, meeting.room)
+  for (const revision of detail.revisions) if (revision.room) roomById.set(revision.room.id, revision.room)
+  if (pendingReschedule?.room) roomById.set(pendingReschedule.room.id, pendingReschedule.room)
 
   const organizerScheduleLabel = detail.permissions.canEditPendingSchedule
     ? t('meetings.workspace.changeRequestedSchedule')
@@ -448,8 +478,10 @@ export function MeetingDetailsPage() {
     detail.permissions.canReschedule ||
     detail.permissions.canEditPendingReschedule
 
-  const currentRoomName = arabic ? meeting.room.nameAr : meeting.room.nameEn
-  const currentRoomAccent = getMeetingRoomAccent(meeting.room.colorKey)
+  const currentRoomName = meeting.meetingMode === 'ZOOM' || !meeting.room
+    ? t('meetings.zoom.zoomType')
+    : arabic ? meeting.room.nameAr : meeting.room.nameEn
+  const currentRoomAccent = meeting.room ? getMeetingRoomAccent(meeting.room.colorKey) : 'var(--primary)' 
   const meetingDateLabel = new Intl.DateTimeFormat(locale, {
     weekday: 'long',
     year: 'numeric',
@@ -509,11 +541,14 @@ export function MeetingDetailsPage() {
   }
 
   async function cancel() {
+    const reason = cancelReason.trim()
+    if (!reason) return
+
     try {
       await cancelMutation.mutateAsync({
         meetingId: meeting.id,
         meetingRowVersion: meeting.meetingRowVersion,
-        reason: cancelReason.trim() || null,
+        reason,
       })
       toast.success(t('meetings.workspace.cancelled'))
       setCancelOpen(false)
@@ -663,8 +698,7 @@ export function MeetingDetailsPage() {
 
   return (
     <div className="space-y-5">
-      <section className="space-y-5 pb-1">
-        <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(19rem,0.72fr)] xl:items-start">
+      <section className="grid gap-8 pb-1 xl:grid-cols-[minmax(0,1fr)_minmax(19rem,0.72fr)] xl:items-start">
         <div className="min-w-0">
           <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs font-semibold">
             <button
@@ -722,15 +756,15 @@ export function MeetingDetailsPage() {
             <span aria-hidden="true" className="bg-border hidden h-8 w-px sm:block" />
 
             <span className="inline-flex min-w-0 items-start gap-2.5">
-              <DoorOpen
-                aria-hidden="true"
-                className="mt-0.5 size-4 shrink-0"
-                style={{ color: currentRoomAccent }}
-              />
+              {meeting.meetingMode === 'ZOOM' ? (
+                <Video aria-hidden="true" className="text-primary mt-0.5 size-4 shrink-0" />
+              ) : (
+                <DoorOpen aria-hidden="true" className="mt-0.5 size-4 shrink-0" style={{ color: currentRoomAccent }} />
+              )}
               <span className="min-w-0">
                 <span className="block truncate font-semibold text-foreground">{currentRoomName}</span>
                 <span className="text-muted-foreground mt-0.5 block truncate text-xs">
-                  {meeting.room.locationText ?? t('meetings.noRoomLocation')}
+                  {meeting.meetingMode === 'ZOOM' ? t('meetings.zoom.online') : meeting.room?.locationText ?? t('meetings.noRoomLocation')}
                 </span>
               </span>
             </span>
@@ -748,6 +782,21 @@ export function MeetingDetailsPage() {
               <ArrowLeft aria-hidden="true" className="size-4" />
             
             </Button>
+
+
+            {meeting.meetingMode === 'ZOOM' && meeting.onlineJoinUrl ? (
+              <a
+                href={meeting.onlineJoinUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                dir={arabic ? 'rtl' : 'ltr'}
+                className={buttonStyles({ className: 'whitespace-nowrap' })}
+              >
+                <Video aria-hidden="true" className="size-4 shrink-0" />
+                <span className="whitespace-nowrap">{t('meetings.zoom.join')}</span>
+                <ExternalLink aria-hidden="true" className="size-3.5 shrink-0" />
+              </a>
+            ) : null}
 
             {detail.permissions.canDecidePendingRequest ? (
               <>
@@ -844,9 +893,48 @@ export function MeetingDetailsPage() {
             ) : null}
           </div>
         </div>
-        </div>
-        <MeetingReportStatusPanel key={meeting.id} meetingId={meeting.id} meetingRowVersion={meeting.meetingRowVersion} />
       </section>
+
+      {meeting.status === 'CANCELLED' ? (
+        <section className="border-destructive/30 bg-destructive/[0.045] rounded-xl border px-4 py-4 sm:px-5">
+          <div className="flex items-start gap-3">
+            <span className="bg-destructive/10 text-destructive grid size-10 shrink-0 place-items-center rounded-xl">
+              <XCircle aria-hidden="true" className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-destructive font-bold">
+                {t('meetings.workspace.cancellationDetailsTitle')}
+              </h2>
+              <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <div>
+                  <p className="text-muted-foreground text-xs font-semibold">
+                    {t('meetings.workspace.cancellationReasonLabel')}
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm leading-6">
+                    {meeting.cancellationReason ?? t('meetings.workspace.cancellationReasonUnavailable')}
+                  </p>
+                </div>
+                <div className="text-muted-foreground text-xs leading-5 sm:text-end">
+                  {meeting.cancelledBy ? (
+                    <p>
+                      {t('meetings.workspace.cancelledBy', { name: meeting.cancelledBy.userName })}
+                    </p>
+                  ) : null}
+                  {meeting.cancelledAtUtc ? (
+                    <p>
+                      {t('meetings.workspace.cancelledAt', {
+                        value: formatDateTime(meeting.cancelledAtUtc, locale, timeFormat),
+                      })}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      <MeetingReportStatusPanel meetingId={meeting.id} meetingRowVersion={meeting.meetingRowVersion} />
 
       <div
         role="tablist"
@@ -933,13 +1021,18 @@ export function MeetingDetailsPage() {
                       background: `color-mix(in oklab, ${currentRoomAccent} 8%, var(--card))`,
                     }}
                   >
-                    <DoorOpen aria-hidden="true" className="size-4" />
+                    {meeting.meetingMode === 'ZOOM' ? <Video aria-hidden="true" className="size-4" /> : <DoorOpen aria-hidden="true" className="size-4" />}
                   </span>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-bold">{currentRoomName}</p>
                     <p className="text-muted-foreground mt-0.5 truncate text-xs">
-                      {meeting.room.locationText ?? t('meetings.noRoomLocation')}
+                      {meeting.meetingMode === 'ZOOM' ? t('meetings.zoom.online') : meeting.room?.locationText ?? t('meetings.noRoomLocation')}
                     </p>
+                    {meeting.meetingMode === 'ZOOM' && meeting.onlineJoinUrl ? (
+                      <a href={meeting.onlineJoinUrl} target="_blank" rel="noreferrer noopener" className="text-primary mt-2 inline-flex items-center gap-1 text-xs font-semibold hover:underline">
+                        <Video aria-hidden="true" className="size-3.5" /> {t('meetings.zoom.join')}
+                      </a>
+                    ) : null}
                   </div>
                 </div>
 
@@ -954,15 +1047,165 @@ export function MeetingDetailsPage() {
               </div>
             </Card>
 
-            <MeetingParticipantsPanel
-              meeting={meeting}
-              attendance={detail.attendance}
-              canManageAttendance={detail.permissions.canManageAttendance && meetingHasStarted}
-              showStartNotice={currentUserIsOrganizer && meeting.status === 'SCHEDULED' && !meetingHasStarted}
-              isSaving={attendanceMutationPending}
-              onChangeAttendance={changeAttendance}
-              onChangeAllAttendance={changeAllAttendance}
-            />
+            <Card className="border-border/70 p-5 shadow-sm sm:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 grid size-10 place-items-center rounded-xl">
+                    <UsersRound aria-hidden="true" className="size-5" />
+                  </span>
+                  <div>
+                    <h2 className="font-bold">{t('meetings.workspace.participants')}</h2>
+                    <p className="text-muted-foreground mt-0.5 text-xs">
+                      {t('meetings.workspace.participantCount', { count: meeting.participantCount })}
+                    </p>
+                  </div>
+                </div>
+
+                {detail.permissions.canManageAttendance && meetingHasStarted && detail.attendance.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={attendanceMutationPending}
+                      onClick={() => void changeAllAttendance('ATTENDED')}
+                    >
+                      {t('meetings.workspace.attendance.markAll')}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={attendanceMutationPending}
+                      onClick={() => void changeAllAttendance('NOT_MARKED')}
+                    >
+                      {t('meetings.workspace.attendance.clear')}
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+
+              {detail.attendance.length > 0 ? (
+                <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                  <div className="bg-emerald-500/10 rounded-lg px-2 py-2.5">
+                    <p className="text-emerald-700 dark:text-emerald-300 text-lg font-bold tabular-nums">
+                      {attendanceCounts.ATTENDED}
+                    </p>
+                    <p className="text-muted-foreground text-[11px]">
+                      {t('meetings.workspace.attendance.status.ATTENDED')}
+                    </p>
+                  </div>
+                  <div className="bg-destructive/10 rounded-lg px-2 py-2.5">
+                    <p className="text-destructive text-lg font-bold tabular-nums">
+                      {attendanceCounts.ABSENT}
+                    </p>
+                    <p className="text-muted-foreground text-[11px]">
+                      {t('meetings.workspace.attendance.status.ABSENT')}
+                    </p>
+                  </div>
+                  <div className="bg-muted/50 rounded-lg px-2 py-2.5">
+                    <p className="text-lg font-bold tabular-nums">{attendanceCounts.NOT_MARKED}</p>
+                    <p className="text-muted-foreground text-[11px]">
+                      {t('meetings.workspace.attendance.status.NOT_MARKED')}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+
+              {currentUserIsOrganizer &&
+              meeting.status === 'SCHEDULED' &&
+              !meetingHasStarted ? (
+                <div className="bg-muted/25 text-muted-foreground mt-4 rounded-xl border border-dashed px-3.5 py-3 text-xs leading-5">
+                  {t('meetings.workspace.attendance.availableAtStart')}
+                </div>
+              ) : null}
+
+              <div className="mt-5 space-y-2">
+                {[meeting.organizer, ...meeting.attendees].map((participant) => {
+                  const organizer = participant.userId === meeting.organizer.userId
+                  const attendance = attendanceByUserId.get(participant.userId) ?? null
+                  const attendanceVariant =
+                    attendance?.status === 'ATTENDED'
+                      ? 'success'
+                      : attendance?.status === 'ABSENT'
+                        ? 'destructive'
+                        : 'secondary'
+
+                  return (
+                    <div
+                      key={`${organizer ? 'organizer' : 'attendee'}-${participant.userId}`}
+                      className="hover:bg-muted/25 flex flex-wrap items-center gap-3 rounded-xl border border-border/70 px-3.5 py-3 transition-colors"
+                    >
+                      <span className="bg-primary/10 text-primary grid size-10 shrink-0 place-items-center rounded-full text-xs font-bold">
+                        {participantInitials(participant)}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="truncate text-sm font-semibold">{participant.userName}</p>
+                          {organizer ? (
+                            <>
+                              <Badge variant="secondary" className="text-[10px]">
+                                {t('meetings.organizer')}
+                              </Badge>
+                              <Badge
+                                variant={meeting.organizerAttending ? 'success' : 'secondary'}
+                                className="text-[10px]"
+                              >
+                                {t(
+                                  meeting.organizerAttending
+                                    ? 'meetings.workspace.organizerAttending'
+                                    : 'meetings.workspace.organizerNotAttending',
+                                )}
+                              </Badge>
+                            </>
+                          ) : null}
+                        </div>
+                        <p className="text-muted-foreground mt-0.5 text-xs">{participant.userCode}</p>
+                      </div>
+
+                      {attendance ? (
+                        detail.permissions.canManageAttendance && meetingHasStarted ? (
+                          <Select
+                            value={attendance.status}
+                            disabled={attendanceMutationPending}
+                            onValueChange={(value) =>
+                              void changeAttendance(
+                                participant.userId,
+                                value as MeetingAttendanceStatus,
+                              )
+                            }
+                          >
+                            <SelectTrigger
+                              className="w-36"
+                              aria-label={t('meetings.workspace.attendance.statusLabel', {
+                                name: participant.userName,
+                              })}
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="NOT_MARKED">
+                                {t('meetings.workspace.attendance.status.NOT_MARKED')}
+                              </SelectItem>
+                              <SelectItem value="ATTENDED">
+                                {t('meetings.workspace.attendance.status.ATTENDED')}
+                              </SelectItem>
+                              <SelectItem value="ABSENT">
+                                {t('meetings.workspace.attendance.status.ABSENT')}
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Badge variant={attendanceVariant}>
+                            {t(`meetings.workspace.attendance.status.${attendance.status}`)}
+                          </Badge>
+                        )
+                      ) : null}
+
+                      <UserRound aria-hidden="true" className="text-muted-foreground size-4" />
+                    </div>
+                  )
+                })}
+              </div>
+            </Card>
           </div>
 
           {pendingReschedule ? (
@@ -987,7 +1230,13 @@ export function MeetingDetailsPage() {
                   {formatDateTime(pendingReschedule.endAtUtc, locale, timeFormat)}
                 </div>
                 <div className="rounded-xl border bg-background/70 p-3.5">
-                  {arabic ? pendingReschedule.room.nameAr : pendingReschedule.room.nameEn}
+                  {pendingReschedule.meetingMode === 'ZOOM'
+                    ? t('meetings.zoom.zoomType')
+                    : pendingReschedule.room
+                      ? arabic
+                        ? pendingReschedule.room.nameAr
+                        : pendingReschedule.room.nameEn
+                      : t('meetings.noRoomLocation')}
                 </div>
               </div>
 
@@ -1285,7 +1534,13 @@ export function MeetingDetailsPage() {
                             {formatDateTime(revision.startAtUtc, locale, timeFormat)} →{' '}
                             {formatDateTime(revision.endAtUtc, locale, timeFormat)}
                           </span>
-                          <span>{arabic ? revision.room.nameAr : revision.room.nameEn}</span>
+                          <span>
+                            {revision.meetingMode === 'ZOOM'
+                              ? t('meetings.zoom.zoomType')
+                              : revision.room
+                                ? arabic ? revision.room.nameAr : revision.room.nameEn
+                                : t('meetings.noRoomLocation')}
+                          </span>
                         </div>
                         <p className="text-muted-foreground mt-2 text-xs">
                           {t('meetings.workspace.requestedBy', { name: revision.requestedBy.userName })}
@@ -1341,7 +1596,8 @@ export function MeetingDetailsPage() {
           initialMeeting={{
             title: meeting.title,
             description: meeting.description,
-            roomId: meeting.room.id,
+            meetingMode: meeting.meetingMode,
+            roomId: meeting.room?.id ?? null,
             organizerAttending: meeting.organizerAttending,
             attendeeUserIds: meeting.attendees.map((item) => item.userId),
             attendees: meeting.attendees,
@@ -1446,6 +1702,7 @@ export function MeetingDetailsPage() {
         cancelText={t('common.cancel')}
         danger
         loading={cancelMutation.isPending}
+        confirmDisabled={!cancelReason.trim()}
         onConfirm={() => void cancel()}
         onCancel={() => {
           setCancelOpen(false)
@@ -1453,7 +1710,9 @@ export function MeetingDetailsPage() {
         }}
       >
         <TextareaField
+          required
           label={t('meetings.workspace.cancelReason')}
+          description={t('meetings.workspace.cancelReasonRequired')}
           value={cancelReason}
           maxLength={1000}
           onChange={(event) => setCancelReason(event.target.value)}

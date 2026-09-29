@@ -13,7 +13,7 @@ const en = {
   title: "Title", status: "Status", organizer: "Organizer", attendee: "Attendee", userCode: "User code",
   name: "Participant", role: "Role", attendance: "Attendance", invited: "Participants", attended: "Attended",
   absent: "Absent", notMarked: "Not marked", markedBy: "Last marked by", markedAt: "Last marked at",
-  start: "Start", end: "End", duration: "Duration", minutes: "min", room: "Room", location: "Location",
+  start: "Start", end: "End", duration: "Duration", minutes: "min", room: "Room", location: "Location", meetingType: "Meeting type", roomMeeting: "Meeting Room", zoomMeeting: "Zoom Meeting", online: "Online",
   description: "Description", schedulingNotes: "Scheduling notes", notProvided: "Not provided",
   organizerPlanned: "Organizer planned to attend", yes: "Yes", no: "No", topic: "Topic", presenter: "Presenter",
   plannedTime: "Planned time", recordedBy: "Recorded by", recordedAt: "Recorded at", updatedAt: "Updated at",
@@ -49,7 +49,7 @@ const en = {
   priorities: { LOW: "Low", MEDIUM: "Medium", HIGH: "High" },
   attendanceStatuses: { NOT_MARKED: "Not marked", ATTENDED: "Attended", ABSENT: "Absent" },
   activityTypes: {
-    REQUESTED: "Meeting requested", DIRECT_CREATED: "Meeting scheduled directly", SCHEDULE_CHANGED: "Schedule changed",
+    REQUESTED: "Meeting requested", DIRECT_CREATED: "Meeting scheduled directly", ZOOM_SCHEDULED: "Zoom Meeting scheduled", ZOOM_RESCHEDULED: "Zoom Meeting rescheduled", SCHEDULE_CHANGED: "Schedule changed",
     REQUEST_SCHEDULE_CHANGED: "Requested schedule changed", APPROVED: "Meeting approved", REJECTED: "Meeting rejected",
     RESCHEDULE_REQUESTED: "Reschedule requested", RESCHEDULE_REQUEST_UPDATED: "Reschedule request changed",
     RESCHEDULE_REQUEST_CANCELLED: "Reschedule request cancelled", RESCHEDULE_APPROVED: "Reschedule approved",
@@ -78,7 +78,7 @@ const ar: Labels = {
   title: "العنوان", status: "الحالة", organizer: "المنظم", attendee: "مشارك", userCode: "رمز المستخدم",
   name: "المشارك", role: "الدور", attendance: "الحضور", invited: "المشاركون", attended: "حاضر",
   absent: "غائب", notMarked: "لم يُسجل", markedBy: "آخر تسجيل بواسطة", markedAt: "وقت آخر تسجيل",
-  start: "البداية", end: "النهاية", duration: "المدة", minutes: "دقيقة", room: "القاعة", location: "الموقع",
+  start: "البداية", end: "النهاية", duration: "المدة", minutes: "دقيقة", room: "القاعة", location: "الموقع", meetingType: "نوع الاجتماع", roomMeeting: "اجتماع حضوري", zoomMeeting: "اجتماع Zoom", online: "عبر الإنترنت",
   description: "الوصف", schedulingNotes: "ملاحظات الجدولة", notProvided: "غير محدد",
   organizerPlanned: "حضور المنظم المخطط", yes: "نعم", no: "لا", topic: "الموضوع", presenter: "المتحدث",
   plannedTime: "المدة المخططة", recordedBy: "سُجل بواسطة", recordedAt: "وقت التسجيل", updatedAt: "آخر تحديث",
@@ -112,7 +112,7 @@ const ar: Labels = {
   priorities: { LOW: "منخفضة", MEDIUM: "متوسطة", HIGH: "عالية" },
   attendanceStatuses: { NOT_MARKED: "لم يُسجل", ATTENDED: "حاضر", ABSENT: "غائب" },
   activityTypes: {
-    REQUESTED: "طُلب الاجتماع", DIRECT_CREATED: "جُدول الاجتماع مباشرة", SCHEDULE_CHANGED: "عُدّل الموعد",
+    REQUESTED: "طُلب الاجتماع", DIRECT_CREATED: "جُدول الاجتماع مباشرة", ZOOM_SCHEDULED: "جُدول اجتماع Zoom", ZOOM_RESCHEDULED: "أُعيدت جدولة اجتماع Zoom", SCHEDULE_CHANGED: "عُدّل الموعد",
     REQUEST_SCHEDULE_CHANGED: "عُدّل الموعد المطلوب", APPROVED: "اعتُمد الاجتماع", REJECTED: "رُفض الاجتماع",
     RESCHEDULE_REQUESTED: "طُلبت إعادة الجدولة", RESCHEDULE_REQUEST_UPDATED: "عُدّل طلب إعادة الجدولة",
     RESCHEDULE_REQUEST_CANCELLED: "أُلغي طلب إعادة الجدولة", RESCHEDULE_APPROVED: "اعتُمدت إعادة الجدولة",
@@ -130,5 +130,6 @@ const ar: Labels = {
 export function meetingReportLabels(language: MeetingReportLanguage): Labels {
   return language === "ar" ? ar : en;
 }
+
 
 

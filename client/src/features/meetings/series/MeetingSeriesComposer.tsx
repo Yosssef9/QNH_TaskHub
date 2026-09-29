@@ -18,6 +18,8 @@ import {
   SlidersHorizontal,
   Trash2,
   UsersRound,
+  Video,
+  Link2,
   type LucideIcon,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -55,7 +57,9 @@ import { MeetingParticipantPicker } from '../components/MeetingParticipantPicker
 import { MeetingTimeRangePicker } from '../components/MeetingTimeRangePicker'
 import { useActiveMeetingRooms } from '../hooks/use-meeting-rooms'
 import { useMeetingParticipants, useMeetingTemplates } from '../hooks/use-meetings'
-import type { MeetingParticipant, MeetingTemplate } from '../types/meeting.types'
+import { canOrganizeZoomMeetings } from '../meeting-access'
+import { isValidZoomJoinUrl } from '../meeting-online-location'
+import type { MeetingMode, MeetingParticipant, MeetingTemplate } from '../types/meeting.types'
 import { MeetingSeriesCustomDateCalendar } from './MeetingSeriesCustomDateCalendar'
 import { MeetingSeriesOccurrenceCalendar } from './MeetingSeriesOccurrenceCalendar'
 import { MeetingSeriesFilePicker, type MeetingSeriesDraftFile } from './MeetingSeriesFilePicker'
@@ -167,13 +171,22 @@ function addedClientIdFromKey(key: string): string | null {
 function scheduleOverrideFields(
   occurrence: MeetingSeriesPreviewOccurrence,
   values: MeetingSeriesOccurrenceScheduleValues,
-  defaultRoomId: number,
+  defaults: MeetingSeriesDefaultsInput,
 ): Omit<Extract<MeetingSeriesException, { action: 'OVERRIDE' }>, 'action' | 'occurrenceKey'> {
   const result: Omit<Extract<MeetingSeriesException, { action: 'OVERRIDE' }>, 'action' | 'occurrenceKey'> = {}
   if (values.date !== occurrence.originalDate) result.date = values.date
   if (values.startTime !== occurrence.originalStartTime) result.startTime = values.startTime
   if (values.endTime !== occurrence.originalEndTime) result.endTime = values.endTime
-  if (values.roomId !== defaultRoomId) result.roomId = values.roomId
+  if (values.meetingMode !== defaults.meetingMode) result.meetingMode = values.meetingMode
+  if (values.meetingMode === 'ROOM') {
+    if (values.roomId !== defaults.roomId || defaults.meetingMode !== 'ROOM') result.roomId = values.roomId
+    if (defaults.meetingMode === 'ZOOM') result.onlineJoinUrl = null
+  } else {
+    if (defaults.meetingMode === 'ROOM') result.roomId = null
+    if (values.onlineJoinUrl !== defaults.onlineJoinUrl || defaults.meetingMode !== 'ZOOM') {
+      result.onlineJoinUrl = values.onlineJoinUrl
+    }
+  }
   return result
 }
 
@@ -221,7 +234,9 @@ function stripScheduleOverrideFields(
     date: _date,
     startTime: _startTime,
     endTime: _endTime,
+    meetingMode: _meetingMode,
     roomId: _roomId,
+    onlineJoinUrl: _onlineJoinUrl,
     ...rest
   } = item
   return rest
@@ -279,7 +294,10 @@ interface MeetingDetailsStageProps {
   organizerUserId: number | null
   roomOptions: SearchableSelectOption[]
   roomsLoading: boolean
+  meetingMode: MeetingMode
   roomId: number | null
+  onlineJoinUrl: string
+  canZoom: boolean
   startTime: string
   endTime: string
   onTemplateChange: (value: number | null) => void
@@ -291,7 +309,9 @@ interface MeetingDetailsStageProps {
   onLoadMoreParticipants: () => void
   onAgendaChange: (items: MeetingAgendaDraftItem[]) => void
   onCommonFilesChange: (files: MeetingSeriesDraftFile[]) => void
+  onMeetingModeChange: (value: MeetingMode) => void
   onRoomChange: (value: number | null) => void
+  onOnlineJoinUrlChange: (value: string) => void
   onTimeChange: (startTime: string, endTime: string) => void
 }
 
@@ -333,7 +353,7 @@ interface PreviewStageProps {
   occurrenceView: OccurrenceView
   bulkSelectedKeys: string[]
   occurrenceFiles: Record<string, MeetingSeriesDraftFile[]>
-  roomName: (id: number) => string
+  roomName: (id: number | null) => string
   locale: string
   timeFormat: TimeFormatPreference
   removedPatternExceptions: MeetingSeriesRemoveException[]
@@ -381,7 +401,9 @@ export function MeetingSeriesComposer() {
   const [occurrenceFiles, setOccurrenceFiles] = useState<Record<string, MeetingSeriesDraftFile[]>>({})
   const [finalizing, setFinalizing] = useState(false)
 
+  const [meetingMode, setMeetingMode] = useState<MeetingMode>('ROOM')
   const [roomId, setRoomId] = useState<number | null>(null)
+  const [onlineJoinUrl, setOnlineJoinUrl] = useState('')
   const [startTime, setStartTime] = useState('09:00')
   const [endTime, setEndTime] = useState('10:00')
   const [scheduleMode, setScheduleMode] = useState<'PATTERN' | 'CUSTOM'>('PATTERN')
@@ -453,7 +475,9 @@ export function MeetingSeriesComposer() {
         plannedDurationMinutes: item.plannedDurationMinutes ?? null,
       })),
     )
+    setMeetingMode(source.defaults.meetingMode)
     setRoomId(source.defaults.roomId)
+    setOnlineJoinUrl('')
     setStartTime(source.defaults.startTime)
     setEndTime(source.defaults.endTime)
     setExceptions([])
@@ -494,6 +518,7 @@ export function MeetingSeriesComposer() {
 
   const participantQuery = useMeetingParticipants(participantSearch, true)
   const currentUserId = currentUser.data?.user.userId ?? null
+  const canZoom = canOrganizeZoomMeetings(currentUser.data?.access)
   const participantOptions = useMemo(() => {
     const byUserId = new Map<number, MeetingParticipant>()
     for (const page of participantQuery.data?.pages ?? []) {
@@ -527,7 +552,8 @@ export function MeetingSeriesComposer() {
 
   const participantCount = attendeeUserIds.length + (organizerAttending ? 1 : 0)
   const agendaValid = agendaItems.every((item) => item.topic.trim().length > 0)
-  const detailsValid = title.trim().length > 0 && participantCount > 0 && agendaValid
+  const locationValid = meetingMode === 'ROOM' ? roomId !== null : canZoom && isValidZoomJoinUrl(onlineJoinUrl)
+  const detailsValid = title.trim().length > 0 && participantCount > 0 && agendaValid && locationValid
   const timeValid = validQuarterHourTime(startTime) && validQuarterHourTime(endTime) && endTime > startTime
 
   const organizerParticipant = useMemo<MeetingParticipant | null>(() => {
@@ -536,7 +562,7 @@ export function MeetingSeriesComposer() {
   }, [currentUser.data?.user])
 
   const seriesDefaults = useMemo<MeetingSeriesDefaultsInput | null>(() => {
-    if (!roomId) return null
+    if (!locationValid) return null
     return {
       title: title.trim(),
       description: description.trim() || null,
@@ -547,11 +573,13 @@ export function MeetingSeriesComposer() {
         presenterUserId: item.presenterUserId,
         plannedDurationMinutes: item.plannedDurationMinutes,
       })),
-      roomId,
+      meetingMode,
+      roomId: meetingMode === 'ROOM' ? roomId : null,
+      onlineJoinUrl: meetingMode === 'ZOOM' ? onlineJoinUrl.trim() : null,
       startTime,
       endTime,
     }
-  }, [agendaItems, attendeeUserIds, description, endTime, organizerAttending, roomId, startTime, title])
+  }, [agendaItems, attendeeUserIds, description, endTime, locationValid, meetingMode, onlineJoinUrl, organizerAttending, roomId, startTime, title])
 
   const templateOptions = useMemo<SearchableSelectOption[]>(
     () =>
@@ -650,20 +678,17 @@ export function MeetingSeriesComposer() {
 
   const locale = i18n.language.startsWith('ar') ? 'ar-SA-u-ca-gregory' : 'en-SA'
   const timeFormat = currentUser.data?.preferences.timeFormat ?? '12H'
-  const selectedRoom = (rooms.data ?? []).find((room) => room.id === roomId) ?? null
-  const selectedRoomName = selectedRoom
-    ? i18n.language.startsWith('ar')
-      ? selectedRoom.nameAr
-      : selectedRoom.nameEn
-    : t('meetings.series.summary.noRoom')
+  const selectedRoom = meetingMode === 'ROOM' ? (rooms.data ?? []).find((room) => room.id === roomId) ?? null : null
+  const selectedRoomName = meetingMode === 'ZOOM'
+    ? t('meetings.zoom.online')
+    : selectedRoom
+      ? i18n.language.startsWith('ar') ? selectedRoom.nameAr : selectedRoom.nameEn
+      : t('meetings.series.summary.noRoom')
 
-  const roomName = (id: number) => {
+  const roomName = (id: number | null) => {
+    if (id === null) return t('meetings.zoom.online')
     const room = (rooms.data ?? []).find((item) => item.id === id)
-    return room
-      ? i18n.language.startsWith('ar')
-        ? room.nameAr
-        : room.nameEn
-      : `#${id}`
+    return room ? (i18n.language.startsWith('ar') ? room.nameAr : room.nameEn) : `#${id}`
   }
   const timeSummary = `${formatClockTime(startTime, locale, timeFormat)} – ${formatClockTime(endTime, locale, timeFormat)}`
   const repeatHumanSummary = (() => {
@@ -743,7 +768,10 @@ export function MeetingSeriesComposer() {
     setOrganizerAttending(template.organizerAttending)
     setAttendeeUserIds(template.attendees.map((attendee) => attendee.userId))
     setSelectedParticipantOptions(template.attendees.map(participantOption))
-    if (template.defaultRoom?.isActive) setRoomId(template.defaultRoom.id)
+    const nextMode: MeetingMode = template.meetingMode === 'ZOOM' && canZoom ? 'ZOOM' : 'ROOM'
+    setMeetingMode(nextMode)
+    setOnlineJoinUrl('')
+    setRoomId(nextMode === 'ROOM' && template.defaultRoom?.isActive ? template.defaultRoom.id : null)
     setEndTime(addMinutes(startTime, template.durationMinutes))
     setAgendaItems([])
   }
@@ -787,7 +815,7 @@ export function MeetingSeriesComposer() {
     occurrence: MeetingSeriesPreviewOccurrence,
     values: MeetingSeriesOccurrenceScheduleValues,
   ) {
-    if (!roomId) return
+    if (!seriesDefaults) return
     const addedId = addedClientIdFromKey(occurrence.occurrenceKey)
     if (addedId) {
       setExceptions((current) =>
@@ -798,7 +826,9 @@ export function MeetingSeriesComposer() {
                 date: values.date,
                 startTime: values.startTime,
                 endTime: values.endTime,
+                meetingMode: values.meetingMode,
                 roomId: values.roomId,
+                onlineJoinUrl: values.onlineJoinUrl,
               }
             : item,
         ),
@@ -806,7 +836,7 @@ export function MeetingSeriesComposer() {
       return
     }
 
-    const scheduleFields = scheduleOverrideFields(occurrence, values, roomId)
+    const scheduleFields = scheduleOverrideFields(occurrence, values, seriesDefaults)
     setExceptions((current) => {
       const existing = current.find(
         (item): item is Extract<MeetingSeriesException, { action: 'OVERRIDE' }> =>
@@ -866,7 +896,7 @@ export function MeetingSeriesComposer() {
         current.map((item) =>
           item.action === 'ADD' && item.clientOccurrenceId.toLowerCase() === addedId.toLowerCase()
             ? (() => {
-                const { startTime: _startTime, endTime: _endTime, roomId: _roomId, ...rest } = item
+                const { startTime: _startTime, endTime: _endTime, meetingMode: _meetingMode, roomId: _roomId, onlineJoinUrl: _onlineJoinUrl, ...rest } = item
                 return rest
               })()
             : item,
@@ -988,7 +1018,9 @@ export function MeetingSeriesComposer() {
         date: occurrence.date,
         startTime: occurrence.startTime,
         endTime: occurrence.endTime,
+        meetingMode: occurrence.meetingMode,
         roomId: occurrence.roomId,
+        onlineJoinUrl: occurrence.onlineJoinUrl,
         title: occurrence.title,
         description: occurrence.description,
         organizerAttending: occurrence.organizerAttending,
@@ -1010,7 +1042,9 @@ export function MeetingSeriesComposer() {
         date: values.date,
         startTime: values.startTime,
         endTime: values.endTime,
+        meetingMode: values.meetingMode,
         roomId: values.roomId,
+        onlineJoinUrl: values.onlineJoinUrl,
       },
     ])
     setSelectedOccurrenceKey(`A:${clientOccurrenceId.toLowerCase()}`)
@@ -1043,7 +1077,9 @@ export function MeetingSeriesComposer() {
         date: occurrence.date,
         startTime: values.startTime ?? occurrence.startTime,
         endTime: values.endTime ?? occurrence.endTime,
-        roomId: values.roomId ?? occurrence.roomId,
+        meetingMode: occurrence.meetingMode,
+        roomId: occurrence.meetingMode === 'ROOM' ? (values.roomId ?? occurrence.roomId) : null,
+        onlineJoinUrl: occurrence.onlineJoinUrl,
       })
     }
   }
@@ -1059,7 +1095,7 @@ export function MeetingSeriesComposer() {
   }
 
   function nextStep() {
-    if (step === 1 && (!detailsValid || !roomId || !timeValid)) {
+    if (step === 1 && (!detailsValid || !locationValid || !timeValid)) {
       toast.error(t('meetings.series.redesign.completeBasics'))
       return
     }
@@ -1080,7 +1116,7 @@ export function MeetingSeriesComposer() {
         return
       }
 
-      if (!roomId || !timeValid || !scheduleDefinition) {
+      if (!locationValid || !timeValid || !scheduleDefinition) {
         toast.error(t('meetings.series.validation.completeSchedule'))
         return
       }
@@ -1161,7 +1197,9 @@ export function MeetingSeriesComposer() {
     date: lastOccurrence ? addDays(lastOccurrence.date, 7) : addDays(startDate, 7),
     startTime,
     endTime,
-    roomId: roomId ?? (rooms.data?.[0]?.id ?? 0),
+    meetingMode,
+    roomId: meetingMode === 'ROOM' ? (roomId ?? rooms.data?.[0]?.id ?? null) : null,
+    onlineJoinUrl: meetingMode === 'ZOOM' ? onlineJoinUrl.trim() : null,
   }
 
   return (
@@ -1191,7 +1229,10 @@ export function MeetingSeriesComposer() {
           organizerUserId={currentUserId}
           roomOptions={roomOptions}
           roomsLoading={rooms.isPending}
+          meetingMode={meetingMode}
           roomId={roomId}
+          onlineJoinUrl={onlineJoinUrl}
+          canZoom={canZoom}
           startTime={startTime}
           endTime={endTime}
           onTemplateChange={(value) => {
@@ -1207,11 +1248,19 @@ export function MeetingSeriesComposer() {
           onLoadMoreParticipants={() => void participantQuery.fetchNextPage()}
           onAgendaChange={setAgendaItems}
           onCommonFilesChange={setCommonFiles}
+          onMeetingModeChange={(value) =>
+            changeScheduleStructure(() => {
+              setMeetingMode(value)
+              if (value === 'ZOOM') setRoomId(null)
+              else setOnlineJoinUrl('')
+            })
+          }
           onRoomChange={(value) =>
             changeScheduleStructure(() => {
               setRoomId(value)
             })
           }
+          onOnlineJoinUrlChange={setOnlineJoinUrl}
           onTimeChange={(nextStartTime, nextEndTime) =>
             changeScheduleStructure(() => {
               setStartTime(nextStartTime)
@@ -1309,6 +1358,7 @@ export function MeetingSeriesComposer() {
         existingOccurrences={previewData?.occurrences ?? []}
         participantCount={participantCount}
         initialValues={addInitialValues}
+        canZoom={canZoom}
         onOpenChange={setAddOccurrenceOpen}
         onAdd={addOccurrence}
       />
@@ -1346,6 +1396,7 @@ export function MeetingSeriesComposer() {
             <MeetingSeriesOccurrenceEditor
               occurrence={selectedOccurrence}
               defaults={seriesDefaults}
+              canZoom={canZoom}
               rooms={rooms.data ?? []}
               seriesOccurrences={previewData?.occurrences ?? []}
               organizer={organizerParticipant}
@@ -1417,8 +1468,8 @@ export function MeetingSeriesComposer() {
                 value={repeatHumanSummary}
               />
               <SummaryLine
-                icon={DoorOpen}
-                label={t('meetings.series.fields.room')}
+                icon={meetingMode === 'ZOOM' ? Video : DoorOpen}
+                label={t(meetingMode === 'ZOOM' ? 'meetings.zoom.zoomType' : 'meetings.series.fields.room')}
                 value={selectedRoomName}
               />
               <SummaryLine
@@ -1650,20 +1701,77 @@ function MeetingDetailsStage(props: MeetingDetailsStageProps) {
           />
         </div>
 
+        <div className="rounded-2xl border bg-muted/10 p-4">
+          <p className="text-sm font-semibold">{t('meetings.zoom.zoomType')}</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              aria-pressed={props.meetingMode === 'ROOM'}
+              className={cn(
+                'flex items-start gap-3 rounded-xl border p-4 text-start transition',
+                props.meetingMode === 'ROOM' ? 'border-primary bg-primary/5 ring-1 ring-primary/15' : 'hover:bg-muted/40',
+              )}
+              onClick={() => props.onMeetingModeChange('ROOM')}
+            >
+              <DoorOpen aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+              <span>
+                <span className="block text-sm font-semibold">{t('meetings.zoom.roomType')}</span>
+                <span className="text-muted-foreground mt-1 block text-xs leading-5">{t('meetings.zoom.roomTypeHint')}</span>
+              </span>
+            </button>
+            {props.canZoom ? (
+              <button
+                type="button"
+                aria-pressed={props.meetingMode === 'ZOOM'}
+                className={cn(
+                  'flex items-start gap-3 rounded-xl border p-4 text-start transition',
+                  props.meetingMode === 'ZOOM' ? 'border-[#2D8CFF]/60 bg-[#2D8CFF]/5 ring-1 ring-[#2D8CFF]/15' : 'hover:bg-muted/40',
+                )}
+                onClick={() => props.onMeetingModeChange('ZOOM')}
+              >
+                <Video aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-[#2D8CFF]" />
+                <span>
+                  <span className="block text-sm font-semibold">{t('meetings.zoom.zoomType')}</span>
+                  <span className="text-muted-foreground mt-1 block text-xs leading-5">{t('meetings.zoom.zoomTypeHint')}</span>
+                </span>
+              </button>
+            ) : null}
+          </div>
+        </div>
+
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
           <div>
-            <label className="mb-1.5 block text-sm font-medium">
-              {t('meetings.series.fields.room')}
-            </label>
-            <SearchableMultiSelect
-              value={props.roomId}
-              options={props.roomOptions}
-              loading={props.roomsLoading}
-              placeholder={t('meetings.create.chooseRoom')}
-              searchPlaceholder={t('meetings.fields.roomSearch')}
-              noResultsText={t('meetings.noActiveRooms')}
-              onChange={(value) => props.onRoomChange(value === null ? null : Number(value))}
-            />
+            {props.meetingMode === 'ROOM' ? (
+              <>
+                <label className="mb-1.5 block text-sm font-medium">
+                  {t('meetings.series.fields.room')}
+                </label>
+                <SearchableMultiSelect
+                  value={props.roomId}
+                  options={props.roomOptions}
+                  loading={props.roomsLoading}
+                  placeholder={t('meetings.create.chooseRoom')}
+                  searchPlaceholder={t('meetings.fields.roomSearch')}
+                  noResultsText={t('meetings.noActiveRooms')}
+                  onChange={(value) => props.onRoomChange(value === null ? null : Number(value))}
+                />
+              </>
+            ) : (
+              <div className="rounded-xl border bg-background p-4">
+                <p className="mb-1 flex items-center gap-2 text-sm font-semibold"><Link2 aria-hidden="true" className="size-4 text-[#2D8CFF]" />{t('meetings.zoom.joinLinkTitle')}</p>
+                <InputField
+                  required
+                  type="url"
+                  label={t('meetings.zoom.joinLink')}
+                  placeholder="https://zoom.us/j/..."
+                  value={props.onlineJoinUrl}
+                  maxLength={2048}
+                  error={props.onlineJoinUrl && !isValidZoomJoinUrl(props.onlineJoinUrl) ? t('meetings.zoom.invalidJoinLink') : undefined}
+                  onChange={(event) => props.onOnlineJoinUrlChange(event.target.value)}
+                />
+                <p className="text-muted-foreground mt-2 text-xs leading-5">{t('meetings.zoom.joinLinkHint')}</p>
+              </div>
+            )}
           </div>
 
           <MeetingTimeRangePicker

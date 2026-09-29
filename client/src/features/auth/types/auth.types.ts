@@ -26,7 +26,10 @@ export interface AccessPermission {
 export interface TaskHubAccess {
   roleCode: TaskHubRoleCode
   permissions: AccessPermission[]
+  /** Aggregate compatibility flag: true when Room or Zoom organizing is enabled. */
   meetingOrganizeEnabled?: boolean
+  meetingRoomOrganizeEnabled?: boolean
+  meetingZoomOrganizeEnabled?: boolean
   meetingCoordinateEnabled?: boolean
 }
 
@@ -46,4 +49,5 @@ export interface AuthMeData {
   access: TaskHubAccess
   preferences: UserPreferences
 }
+
 

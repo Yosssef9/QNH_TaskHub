@@ -166,13 +166,18 @@ export function AccessUsersTable({
                 </td>
                 <td className="px-5 py-4">
                   <div className="flex flex-wrap gap-1.5">
-                    {user.meetingOrganizeEnabled ? (
-                      <Badge variant="secondary">{t('access.meetingOrganizerShort')}</Badge>
+                    {user.meetingRoomOrganizeEnabled ? (
+                      <Badge variant="secondary">{t('access.meetingRoomOrganizerShort')}</Badge>
+                    ) : null}
+                    {user.meetingZoomOrganizeEnabled ? (
+                      <Badge variant="secondary">{t('access.meetingZoomOrganizerShort')}</Badge>
                     ) : null}
                     {user.meetingCoordinateEnabled ? (
                       <Badge variant="secondary">{t('access.meetingCoordinatorShort')}</Badge>
                     ) : null}
-                    {!user.meetingOrganizeEnabled && !user.meetingCoordinateEnabled ? (
+                    {!user.meetingRoomOrganizeEnabled &&
+                    !user.meetingZoomOrganizeEnabled &&
+                    !user.meetingCoordinateEnabled ? (
                       <span className="text-muted-foreground">{t('common.none')}</span>
                     ) : null}
                   </div>
@@ -207,3 +212,4 @@ export function AccessUsersTable({
     </div>
   )
 }
+

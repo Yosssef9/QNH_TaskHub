@@ -20,7 +20,10 @@ export interface PortalUser {
 export interface TaskHubAccess {
   roleCode: TaskHubRoleCode;
   permissions: AccessPermission[];
+  /** Backward-compatible aggregate: Room Organizer OR Zoom Organizer. */
   meetingOrganizeEnabled?: boolean;
+  meetingRoomOrganizeEnabled?: boolean;
+  meetingZoomOrganizeEnabled?: boolean;
   meetingCoordinateEnabled?: boolean;
 }
 

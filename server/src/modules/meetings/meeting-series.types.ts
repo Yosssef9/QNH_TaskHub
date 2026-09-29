@@ -1,4 +1,5 @@
 import type { MeetingAgendaItemInput, MeetingParticipant } from "./meeting-workflow.types.js";
+import type { MeetingMode } from "./meetings.types.js";
 import type { MeetingParticipantAvailability } from "./meeting-scheduling.types.js";
 import type { MeetingSeriesPreviewBody } from "./meeting-series.schemas.js";
 
@@ -22,7 +23,9 @@ export type MeetingSeriesOccurrenceSource = "PATTERN" | "CUSTOM" | "ADDED";
 export type MeetingSeriesOverrideKind =
   | "DATE"
   | "TIME"
+  | "MEETING_MODE"
   | "ROOM"
+  | "ONLINE_JOIN_URL"
   | "TITLE"
   | "DESCRIPTION"
   | "ATTENDEES"
@@ -44,7 +47,9 @@ export interface MeetingSeriesResolvedOccurrence {
   endTime: string;
   startAtUtc: string;
   endAtUtc: string;
-  roomId: number;
+  meetingMode: MeetingMode;
+  roomId: number | null;
+  onlineJoinUrl: string | null;
   title: string;
   description: string | null;
   organizerAttending: boolean;
@@ -121,9 +126,11 @@ export interface MeetingSeriesNextMeetingSummary {
   status: "PENDING_APPROVAL" | "SCHEDULED" | "REJECTED" | "CANCELLED";
   startAtUtc: string;
   endAtUtc: string;
-  roomId: number;
-  roomNameAr: string;
-  roomNameEn: string;
+  meetingMode: MeetingMode;
+  roomId: number | null;
+  roomNameAr: string | null;
+  roomNameEn: string | null;
+  onlineJoinUrl: string | null;
 }
 
 export interface MeetingSeriesListItem {
@@ -158,16 +165,20 @@ export interface MeetingSeriesMemberSummary {
   status: "PENDING_APPROVAL" | "SCHEDULED" | "REJECTED" | "CANCELLED";
   currentStartAtUtc: string | null;
   currentEndAtUtc: string | null;
+  currentMeetingMode: MeetingMode | null;
   currentRoomId: number | null;
   currentRoomNameAr: string | null;
   currentRoomNameEn: string | null;
+  currentOnlineJoinUrl: string | null;
   originalStartAtUtc: string | null;
   originalEndAtUtc: string | null;
   initialStartAtUtc: string;
   initialEndAtUtc: string;
-  initialRoomId: number;
-  initialRoomNameAr: string;
-  initialRoomNameEn: string;
+  initialMeetingMode: MeetingMode;
+  initialRoomId: number | null;
+  initialRoomNameAr: string | null;
+  initialRoomNameEn: string | null;
+  initialOnlineJoinUrl: string | null;
   customizationJson: string | null;
   wasCustomizedAtCreation: boolean;
 }

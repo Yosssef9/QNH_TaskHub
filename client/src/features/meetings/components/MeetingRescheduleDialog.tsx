@@ -1,9 +1,10 @@
-import { AlertTriangle, CalendarClock, CheckCircle2, Clock3, DoorOpen, Loader2 } from 'lucide-react'
+import { AlertTriangle, Building2, CalendarClock, CheckCircle2, Clock3, DoorOpen, Loader2, Video } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
 
 import { Badge } from '@/components/ui/badge'
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/cn'
@@ -23,12 +24,15 @@ import {
   useRequestMeetingReschedule,
   useUpdateOrganizerRequestedSchedule,
 } from '../hooks/use-meetings'
-import type { MeetingDetail, MeetingRevisionDetail, MeetingRoom } from '../types/meeting.types'
+import type { MeetingDetail, MeetingMode, MeetingRevisionDetail, MeetingRoom } from '../types/meeting.types'
+import { canOrganizeRoomMeetings, canOrganizeZoomMeetings } from '../meeting-access'
+import { isValidZoomJoinUrl } from '../meeting-online-location'
 import {
   buildParticipantAvailabilityInput,
   participantUserIdsFromMeeting,
 } from '../meeting-participant-availability'
 import { MeetingParticipantConflictNotice } from './MeetingParticipantConflictNotice'
+import { ZoomMeetingSchedulePanel } from './ZoomMeetingSchedulePanel'
 import {
   MeetingSchedulePicker,
   type MeetingScheduleSelectionState,
@@ -52,6 +56,7 @@ function scheduleDate(value: string, locale: string): string {
 
 function ScheduleCard({
   label,
+  meetingMode,
   room,
   startAtUtc,
   endAtUtc,
@@ -59,7 +64,8 @@ function ScheduleCard({
   arabic,
 }: {
   label: string
-  room: MeetingRoom
+  meetingMode: MeetingMode
+  room: MeetingRoom | null
   startAtUtc: string
   endAtUtc: string
   locale: string
@@ -81,8 +87,8 @@ function ScheduleCard({
           {formatTime(endAtUtc, locale, timeFormat)}
         </span>
         <span className="inline-flex min-w-0 items-center gap-1.5">
-          <DoorOpen aria-hidden="true" className="size-3.5 shrink-0" />
-          <span className="truncate">{roomName(room, arabic)}</span>
+          {meetingMode === 'ZOOM' ? <Video aria-hidden="true" className="size-3.5 shrink-0" /> : <DoorOpen aria-hidden="true" className="size-3.5 shrink-0" />}
+          <span className="truncate">{meetingMode === 'ZOOM' ? 'Zoom' : room ? roomName(room, arabic) : '—'}</span>
         </span>
       </div>
     </div>
@@ -111,6 +117,7 @@ export function MeetingRescheduleDialog({
   const { i18n, t } = useTranslation()
   const arabic = i18n.language.startsWith('ar')
   const locale = arabic ? 'ar-SA-u-ca-gregory' : 'en-SA'
+  const currentUser = useCurrentUser()
   const rooms = useActiveMeetingRooms()
   const updateInitial = useUpdateOrganizerRequestedSchedule()
   const requestReschedule = useRequestMeetingReschedule()
@@ -124,7 +131,9 @@ export function MeetingRescheduleDialog({
   const [date, setDate] = useState(() => formatRiyadhDateInput(sourceSchedule.startAtUtc))
   const [startTime, setStartTime] = useState(() => formatRiyadhTimeInput(sourceSchedule.startAtUtc))
   const [endTime, setEndTime] = useState(() => formatRiyadhTimeInput(sourceSchedule.endAtUtc))
-  const [roomId, setRoomId] = useState<number | null>(sourceSchedule.room.id)
+  const [meetingMode, setMeetingMode] = useState<MeetingMode>(sourceSchedule.meetingMode)
+  const [onlineJoinUrl, setOnlineJoinUrl] = useState(sourceSchedule.onlineJoinUrl ?? '')
+  const [roomId, setRoomId] = useState<number | null>(sourceSchedule.room?.id ?? null)
   const [selectionState, setSelectionState] = useState<MeetingScheduleSelectionState | null>(null)
 
   useEffect(() => {
@@ -135,9 +144,14 @@ export function MeetingRescheduleDialog({
     setDate(formatRiyadhDateInput(source.startAtUtc))
     setStartTime(formatRiyadhTimeInput(source.startAtUtc))
     setEndTime(formatRiyadhTimeInput(source.endAtUtc))
-    setRoomId(source.room.id)
+    setMeetingMode(source.meetingMode)
+    setOnlineJoinUrl(source.onlineJoinUrl ?? '')
+    setRoomId(source.room?.id ?? null)
     setSelectionState(null)
   }, [detail, open])
+
+  const canRoom = canOrganizeRoomMeetings(currentUser.data?.access)
+  const canZoom = canOrganizeZoomMeetings(currentUser.data?.access)
 
   const selectedStartAtUtc = useMemo(() => {
     try {
@@ -155,8 +169,9 @@ export function MeetingRescheduleDialog({
     }
   }, [date, endTime])
 
+  const hasValidLocation = meetingMode === 'ZOOM' ? isValidZoomJoinUrl(onlineJoinUrl) : roomId !== null
   const hasValidWindow =
-    roomId !== null &&
+    hasValidLocation &&
     selectedStartAtUtc !== null &&
     selectedEndAtUtc !== null &&
     new Date(selectedEndAtUtc).getTime() > new Date(selectedStartAtUtc).getTime()
@@ -197,15 +212,17 @@ export function MeetingRescheduleDialog({
         ? t('meetings.workspace.editRescheduleDescription')
         : t('meetings.workspace.rescheduleDescription')
 
-  const submitLabel =
-    mode === 'CHANGE_INITIAL'
+  const submitLabel = meetingMode === 'ZOOM'
+    ? t('meetings.zoom.saveDirectSchedule')
+    : mode === 'CHANGE_INITIAL'
       ? t('meetings.workspace.saveRequestedSchedule')
       : mode === 'EDIT_RESCHEDULE'
         ? t('meetings.workspace.saveRescheduleRequest')
         : t('meetings.workspace.requestReschedule')
 
   async function submit() {
-    if (!canSubmit || roomId === null || !selectedStartAtUtc || !selectedEndAtUtc) return
+    if (!canSubmit || !selectedStartAtUtc || !selectedEndAtUtc) return
+    if (meetingMode === 'ROOM' && roomId === null) return
 
     try {
       if (mode === 'CHANGE_INITIAL') {
@@ -213,31 +230,37 @@ export function MeetingRescheduleDialog({
           meetingId: meeting.id,
           revisionId: meeting.revisionId,
           revisionRowVersion: meeting.revisionRowVersion,
-          roomId,
+          meetingMode,
+          roomId: meetingMode === 'ROOM' ? roomId : null,
+          onlineJoinUrl: meetingMode === 'ZOOM' ? onlineJoinUrl.trim() : null,
           startAtUtc: selectedStartAtUtc,
           endAtUtc: selectedEndAtUtc,
           schedulingNotes: meeting.schedulingNotes ?? null,
         })
-        toast.success(t('meetings.workspace.requestedScheduleUpdated'))
+        toast.success(t(meetingMode === 'ZOOM' ? 'meetings.workspace.directRescheduled' : 'meetings.workspace.requestedScheduleUpdated'))
       } else if (mode === 'EDIT_RESCHEDULE' && pendingRevision) {
         await editReschedule.mutateAsync({
           meetingId: meeting.id,
           revisionId: pendingRevision.id,
           revisionRowVersion: pendingRevision.rowVersion,
-          roomId,
+          meetingMode,
+          roomId: meetingMode === 'ROOM' ? roomId : null,
+          onlineJoinUrl: meetingMode === 'ZOOM' ? onlineJoinUrl.trim() : null,
           startAtUtc: selectedStartAtUtc,
           endAtUtc: selectedEndAtUtc,
         })
-        toast.success(t('meetings.workspace.rescheduleRequestUpdated'))
+        toast.success(t(meetingMode === 'ZOOM' ? 'meetings.workspace.directRescheduled' : 'meetings.workspace.rescheduleRequestUpdated'))
       } else {
         await requestReschedule.mutateAsync({
           meetingId: meeting.id,
           meetingRowVersion: meeting.meetingRowVersion,
-          roomId,
+          meetingMode,
+          roomId: meetingMode === 'ROOM' ? roomId : null,
+          onlineJoinUrl: meetingMode === 'ZOOM' ? onlineJoinUrl.trim() : null,
           startAtUtc: selectedStartAtUtc,
           endAtUtc: selectedEndAtUtc,
         })
-        toast.success(t('meetings.workspace.rescheduleRequested'))
+        toast.success(t(meetingMode === 'ZOOM' ? 'meetings.workspace.directRescheduled' : 'meetings.workspace.rescheduleRequested'))
       }
       onOpenChange(false)
     } catch (error) {
@@ -296,6 +319,7 @@ export function MeetingRescheduleDialog({
               <h3 className="mb-2 text-sm font-semibold">{t('meetings.workspace.currentSchedule')}</h3>
               <ScheduleCard
                 label={t('meetings.workspace.currentSchedule')}
+                meetingMode={meeting.meetingMode}
                 room={meeting.room}
                 startAtUtc={meeting.startAtUtc}
                 endAtUtc={meeting.endAtUtc}
@@ -305,7 +329,32 @@ export function MeetingRescheduleDialog({
             </section>
           ) : null}
 
+          {canRoom && canZoom ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button type="button" disabled={isPending} aria-pressed={meetingMode === 'ROOM'} className={cn('flex items-start gap-3 rounded-xl border p-4 text-start', meetingMode === 'ROOM' && 'border-primary bg-primary/5')} onClick={() => { setMeetingMode('ROOM'); setOnlineJoinUrl(''); setSelectionState(null) }}>
+                <Building2 aria-hidden="true" className="text-primary mt-0.5 size-5" />
+                <span><span className="block text-sm font-semibold">{t('meetings.zoom.roomType')}</span><span className="text-muted-foreground mt-1 block text-xs">{t('meetings.zoom.roomRescheduleHint')}</span></span>
+              </button>
+              <button type="button" disabled={isPending} aria-pressed={meetingMode === 'ZOOM'} className={cn('flex items-start gap-3 rounded-xl border p-4 text-start', meetingMode === 'ZOOM' && 'border-[#2D8CFF]/60 bg-[#2D8CFF]/5')} onClick={() => { setMeetingMode('ZOOM'); setRoomId(null); setSelectionState(null) }}>
+                <Video aria-hidden="true" className="mt-0.5 size-5 text-[#2D8CFF]" />
+                <span><span className="block text-sm font-semibold">{t('meetings.zoom.zoomType')}</span><span className="text-muted-foreground mt-1 block text-xs">{t('meetings.zoom.zoomRescheduleHint')}</span></span>
+              </button>
+            </div>
+          ) : null}
+
           <div className="overflow-hidden rounded-2xl border bg-muted/10 shadow-sm">
+            {meetingMode === 'ZOOM' ? (
+              <ZoomMeetingSchedulePanel
+                date={date}
+                startTime={startTime}
+                endTime={endTime}
+                onlineJoinUrl={onlineJoinUrl}
+                disabled={isPending}
+                onDateChange={setDate}
+                onTimeChange={(nextStartTime, nextEndTime) => { setStartTime(nextStartTime); setEndTime(nextEndTime) }}
+                onJoinUrlChange={setOnlineJoinUrl}
+              />
+            ) : (
             <MeetingSchedulePicker
               date={date}
               roomId={roomId}
@@ -318,6 +367,8 @@ export function MeetingRescheduleDialog({
               excludeMeetingId={meeting.status === 'SCHEDULED' ? meeting.id : null}
               heading={t('meetings.workspace.chooseRequestedSchedule')}
               description={t('meetings.workspace.chooseRequestedScheduleDescription')}
+              showDurationPicker={false}
+              directTimeRangeSelection
               onSelectionStateChange={setSelectionState}
               onDateChange={setDate}
               onRoomChange={setRoomId}
@@ -326,9 +377,10 @@ export function MeetingRescheduleDialog({
                 setEndTime(nextEndTime)
               }}
             />
+            )}
           </div>
 
-          {hasValidWindow ? (
+          {meetingMode === 'ROOM' && hasValidWindow ? (
             <div className={cn('flex items-start gap-2 rounded-xl border p-3 text-sm', availabilityClass)}>
               {selectionState?.isChecking ? (
                 <Loader2 aria-hidden="true" className="mt-0.5 size-4 shrink-0 animate-spin" />

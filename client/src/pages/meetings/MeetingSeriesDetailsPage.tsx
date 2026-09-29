@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, CalendarDays, CalendarRange, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Copy, DoorOpen, List, Sparkles } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, CalendarDays, CalendarRange, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Copy, DoorOpen, List, Sparkles, Video } from 'lucide-react'
 import type { TFunction } from 'i18next'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -86,6 +86,7 @@ function isCurrentlyDifferent(member: MeetingSeriesMemberSummary) {
       member.currentEndAtUtc &&
       (member.currentStartAtUtc !== member.initialStartAtUtc ||
         member.currentEndAtUtc !== member.initialEndAtUtc ||
+        member.currentMeetingMode !== member.initialMeetingMode ||
         member.currentRoomId !== member.initialRoomId),
   )
 }
@@ -420,10 +421,11 @@ export function MeetingSeriesDetailsPage() {
   })
 
   const defaultRoomName = (() => {
+    if (series.defaults.meetingMode === 'ZOOM') return t('meetings.zoom.online')
     const first = series.members[0]
     if (!first) return '—'
     const defaultRoomMember = series.members.find((member) => member.initialRoomId === series.defaults.roomId) ?? first
-    return arabic ? defaultRoomMember.initialRoomNameAr : defaultRoomMember.initialRoomNameEn
+    return (arabic ? defaultRoomMember.initialRoomNameAr : defaultRoomMember.initialRoomNameEn) ?? '—'
   })()
 
   return (
@@ -459,7 +461,7 @@ export function MeetingSeriesDetailsPage() {
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div><p className="text-muted-foreground text-xs">{t('meetings.seriesManagement.originalPattern')}</p><p className="mt-1 font-medium">{patternSummary(series.schedule, t)}</p></div>
           <div><p className="text-muted-foreground text-xs">{t('meetings.seriesManagement.defaultTime')}</p><p className="mt-1 font-medium">{series.defaults.startTime} – {series.defaults.endTime}</p></div>
-          <div><p className="text-muted-foreground text-xs">{t('meetings.seriesManagement.defaultRoom')}</p><p className="mt-1 font-medium">{defaultRoomName}</p></div>
+          <div><p className="text-muted-foreground text-xs">{series.defaults.meetingMode === 'ZOOM' ? t('meetings.zoom.zoomType') : t('meetings.seriesManagement.defaultRoom')}</p><p className="mt-1 inline-flex items-center gap-1.5 font-medium">{series.defaults.meetingMode === 'ZOOM' ? <Video aria-hidden="true" className="size-4 text-[#2D8CFF]" /> : <DoorOpen aria-hidden="true" className="size-4" />}{defaultRoomName}</p></div>
           <div><p className="text-muted-foreground text-xs">{t('meetings.seriesManagement.attendees')}</p><p className="mt-1 font-medium">{series.defaultAttendees.length + (series.defaults.organizerAttending ? 1 : 0)}</p></div>
         </div>
         {series.defaults.description ? <p className="text-muted-foreground mt-4 border-t pt-4 text-sm leading-6">{series.defaults.description}</p> : null}
@@ -516,7 +518,8 @@ export function MeetingSeriesDetailsPage() {
             {filteredMembers.map((member) => {
               const start = member.currentStartAtUtc ?? member.initialStartAtUtc
               const end = member.currentEndAtUtc ?? member.initialEndAtUtc
-              const roomName = arabic ? (member.currentRoomNameAr ?? member.initialRoomNameAr) : (member.currentRoomNameEn ?? member.initialRoomNameEn)
+              const currentMode = member.currentMeetingMode ?? member.initialMeetingMode
+              const roomName = currentMode === 'ZOOM' ? t('meetings.zoom.online') : ((arabic ? (member.currentRoomNameAr ?? member.initialRoomNameAr) : (member.currentRoomNameEn ?? member.initialRoomNameEn)) ?? '—')
               const changedAfterCreation = isCurrentlyDifferent(member)
               return (
                 <Card key={member.meetingId} className="p-4">
@@ -532,7 +535,7 @@ export function MeetingSeriesDetailsPage() {
                       <div className="text-muted-foreground mt-2 flex flex-wrap gap-x-5 gap-y-2 text-sm">
                         <span className="inline-flex items-center gap-1.5"><CalendarDays aria-hidden="true" className="size-4" />{formatDateTime(start, locale, timeFormat, { dateStyle: 'medium' })}</span>
                         <span className="inline-flex items-center gap-1.5"><Clock3 aria-hidden="true" className="size-4" />{formatTimeRange(start, end, locale, timeFormat)}</span>
-                        <span className="inline-flex items-center gap-1.5"><DoorOpen aria-hidden="true" className="size-4" />{roomName}</span>
+                        <span className="inline-flex items-center gap-1.5">{currentMode === 'ZOOM' ? <Video aria-hidden="true" className="size-4 text-[#2D8CFF]" /> : <DoorOpen aria-hidden="true" className="size-4" />}{roomName}</span>
                       </div>
                       {member.wasCustomizedAtCreation && member.originalStartAtUtc ? (
                         <p className="text-muted-foreground mt-2 text-xs">{t('meetings.seriesManagement.originally', { value: formatDateTime(member.originalStartAtUtc, locale, timeFormat, { dateStyle: 'medium' }) })}</p>
@@ -550,3 +553,4 @@ export function MeetingSeriesDetailsPage() {
     </div>
   )
 }
+

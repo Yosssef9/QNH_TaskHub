@@ -7,6 +7,8 @@ import { useTimeFormatPreference } from '@/features/preferences/hooks/use-time-f
 import { formatClockTime } from '@/lib/date-time'
 import { cn } from '@/lib/cn'
 
+import { formatMeetingDuration } from './MeetingDurationPicker'
+
 const DAY_MINUTES = 24 * 60
 const STEP_MINUTES = 15
 const MIN_DURATION_MINUTES = 30
@@ -138,6 +140,15 @@ export function MeetingTimeRangePicker({
               </SelectContent>
             </Select>
           </div>
+        </div>
+
+        <div className="bg-muted/30 mt-3 flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5">
+          <span className="text-muted-foreground text-xs font-medium">
+            {t('meetings.create.duration')}
+          </span>
+          <span className="text-sm font-semibold tabular-nums">
+            {formatMeetingDuration(currentDuration, t)}
+          </span>
         </div>
 
         {error ? (

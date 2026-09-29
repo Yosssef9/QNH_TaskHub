@@ -1,6 +1,7 @@
 import type { DatabaseTransaction } from "../../database/types.js";
 import { getDatabasePool, sql } from "../../database/sql.js";
 import { normalizeSqlRowVersion } from "../../shared/utils/sql-row-version.js";
+import type { MeetingMode } from "./meetings.types.js";
 import type {
   MeetingSeriesCreationMode,
   MeetingSeriesExistingIdentity,
@@ -31,9 +32,11 @@ interface SeriesListRecord {
   nextStatus: "PENDING_APPROVAL" | "SCHEDULED" | "REJECTED" | "CANCELLED" | null;
   nextStartAtUtc: Date | null;
   nextEndAtUtc: Date | null;
+  nextMeetingMode: MeetingMode | null;
   nextRoomId: number | string | null;
   nextRoomNameAr: string | null;
   nextRoomNameEn: string | null;
+  nextOnlineJoinUrl: string | null;
   totalCount: number | string;
 }
 
@@ -69,16 +72,20 @@ interface RawSeriesMemberRecord {
   status: "PENDING_APPROVAL" | "SCHEDULED" | "REJECTED" | "CANCELLED";
   currentStartAtUtc: Date | null;
   currentEndAtUtc: Date | null;
+  currentMeetingMode: MeetingMode | null;
   currentRoomId: number | string | null;
   currentRoomNameAr: string | null;
   currentRoomNameEn: string | null;
+  currentOnlineJoinUrl: string | null;
   originalStartAtUtc: Date | null;
   originalEndAtUtc: Date | null;
   initialStartAtUtc: Date;
   initialEndAtUtc: Date;
-  initialRoomId: number | string;
-  initialRoomNameAr: string;
-  initialRoomNameEn: string;
+  initialMeetingMode: MeetingMode;
+  initialRoomId: number | string | null;
+  initialRoomNameAr: string | null;
+  initialRoomNameEn: string | null;
+  initialOnlineJoinUrl: string | null;
   customizationJson: string | null;
 }
 
@@ -285,7 +292,9 @@ export const meetingSeriesRepository = {
       originalEndAtUtc: Date | null;
       initialStartAtUtc: Date;
       initialEndAtUtc: Date;
-      initialRoomId: number;
+      initialMeetingMode: MeetingMode;
+      initialRoomId: number | null;
+      initialOnlineJoinUrl: string | null;
       customizationJson: string | null;
     },
   ): Promise<void> {
@@ -300,7 +309,9 @@ export const meetingSeriesRepository = {
       .input("originalEndAtUtc", sql.DateTime2(3), input.originalEndAtUtc)
       .input("initialStartAtUtc", sql.DateTime2(3), input.initialStartAtUtc)
       .input("initialEndAtUtc", sql.DateTime2(3), input.initialEndAtUtc)
+      .input("initialMeetingMode", sql.VarChar(10), input.initialMeetingMode)
       .input("initialRoomId", sql.BigInt, input.initialRoomId)
+      .input("initialOnlineJoinUrl", sql.NVarChar(2048), input.initialOnlineJoinUrl)
       .input("customizationJson", sql.NVarChar(sql.MAX), input.customizationJson)
       .query(`
         INSERT INTO dbo.TM_meeting_series_members (
@@ -313,7 +324,9 @@ export const meetingSeriesRepository = {
           original_end_at_utc,
           initial_start_at_utc,
           initial_end_at_utc,
+          initial_meeting_mode,
           initial_room_id,
+          initial_online_join_url,
           customization_json
         )
         VALUES (
@@ -326,7 +339,9 @@ export const meetingSeriesRepository = {
           @originalEndAtUtc,
           @initialStartAtUtc,
           @initialEndAtUtc,
+          @initialMeetingMode,
           @initialRoomId,
+          @initialOnlineJoinUrl,
           @customizationJson
         );
       `);
@@ -508,9 +523,11 @@ export const meetingSeriesRepository = {
           nextMeeting.status AS nextStatus,
           nextMeeting.startAtUtc AS nextStartAtUtc,
           nextMeeting.endAtUtc AS nextEndAtUtc,
+          nextMeeting.meetingMode AS nextMeetingMode,
           nextMeeting.roomId AS nextRoomId,
           nextMeeting.roomNameAr AS nextRoomNameAr,
           nextMeeting.roomNameEn AS nextRoomNameEn,
+          nextMeeting.onlineJoinUrl AS nextOnlineJoinUrl,
           COUNT_BIG(1) OVER() AS totalCount
         FROM filtered
         OUTER APPLY (
@@ -520,6 +537,8 @@ export const meetingSeriesRepository = {
             m2.status,
             r2.start_at_utc AS startAtUtc,
             r2.end_at_utc AS endAtUtc,
+            r2.meeting_mode AS meetingMode,
+            r2.online_join_url AS onlineJoinUrl,
             room.id AS roomId,
             room.name_ar AS roomNameAr,
             room.name_en AS roomNameEn
@@ -529,7 +548,7 @@ export const meetingSeriesRepository = {
           INNER JOIN dbo.TM_meeting_revisions AS r2
             ON r2.id = m2.current_revision_id
            AND r2.meeting_id = m2.id
-          INNER JOIN dbo.TM_meeting_rooms AS room
+          LEFT JOIN dbo.TM_meeting_rooms AS room
             ON room.id = r2.room_id
           WHERE sm2.series_id = filtered.seriesId
             AND m2.status = 'SCHEDULED'
@@ -555,16 +574,18 @@ export const meetingSeriesRepository = {
       customizedCount: Number(record.customizedCount),
       state: record.state,
       nextMeeting:
-        record.nextMeetingId !== null && record.nextStartAtUtc && record.nextEndAtUtc && record.nextRoomId !== null
+        record.nextMeetingId !== null && record.nextStartAtUtc && record.nextEndAtUtc && record.nextMeetingMode
           ? {
               meetingId: Number(record.nextMeetingId),
               title: record.nextTitle ?? record.title,
               status: record.nextStatus ?? "SCHEDULED",
               startAtUtc: record.nextStartAtUtc.toISOString(),
               endAtUtc: record.nextEndAtUtc.toISOString(),
-              roomId: Number(record.nextRoomId),
-              roomNameAr: record.nextRoomNameAr ?? "",
-              roomNameEn: record.nextRoomNameEn ?? "",
+              meetingMode: record.nextMeetingMode,
+              roomId: record.nextRoomId === null ? null : Number(record.nextRoomId),
+              roomNameAr: record.nextRoomNameAr,
+              roomNameEn: record.nextRoomNameEn,
+              onlineJoinUrl: record.nextOnlineJoinUrl,
             }
           : null,
     }));
@@ -630,6 +651,8 @@ export const meetingSeriesRepository = {
           m.status,
           currentRevision.start_at_utc AS currentStartAtUtc,
           currentRevision.end_at_utc AS currentEndAtUtc,
+          currentRevision.meeting_mode AS currentMeetingMode,
+          currentRevision.online_join_url AS currentOnlineJoinUrl,
           currentRoom.id AS currentRoomId,
           currentRoom.name_ar AS currentRoomNameAr,
           currentRoom.name_en AS currentRoomNameEn,
@@ -637,6 +660,8 @@ export const meetingSeriesRepository = {
           sm.original_end_at_utc AS originalEndAtUtc,
           sm.initial_start_at_utc AS initialStartAtUtc,
           sm.initial_end_at_utc AS initialEndAtUtc,
+          sm.initial_meeting_mode AS initialMeetingMode,
+          sm.initial_online_join_url AS initialOnlineJoinUrl,
           sm.initial_room_id AS initialRoomId,
           initialRoom.name_ar AS initialRoomNameAr,
           initialRoom.name_en AS initialRoomNameEn,
@@ -649,7 +674,7 @@ export const meetingSeriesRepository = {
          AND currentRevision.meeting_id = m.id
         LEFT JOIN dbo.TM_meeting_rooms AS currentRoom
           ON currentRoom.id = currentRevision.room_id
-        INNER JOIN dbo.TM_meeting_rooms AS initialRoom
+        LEFT JOIN dbo.TM_meeting_rooms AS initialRoom
           ON initialRoom.id = sm.initial_room_id
         WHERE sm.series_id = @seriesId
         ORDER BY sm.sequence_number, sm.meeting_id;
@@ -665,16 +690,20 @@ export const meetingSeriesRepository = {
       status: record.status,
       currentStartAtUtc: record.currentStartAtUtc?.toISOString() ?? null,
       currentEndAtUtc: record.currentEndAtUtc?.toISOString() ?? null,
+      currentMeetingMode: record.currentMeetingMode,
       currentRoomId: record.currentRoomId === null ? null : Number(record.currentRoomId),
       currentRoomNameAr: record.currentRoomNameAr,
       currentRoomNameEn: record.currentRoomNameEn,
+      currentOnlineJoinUrl: record.currentOnlineJoinUrl,
       originalStartAtUtc: record.originalStartAtUtc?.toISOString() ?? null,
       originalEndAtUtc: record.originalEndAtUtc?.toISOString() ?? null,
       initialStartAtUtc: record.initialStartAtUtc.toISOString(),
       initialEndAtUtc: record.initialEndAtUtc.toISOString(),
-      initialRoomId: Number(record.initialRoomId),
+      initialMeetingMode: record.initialMeetingMode,
+      initialRoomId: record.initialRoomId === null ? null : Number(record.initialRoomId),
       initialRoomNameAr: record.initialRoomNameAr,
       initialRoomNameEn: record.initialRoomNameEn,
+      initialOnlineJoinUrl: record.initialOnlineJoinUrl,
       customizationJson: record.customizationJson,
       wasCustomizedAtCreation: record.customizationJson !== null,
     }));
@@ -733,5 +762,6 @@ export const meetingSeriesRepository = {
   },
 
 };
+
 
 

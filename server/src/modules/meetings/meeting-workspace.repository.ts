@@ -18,6 +18,7 @@ import type {
   UpdateMeetingTemplateInput,
 } from "./meeting-workspace.types.js";
 import type { MeetingParticipant } from "./meeting-workflow.types.js";
+import type { MeetingMode } from "./meetings.types.js";
 
 export interface MeetingAccessContext {
   meetingId: number;
@@ -39,7 +40,10 @@ interface AccessRecord {
   hasPendingReschedule: boolean | number;
 }
 
-interface RevisionRecord extends MeetingRoomRecord {
+interface RevisionRecord extends Partial<MeetingRoomRecord> {
+  meetingMode: MeetingMode;
+  roomId: number | string | null;
+  onlineJoinUrl: string | null;
   revisionId: number | string;
   revisionNumber: number | string;
   revisionType: MeetingRevisionDetail["revisionType"];
@@ -122,6 +126,7 @@ interface TemplateRecord extends Partial<MeetingRoomRecord> {
   templateTitle: string;
   templateDescription: string | null;
   durationMinutes: number | string;
+  meetingMode: MeetingMode;
   defaultRoomId: number | string | null;
   organizerAttending: boolean | number;
   attendeesJson: string | null;
@@ -180,42 +185,35 @@ function parseParticipants(value: string | null): MeetingParticipant[] {
 function mapRevision(record: RevisionRecord): MeetingRevisionDetail | null {
   const rowVersion = normalizeSqlRowVersion(record.revisionRowVersion);
   if (!rowVersion) return null;
-  const room = mapMeetingRoom({
-    id: record.id,
-    code: record.code ?? null,
-    nameAr: record.nameAr ?? "",
-    nameEn: record.nameEn ?? "",
-    locationText: record.locationText ?? null,
-    colorKey: record.colorKey,
-    capacity: Number(record.capacity ?? 0),
-    equipmentNotes: record.equipmentNotes ?? null,
-    isActive: Boolean(record.isActive),
-    rowVersion: record.rowVersion,
-  });
+  const room = record.meetingMode === "ROOM" && record.roomId !== null
+    ? mapMeetingRoom({
+        id: record.roomId,
+        code: record.code ?? null,
+        nameAr: record.nameAr ?? "",
+        nameEn: record.nameEn ?? "",
+        locationText: record.locationText ?? null,
+        colorKey: record.colorKey ?? "BLUE",
+        capacity: Number(record.capacity ?? 0),
+        equipmentNotes: record.equipmentNotes ?? null,
+        isActive: Boolean(record.isActive),
+        rowVersion: record.rowVersion,
+      })
+    : null;
+  if (record.meetingMode === "ROOM" && !room) return null;
   return {
     id: Number(record.revisionId),
     revisionNumber: Number(record.revisionNumber),
     revisionType: record.revisionType,
     revisionStatus: record.revisionStatus,
+    meetingMode: record.meetingMode,
     room,
+    onlineJoinUrl: record.onlineJoinUrl,
     startAtUtc: record.startAtUtc.toISOString(),
     endAtUtc: record.endAtUtc.toISOString(),
     schedulingNotes: record.schedulingNotes,
-    requestedBy: participant(
-      record.requestedByUserId,
-      record.requestedByUserCode,
-      record.requestedByUserName,
-    ),
-    approvedBy: optionalParticipant(
-      record.approvedByUserId,
-      record.approvedByUserCode,
-      record.approvedByUserName,
-    ),
-    rejectedBy: optionalParticipant(
-      record.rejectedByUserId,
-      record.rejectedByUserCode,
-      record.rejectedByUserName,
-    ),
+    requestedBy: participant(record.requestedByUserId, record.requestedByUserCode, record.requestedByUserName),
+    approvedBy: optionalParticipant(record.approvedByUserId, record.approvedByUserCode, record.approvedByUserName),
+    rejectedBy: optionalParticipant(record.rejectedByUserId, record.rejectedByUserCode, record.rejectedByUserName),
     createdAtUtc: record.createdAtUtc.toISOString(),
     decidedAtUtc: record.decidedAtUtc?.toISOString() ?? null,
     rowVersion,
@@ -281,6 +279,7 @@ function mapTemplate(record: TemplateRecord): MeetingTemplate | null {
     title: record.templateTitle,
     description: record.templateDescription,
     durationMinutes: Number(record.durationMinutes),
+    meetingMode: record.meetingMode,
     defaultRoom,
     organizerAttending: Boolean(record.organizerAttending),
     attendees: parseParticipants(record.attendeesJson),
@@ -302,6 +301,7 @@ const templateFields = `
   template.title AS templateTitle,
   template.description AS templateDescription,
   template.duration_minutes AS durationMinutes,
+  template.meeting_mode AS meetingMode,
   template.default_room_id AS defaultRoomId,
   template.row_version AS templateRowVersion,
   room.id,
@@ -573,6 +573,9 @@ export const meetingWorkspaceRepository = {
         revision.revision_number AS revisionNumber,
         revision.revision_type AS revisionType,
         revision.revision_status AS revisionStatus,
+        revision.meeting_mode AS meetingMode,
+        revision.room_id AS roomId,
+        revision.online_join_url AS onlineJoinUrl,
         room.id,
         room.code,
         room.name_ar AS nameAr,
@@ -599,7 +602,7 @@ export const meetingWorkspaceRepository = {
         revision.decided_at_utc AS decidedAtUtc,
         revision.row_version AS revisionRowVersion
       FROM dbo.TM_meeting_revisions AS revision
-      INNER JOIN dbo.TM_meeting_rooms AS room ON room.id = revision.room_id
+      LEFT JOIN dbo.TM_meeting_rooms AS room ON room.id = revision.room_id
       INNER JOIN dbo.users AS requested ON requested.USER_ID = revision.requested_by_user_id
       LEFT JOIN dbo.users AS approved ON approved.USER_ID = revision.approved_by_user_id
       LEFT JOIN dbo.users AS rejected ON rejected.USER_ID = revision.rejected_by_user_id
@@ -865,13 +868,15 @@ export const meetingWorkspaceRepository = {
     transaction: DatabaseTransaction,
     meetingId: number,
     actorUserId: number,
-    input: { roomId: number; startAtUtc: Date; endAtUtc: Date; schedulingNotes?: string | null },
+    input: { meetingMode: MeetingMode; roomId: number | null; onlineJoinUrl: string | null; startAtUtc: Date; endAtUtc: Date; schedulingNotes?: string | null },
   ): Promise<{ revisionId: number; rowVersion: string } | null> {
     const result = await transaction
       .request()
       .input("meetingId", sql.BigInt, meetingId)
       .input("actorUserId", sql.Int, actorUserId)
+      .input("meetingMode", sql.VarChar(10), input.meetingMode)
       .input("roomId", sql.BigInt, input.roomId)
+      .input("onlineJoinUrl", sql.NVarChar(2048), input.onlineJoinUrl)
       .input("startAtUtc", sql.DateTime2(3), input.startAtUtc)
       .input("endAtUtc", sql.DateTime2(3), input.endAtUtc)
       .input("schedulingNotes", sql.NVarChar(1000), input.schedulingNotes ?? null)
@@ -886,7 +891,9 @@ export const meetingWorkspaceRepository = {
           revision_number,
           revision_type,
           revision_status,
+          meeting_mode,
           room_id,
+          online_join_url,
           start_at_utc,
           end_at_utc,
           scheduling_notes,
@@ -898,7 +905,9 @@ export const meetingWorkspaceRepository = {
           @nextRevisionNumber,
           'RESCHEDULE',
           'PENDING',
+          @meetingMode,
           @roomId,
+          @onlineJoinUrl,
           @startAtUtc,
           @endAtUtc,
           @schedulingNotes,
@@ -931,7 +940,9 @@ export const meetingWorkspaceRepository = {
     input: {
       revisionId: number;
       revisionRowVersion: string;
-      roomId: number;
+      meetingMode: MeetingMode;
+      roomId: number | null;
+      onlineJoinUrl: string | null;
       startAtUtc: string;
       endAtUtc: string;
     },
@@ -943,12 +954,16 @@ export const meetingWorkspaceRepository = {
       .input("meetingId", sql.BigInt, meetingId)
       .input("revisionId", sql.BigInt, input.revisionId)
       .input("rowVersion", sql.VarBinary(8), rowVersion)
+      .input("meetingMode", sql.VarChar(10), input.meetingMode)
       .input("roomId", sql.BigInt, input.roomId)
+      .input("onlineJoinUrl", sql.NVarChar(2048), input.onlineJoinUrl)
       .input("startAtUtc", sql.DateTime2(3), new Date(input.startAtUtc))
       .input("endAtUtc", sql.DateTime2(3), new Date(input.endAtUtc))
       .query(`
         UPDATE dbo.TM_meeting_revisions
-        SET room_id = @roomId,
+        SET meeting_mode = @meetingMode,
+            room_id = @roomId,
+            online_join_url = @onlineJoinUrl,
             start_at_utc = @startAtUtc,
             end_at_utc = @endAtUtc
         WHERE id = @revisionId
@@ -972,13 +987,17 @@ export const meetingWorkspaceRepository = {
       .input("meetingId", sql.BigInt, meetingId)
       .input("revisionId", sql.BigInt, input.revisionId)
       .input("rowVersion", sql.VarBinary(8), rowVersion)
+      .input("meetingMode", sql.VarChar(10), input.meetingMode)
       .input("roomId", sql.BigInt, input.roomId)
+      .input("onlineJoinUrl", sql.NVarChar(2048), input.onlineJoinUrl)
       .input("startAtUtc", sql.DateTime2(3), new Date(input.startAtUtc))
       .input("endAtUtc", sql.DateTime2(3), new Date(input.endAtUtc))
       .input("schedulingNotes", sql.NVarChar(1000), input.schedulingNotes ?? null)
       .query(`
         UPDATE dbo.TM_meeting_revisions
-        SET room_id = @roomId,
+        SET meeting_mode = @meetingMode,
+            room_id = @roomId,
+            online_join_url = @onlineJoinUrl,
             start_at_utc = @startAtUtc,
             end_at_utc = @endAtUtc,
             scheduling_notes = @schedulingNotes
@@ -1044,6 +1063,7 @@ export const meetingWorkspaceRepository = {
   async cancelMeeting(
     transaction: DatabaseTransaction,
     meetingId: number,
+    actorUserId: number,
     input: CancelMeetingInput,
   ): Promise<boolean> {
     const rowVersion = rowVersionToBuffer(input.meetingRowVersion);
@@ -1051,11 +1071,15 @@ export const meetingWorkspaceRepository = {
     const result = await transaction
       .request()
       .input("meetingId", sql.BigInt, meetingId)
+      .input("actorUserId", sql.Int, actorUserId)
+      .input("reason", sql.NVarChar(1000), input.reason.trim())
       .input("rowVersion", sql.VarBinary(8), rowVersion)
       .query(`
         UPDATE dbo.TM_meetings
         SET status = 'CANCELLED',
             cancelled_at_utc = SYSUTCDATETIME(),
+            cancelled_by_user_id = @actorUserId,
+            cancellation_reason = @reason,
             updated_at_utc = SYSUTCDATETIME()
         WHERE id = @meetingId
           AND status IN ('PENDING_APPROVAL', 'SCHEDULED')
@@ -1289,6 +1313,7 @@ export const meetingWorkspaceRepository = {
       .input("title", sql.NVarChar(250), input.title)
       .input("description", sql.NVarChar(sql.MAX), input.description ?? null)
       .input("durationMinutes", sql.Int, input.durationMinutes)
+      .input("meetingMode", sql.VarChar(10), input.meetingMode)
       .input("defaultRoomId", sql.BigInt, input.defaultRoomId ?? null)
       .query<IdRecord>(`
         INSERT INTO dbo.TM_meeting_templates (
@@ -1297,6 +1322,7 @@ export const meetingWorkspaceRepository = {
           title,
           description,
           duration_minutes,
+          meeting_mode,
           default_room_id
         )
         OUTPUT inserted.id
@@ -1306,6 +1332,7 @@ export const meetingWorkspaceRepository = {
           @title,
           @description,
           @durationMinutes,
+          @meetingMode,
           @defaultRoomId
         );
       `);
@@ -1357,6 +1384,7 @@ export const meetingWorkspaceRepository = {
       .input("title", sql.NVarChar(250), input.title)
       .input("description", sql.NVarChar(sql.MAX), input.description ?? null)
       .input("durationMinutes", sql.Int, input.durationMinutes)
+      .input("meetingMode", sql.VarChar(10), input.meetingMode)
       .input("defaultRoomId", sql.BigInt, input.defaultRoomId ?? null)
       .query(`
         UPDATE dbo.TM_meeting_templates
@@ -1364,6 +1392,7 @@ export const meetingWorkspaceRepository = {
             title = @title,
             description = @description,
             duration_minutes = @durationMinutes,
+            meeting_mode = @meetingMode,
             default_room_id = @defaultRoomId,
             updated_at_utc = SYSUTCDATETIME()
         WHERE id = @templateId
@@ -1402,5 +1431,6 @@ export const meetingWorkspaceRepository = {
 export function mapMeetingAttachmentRecord(record: MeetingAttachmentRecord): MeetingAttachment {
   return mapAttachment(record);
 }
+
 
 

@@ -66,7 +66,7 @@ export function assertMeetingHasNotStarted(startAtUtc: Date, nowUtc = new Date()
     throw new AppError({
       statusCode: 409,
       code: "MEETING_ALREADY_STARTED",
-      message: "This Meeting has already started and can no longer be cancelled or rescheduled.",
+      message: "This Meeting has already started and can no longer be rescheduled.",
     });
   }
 }

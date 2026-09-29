@@ -104,6 +104,8 @@ export function mapAuthMeData(
       roleCode: toRoleCode(access.roleCode),
       permissions,
       meetingOrganizeEnabled: access.meetingOrganizeEnabled ?? false,
+      meetingRoomOrganizeEnabled: access.meetingRoomOrganizeEnabled ?? false,
+      meetingZoomOrganizeEnabled: access.meetingZoomOrganizeEnabled ?? false,
       meetingCoordinateEnabled: access.meetingCoordinateEnabled ?? false,
     },
     preferences: {
@@ -118,6 +120,7 @@ export function mapAuthMeData(
     },
   };
 }
+
 
 
 

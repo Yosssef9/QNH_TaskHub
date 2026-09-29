@@ -69,6 +69,22 @@ describe("Meeting schedule conflict email presentation", () => {
     assert.match(document.html, /dir="rtl"/);
   });
 
+  it("uses the Zoom join URL as the invitation action for an authorized Zoom recipient", () => {
+    const document = renderMeetingLifecycleEmail("MEETING_INVITED", {
+      ...lifecyclePayload(),
+      meetingMode: "ZOOM",
+      roomNameAr: null,
+      roomNameEn: null,
+      onlineJoinUrl: "https://qnh.zoom.us/j/123456789?pwd=abc",
+      scheduleConflict: null,
+    }, "en", context);
+
+    assert.match(document.text, /Zoom Meeting/);
+    assert.match(document.text, /Join Zoom Meeting: https:\/\/qnh\.zoom\.us\/j\/123456789\?pwd=abc/);
+    assert.match(document.html, /Join Zoom Meeting/);
+    assert.match(document.html, /https:\/\/qnh\.zoom\.us\/j\/123456789\?pwd=abc/);
+  });
+
   it("marks only conflicting Series occurrences and keeps the grouped message recipient-specific", () => {
     const document = renderMeetingSeriesScheduledEmail({
       seriesId: 9,

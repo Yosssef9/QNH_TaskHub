@@ -164,7 +164,12 @@ export const checkMeetingAvailability: RequestHandler = async (req, res) => {
 
 export const checkMeetingParticipantAvailability: RequestHandler = async (req, res) => {
   const input = getValidatedRequestPart<MeetingParticipantAvailabilityBody>(req, "body");
-  const availability = await meetingSchedulingService.getParticipantAvailability(input);
+  const access = currentAccess(req);
+  const availability = await meetingSchedulingService.getParticipantAvailability(input, {
+    userId: actorUserId(req),
+    canCoordinateMeetings: access.meetingCoordinateEnabled === true,
+    canPreviewRoomMeetings: access.meetingRoomOrganizeEnabled === true,
+  });
   const body: ApiSuccessResponse<{ availability: MeetingParticipantAvailability }> = {
     success: true,
     data: { availability },
@@ -660,8 +665,3 @@ export const archiveMeetingTemplate: RequestHandler = async (req, res) => {
   await meetingWorkspaceService.archiveTemplate(actorUserId(req), params.templateId, input.rowVersion);
   res.status(200).json({ success: true, data: { templateId: params.templateId } });
 };
-
-
-
-
-

@@ -27,6 +27,8 @@ export interface AccessUser {
   procurementAccess: ProcurementAccessState;
   kpiWorkCyclesAccess: boolean;
   meetingOrganizeEnabled?: boolean;
+  meetingRoomOrganizeEnabled?: boolean;
+  meetingZoomOrganizeEnabled?: boolean;
   meetingCoordinateEnabled?: boolean;
 }
 
@@ -57,6 +59,8 @@ export interface UpdateAccessInput {
   procurementAccess: ProcurementAccessState;
   kpiWorkCyclesAccess: boolean;
   meetingOrganizeEnabled?: boolean | undefined;
+  meetingRoomOrganizeEnabled?: boolean | undefined;
+  meetingZoomOrganizeEnabled?: boolean | undefined;
   meetingCoordinateEnabled?: boolean | undefined;
 }
 
@@ -64,6 +68,8 @@ export interface CurrentAccessRecord {
   roleCode: TaskHubRoleCode;
   isActive: boolean;
   meetingOrganizeEnabled?: boolean;
+  meetingRoomOrganizeEnabled?: boolean;
+  meetingZoomOrganizeEnabled?: boolean;
   meetingCoordinateEnabled?: boolean;
 }
 
@@ -71,3 +77,4 @@ export interface DelegationParticipantRecord {
   userId: number;
   contractsAccess: boolean;
 }
+

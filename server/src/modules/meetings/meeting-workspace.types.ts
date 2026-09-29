@@ -1,4 +1,4 @@
-import type { MeetingRoom } from "./meetings.types.js";
+import type { MeetingMode, MeetingRoom } from "./meetings.types.js";
 import type { MeetingParticipant, MeetingSummary } from "./meeting-workflow.types.js";
 
 export interface MeetingRevisionDetail {
@@ -6,7 +6,9 @@ export interface MeetingRevisionDetail {
   revisionNumber: number;
   revisionType: "INITIAL" | "RESCHEDULE";
   revisionStatus: "PENDING" | "APPROVED" | "REJECTED";
-  room: MeetingRoom;
+  meetingMode: MeetingMode;
+  room: MeetingRoom | null;
+  onlineJoinUrl: string | null;
   startAtUtc: string;
   endAtUtc: string;
   schedulingNotes: string | null;
@@ -94,7 +96,9 @@ export interface MeetingDetail {
 
 export interface CreateMeetingRescheduleInput {
   meetingRowVersion: string;
-  roomId: number;
+  meetingMode: MeetingMode;
+  roomId: number | null;
+  onlineJoinUrl: string | null;
   startAtUtc: string;
   endAtUtc: string;
 }
@@ -102,7 +106,9 @@ export interface CreateMeetingRescheduleInput {
 export interface UpdateMeetingRescheduleInput {
   revisionId: number;
   revisionRowVersion: string;
-  roomId: number;
+  meetingMode: MeetingMode;
+  roomId: number | null;
+  onlineJoinUrl: string | null;
   startAtUtc: string;
   endAtUtc: string;
   schedulingNotes?: string | null;
@@ -111,14 +117,18 @@ export interface UpdateMeetingRescheduleInput {
 export interface UpdateOrganizerRescheduleInput {
   revisionId: number;
   revisionRowVersion: string;
-  roomId: number;
+  meetingMode: MeetingMode;
+  roomId: number | null;
+  onlineJoinUrl: string | null;
   startAtUtc: string;
   endAtUtc: string;
 }
 
 export interface CoordinatorDirectRescheduleInput {
   meetingRowVersion: string;
-  roomId: number;
+  meetingMode: MeetingMode;
+  roomId: number | null;
+  onlineJoinUrl: string | null;
   startAtUtc: string;
   endAtUtc: string;
   schedulingNotes?: string | null;
@@ -139,7 +149,7 @@ export interface CancelMeetingRescheduleRequestInput extends DecideMeetingResche
 
 export interface CancelMeetingInput {
   meetingRowVersion: string;
-  reason?: string | null;
+  reason: string;
 }
 
 export interface MeetingRescheduleQueueItem {
@@ -164,6 +174,7 @@ export interface MeetingTemplate {
   title: string;
   description: string | null;
   durationMinutes: number;
+  meetingMode: MeetingMode;
   defaultRoom: MeetingRoom | null;
   organizerAttending: boolean;
   attendees: MeetingParticipant[];
@@ -175,6 +186,7 @@ export interface SaveMeetingTemplateInput {
   title: string;
   description?: string | null;
   durationMinutes: number;
+  meetingMode: MeetingMode;
   defaultRoomId?: number | null;
   organizerAttending: boolean;
   attendeeUserIds: number[];
@@ -183,4 +195,5 @@ export interface SaveMeetingTemplateInput {
 export interface UpdateMeetingTemplateInput extends SaveMeetingTemplateInput {
   rowVersion: string;
 }
+
 

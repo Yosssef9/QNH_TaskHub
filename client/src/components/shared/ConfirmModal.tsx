@@ -21,6 +21,7 @@ export interface ConfirmModalProps {
   confirmText?: string
   cancelText?: string
   loading?: boolean
+  confirmDisabled?: boolean
   danger?: boolean
   onConfirm: () => void
   onCancel: () => void
@@ -34,6 +35,7 @@ export function ConfirmModal({
   confirmText = 'Confirm',
   cancelText = 'Cancel',
   loading = false,
+  confirmDisabled = false,
   danger = false,
   onConfirm,
   onCancel,
@@ -85,7 +87,7 @@ export function ConfirmModal({
             <AlertDialogCancel disabled={loading}>{cancelText}</AlertDialogCancel>
           ) : null}
           <AlertDialogAction
-            disabled={loading}
+            disabled={loading || confirmDisabled}
             className={danger ? 'bg-destructive hover:bg-destructive/90 text-white' : undefined}
             onClick={handleConfirm}
           >

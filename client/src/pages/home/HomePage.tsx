@@ -664,8 +664,12 @@ function HomeMeetingRow({
   timeFormat: '12H' | '24H'
 }) {
   const { i18n, t } = useTranslation()
-  const accent = getMeetingRoomAccent(meeting.room.colorKey)
-  const roomName = i18n.language.startsWith('ar') ? meeting.room.nameAr : meeting.room.nameEn
+  const accent = meeting.room ? getMeetingRoomAccent(meeting.room.colorKey) : 'var(--primary)'
+  const roomName = meeting.meetingMode === 'ZOOM' || !meeting.room
+    ? t('meetings.zoom.zoomType')
+    : i18n.language.startsWith('ar')
+      ? meeting.room.nameAr
+      : meeting.room.nameEn
   const roleLabel =
     currentUserId !== null && meeting.organizer.userId === currentUserId
       ? t('home.meetingOrganizer')
@@ -787,3 +791,4 @@ function QuickButton({
     </button>
   )
 }
+

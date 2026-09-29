@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { isValidZoomJoinUrl } from "./meeting-online-location.js";
+
 const utcDateTimeSchema = z.string().datetime({ offset: true });
 const rowVersionSchema = z.string().regex(/^0x[0-9A-Fa-f]{16}$/);
 
@@ -14,17 +16,25 @@ const nullableTrimmed = (max: number) =>
 
 function withValidSchedule<T extends z.ZodRawShape>(shape: T) {
   return z.object(shape).superRefine((value, ctx) => {
-    const candidate = value as { startAtUtc?: unknown; endAtUtc?: unknown };
-    if (typeof candidate.startAtUtc !== "string" || typeof candidate.endAtUtc !== "string") return;
-    if (new Date(candidate.endAtUtc).getTime() <= new Date(candidate.startAtUtc).getTime()) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["endAtUtc"],
-        message: "Meeting end time must be after its start time.",
-      });
+    const candidate = value as { startAtUtc?: unknown; endAtUtc?: unknown; meetingMode?: unknown; roomId?: unknown; onlineJoinUrl?: unknown };
+    if (typeof candidate.startAtUtc === "string" && typeof candidate.endAtUtc === "string" && new Date(candidate.endAtUtc).getTime() <= new Date(candidate.startAtUtc).getTime()) {
+      ctx.addIssue({ code: "custom", path: ["endAtUtc"], message: "Meeting end time must be after its start time." });
+    }
+    if (candidate.meetingMode === "ROOM") {
+      if (typeof candidate.roomId !== "number") ctx.addIssue({ code: "custom", path: ["roomId"], message: "Choose a Meeting Room." });
+      if (candidate.onlineJoinUrl !== null) ctx.addIssue({ code: "custom", path: ["onlineJoinUrl"], message: "Room Meetings cannot store an online join link." });
+    } else if (candidate.meetingMode === "ZOOM") {
+      if (candidate.roomId !== null) ctx.addIssue({ code: "custom", path: ["roomId"], message: "Zoom Meetings do not use a physical Meeting Room." });
+      if (typeof candidate.onlineJoinUrl !== "string" || !isValidZoomJoinUrl(candidate.onlineJoinUrl)) ctx.addIssue({ code: "custom", path: ["onlineJoinUrl"], message: "Enter a valid HTTPS Zoom Meeting link." });
     }
   });
 }
+
+const locationFields = {
+  meetingMode: z.enum(["ROOM", "ZOOM"]),
+  roomId: z.coerce.number().int().positive().nullable(),
+  onlineJoinUrl: nullableTrimmed(2048),
+};
 
 export const meetingWorkspaceParamsSchema = z.object({
   meetingId: z.coerce.number().int().positive(),
@@ -40,7 +50,7 @@ export const meetingTemplateParamsSchema = z.object({
 
 export const createMeetingRescheduleBodySchema = withValidSchedule({
   meetingRowVersion: rowVersionSchema,
-  roomId: z.coerce.number().int().positive(),
+  ...locationFields,
   startAtUtc: utcDateTimeSchema,
   endAtUtc: utcDateTimeSchema,
 });
@@ -48,7 +58,7 @@ export const createMeetingRescheduleBodySchema = withValidSchedule({
 export const updateMeetingRescheduleBodySchema = withValidSchedule({
   revisionId: z.coerce.number().int().positive(),
   revisionRowVersion: rowVersionSchema,
-  roomId: z.coerce.number().int().positive(),
+  ...locationFields,
   startAtUtc: utcDateTimeSchema,
   endAtUtc: utcDateTimeSchema,
   schedulingNotes: nullableTrimmed(1000),
@@ -58,14 +68,14 @@ export const updateMeetingRescheduleBodySchema = withValidSchedule({
 export const updateOrganizerRescheduleBodySchema = withValidSchedule({
   revisionId: z.coerce.number().int().positive(),
   revisionRowVersion: rowVersionSchema,
-  roomId: z.coerce.number().int().positive(),
+  ...locationFields,
   startAtUtc: utcDateTimeSchema,
   endAtUtc: utcDateTimeSchema,
 });
 
 export const coordinatorDirectRescheduleBodySchema = withValidSchedule({
   meetingRowVersion: rowVersionSchema,
-  roomId: z.coerce.number().int().positive(),
+  ...locationFields,
   startAtUtc: utcDateTimeSchema,
   endAtUtc: utcDateTimeSchema,
   schedulingNotes: nullableTrimmed(1000),
@@ -86,7 +96,7 @@ export const cancelMeetingRescheduleRequestBodySchema = decideMeetingRescheduleB
 
 export const cancelMeetingBodySchema = z.object({
   meetingRowVersion: rowVersionSchema,
-  reason: nullableTrimmed(1000),
+  reason: z.string().trim().min(1).max(1000),
 });
 
 const meetingAgendaItemBodySchema = z.object({
@@ -117,16 +127,19 @@ const meetingTemplateFields = {
   title: z.string().trim().min(1).max(250),
   description: nullableTrimmed(10000),
   durationMinutes: z.coerce.number().int().min(30).max(1440),
+  meetingMode: z.enum(["ROOM", "ZOOM"]),
   defaultRoomId: z.coerce.number().int().positive().nullable().optional(),
   organizerAttending: z.boolean(),
   attendeeUserIds: z.array(z.coerce.number().int().positive()).max(500).default([]),
 };
 
-export const createMeetingTemplateBodySchema = z.object(meetingTemplateFields);
-export const updateMeetingTemplateBodySchema = z.object({
-  ...meetingTemplateFields,
-  rowVersion: rowVersionSchema,
-});
+const validateTemplateLocation = (value: { meetingMode: "ROOM" | "ZOOM"; defaultRoomId?: number | null }, ctx: z.RefinementCtx) => {
+  if (value.meetingMode === "ZOOM" && value.defaultRoomId != null) {
+    ctx.addIssue({ code: "custom", path: ["defaultRoomId"], message: "Zoom Meeting Templates cannot reserve a physical room." });
+  }
+};
+export const createMeetingTemplateBodySchema = z.object(meetingTemplateFields).superRefine(validateTemplateLocation);
+export const updateMeetingTemplateBodySchema = z.object({ ...meetingTemplateFields, rowVersion: rowVersionSchema }).superRefine(validateTemplateLocation);
 export const archiveMeetingTemplateBodySchema = z.object({ rowVersion: rowVersionSchema });
 
 export type MeetingWorkspaceParams = z.infer<typeof meetingWorkspaceParamsSchema>;
@@ -146,4 +159,5 @@ export type BulkUpdateMeetingAttendanceBody = z.infer<typeof bulkUpdateMeetingAt
 export type CreateMeetingTemplateBody = z.infer<typeof createMeetingTemplateBodySchema>;
 export type UpdateMeetingTemplateBody = z.infer<typeof updateMeetingTemplateBodySchema>;
 export type ArchiveMeetingTemplateBody = z.infer<typeof archiveMeetingTemplateBodySchema>;
+
 

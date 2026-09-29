@@ -8,7 +8,7 @@ import type {
   MeetingSummary,
   UpdatePendingMeetingScheduleInput,
 } from "./meeting-workflow.types.js";
-import type { MeetingRoomColorKey } from "./meetings.types.js";
+import type { MeetingMode, MeetingRoomColorKey } from "./meetings.types.js";
 
 interface CountRecord {
   total: number | string;
@@ -38,16 +38,23 @@ interface MeetingSummaryRecord {
   organizerUserId: number | string;
   organizerUserCode: string;
   organizerUserName: string;
-  roomId: number | string;
+  meetingMode: MeetingMode;
+  roomId: number | string | null;
   roomCode: string | null;
-  roomNameAr: string;
-  roomNameEn: string;
+  roomNameAr: string | null;
+  roomNameEn: string | null;
   roomLocationText: string | null;
-  roomColorKey: MeetingRoomColorKey;
-  roomCapacity: number | string;
+  roomColorKey: MeetingRoomColorKey | null;
+  roomCapacity: number | string | null;
   roomEquipmentNotes: string | null;
-  roomIsActive: boolean | number;
-  roomRowVersion: unknown;
+  roomIsActive: boolean | number | null;
+  roomRowVersion: unknown | null;
+  onlineJoinUrl: string | null;
+  cancelledAtUtc: Date | null;
+  cancellationReason: string | null;
+  cancelledByUserId: number | string | null;
+  cancelledByUserCode: string | null;
+  cancelledByUserName: string | null;
   startAtUtc: Date;
   endAtUtc: Date;
   schedulingNotes: string | null;
@@ -83,12 +90,14 @@ interface ScheduleRecord {
   organizerUserId: number | string;
   organizerUserCode: string;
   organizerUserName: string;
-  roomId: number | string;
+  meetingMode: MeetingMode;
+  roomId: number | string | null;
   roomCode: string | null;
-  roomNameAr: string;
-  roomNameEn: string;
+  roomNameAr: string | null;
+  roomNameEn: string | null;
   roomLocationText: string | null;
-  roomColorKey: MeetingRoomColorKey;
+  roomColorKey: MeetingRoomColorKey | null;
+  onlineJoinUrl: string | null;
   startAtUtc: Date;
   endAtUtc: Date;
   isOrganizer: boolean | number;
@@ -103,6 +112,7 @@ export interface MeetingScheduleRecord {
   meetingId: number;
   title: string;
   organizer: MeetingParticipant;
+  meetingMode: MeetingMode;
   room: {
     id: number;
     code: string | null;
@@ -110,7 +120,8 @@ export interface MeetingScheduleRecord {
     nameEn: string;
     locationText: string | null;
     colorKey: MeetingRoomColorKey;
-  };
+  } | null;
+  onlineJoinUrl: string | null;
   startAtUtc: Date;
   endAtUtc: Date;
   isOrganizer: boolean;
@@ -170,8 +181,9 @@ function parseAttendees(value: string | null): MeetingParticipant[] {
 function mapMeetingSummary(record: MeetingSummaryRecord): MeetingSummary | null {
   const meetingRowVersion = normalizeSqlRowVersion(record.meetingRowVersion);
   const revisionRowVersion = normalizeSqlRowVersion(record.revisionRowVersion);
-  const roomRowVersion = normalizeSqlRowVersion(record.roomRowVersion);
-  if (!meetingRowVersion || !revisionRowVersion || !roomRowVersion) return null;
+  const roomRowVersion = record.roomRowVersion ? normalizeSqlRowVersion(record.roomRowVersion) : null;
+  if (!meetingRowVersion || !revisionRowVersion) return null;
+  if (record.meetingMode === "ROOM" && (!roomRowVersion || record.roomId === null || !record.roomNameAr || !record.roomNameEn || !record.roomColorKey || record.roomCapacity === null)) return null;
 
   return {
     id: Number(record.id),
@@ -183,18 +195,32 @@ function mapMeetingSummary(record: MeetingSummaryRecord): MeetingSummary | null 
       userCode: record.organizerUserCode,
       userName: record.organizerUserName,
     },
-    room: {
-      id: Number(record.roomId),
-      code: record.roomCode,
-      nameAr: record.roomNameAr,
-      nameEn: record.roomNameEn,
-      locationText: record.roomLocationText,
-      colorKey: record.roomColorKey,
-      capacity: Number(record.roomCapacity),
-      equipmentNotes: record.roomEquipmentNotes,
-      isActive: Boolean(record.roomIsActive),
-      rowVersion: roomRowVersion,
-    },
+    meetingMode: record.meetingMode,
+    room: record.meetingMode === "ROOM" && record.roomId !== null && roomRowVersion && record.roomNameAr && record.roomNameEn && record.roomColorKey && record.roomCapacity !== null
+      ? {
+          id: Number(record.roomId),
+          code: record.roomCode,
+          nameAr: record.roomNameAr,
+          nameEn: record.roomNameEn,
+          locationText: record.roomLocationText,
+          colorKey: record.roomColorKey,
+          capacity: Number(record.roomCapacity),
+          equipmentNotes: record.roomEquipmentNotes,
+          isActive: Boolean(record.roomIsActive),
+          rowVersion: roomRowVersion,
+        }
+      : null,
+    onlineJoinUrl: record.onlineJoinUrl,
+    cancelledAtUtc: record.cancelledAtUtc?.toISOString() ?? null,
+    cancellationReason: record.cancellationReason,
+    cancelledBy:
+      record.cancelledByUserId !== null && record.cancelledByUserCode && record.cancelledByUserName
+        ? {
+            userId: Number(record.cancelledByUserId),
+            userCode: record.cancelledByUserCode,
+            userName: record.cancelledByUserName,
+          }
+        : null,
     startAtUtc: record.startAtUtc.toISOString(),
     endAtUtc: record.endAtUtc.toISOString(),
     schedulingNotes: record.schedulingNotes,
@@ -217,6 +243,7 @@ const meetingSummaryFields = `
   organizer.USER_ID AS organizerUserId,
   organizer.USER_CODE AS organizerUserCode,
   organizer.USER_NAME AS organizerUserName,
+  selectedRevision.meeting_mode AS meetingMode,
   room.id AS roomId,
   room.code AS roomCode,
   room.name_ar AS roomNameAr,
@@ -227,6 +254,12 @@ const meetingSummaryFields = `
   room.equipment_notes AS roomEquipmentNotes,
   CAST(room.is_active AS BIT) AS roomIsActive,
   room.row_version AS roomRowVersion,
+  selectedRevision.online_join_url AS onlineJoinUrl,
+  m.cancelled_at_utc AS cancelledAtUtc,
+  m.cancellation_reason AS cancellationReason,
+  cancelledBy.USER_ID AS cancelledByUserId,
+  cancelledBy.USER_CODE AS cancelledByUserCode,
+  cancelledBy.USER_NAME AS cancelledByUserName,
   selectedRevision.start_at_utc AS startAtUtc,
   selectedRevision.end_at_utc AS endAtUtc,
   selectedRevision.scheduling_notes AS schedulingNotes,
@@ -275,13 +308,17 @@ const meetingSummaryFields = `
 const meetingSummaryJoins = `
   INNER JOIN dbo.users AS organizer
     ON organizer.USER_ID = m.organizer_user_id
+  LEFT JOIN dbo.users AS cancelledBy
+    ON cancelledBy.USER_ID = m.cancelled_by_user_id
   CROSS APPLY (
     SELECT TOP (1)
       revision.id,
       revision.revision_number,
       revision.revision_type,
       revision.revision_status,
+      revision.meeting_mode,
       revision.room_id,
+      revision.online_join_url,
       revision.start_at_utc,
       revision.end_at_utc,
       revision.scheduling_notes,
@@ -294,7 +331,7 @@ const meetingSummaryJoins = `
       revision.revision_number DESC,
       revision.id DESC
   ) AS selectedRevision
-  INNER JOIN dbo.TM_meeting_rooms AS room
+  LEFT JOIN dbo.TM_meeting_rooms AS room
     ON room.id = selectedRevision.room_id
 `;
 
@@ -454,12 +491,14 @@ export const meetingWorkflowRepository = {
     transaction: DatabaseTransaction,
     actorUserId: number,
     meetingId: number,
-    input: Pick<CreateMeetingInput, "roomId" | "startAtUtc" | "endAtUtc">,
+    input: Pick<CreateMeetingInput, "meetingMode" | "roomId" | "onlineJoinUrl" | "startAtUtc" | "endAtUtc">,
   ): Promise<{ revisionId: number; rowVersion: string } | null> {
     const result = await transaction
       .request()
       .input("meetingId", sql.BigInt, meetingId)
+      .input("meetingMode", sql.VarChar(10), input.meetingMode)
       .input("roomId", sql.BigInt, input.roomId)
+      .input("onlineJoinUrl", sql.NVarChar(2048), input.onlineJoinUrl)
       .input("startAtUtc", sql.DateTime2(3), new Date(input.startAtUtc))
       .input("endAtUtc", sql.DateTime2(3), new Date(input.endAtUtc))
       .input("actorUserId", sql.Int, actorUserId)
@@ -469,7 +508,9 @@ export const meetingWorkflowRepository = {
           revision_number,
           revision_type,
           revision_status,
+          meeting_mode,
           room_id,
+          online_join_url,
           start_at_utc,
           end_at_utc,
           requested_by_user_id
@@ -480,7 +521,9 @@ export const meetingWorkflowRepository = {
           1,
           'INITIAL',
           'PENDING',
+          @meetingMode,
           @roomId,
+          @onlineJoinUrl,
           @startAtUtc,
           @endAtUtc,
           @actorUserId
@@ -721,7 +764,9 @@ export const meetingWorkflowRepository = {
     input: {
       revisionId: number;
       revisionRowVersion: string;
-      roomId: number;
+      meetingMode: MeetingMode;
+      roomId: number | null;
+      onlineJoinUrl: string | null;
       startAtUtc: string;
       endAtUtc: string;
     },
@@ -734,13 +779,17 @@ export const meetingWorkflowRepository = {
       .input("meetingId", sql.BigInt, meetingId)
       .input("revisionId", sql.BigInt, input.revisionId)
       .input("rowVersion", sql.VarBinary(8), rowVersion)
+      .input("meetingMode", sql.VarChar(10), input.meetingMode)
       .input("roomId", sql.BigInt, input.roomId)
+      .input("onlineJoinUrl", sql.NVarChar(2048), input.onlineJoinUrl)
       .input("startAtUtc", sql.DateTime2(3), new Date(input.startAtUtc))
       .input("endAtUtc", sql.DateTime2(3), new Date(input.endAtUtc))
       .query(`
         UPDATE dbo.TM_meeting_revisions
         SET
+          meeting_mode = @meetingMode,
           room_id = @roomId,
+          online_join_url = @onlineJoinUrl,
           start_at_utc = @startAtUtc,
           end_at_utc = @endAtUtc
         WHERE id = @revisionId
@@ -766,14 +815,18 @@ export const meetingWorkflowRepository = {
       .input("meetingId", sql.BigInt, meetingId)
       .input("revisionId", sql.BigInt, input.revisionId)
       .input("rowVersion", sql.VarBinary(8), rowVersion)
+      .input("meetingMode", sql.VarChar(10), input.meetingMode)
       .input("roomId", sql.BigInt, input.roomId)
+      .input("onlineJoinUrl", sql.NVarChar(2048), input.onlineJoinUrl)
       .input("startAtUtc", sql.DateTime2(3), new Date(input.startAtUtc))
       .input("endAtUtc", sql.DateTime2(3), new Date(input.endAtUtc))
       .input("schedulingNotes", sql.NVarChar(1000), input.schedulingNotes ?? null)
       .query(`
         UPDATE dbo.TM_meeting_revisions
         SET
+          meeting_mode = @meetingMode,
           room_id = @roomId,
+          online_join_url = @onlineJoinUrl,
           start_at_utc = @startAtUtc,
           end_at_utc = @endAtUtc,
           scheduling_notes = @schedulingNotes
@@ -863,12 +916,14 @@ export const meetingWorkflowRepository = {
           organizer.USER_ID AS organizerUserId,
           organizer.USER_CODE AS organizerUserCode,
           organizer.USER_NAME AS organizerUserName,
+          revision.meeting_mode AS meetingMode,
           room.id AS roomId,
           room.code AS roomCode,
           room.name_ar AS roomNameAr,
           room.name_en AS roomNameEn,
           room.location_text AS roomLocationText,
           room.color_key AS roomColorKey,
+          revision.online_join_url AS onlineJoinUrl,
           revision.start_at_utc AS startAtUtc,
           revision.end_at_utc AS endAtUtc,
           CAST(CASE WHEN m.organizer_user_id = @userId THEN 1 ELSE 0 END AS BIT) AS isOrganizer,
@@ -904,7 +959,7 @@ export const meetingWorkflowRepository = {
         INNER JOIN dbo.TM_meeting_revisions AS revision
           ON revision.id = m.current_revision_id
          AND revision.meeting_id = m.id
-        INNER JOIN dbo.TM_meeting_rooms AS room
+        LEFT JOIN dbo.TM_meeting_rooms AS room
           ON room.id = revision.room_id
         INNER JOIN dbo.users AS organizer
           ON organizer.USER_ID = m.organizer_user_id
@@ -912,8 +967,8 @@ export const meetingWorkflowRepository = {
           AND revision.revision_status = 'APPROVED'
           AND revision.start_at_utc < @toAtUtc
           AND revision.end_at_utc > @fromAtUtc
-          AND (@roomId IS NULL OR revision.room_id = @roomId)
-        ORDER BY revision.start_at_utc, revision.end_at_utc, room.name_en, m.id;
+          AND (@roomId IS NULL OR (revision.meeting_mode = 'ROOM' AND revision.room_id = @roomId))
+        ORDER BY revision.start_at_utc, revision.end_at_utc, COALESCE(room.name_en, N'Zoom'), m.id;
       `);
 
     return result.recordset.map((record) => ({
@@ -924,14 +979,18 @@ export const meetingWorkflowRepository = {
         userCode: record.organizerUserCode,
         userName: record.organizerUserName,
       },
-      room: {
-        id: Number(record.roomId),
-        code: record.roomCode,
-        nameAr: record.roomNameAr,
-        nameEn: record.roomNameEn,
-        locationText: record.roomLocationText,
-        colorKey: record.roomColorKey,
-      },
+      meetingMode: record.meetingMode,
+      room: record.meetingMode === "ROOM" && record.roomId !== null && record.roomNameAr && record.roomNameEn && record.roomColorKey
+        ? {
+            id: Number(record.roomId),
+            code: record.roomCode,
+            nameAr: record.roomNameAr,
+            nameEn: record.roomNameEn,
+            locationText: record.roomLocationText,
+            colorKey: record.roomColorKey,
+          }
+        : null,
+      onlineJoinUrl: record.onlineJoinUrl,
       startAtUtc: record.startAtUtc,
       endAtUtc: record.endAtUtc,
       isOrganizer: Boolean(record.isOrganizer),
@@ -943,6 +1002,7 @@ export const meetingWorkflowRepository = {
     }));
   },
 };
+
 
 
 

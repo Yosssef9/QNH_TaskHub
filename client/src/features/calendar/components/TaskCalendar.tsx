@@ -94,7 +94,7 @@ function meetingEventId(meeting: MeetingScheduleEntry): string {
   if (meeting.visibility === 'FULL') return `meeting-${meeting.meetingId}`
   return [
     'busy',
-    meeting.room.id,
+    meeting.room?.id ?? 'zoom',
     meeting.organizer.userId,
     meeting.startAtUtc,
     meeting.endAtUtc,
@@ -851,4 +851,5 @@ export function TaskCalendar({
     </Card>
   )
 }
+
 

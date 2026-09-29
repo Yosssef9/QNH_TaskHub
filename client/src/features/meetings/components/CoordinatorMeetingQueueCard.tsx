@@ -21,6 +21,7 @@ import type { MeetingSummary } from '@/features/meetings/types/meeting.types'
 import { formatTimeRange } from '@/lib/date-time'
 
 function roomSurface(meeting: MeetingSummary): CSSProperties {
+  if (!meeting.room) return {}
   const accent = getMeetingRoomAccent(meeting.room.colorKey)
   return {
     borderInlineStart: `3px solid ${accent}`,
@@ -54,8 +55,10 @@ export function CoordinatorMeetingQueueCard({
   const arabic = i18n.language.startsWith('ar')
   const locale = arabic ? 'ar-SA' : 'en-SA'
   const busy = approving || rejecting
-  const roomName = arabic ? meeting.room.nameAr : meeting.room.nameEn
-  const roomAccent = getMeetingRoomAccent(meeting.room.colorKey)
+  const room = meeting.room
+  if (!room) return null
+  const roomName = arabic ? room.nameAr : room.nameEn
+  const roomAccent = getMeetingRoomAccent(room.colorKey)
   const dateLabel = new Intl.DateTimeFormat(locale, {
     weekday: 'long',
     day: 'numeric',
@@ -117,7 +120,7 @@ export function CoordinatorMeetingQueueCard({
               <p className="truncate text-sm font-semibold">{roomName}</p>
             </div>
             <p className="text-muted-foreground mt-1 truncate text-xs">
-              {meeting.room.locationText ?? t('meetings.noRoomLocation')}
+              {room.locationText ?? t('meetings.noRoomLocation')}
             </p>
           </div>
 
@@ -169,3 +172,4 @@ export function CoordinatorMeetingQueueCard({
     </Card>
   )
 }
+

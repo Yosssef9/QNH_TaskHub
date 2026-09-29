@@ -16,7 +16,9 @@ import type {
   MeetingAvailability,
   MeetingAvailabilityInput,
   MeetingParticipantAvailability,
+  MeetingParticipantAvailabilityViewer,
   MeetingParticipantConflictInput,
+  MeetingParticipantConflictMeetingDetail,
   MeetingParticipantConflictMeetingResult,
   MeetingParticipantConflictMeetingWindow,
   MeetingParticipantScheduleConflict,
@@ -99,6 +101,24 @@ async function assertCoordinatorPermission(
   });
 }
 
+async function assertZoomOrganizerPermission(
+  transaction: DatabaseTransaction,
+  actorUserId: number,
+): Promise<void> {
+  const allowed = await meetingSchedulingRepository.hasActiveMeetingPermission(
+    transaction,
+    actorUserId,
+    "MEETING_ORGANIZE_ZOOM",
+  );
+  if (allowed) return;
+
+  throw new AppError({
+    statusCode: 403,
+    code: "ZOOM_MEETING_ORGANIZER_REQUIRED",
+    message: "Zoom Meeting Organizer permission is required for this operation.",
+  });
+}
+
 function sameConcurrencySnapshot(
   beforeLock: RevisionScheduleRecord,
   afterLock: RevisionScheduleRecord,
@@ -106,7 +126,9 @@ function sameConcurrencySnapshot(
   return (
     beforeLock.meetingRowVersion === afterLock.meetingRowVersion &&
     beforeLock.revisionRowVersion === afterLock.revisionRowVersion &&
+    beforeLock.meetingMode === afterLock.meetingMode &&
     beforeLock.roomId === afterLock.roomId &&
+    beforeLock.onlineJoinUrl === afterLock.onlineJoinUrl &&
     beforeLock.startAtUtc.getTime() === afterLock.startAtUtc.getTime() &&
     beforeLock.endAtUtc.getTime() === afterLock.endAtUtc.getTime() &&
     beforeLock.revisionStatus === afterLock.revisionStatus &&
@@ -139,14 +161,16 @@ async function assertLockedScheduleAvailable(
   assertNoConflict(conflicts);
 }
 
-async function commitPendingRevisionInTransaction(
+async function commitRevisionInTransaction(
   transaction: DatabaseTransaction,
   actorUserId: number,
   meetingId: number,
   revisionId: number,
-  expectedRevisionRowVersion?: string,
+  expectedRevisionRowVersion: string | undefined,
+  authority: "COORDINATOR" | "ZOOM_ORGANIZER",
 ): Promise<ScheduledRevisionResult> {
-  await assertCoordinatorPermission(transaction, actorUserId);
+  if (authority === "COORDINATOR") await assertCoordinatorPermission(transaction, actorUserId);
+  else await assertZoomOrganizerPermission(transaction, actorUserId);
 
   const beforeLock = await meetingSchedulingRepository.findRevisionSchedule(
     transaction,
@@ -161,17 +185,23 @@ async function commitPendingRevisionInTransaction(
     });
   }
   if (beforeLock.revisionStatus !== "PENDING") throw staleSchedule();
-  if (
-    expectedRevisionRowVersion !== undefined &&
-    beforeLock.revisionRowVersion !== expectedRevisionRowVersion
-  ) {
+  if (expectedRevisionRowVersion !== undefined && beforeLock.revisionRowVersion !== expectedRevisionRowVersion) {
     throw staleSchedule();
   }
-  if (!["PENDING_APPROVAL", "SCHEDULED"].includes(beforeLock.meetingStatus)) {
-    throw staleSchedule();
+  if (!["PENDING_APPROVAL", "SCHEDULED"].includes(beforeLock.meetingStatus)) throw staleSchedule();
+  if (authority === "COORDINATOR" && beforeLock.meetingMode !== "ROOM") {
+    throw new AppError({
+      statusCode: 409,
+      code: "ZOOM_MEETING_DOES_NOT_REQUIRE_COORDINATOR",
+      message: "Zoom Meetings are scheduled directly by a Zoom Meeting Organizer.",
+    });
   }
+  if (authority === "ZOOM_ORGANIZER" && beforeLock.meetingMode !== "ZOOM") throw staleSchedule();
 
-  assertRoomLock(await meetingSchedulingRepository.acquireRoomLock(transaction, beforeLock.roomId));
+  if (beforeLock.meetingMode === "ROOM") {
+    if (beforeLock.roomId === null) throw staleSchedule();
+    assertRoomLock(await meetingSchedulingRepository.acquireRoomLock(transaction, beforeLock.roomId));
+  }
 
   const afterLock = await meetingSchedulingRepository.findRevisionSchedule(
     transaction,
@@ -182,28 +212,27 @@ async function commitPendingRevisionInTransaction(
 
   assertSchedulableMeetingWindow(afterLock.startAtUtc, afterLock.endAtUtc);
 
-  const participantCount = await meetingSchedulingRepository.countMeetingParticipants(
-    transaction,
-    meetingId,
-  );
+  const participantCount = await meetingSchedulingRepository.countMeetingParticipants(transaction, meetingId);
   if (participantCount < 1) throw staleSchedule();
 
-  const room = await meetingSchedulingRepository.findRoomForScheduling(
-    transaction,
-    afterLock.roomId,
-  );
-  if (!room) throw roomNotFound();
-  assertRoomCanSchedule(Boolean(room.isActive));
-  assertCapacity(Number(room.capacity), participantCount);
+  if (afterLock.meetingMode === "ROOM") {
+    if (afterLock.roomId === null || afterLock.onlineJoinUrl !== null) throw staleSchedule();
+    const room = await meetingSchedulingRepository.findRoomForScheduling(transaction, afterLock.roomId);
+    if (!room) throw roomNotFound();
+    assertRoomCanSchedule(Boolean(room.isActive));
+    assertCapacity(Number(room.capacity), participantCount);
 
-  const conflictCount = await meetingSchedulingRepository.countConflictsInTransaction(
-    transaction,
-    afterLock.roomId,
-    afterLock.startAtUtc,
-    afterLock.endAtUtc,
-    meetingId,
-  );
-  assertNoConflict(conflictCount);
+    const conflictCount = await meetingSchedulingRepository.countConflictsInTransaction(
+      transaction,
+      afterLock.roomId,
+      afterLock.startAtUtc,
+      afterLock.endAtUtc,
+      meetingId,
+    );
+    assertNoConflict(conflictCount);
+  } else if (!afterLock.onlineJoinUrl || afterLock.roomId !== null) {
+    throw staleSchedule();
+  }
 
   const revisionUpdated = await meetingSchedulingRepository.approveRevision(
     transaction,
@@ -222,35 +251,104 @@ async function commitPendingRevisionInTransaction(
   );
   if (!meetingUpdated) throw staleSchedule();
 
-  await meetingSchedulingRepository.addActivity(
-    transaction,
-    meetingId,
-    actorUserId,
-    afterLock.revisionType === "RESCHEDULE" ? "RESCHEDULE_APPROVED" : "APPROVED",
-    {
-      revisionId,
-      roomId: afterLock.roomId,
-      startAtUtc: afterLock.startAtUtc.toISOString(),
-      endAtUtc: afterLock.endAtUtc.toISOString(),
-      participantCount,
-    },
-  );
+  const activityType =
+    afterLock.meetingMode === "ZOOM"
+      ? afterLock.revisionType === "RESCHEDULE"
+        ? "ZOOM_RESCHEDULED"
+        : "ZOOM_SCHEDULED"
+      : afterLock.revisionType === "RESCHEDULE"
+        ? "RESCHEDULE_APPROVED"
+        : "APPROVED";
+
+  await meetingSchedulingRepository.addActivity(transaction, meetingId, actorUserId, activityType, {
+    revisionId,
+    meetingMode: afterLock.meetingMode,
+    roomId: afterLock.roomId,
+    startAtUtc: afterLock.startAtUtc.toISOString(),
+    endAtUtc: afterLock.endAtUtc.toISOString(),
+    participantCount,
+  });
 
   return {
     meetingId,
     revisionId,
+    meetingMode: afterLock.meetingMode,
     roomId: afterLock.roomId,
+    onlineJoinUrl: afterLock.onlineJoinUrl,
     startAtUtc: afterLock.startAtUtc,
     endAtUtc: afterLock.endAtUtc,
     participantCount,
   };
+}
 
+async function commitPendingRevisionInTransaction(
+  transaction: DatabaseTransaction,
+  actorUserId: number,
+  meetingId: number,
+  revisionId: number,
+  expectedRevisionRowVersion?: string,
+): Promise<ScheduledRevisionResult> {
+  return commitRevisionInTransaction(
+    transaction, actorUserId, meetingId, revisionId, expectedRevisionRowVersion, "COORDINATOR",
+  );
+}
+
+async function commitZoomRevisionInTransaction(
+  transaction: DatabaseTransaction,
+  actorUserId: number,
+  meetingId: number,
+  revisionId: number,
+  expectedRevisionRowVersion?: string,
+): Promise<ScheduledRevisionResult> {
+  return commitRevisionInTransaction(
+    transaction, actorUserId, meetingId, revisionId, expectedRevisionRowVersion, "ZOOM_ORGANIZER",
+  );
 }
 
 const MAX_CONFLICT_WINDOWS_PER_PARTICIPANT = 3;
 
+function mapVisibleConflictMeetings(
+  rows: readonly import("./meeting-scheduling.repository.js").ParticipantConflictVisibleMeetingRecord[],
+): Map<number, MeetingParticipantConflictMeetingDetail> {
+  const visible = new Map<number, MeetingParticipantConflictMeetingDetail>();
+
+  for (const row of rows) {
+    const meetingId = Number(row.meetingId);
+    const room =
+      row.roomId === null ||
+      row.roomNameAr === null ||
+      row.roomNameEn === null ||
+      row.roomColorKey === null
+        ? null
+        : {
+            id: Number(row.roomId),
+            code: row.roomCode,
+            nameAr: row.roomNameAr,
+            nameEn: row.roomNameEn,
+            locationText: row.roomLocationText,
+            colorKey: row.roomColorKey,
+          };
+
+    visible.set(meetingId, {
+      visibility: row.visibility,
+      meetingId: row.visibility === "FULL" ? meetingId : null,
+      title: row.title,
+      meetingMode: row.meetingMode,
+      organizer: {
+        userId: Number(row.organizerUserId),
+        userCode: row.organizerUserCode,
+        userName: row.organizerUserName,
+      },
+      room,
+    });
+  }
+
+  return visible;
+}
+
 function projectParticipantConflicts(
   rows: readonly import("./meeting-scheduling.repository.js").ParticipantScheduleConflictRecord[],
+  visibleMeetings: ReadonlyMap<number, MeetingParticipantConflictMeetingDetail> = new Map(),
 ): MeetingParticipantScheduleConflict[] {
   const byUser = new Map<number, MeetingParticipantScheduleConflict>();
 
@@ -275,6 +373,7 @@ function projectParticipantConflicts(
       conflict.overlaps.push({
         startAtUtc: row.startAtUtc.toISOString(),
         endAtUtc: row.endAtUtc.toISOString(),
+        meeting: visibleMeetings.get(Number(row.meetingId)) ?? null,
       });
     }
   }
@@ -320,6 +419,7 @@ export const meetingSchedulingService = {
 
   async getParticipantAvailability(
     input: MeetingParticipantConflictInput,
+    viewer?: MeetingParticipantAvailabilityViewer,
   ): Promise<MeetingParticipantAvailability> {
     const startAtUtc = new Date(input.startAtUtc);
     const endAtUtc = new Date(input.endAtUtc);
@@ -328,15 +428,31 @@ export const meetingSchedulingService = {
     const participantUserIds = [...new Set(input.participantUserIds)].filter(
       (userId) => Number.isSafeInteger(userId) && userId > 0,
     );
+    const excludeMeetingId = input.excludeMeetingId ?? null;
 
-    const conflicts = projectParticipantConflicts(
-      await meetingSchedulingRepository.findParticipantScheduleConflicts({
-        participantUserIds,
-        startAtUtc,
-        endAtUtc,
-        excludeMeetingId: input.excludeMeetingId ?? null,
-      }),
-    );
+    const conflictRows = await meetingSchedulingRepository.findParticipantScheduleConflicts({
+      participantUserIds,
+      startAtUtc,
+      endAtUtc,
+      excludeMeetingId,
+    });
+
+    let visibleMeetings = new Map<number, MeetingParticipantConflictMeetingDetail>();
+    if (viewer && conflictRows.length > 0) {
+      visibleMeetings = mapVisibleConflictMeetings(
+        await meetingSchedulingRepository.findVisibleParticipantConflictMeetings({
+          viewerUserId: viewer.userId,
+          participantUserIds,
+          startAtUtc,
+          endAtUtc,
+          excludeMeetingId,
+          canCoordinateMeetings: viewer.canCoordinateMeetings,
+          canPreviewRoomMeetings: viewer.canPreviewRoomMeetings,
+        }),
+      );
+    }
+
+    const conflicts = projectParticipantConflicts(conflictRows, visibleMeetings);
 
     return {
       startAtUtc: startAtUtc.toISOString(),
@@ -391,6 +507,13 @@ export const meetingSchedulingService = {
     await assertCoordinatorPermission(transaction, actorUserId);
   },
 
+  async assertZoomOrganizerPermission(
+    transaction: DatabaseTransaction,
+    actorUserId: number,
+  ): Promise<void> {
+    await assertZoomOrganizerPermission(transaction, actorUserId);
+  },
+
   async acquireRoomLocksInTransaction(
     transaction: DatabaseTransaction,
     roomIds: readonly number[],
@@ -440,6 +563,20 @@ export const meetingSchedulingService = {
       expectedRevisionRowVersion,
     );
   },
+
+  async commitZoomRevisionInTransaction(
+    transaction: DatabaseTransaction,
+    actorUserId: number,
+    meetingId: number,
+    revisionId: number,
+    expectedRevisionRowVersion?: string,
+  ): Promise<ScheduledRevisionResult> {
+    return commitZoomRevisionInTransaction(
+      transaction,
+      actorUserId,
+      meetingId,
+      revisionId,
+      expectedRevisionRowVersion,
+    );
+  },
 };
-
-

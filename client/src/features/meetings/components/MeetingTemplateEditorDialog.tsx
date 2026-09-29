@@ -1,6 +1,8 @@
 import {
+  Building2,
   DoorOpen,
   FileText,
+  Video,
   Info,
   LayoutTemplate,
   Save,
@@ -29,7 +31,8 @@ import {
   useMeetingParticipants,
   useUpdateMeetingTemplate,
 } from '../hooks/use-meetings'
-import type { MeetingParticipant, MeetingTemplate } from '../types/meeting.types'
+import type { MeetingMode, MeetingParticipant, MeetingTemplate } from '../types/meeting.types'
+import { canOrganizeRoomMeetings, canOrganizeZoomMeetings } from '../meeting-access'
 import { MeetingDurationPicker, formatMeetingDuration } from './MeetingDurationPicker'
 import { MeetingParticipantPicker } from './MeetingParticipantPicker'
 
@@ -51,7 +54,8 @@ export function MeetingTemplateEditorDialog({
   initialMeeting?: {
     title: string
     description: string | null
-    roomId: number
+    meetingMode: MeetingMode
+    roomId: number | null
     organizerAttending: boolean
     attendeeUserIds: number[]
     attendees?: MeetingParticipant[]
@@ -65,6 +69,8 @@ export function MeetingTemplateEditorDialog({
   const rooms = useActiveMeetingRooms()
   const createMutation = useCreateMeetingTemplate()
   const updateMutation = useUpdateMeetingTemplate()
+  const canRoom = canOrganizeRoomMeetings(currentUser.data?.access)
+  const canZoom = canOrganizeZoomMeetings(currentUser.data?.access)
 
   const [name, setName] = useState(template?.name ?? initialMeeting?.title ?? '')
   const [title, setTitle] = useState(template?.title ?? initialMeeting?.title ?? '')
@@ -74,10 +80,16 @@ export function MeetingTemplateEditorDialog({
   const [durationMinutes, setDurationMinutes] = useState(
     template?.durationMinutes ?? initialMeeting?.durationMinutes ?? 60,
   )
+  const [meetingMode, setMeetingMode] = useState<MeetingMode>(() => {
+    const preferred = template?.meetingMode ?? initialMeeting?.meetingMode ?? 'ROOM'
+    if (preferred === 'ZOOM' && canZoom) return 'ZOOM'
+    if (preferred === 'ROOM' && canRoom) return 'ROOM'
+    return canZoom ? 'ZOOM' : 'ROOM'
+  })
   const [roomId, setRoomId] = useState<number | null>(
-    template?.defaultRoom?.isActive
+    (template?.meetingMode ?? initialMeeting?.meetingMode ?? 'ROOM') === 'ROOM' && template?.defaultRoom?.isActive
       ? template.defaultRoom.id
-      : initialMeeting?.roomId ?? null,
+      : (initialMeeting?.meetingMode ?? 'ROOM') === 'ROOM' ? (initialMeeting?.roomId ?? null) : null,
   )
   const [organizerAttending, setOrganizerAttending] = useState(
     template?.organizerAttending ?? initialMeeting?.organizerAttending ?? true,
@@ -148,7 +160,8 @@ export function MeetingTemplateEditorDialog({
       title: title.trim(),
       description: description.trim() || null,
       durationMinutes,
-      defaultRoomId: roomId,
+      meetingMode,
+      defaultRoomId: meetingMode === 'ROOM' ? roomId : null,
       organizerAttending,
       attendeeUserIds,
     }
@@ -284,6 +297,19 @@ export function MeetingTemplateEditorDialog({
             </div>
 
             <div className="space-y-5 p-4 sm:p-5">
+              {canRoom && canZoom ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <button type="button" disabled={pending} aria-pressed={meetingMode === 'ROOM'} className={cn('flex items-start gap-3 rounded-xl border p-4 text-start', meetingMode === 'ROOM' && 'border-primary bg-primary/5')} onClick={() => { setMeetingMode('ROOM') }}>
+                    <Building2 aria-hidden="true" className="text-primary mt-0.5 size-5" />
+                    <span><span className="block text-sm font-semibold">{t('meetings.zoom.roomType')}</span><span className="text-muted-foreground mt-1 block text-xs">{t('meetings.templates.roomTemplateHint')}</span></span>
+                  </button>
+                  <button type="button" disabled={pending} aria-pressed={meetingMode === 'ZOOM'} className={cn('flex items-start gap-3 rounded-xl border p-4 text-start', meetingMode === 'ZOOM' && 'border-[#2D8CFF]/60 bg-[#2D8CFF]/5')} onClick={() => { setMeetingMode('ZOOM'); setRoomId(null) }}>
+                    <Video aria-hidden="true" className="mt-0.5 size-5 text-[#2D8CFF]" />
+                    <span><span className="block text-sm font-semibold">{t('meetings.zoom.zoomType')}</span><span className="text-muted-foreground mt-1 block text-xs">{t('meetings.templates.zoomTemplateHint')}</span></span>
+                  </button>
+                </div>
+              ) : null}
+
               <div className="grid gap-4 lg:grid-cols-2">
                 <MeetingDurationPicker
                   valueMinutes={durationMinutes}
@@ -296,29 +322,29 @@ export function MeetingTemplateEditorDialog({
                   onChange={setDurationMinutes}
                 />
 
-                <div className="rounded-xl border bg-background p-4">
-                  <div className="mb-3 flex items-start gap-2">
-                    <DoorOpen aria-hidden="true" className="text-primary mt-0.5 size-4" />
-                    <div>
-                      <p className="text-sm font-semibold">
-                        {t('meetings.templates.defaultRoom')}
-                      </p>
-                      <p className="text-muted-foreground mt-0.5 text-xs">
-                        {t('meetings.templates.defaultRoomHint')}
-                      </p>
+                {meetingMode === 'ROOM' ? (
+                  <div className="rounded-xl border bg-background p-4">
+                    <div className="mb-3 flex items-start gap-2">
+                      <DoorOpen aria-hidden="true" className="text-primary mt-0.5 size-4" />
+                      <div>
+                        <p className="text-sm font-semibold">{t('meetings.templates.defaultRoom')}</p>
+                        <p className="text-muted-foreground mt-0.5 text-xs">{t('meetings.templates.defaultRoomHint')}</p>
+                      </div>
                     </div>
+                    <SearchableMultiSelect
+                      value={roomId}
+                      options={roomOptions}
+                      placeholder={t('meetings.templates.noDefaultRoom')}
+                      searchPlaceholder={t('meetings.fields.roomSearch')}
+                      disabled={pending}
+                      onChange={(value) => setRoomId(value === null ? null : Number(value))}
+                    />
                   </div>
-                  <SearchableMultiSelect
-                    value={roomId}
-                    options={roomOptions}
-                    placeholder={t('meetings.templates.noDefaultRoom')}
-                    searchPlaceholder={t('meetings.fields.roomSearch')}
-                    disabled={pending}
-                    onChange={(value) =>
-                      setRoomId(value === null ? null : Number(value))
-                    }
-                  />
-                </div>
+                ) : (
+                  <div className="rounded-xl border border-[#2D8CFF]/20 bg-[#2D8CFF]/5 p-4">
+                    <div className="flex items-start gap-2"><Video aria-hidden="true" className="mt-0.5 size-4 text-[#2D8CFF]" /><div><p className="text-sm font-semibold">{t('meetings.templates.zoomTemplateTitle')}</p><p className="text-muted-foreground mt-1 text-xs leading-5">{t('meetings.templates.zoomTemplateLinkNotStored')}</p></div></div>
+                  </div>
+                )}
               </div>
 
               <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
@@ -481,3 +507,4 @@ export function MeetingTemplateEditorDialog({
     </Dialog>
   )
 }
+

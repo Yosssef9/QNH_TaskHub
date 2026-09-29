@@ -294,6 +294,8 @@ export const enTranslation = {
     task: 'New task',
     taskDescription:
       'Uses the current list or My Tasks by default, and you can change it before saving.',
+    meeting: 'Create Meeting',
+    meetingDescription: 'Create a Room or Zoom Meeting using your Meeting permissions.',
     kpiTask: 'New KPI task',
     kpiTaskDescription: 'Choose the Work Cycle and KPI that should own the task.',
     kpiTaskDescriptionWithCycle:
@@ -658,11 +660,19 @@ export const enTranslation = {
     meetingOrganizer: 'Meeting Organizer',
     meetingOrganizerShort: 'Organizer',
     meetingOrganizerDescription:
-      'Can create Meeting requests and, in later phases, manage Meetings they organize.',
+      'Legacy combined Meeting Organizer label retained for compatibility.',
+    meetingRoomOrganizer: 'Room Meeting Organizer',
+    meetingRoomOrganizerShort: 'Room Organizer',
+    meetingRoomOrganizerDescription:
+      'Can create and manage physical-room Meeting requests. Room Meetings require Coordinator approval.',
+    meetingZoomOrganizer: 'Zoom Meeting Organizer',
+    meetingZoomOrganizerShort: 'Zoom Organizer',
+    meetingZoomOrganizerDescription:
+      'Can schedule and manage Zoom Meetings directly without Coordinator approval.',
     meetingCoordinator: 'Meeting Coordinator',
     meetingCoordinatorShort: 'Coordinator',
     meetingCoordinatorDescription:
-      'Can coordinate Meeting requests and later schedule Meetings directly without approval.',
+      'Can approve and coordinate physical-room Meetings. Zoom scheduling still requires Zoom Organizer permission.',
     filters: {
       all: 'All',
       role: 'Role',
@@ -1698,6 +1708,25 @@ export const enTranslation = {
     },
   },
   meetings: {
+    zoom: {
+      roomType: 'Meeting Room',
+      roomTypeHint: 'Uses a physical Meeting Room and follows the Coordinator approval workflow.',
+      zoomType: 'Zoom Meeting',
+      zoomTypeHint: 'Schedules directly without Coordinator approval. A valid Zoom link is required.',
+      online: 'Online',
+      join: 'Join Zoom Meeting',
+      joinLink: 'Zoom Meeting link',
+      joinLinkTitle: 'Zoom Meeting link',
+      joinLinkHint: 'Enter the HTTPS Zoom join link that invited participants should use.',
+      invalidJoinLink: 'Enter a valid HTTPS Zoom Meeting link.',
+      scheduleTitle: 'Zoom schedule',
+      scheduleDescription: 'Choose the date and time and add the Zoom link. Zoom Meetings do not reserve a physical room.',
+      dateTitle: 'Meeting date',
+      dateHint: 'Zoom Meetings follow the same scheduling time rules as Room Meetings.',
+      saveDirectSchedule: 'Save Zoom schedule',
+      zoomRescheduleHint: 'Zoom schedule changes take effect directly and notify participants after saving.',
+      roomRescheduleHint: 'Changing to a Meeting Room creates a Room reschedule request for Coordinator approval.',
+    },
     report: {
       automatic: {
         compact: {
@@ -2328,7 +2357,7 @@ export const enTranslation = {
         'Add the Meeting title, attendees, and optional files. Focus this panel whenever you want more working space without losing the schedule summary.',
       scheduleTitle: 'Choose the schedule',
       scheduleDescription:
-        'Choose when, where, and how long the Meeting needs, then pick a clear start-to-end option with its availability shown.',
+        'Choose the date, location, start time, and end time. TaskHub calculates the duration automatically and shows availability for the selected range.',
       startFromTemplate: 'Start from a template',
       templateHint: 'Optional — reuse a private Meeting setup, then adjust anything you need.',
       templatePlaceholder: 'Choose a Meeting Template',
@@ -2519,6 +2548,11 @@ export const enTranslation = {
       nonBlocking: 'This is only a scheduling note and does not prevent creating or rescheduling the Meeting.',
       summary: '{{count}} participant(s) have another scheduled Meeting that overlaps this time.',
       conflictLabel: 'Schedule conflict',
+      anotherMeeting: 'Another Meeting',
+      organizer: 'Organizer: {{name}}',
+      meetingRoom: 'Meeting Room',
+      previewOnly: 'Schedule preview',
+      openMeeting: 'Open Meeting',
       moreConflicts: '+{{count}} more overlapping Meeting(s)',
       showAll: 'Show all {{count}} conflicts',
       showLess: 'Show fewer conflicts',
@@ -2617,8 +2651,14 @@ export const enTranslation = {
       cancelMeeting: 'Cancel Meeting',
       cancelTitle: 'Cancel Meeting',
       cancelDescription:
-        'Cancel “{{title}}”? The Meeting history will be preserved and the active room reservation will be released.',
+        'Cancel “{{title}}”? The Meeting and its history will remain available. A cancellation reason is required.',
       cancelReason: 'Cancellation reason',
+      cancelReasonRequired: 'Required. Explain why this Meeting is being cancelled.',
+      cancellationDetailsTitle: 'Meeting cancelled',
+      cancellationReasonLabel: 'Reason',
+      cancellationReasonUnavailable: 'Cancellation reason was not recorded.',
+      cancelledBy: 'Cancelled by {{name}}',
+      cancelledAt: 'Cancelled {{value}}',
       cancelled: 'Meeting cancelled.',
       cancelError: 'The Meeting could not be cancelled.',
       rescheduleQueue: 'Reschedule Requests',
@@ -3002,9 +3042,14 @@ export const enTranslation = {
       MEETING_ROOM_TIME_CONFLICT: 'The selected Meeting Room is already reserved during this time.',
       MEETING_SCHEDULE_IN_PAST: 'The Meeting start time has already passed. Choose a future time.',
       MEETING_ALREADY_STARTED:
-        'This Meeting has already started and can no longer be cancelled or rescheduled.',
+        'This Meeting has already started and can no longer be rescheduled.',
       INVALID_MEETING_TIME_INCREMENT: 'Meeting start and end times must use 15-minute increments.',
       MEETING_ROOM_CAPACITY_EXCEEDED: 'The selected Meeting Room does not have enough capacity.',
+      ROOM_MEETING_ORGANIZER_REQUIRED: 'Room Meeting Organizer permission is required for this operation.',
+      ZOOM_MEETING_ORGANIZER_REQUIRED: 'Zoom Meeting Organizer permission is required for this operation.',
+      INVALID_ZOOM_JOIN_URL: 'Enter a valid HTTPS Zoom Meeting link.',
+      MEETING_ROOM_REQUIRED: 'Choose a Meeting Room for a Room Meeting.',
+      COORDINATOR_ROOM_MEETING_REQUIRED: 'Coordinator approval actions apply only to Room Meetings.',
       ACTIVE_MEETING_ROOM_REQUIRED: 'Choose an active Meeting Room.',
       MEETING_ROOM_SCHEDULE_BUSY: 'Another scheduling operation is using this room. Try again.',
       MEETING_WORKSPACE_STALE: 'This Meeting changed after you opened it. Reload and try again.',
@@ -3723,20 +3768,3 @@ export const enTranslation = {
     backHome: 'Back to home',
   },
 } as const
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

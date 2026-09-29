@@ -1,5 +1,6 @@
 import type {
   MeetingAgendaItemInput,
+  MeetingMode,
   MeetingParticipant,
   MeetingParticipantAvailability,
   MeetingStatus,
@@ -24,7 +25,9 @@ export type MeetingSeriesOccurrenceSource = 'PATTERN' | 'CUSTOM' | 'ADDED'
 export type MeetingSeriesOverrideKind =
   | 'DATE'
   | 'TIME'
+  | 'MEETING_MODE'
   | 'ROOM'
+  | 'ONLINE_JOIN_URL'
   | 'TITLE'
   | 'DESCRIPTION'
   | 'ATTENDEES'
@@ -38,7 +41,9 @@ export interface MeetingSeriesDefaultsInput {
   organizerAttending: boolean
   attendeeUserIds: number[]
   agendaItems: MeetingAgendaItemInput[]
-  roomId: number
+  meetingMode: MeetingMode
+  roomId: number | null
+  onlineJoinUrl: string | null
   startTime: string
   endTime: string
 }
@@ -83,7 +88,9 @@ export interface MeetingSeriesScheduleOverride extends MeetingSeriesOccurrenceDe
   date?: string
   startTime?: string
   endTime?: string
-  roomId?: number
+  meetingMode?: MeetingMode
+  roomId?: number | null
+  onlineJoinUrl?: string | null
 }
 
 export interface MeetingSeriesRemoveException {
@@ -97,7 +104,9 @@ export interface MeetingSeriesAddException extends MeetingSeriesOccurrenceDetail
   date: string
   startTime?: string
   endTime?: string
-  roomId?: number
+  meetingMode?: MeetingMode
+  roomId?: number | null
+  onlineJoinUrl?: string | null
 }
 
 export type MeetingSeriesException =
@@ -132,7 +141,9 @@ export interface MeetingSeriesPreviewOccurrence {
   endTime: string
   startAtUtc: string
   endAtUtc: string
-  roomId: number
+  meetingMode: MeetingMode
+  roomId: number | null
+  onlineJoinUrl: string | null
   title: string
   description: string | null
   organizerAttending: boolean
@@ -199,9 +210,11 @@ export interface MeetingSeriesNextMeetingSummary {
   status: MeetingStatus
   startAtUtc: string
   endAtUtc: string
-  roomId: number
-  roomNameAr: string
-  roomNameEn: string
+  meetingMode: MeetingMode
+  roomId: number | null
+  onlineJoinUrl: string | null
+  roomNameAr: string | null
+  roomNameEn: string | null
 }
 
 export interface MeetingSeriesListItem {
@@ -243,16 +256,20 @@ export interface MeetingSeriesMemberSummary {
   status: MeetingStatus
   currentStartAtUtc: string | null
   currentEndAtUtc: string | null
+  currentMeetingMode: MeetingMode | null
   currentRoomId: number | null
   currentRoomNameAr: string | null
   currentRoomNameEn: string | null
+  currentOnlineJoinUrl: string | null
   originalStartAtUtc: string | null
   originalEndAtUtc: string | null
   initialStartAtUtc: string
   initialEndAtUtc: string
-  initialRoomId: number
-  initialRoomNameAr: string
-  initialRoomNameEn: string
+  initialMeetingMode: MeetingMode
+  initialRoomId: number | null
+  initialRoomNameAr: string | null
+  initialRoomNameEn: string | null
+  initialOnlineJoinUrl: string | null
   customizationJson: string | null
   wasCustomizedAtCreation: boolean
 }

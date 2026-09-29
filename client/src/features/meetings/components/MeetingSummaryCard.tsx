@@ -1,4 +1,4 @@
-import { CalendarClock, DoorOpen, ExternalLink, Pencil, UsersRound } from 'lucide-react'
+import { CalendarClock, DoorOpen, ExternalLink, Pencil, UsersRound, Video } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Badge } from '@/components/ui/badge'
@@ -39,7 +39,7 @@ export function MeetingSummaryCard({
 }: MeetingSummaryCardProps) {
   const { i18n, t } = useTranslation()
   const timeFormat = useTimeFormatPreference()
-  const roomName = i18n.language.startsWith('ar') ? meeting.room.nameAr : meeting.room.nameEn
+  const roomName = meeting.room ? (i18n.language.startsWith('ar') ? meeting.room.nameAr : meeting.room.nameEn) : t('meetings.zoom.zoomType')
   const locale = i18n.language.startsWith('ar') ? 'ar-SA' : 'en-SA'
   const attendeeNames = meeting.attendees.map((attendee) => attendee.userName).join(', ')
 
@@ -80,11 +80,11 @@ export function MeetingSummaryCard({
           </div>
         </div>
         <div className="bg-muted/45 flex items-start gap-2 rounded-lg border p-3">
-          <DoorOpen aria-hidden="true" className="text-muted-foreground mt-0.5 size-4" />
+          {meeting.meetingMode === 'ZOOM' ? <Video aria-hidden="true" className="mt-0.5 size-4 text-[#2D8CFF]" /> : <DoorOpen aria-hidden="true" className="text-muted-foreground mt-0.5 size-4" />}
           <div className="min-w-0">
             <p className="truncate font-medium">{roomName}</p>
             <p className="text-muted-foreground mt-0.5 truncate text-xs">
-              {meeting.room.locationText ?? t('meetings.noRoomLocation')}
+              {meeting.meetingMode === 'ZOOM' ? t('meetings.zoom.online') : (meeting.room?.locationText ?? t('meetings.noRoomLocation'))}
             </p>
           </div>
         </div>
@@ -132,6 +132,7 @@ export function MeetingSummaryCard({
     </Card>
   )
 }
+
 
 
 

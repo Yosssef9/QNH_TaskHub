@@ -118,7 +118,9 @@ function asMeetingInput(occurrence: MeetingSeriesResolvedOccurrence): CreateMeet
   return {
     title: occurrence.title,
     description: occurrence.description,
+    meetingMode: occurrence.meetingMode,
     roomId: occurrence.roomId,
+    onlineJoinUrl: occurrence.onlineJoinUrl,
     startAtUtc: occurrence.startAtUtc,
     endAtUtc: occurrence.endAtUtc,
     organizerAttending: occurrence.organizerAttending,
@@ -167,6 +169,15 @@ async function assertCoordinator(
   actorUserId: number,
 ): Promise<void> {
   await meetingSchedulingService.assertCoordinatorPermission(transaction, actorUserId);
+}
+
+async function assertZoomPermissionForOccurrences(
+  transaction: DatabaseTransaction,
+  actorUserId: number,
+  occurrences: readonly MeetingSeriesResolvedOccurrence[],
+): Promise<void> {
+  if (!occurrences.some((occurrence) => occurrence.meetingMode === "ZOOM")) return;
+  await meetingSchedulingService.assertZoomOrganizerPermission(transaction, actorUserId);
 }
 
 async function prepareAll(
@@ -277,6 +288,7 @@ export const meetingSeriesService = {
     const internalIssues = internalConflictIssues(occurrences);
     const preparation = await withTransaction(async (transaction) => {
       await assertCoordinator(transaction, actorUserId);
+      await assertZoomPermissionForOccurrences(transaction, actorUserId, occurrences);
       const results = new Map<
         string,
         { prepared: PreparedMeetingCreation | null; issues: MeetingSeriesValidationIssue[] }
@@ -317,7 +329,7 @@ export const meetingSeriesService = {
         ? preparedResult.prepared.attendeeUserIds.length
         : estimatedParticipantCount(actorUserId, occurrence);
 
-      if (preparedResult?.prepared) {
+      if (preparedResult?.prepared && occurrence.meetingMode === "ROOM" && occurrence.roomId !== null) {
         try {
           const availability = await meetingSchedulingService.getAvailability({
             roomId: occurrence.roomId,
@@ -351,12 +363,19 @@ export const meetingSeriesService = {
 
       if (preparedResult?.prepared) {
         try {
-          participantAvailability = await meetingSchedulingService.getParticipantAvailability({
-            startAtUtc: occurrence.startAtUtc,
-            endAtUtc: occurrence.endAtUtc,
-            participantUserIds: preparedResult.prepared.attendeeUserIds,
-            excludeMeetingId: null,
-          });
+          participantAvailability = await meetingSchedulingService.getParticipantAvailability(
+            {
+              startAtUtc: occurrence.startAtUtc,
+              endAtUtc: occurrence.endAtUtc,
+              participantUserIds: preparedResult.prepared.attendeeUserIds,
+              excludeMeetingId: null,
+            },
+            {
+              userId: actorUserId,
+              canCoordinateMeetings: true,
+              canPreviewRoomMeetings: true,
+            },
+          );
         } catch {
           // Participant conflicts are advisory only. Keep Series preview/create eligibility independent.
           participantAvailabilityCheckFailed = true;
@@ -402,6 +421,7 @@ export const meetingSeriesService = {
       if (replay) return replay;
 
       const occurrences = resolveMeetingSeriesOccurrences(previewInput);
+      await assertZoomPermissionForOccurrences(transaction, actorUserId, occurrences);
       const internalConflicts = findMeetingSeriesInternalConflicts(occurrences);
       if (internalConflicts.length > 0) {
         throw new AppError({
@@ -413,12 +433,13 @@ export const meetingSeriesService = {
       }
 
       const prepared = await prepareAll(transaction, actorUserId, occurrences);
-      await meetingSchedulingService.acquireRoomLocksInTransaction(
-        transaction,
-        prepared.map(({ occurrence }) => occurrence.roomId),
-      );
+      const roomIds = prepared
+        .filter(({ occurrence }) => occurrence.meetingMode === "ROOM" && occurrence.roomId !== null)
+        .map(({ occurrence }) => occurrence.roomId as number);
+      await meetingSchedulingService.acquireRoomLocksInTransaction(transaction, roomIds);
 
       for (const item of prepared) {
+        if (item.occurrence.meetingMode !== "ROOM" || item.occurrence.roomId === null) continue;
         await meetingSchedulingService.assertLockedScheduleAvailable(transaction, {
           roomId: item.occurrence.roomId,
           startAtUtc: item.prepared.startAtUtc,
@@ -451,13 +472,23 @@ export const meetingSeriesService = {
           "DIRECT_CREATED",
           "DIRECT",
         );
-        await meetingSchedulingService.commitPendingRevisionInTransaction(
-          transaction,
-          actorUserId,
-          created.meetingId,
-          created.revisionId,
-          created.revisionRowVersion,
-        );
+        if (item.occurrence.meetingMode === "ZOOM") {
+          await meetingSchedulingService.commitZoomRevisionInTransaction(
+            transaction,
+            actorUserId,
+            created.meetingId,
+            created.revisionId,
+            created.revisionRowVersion,
+          );
+        } else {
+          await meetingSchedulingService.commitPendingRevisionInTransaction(
+            transaction,
+            actorUserId,
+            created.meetingId,
+            created.revisionId,
+            created.revisionRowVersion,
+          );
+        }
 
         await meetingSchedulingRepository.addActivity(
           transaction,
@@ -490,14 +521,18 @@ export const meetingSeriesService = {
             : null,
           initialStartAtUtc: item.prepared.startAtUtc,
           initialEndAtUtc: item.prepared.endAtUtc,
+          initialMeetingMode: item.occurrence.meetingMode,
           initialRoomId: item.occurrence.roomId,
+          initialOnlineJoinUrl: item.occurrence.onlineJoinUrl,
           customizationJson: item.occurrence.isCustomized
             ? JSON.stringify({
                 overrideKinds: item.occurrence.overrideKinds,
                 date: item.occurrence.date,
                 startTime: item.occurrence.startTime,
                 endTime: item.occurrence.endTime,
+                meetingMode: item.occurrence.meetingMode,
                 roomId: item.occurrence.roomId,
+                onlineJoinUrl: item.occurrence.onlineJoinUrl,
                 title: item.occurrence.title,
                 description: item.occurrence.description,
                 organizerAttending: item.occurrence.organizerAttending,
@@ -711,5 +746,6 @@ export const meetingSeriesService = {
   },
 
 };
+
 
 

@@ -45,7 +45,9 @@ export function renderMeetingReportDocument(
     }).format(new Date(`${value}T12:00:00Z`));
   };
   const duration = Math.round((Date.parse(meeting.endAtUtc) - Date.parse(meeting.startAtUtc)) / 60_000);
-  const roomName = (room: { nameAr: string; nameEn: string }) => rtl ? room.nameAr : room.nameEn;
+  const roomName = (room: { nameAr: string; nameEn: string } | null | undefined) => room ? (rtl ? room.nameAr : room.nameEn) : l.notProvided;
+  const scheduleLocation = (mode: "ROOM" | "ZOOM", room: { nameAr: string; nameEn: string } | null | undefined) =>
+    mode === "ZOOM" ? l.online : roomName(room);
   const attendanceKind = (status: MeetingAttendanceStatus) => status === "ATTENDED" ? "success" : status === "ABSENT" ? "danger" : "neutral";
   const statusKind = (status: string) => status === "DONE" || status === "APPROVED" || status === "SCHEDULED" ? "success" : status === "CANCELLED" || status === "REJECTED" ? "danger" : "neutral";
   const fileSize = (bytes: number) => bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -65,7 +67,10 @@ export function renderMeetingReportDocument(
       ${field(l.start, dateTime(meeting.startAtUtc))}${field(l.end, dateTime(meeting.endAtUtc))}
       ${field(l.duration, Number.isFinite(duration) && duration > 0 ? `${duration} ${l.minutes}` : l.notProvided)}
       ${field(l.organizerPlanned, meeting.organizerAttending ? l.yes : l.no)}
-      ${field(l.room, roomName(meeting.room))}${field(l.location, meeting.room.locationText ?? l.notProvided)}
+      ${field(l.meetingType, meeting.meetingMode === "ZOOM" ? l.zoomMeeting : l.roomMeeting)}
+      ${meeting.meetingMode === "ZOOM"
+        ? field(l.location, l.online)
+        : `${field(l.room, meeting.room ? roomName(meeting.room) : l.notProvided)}${field(l.location, meeting.room?.locationText ?? l.notProvided)}`}
     </dl>
     ${data.detail.pendingReschedule ? `<p class="notice">${e(l.pendingReschedule)}</p>` : ""}
     <h3>${e(l.description)}</h3>${meeting.description?.trim() ? paragraph(meeting.description) : empty(l.noDescription)}
@@ -120,7 +125,7 @@ export function renderMeetingReportDocument(
   const revisions = data.detail.revisions.length ? table([l.revision, l.start + " / " + l.end, l.event],
     [...data.detail.revisions].sort((left, right) => left.revisionNumber - right.revisionNumber).map((item) => [
       `<strong>#${item.revisionNumber}</strong> · ${e(item.revisionType === "INITIAL" ? l.initial : l.reschedule)}<div>${badge(item.revisionStatus === "APPROVED" ? l.approved : item.revisionStatus === "REJECTED" ? l.rejected : l.pending, statusKind(item.revisionStatus))}</div>${item.id === meeting.revisionId ? `<div class="small muted">${e(l.current)}</div>` : ""}`,
-      `<div>${meta(l.start, dateTime(item.startAtUtc))}</div><div>${meta(l.end, dateTime(item.endAtUtc))}</div><div>${meta(l.room, roomName(item.room))}</div>${item.schedulingNotes ? `<div class="small">${meta(l.schedulingNotes, item.schedulingNotes)}</div>` : ""}`,
+      `<div>${meta(l.start, dateTime(item.startAtUtc))}</div><div>${meta(l.end, dateTime(item.endAtUtc))}</div><div>${meta(l.meetingType, item.meetingMode === "ZOOM" ? l.zoomMeeting : l.roomMeeting)}</div><div>${meta(l.location, scheduleLocation(item.meetingMode, item.room))}</div>${item.schedulingNotes ? `<div class="small">${meta(l.schedulingNotes, item.schedulingNotes)}</div>` : ""}`,
       `<div>${meta(l.requestedBy, item.requestedBy.userName)}</div><div class="small muted">${meta(l.createdAt, dateTime(item.createdAtUtc))}</div>${item.approvedBy ? `<div>${meta(l.approvedBy, item.approvedBy.userName)}</div>` : ""}${item.rejectedBy ? `<div>${meta(l.rejectedBy, item.rejectedBy.userName)}</div>` : ""}${item.decidedAtUtc ? `<div class="small muted">${meta(l.decidedAt, dateTime(item.decidedAtUtc))}</div>` : ""}`,
     ]), [22, 40, 38]) : empty(l.noRevisions);
 
@@ -160,9 +165,9 @@ export function renderMeetingReportDocument(
       text(dateTime(item.createdAtUtc)), text(item.actor.userName), `${e(l.activityTypes[item.activityType] ?? l.unknownActivity)}${eventDetails(item)}`,
     ]), [23, 22, 55]) : empty(l.noActivity);
 
-  const related = data.relatedMeetings.length ? table([l.meeting, l.status, l.start, l.room], data.relatedMeetings.map((item) => [
+  const related = data.relatedMeetings.length ? table([l.meeting, l.status, l.start, l.location], data.relatedMeetings.map((item) => [
     `<span dir="ltr">#${item.id}</span> ${text(item.title)}<div class="small muted">${meta(l.organizer, item.organizer.userName)}</div>`,
-    badge(l.statuses[item.status], statusKind(item.status)), text(dateTime(item.startAtUtc)), text(roomName(item.room)),
+    badge(l.statuses[item.status], statusKind(item.status)), text(dateTime(item.startAtUtc)), text(scheduleLocation(item.meetingMode, item.room)),
   ]), [40, 18, 24, 18]) : empty(l.noRelated);
 
   const html = `<!doctype html><html lang="${data.language}" dir="${direction}"><head><meta charset="utf-8">
@@ -245,5 +250,6 @@ export function renderMeetingReportDocument(
     footerTemplate: `<div dir="${direction}" style="font:9px Arial,Tahoma,sans-serif;color:#607087;width:100%;margin:0 15mm;border-top:1px solid #d8e1ed;padding-top:6px;display:flex;justify-content:space-between;"><span>QNH TaskHub · ${e(l.meeting)} #${meeting.id}</span><span>${e(l.page)} <span class="pageNumber"></span> ${e(l.of)} <span class="totalPages"></span></span></div>`,
   };
 }
+
 
 

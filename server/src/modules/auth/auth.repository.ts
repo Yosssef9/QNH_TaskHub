@@ -16,6 +16,8 @@ export interface AccessProfileRecord {
   roleCode: string;
   isActive: boolean;
   meetingOrganizeEnabled?: boolean;
+  meetingRoomOrganizeEnabled?: boolean;
+  meetingZoomOrganizeEnabled?: boolean;
   meetingCoordinateEnabled?: boolean;
   languageCode: string | null;
   theme: string | null;
@@ -58,26 +60,30 @@ export async function findAccessProfile(userId: number): Promise<AccessProfileRe
       SELECT
         access.role_code AS roleCode,
         access.is_active AS isActive,
-        CAST(
-          CASE WHEN EXISTS (
-            SELECT 1
-            FROM dbo.TM_meeting_user_permissions AS permission
-            WHERE permission.portal_user_id = access.portal_user_id
-              AND permission.permission_code = 'MEETING_ORGANIZE'
-              AND permission.is_active = 1
-          ) THEN 1 ELSE 0 END
-          AS BIT
-        ) AS meetingOrganizeEnabled,
-        CAST(
-          CASE WHEN EXISTS (
-            SELECT 1
-            FROM dbo.TM_meeting_user_permissions AS permission
-            WHERE permission.portal_user_id = access.portal_user_id
-              AND permission.permission_code = 'MEETING_COORDINATE'
-              AND permission.is_active = 1
-          ) THEN 1 ELSE 0 END
-          AS BIT
-        ) AS meetingCoordinateEnabled,
+        CAST(CASE WHEN EXISTS (
+          SELECT 1 FROM dbo.TM_meeting_user_permissions AS permission
+          WHERE permission.portal_user_id = access.portal_user_id
+            AND permission.permission_code IN ('MEETING_ORGANIZE_ROOM', 'MEETING_ORGANIZE_ZOOM')
+            AND permission.is_active = 1
+        ) THEN 1 ELSE 0 END AS BIT) AS meetingOrganizeEnabled,
+        CAST(CASE WHEN EXISTS (
+          SELECT 1 FROM dbo.TM_meeting_user_permissions AS permission
+          WHERE permission.portal_user_id = access.portal_user_id
+            AND permission.permission_code = 'MEETING_ORGANIZE_ROOM'
+            AND permission.is_active = 1
+        ) THEN 1 ELSE 0 END AS BIT) AS meetingRoomOrganizeEnabled,
+        CAST(CASE WHEN EXISTS (
+          SELECT 1 FROM dbo.TM_meeting_user_permissions AS permission
+          WHERE permission.portal_user_id = access.portal_user_id
+            AND permission.permission_code = 'MEETING_ORGANIZE_ZOOM'
+            AND permission.is_active = 1
+        ) THEN 1 ELSE 0 END AS BIT) AS meetingZoomOrganizeEnabled,
+        CAST(CASE WHEN EXISTS (
+          SELECT 1 FROM dbo.TM_meeting_user_permissions AS permission
+          WHERE permission.portal_user_id = access.portal_user_id
+            AND permission.permission_code = 'MEETING_COORDINATE'
+            AND permission.is_active = 1
+        ) THEN 1 ELSE 0 END AS BIT) AS meetingCoordinateEnabled,
         settings.language_code AS languageCode,
         settings.theme,
         settings.sidebar_collapsed AS sidebarCollapsed,
@@ -159,6 +165,7 @@ export const authRepository: AuthRepository = {
   ensureUserFoundation,
   listAccessPermissions: accessPermissionsRepository.listUserPermissions,
 };
+
 
 
 

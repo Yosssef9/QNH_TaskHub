@@ -1,4 +1,4 @@
-import { CalendarDays, MapPin, UsersRound } from 'lucide-react'
+import { CalendarDays, MapPin, UsersRound, Video } from 'lucide-react'
 import type { CSSProperties } from 'react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -101,7 +101,9 @@ export function MeetingWeekOverflowPopover({
 
         <div className="max-h-80 space-y-1.5 overflow-y-auto p-2">
           {state.meetings.map((meeting, index) => {
-            const roomName = isArabic ? meeting.room.nameAr : meeting.room.nameEn
+            const isZoom = meeting.meetingMode === 'ZOOM'
+            const roomName = isZoom ? t('meetings.zoom.online') : meeting.room ? (isArabic ? meeting.room.nameAr : meeting.room.nameEn) : '—'
+            const LocationIcon = isZoom ? Video : MapPin
             const title = meeting.visibility === 'BUSY' ? t('calendar.meetingBusy') : meeting.title
             const isFull = meeting.visibility === 'FULL'
             const meetingId = isFull ? meeting.meetingId : null
@@ -109,7 +111,7 @@ export function MeetingWeekOverflowPopover({
               meeting.visibility === 'FULL' && meeting.hasPendingReschedule
                 ? t('calendar.rescheduleRequested')
                 : null
-            const accent = getMeetingRoomAccent(meeting.room.colorKey)
+            const accent = isZoom ? '#2D8CFF' : getMeetingRoomAccent(meeting.room?.colorKey ?? null)
             const style = { '--meeting-room-accent': accent } as CSSProperties
             const rangeText = formatMeetingCardTimeRange(
               meeting.startAtUtc,
@@ -138,7 +140,7 @@ export function MeetingWeekOverflowPopover({
                       {rangeText}
                     </span>
                     <span className="inline-flex min-w-0 items-center gap-1">
-                      <MapPin aria-hidden="true" className="size-3 shrink-0" />
+                      <LocationIcon aria-hidden="true" className="size-3 shrink-0" />
                       <span className="min-w-0 truncate">{roomName}</span>
                     </span>
                     {meeting.visibility === 'FULL' ? (
@@ -171,7 +173,7 @@ export function MeetingWeekOverflowPopover({
 
             return (
               <div
-                key={`${meeting.visibility}-${meeting.room.id}-${meeting.startAtUtc}-${index}`}
+                key={`${meeting.visibility}-${meeting.room?.id ?? 'zoom'}-${meeting.startAtUtc}-${index}`}
                 style={style}
                 className="meeting-week-overflow-item relative flex min-w-0 items-start gap-2 overflow-hidden rounded-lg border border-border/70 bg-card px-3 py-2.5 ps-4 text-start"
               >
@@ -199,3 +201,4 @@ export function MeetingWeekOverflowPopover({
     </Popover>
   )
 }
+

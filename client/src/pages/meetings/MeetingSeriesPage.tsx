@@ -1,4 +1,4 @@
-import { CalendarDays, CalendarPlus2, ChevronLeft, ChevronRight, Clock3, DoorOpen, Repeat2, Sparkles } from 'lucide-react'
+import { CalendarDays, CalendarPlus2, ChevronLeft, ChevronRight, Clock3, DoorOpen, Repeat2, Sparkles, Video } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router'
@@ -154,7 +154,7 @@ export function MeetingSeriesPage() {
                 <p className="mt-1 font-medium">{formatDateTime(item.nextMeeting.startAtUtc, locale, timeFormat, { dateStyle: 'medium' })}</p>
                 <div className="text-muted-foreground mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
                   <span className="inline-flex items-center gap-1.5"><Clock3 aria-hidden="true" className="size-3.5" />{formatTimeRange(item.nextMeeting.startAtUtc, item.nextMeeting.endAtUtc, locale, timeFormat)}</span>
-                  <span className="inline-flex items-center gap-1.5"><DoorOpen aria-hidden="true" className="size-3.5" />{arabic ? item.nextMeeting.roomNameAr : item.nextMeeting.roomNameEn}</span>
+                  <span className="inline-flex items-center gap-1.5">{item.nextMeeting.meetingMode === 'ZOOM' ? <Video aria-hidden="true" className="size-3.5 text-[#2D8CFF]" /> : <DoorOpen aria-hidden="true" className="size-3.5" />}{item.nextMeeting.meetingMode === 'ZOOM' ? t('meetings.zoom.online') : (arabic ? item.nextMeeting.roomNameAr : item.nextMeeting.roomNameEn) ?? '—'}</span>
                 </div>
               </div>
             ) : null}
@@ -180,3 +180,4 @@ export function MeetingSeriesPage() {
     </div>
   )
 }
+

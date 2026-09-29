@@ -57,7 +57,8 @@ export interface RelatedMeeting {
   title: string
   status: MeetingStatus
   organizer: MeetingParticipant
-  room: Pick<MeetingRoom, 'id' | 'code' | 'nameAr' | 'nameEn' | 'locationText' | 'colorKey'>
+  meetingMode: MeetingMode
+  room: Pick<MeetingRoom, 'id' | 'code' | 'nameAr' | 'nameEn' | 'locationText' | 'colorKey'> | null
   startAtUtc: string
   endAtUtc: string
   participantCount: number
@@ -74,3 +75,4 @@ export type MeetingFollowUpSectionKey =
   | 'decisions'
   | 'notes'
   | 'related-meetings'
+

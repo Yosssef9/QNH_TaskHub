@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { isValidZoomJoinUrl } from "./meeting-online-location.js";
 import {
   MEETING_SERIES_MAX_OCCURRENCES,
   MEETING_SERIES_TIME_ZONE,
@@ -35,16 +36,60 @@ const agendaItemSchema = z.object({
     .transform((value) => value ?? null),
 });
 
-export const meetingSeriesDefaultsSchema = z.object({
-  title: z.string().trim().min(1).max(250),
-  description: nullableDescriptionSchema,
-  organizerAttending: z.boolean(),
-  attendeeUserIds: z.array(positiveUserIdSchema).max(500).default([]),
-  agendaItems: z.array(agendaItemSchema).max(50).default([]),
-  roomId: z.coerce.number().int().positive(),
-  startTime: localTimeSchema,
-  endTime: localTimeSchema,
-});
+const meetingModeSchema = z.enum(["ROOM", "ZOOM"]);
+const nullableRoomIdSchema = z.coerce.number().int().positive().nullable().optional().transform((value) => value ?? null);
+const nullableOnlineJoinUrlSchema = z
+  .string()
+  .trim()
+  .max(2048)
+  .nullable()
+  .optional()
+  .transform((value) => (value && value.length > 0 ? value : null));
+const optionalOnlineJoinUrlOverrideSchema = z
+  .string()
+  .trim()
+  .max(2048)
+  .nullable()
+  .optional()
+  .transform((value) => value === undefined ? undefined : (value && value.length > 0 ? value : null));
+
+function validateLocation(
+  value: { meetingMode: "ROOM" | "ZOOM"; roomId: number | null; onlineJoinUrl: string | null },
+  ctx: z.RefinementCtx,
+  prefix: (string | number)[] = [],
+): void {
+  if (value.meetingMode === "ROOM") {
+    if (value.roomId === null) {
+      ctx.addIssue({ code: "custom", path: [...prefix, "roomId"], message: "Meeting Room is required for a Room Meeting." });
+    }
+    if (value.onlineJoinUrl !== null) {
+      ctx.addIssue({ code: "custom", path: [...prefix, "onlineJoinUrl"], message: "Room Meetings must not include a Zoom link." });
+    }
+    return;
+  }
+
+  if (value.roomId !== null) {
+    ctx.addIssue({ code: "custom", path: [...prefix, "roomId"], message: "Zoom Meetings do not reserve a Meeting Room." });
+  }
+  if (!value.onlineJoinUrl || !isValidZoomJoinUrl(value.onlineJoinUrl)) {
+    ctx.addIssue({ code: "custom", path: [...prefix, "onlineJoinUrl"], message: "Enter a valid HTTPS Zoom Meeting link." });
+  }
+}
+
+export const meetingSeriesDefaultsSchema = z
+  .object({
+    title: z.string().trim().min(1).max(250),
+    description: nullableDescriptionSchema,
+    organizerAttending: z.boolean(),
+    attendeeUserIds: z.array(positiveUserIdSchema).max(500).default([]),
+    agendaItems: z.array(agendaItemSchema).max(50).default([]),
+    meetingMode: meetingModeSchema.default("ROOM"),
+    roomId: nullableRoomIdSchema,
+    onlineJoinUrl: nullableOnlineJoinUrlSchema,
+    startTime: localTimeSchema,
+    endTime: localTimeSchema,
+  })
+  .superRefine((value, ctx) => validateLocation(value, ctx));
 
 const rangeEndDateSchema = z.object({
   type: z.literal("END_DATE"),
@@ -117,7 +162,9 @@ const occurrenceOverrideSchema = z
     date: localDateSchema.optional(),
     startTime: localTimeSchema.optional(),
     endTime: localTimeSchema.optional(),
-    roomId: z.coerce.number().int().positive().optional(),
+    meetingMode: meetingModeSchema.optional(),
+    roomId: z.union([z.coerce.number().int().positive(), z.null()]).optional(),
+    onlineJoinUrl: optionalOnlineJoinUrlOverrideSchema,
     ...detailOverrideFields,
   })
   .superRefine((value, ctx) => {
@@ -125,19 +172,34 @@ const occurrenceOverrideSchema = z
       "date",
       "startTime",
       "endTime",
+      "meetingMode",
       "roomId",
+      "onlineJoinUrl",
       "title",
       "description",
       "organizerAttending",
       "attendeeUserIds",
       "agendaItems",
     ] as const;
-    if (overrideFieldNames.some((field) => value[field] !== undefined)) return;
+    if (!overrideFieldNames.some((field) => value[field] !== undefined)) {
+      ctx.addIssue({ code: "custom", message: "Occurrence override must change at least one value." });
+    }
 
-    ctx.addIssue({
-      code: "custom",
-      message: "Occurrence override must change at least one value.",
-    });
+    if (value.meetingMode === "ROOM") {
+      if (value.roomId === undefined || value.roomId === null) {
+        ctx.addIssue({ code: "custom", path: ["roomId"], message: "Choose a Meeting Room when changing an occurrence to a Room Meeting." });
+      }
+      if (value.onlineJoinUrl) {
+        ctx.addIssue({ code: "custom", path: ["onlineJoinUrl"], message: "Room Meetings must not include a Zoom link." });
+      }
+    } else if (value.meetingMode === "ZOOM") {
+      if (value.roomId !== undefined && value.roomId !== null) {
+        ctx.addIssue({ code: "custom", path: ["roomId"], message: "Zoom Meetings do not reserve a Meeting Room." });
+      }
+      if (!value.onlineJoinUrl || !isValidZoomJoinUrl(value.onlineJoinUrl)) {
+        ctx.addIssue({ code: "custom", path: ["onlineJoinUrl"], message: "Enter a valid HTTPS Zoom Meeting link when changing an occurrence to Zoom." });
+      }
+    }
   });
 
 const occurrenceRemoveSchema = z.object({
@@ -151,8 +213,22 @@ const occurrenceAddSchema = z.object({
   date: localDateSchema,
   startTime: localTimeSchema.optional(),
   endTime: localTimeSchema.optional(),
-  roomId: z.coerce.number().int().positive().optional(),
+  meetingMode: meetingModeSchema.optional(),
+  roomId: z.union([z.coerce.number().int().positive(), z.null()]).optional(),
+  onlineJoinUrl: optionalOnlineJoinUrlOverrideSchema,
   ...detailOverrideFields,
+}).superRefine((value, ctx) => {
+  if (value.meetingMode === "ROOM" && (value.roomId === undefined || value.roomId === null)) {
+    ctx.addIssue({ code: "custom", path: ["roomId"], message: "Choose a Meeting Room for an added Room occurrence." });
+  }
+  if (value.meetingMode === "ZOOM") {
+    if (value.roomId !== undefined && value.roomId !== null) {
+      ctx.addIssue({ code: "custom", path: ["roomId"], message: "Zoom Meetings do not reserve a Meeting Room." });
+    }
+    if (!value.onlineJoinUrl || !isValidZoomJoinUrl(value.onlineJoinUrl)) {
+      ctx.addIssue({ code: "custom", path: ["onlineJoinUrl"], message: "Enter a valid HTTPS Zoom Meeting link for an added Zoom occurrence." });
+    }
+  }
 });
 
 const occurrenceExceptionSchema = z.discriminatedUnion("action", [
@@ -246,4 +322,5 @@ export type MeetingSeriesAttachmentBody = z.infer<typeof meetingSeriesAttachment
 export type MeetingSeriesParams = z.infer<typeof meetingSeriesParamsSchema>;
 export type MeetingSeriesMeetingParams = z.infer<typeof meetingSeriesMeetingParamsSchema>;
 export type MeetingSeriesListQuery = z.infer<typeof meetingSeriesListQuerySchema>;
+
 

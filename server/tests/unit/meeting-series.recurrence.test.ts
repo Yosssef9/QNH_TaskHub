@@ -147,6 +147,32 @@ describe("Meeting Series recurrence", () => {
     ]);
   });
 
+
+  it("does not treat overlapping Zoom occurrences as a shared-resource conflict", () => {
+    const roomItems = resolve({
+      defaults,
+      schedule: { mode: "CUSTOM", dates: ["2026-10-05", "2026-10-06"] },
+      exceptions: [
+        {
+          action: "OVERRIDE",
+          occurrenceKey: "C:2026-10-06:08:00",
+          date: "2026-10-05",
+          startTime: "09:00",
+          endTime: "11:00",
+        },
+      ],
+    });
+
+    const zoomItems = roomItems.map((item, index) => ({
+      ...item,
+      meetingMode: "ZOOM" as const,
+      roomId: null,
+      onlineJoinUrl: `https://zoom.us/j/12345678${index}`,
+    }));
+
+    expect(findMeetingSeriesInternalConflicts(zoomItems)).toEqual([]);
+  });
+
   it("converts Riyadh local time to UTC and enforces the 12-month range", () => {
     expect(riyadhLocalDateTimeToUtc("2026-10-05", "08:00").toISOString()).toBe(
       "2026-10-05T05:00:00.000Z",
@@ -185,3 +211,4 @@ describe("Meeting Series recurrence", () => {
     ).toThrowError(expect.objectContaining({ code: "MEETING_SERIES_TOO_MANY_OCCURRENCES" }));
   });
 });
+

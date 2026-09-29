@@ -1,13 +1,104 @@
-import { AlertTriangle, ChevronDown, Loader2 } from 'lucide-react'
+import { AlertTriangle, ArrowUpRight, ChevronDown, Loader2, MapPin, UserRound, Video } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router'
 
 import { Button } from '@/components/ui/button'
 import { useTimeFormatPreference } from '@/features/preferences/hooks/use-time-format'
 import { cn } from '@/lib/cn'
 import { formatTimeRange } from '@/lib/date-time'
 
-import type { MeetingParticipantAvailability } from '../types/meeting.types'
+import type {
+  MeetingParticipantAvailability,
+  MeetingParticipantConflictWindow,
+} from '../types/meeting.types'
+
+function ConflictWindow({
+  window,
+  locale,
+  timeFormat,
+  arabic,
+}: {
+  window: MeetingParticipantConflictWindow
+  locale: string
+  timeFormat: ReturnType<typeof useTimeFormatPreference>
+  arabic: boolean
+}) {
+  const { t } = useTranslation()
+  const meeting = window.meeting
+  const time = formatTimeRange(window.startAtUtc, window.endAtUtc, locale, timeFormat)
+
+  if (!meeting) {
+    return (
+      <div className="bg-background/70 rounded-md border border-warning/15 px-2.5 py-2">
+        <p className="text-foreground text-xs font-semibold">
+          {t('meetings.participantAvailability.anotherMeeting')}
+        </p>
+        <p className="text-muted-foreground mt-0.5 text-xs">{time}</p>
+      </div>
+    )
+  }
+
+  const roomName = meeting.room
+    ? arabic
+      ? meeting.room.nameAr
+      : meeting.room.nameEn
+    : null
+  const locationLabel =
+    meeting.meetingMode === 'ZOOM'
+      ? t('meetings.zoom.zoomType')
+      : roomName ?? t('meetings.participantAvailability.meetingRoom')
+  const locationText = meeting.room?.locationText?.trim()
+    ? `${locationLabel} · ${meeting.room.locationText.trim()}`
+    : locationLabel
+
+  return (
+    <div className="bg-background/80 rounded-md border border-warning/20 px-2.5 py-2.5">
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+        <div className="min-w-0 flex-1">
+          <p className="text-foreground truncate text-xs font-semibold" title={meeting.title}>
+            {meeting.title}
+          </p>
+          <p className="text-muted-foreground mt-0.5 text-xs">{time}</p>
+        </div>
+        {meeting.visibility === 'PREVIEW' ? (
+          <span className="text-muted-foreground shrink-0 text-[10px] font-medium">
+            {t('meetings.participantAvailability.previewOnly')}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="text-muted-foreground mt-2 space-y-1 text-[11px] leading-4">
+        <p className="flex items-center gap-1.5">
+          <UserRound aria-hidden="true" className="size-3 shrink-0" />
+          <span>
+            {t('meetings.participantAvailability.organizer', {
+              name: meeting.organizer.userName,
+            })}
+          </span>
+        </p>
+        <p className="flex items-center gap-1.5">
+          {meeting.meetingMode === 'ZOOM' ? (
+            <Video aria-hidden="true" className="size-3 shrink-0" />
+          ) : (
+            <MapPin aria-hidden="true" className="size-3 shrink-0" />
+          )}
+          <span>{locationText}</span>
+        </p>
+      </div>
+
+      {meeting.visibility === 'FULL' && meeting.meetingId !== null ? (
+        <Link
+          to={`/meetings/${meeting.meetingId}`}
+          className="text-primary mt-2 inline-flex items-center gap-1 text-xs font-semibold hover:underline"
+        >
+          {t('meetings.participantAvailability.openMeeting')}
+          <ArrowUpRight aria-hidden="true" className="size-3.5 shrink-0" />
+        </Link>
+      ) : null}
+    </div>
+  )
+}
 
 export function MeetingParticipantConflictNotice({
   availability,
@@ -23,7 +114,8 @@ export function MeetingParticipantConflictNotice({
   const { i18n, t } = useTranslation()
   const timeFormat = useTimeFormatPreference()
   const [showAll, setShowAll] = useState(false)
-  const locale = i18n.language.startsWith('ar') ? 'ar-SA-u-ca-gregory' : 'en-SA'
+  const arabic = i18n.language.startsWith('ar')
+  const locale = arabic ? 'ar-SA-u-ca-gregory' : 'en-SA'
 
   const conflicts = availability?.conflicts ?? []
   const visibleConflicts = useMemo(
@@ -87,14 +179,18 @@ export function MeetingParticipantConflictNotice({
                 {t('meetings.participantAvailability.conflictLabel')}
               </span>
             </div>
-            <div className="text-muted-foreground mt-1.5 space-y-0.5 text-xs">
+            <div className="mt-2 space-y-1.5">
               {conflict.overlaps.map((window, index) => (
-                <p key={`${window.startAtUtc}-${window.endAtUtc}-${index}`}>
-                  {formatTimeRange(window.startAtUtc, window.endAtUtc, locale, timeFormat)}
-                </p>
+                <ConflictWindow
+                  key={`${window.startAtUtc}-${window.endAtUtc}-${index}`}
+                  window={window}
+                  locale={locale}
+                  timeFormat={timeFormat}
+                  arabic={arabic}
+                />
               ))}
               {conflict.conflictCount > conflict.overlaps.length ? (
-                <p>
+                <p className="text-muted-foreground text-xs">
                   {t('meetings.participantAvailability.moreConflicts', {
                     count: conflict.conflictCount - conflict.overlaps.length,
                   })}

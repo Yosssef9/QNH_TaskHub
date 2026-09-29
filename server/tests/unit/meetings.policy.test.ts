@@ -10,6 +10,8 @@ const baseAccess: TaskHubAccess = {
   roleCode: "USER",
   permissions: [],
   meetingOrganizeEnabled: false,
+  meetingRoomOrganizeEnabled: false,
+  meetingZoomOrganizeEnabled: false,
   meetingCoordinateEnabled: false,
 };
 
@@ -44,7 +46,7 @@ describe("Meetings policy", () => {
   it("returns title-and-creator preview visibility for unrelated scheduled Meetings to Organizers", () => {
     expect(
       meetingScheduleVisibility(
-        { ...baseAccess, meetingOrganizeEnabled: true },
+        { ...baseAccess, meetingRoomOrganizeEnabled: true },
         { isOrganizer: false, isAttendee: false },
       ),
     ).toBe("PREVIEW");
@@ -62,5 +64,6 @@ describe("Meetings policy", () => {
     ).toBe("NONE");
   });
 });
+
 
 

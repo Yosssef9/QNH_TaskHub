@@ -249,7 +249,9 @@ function overrideKindsFor(
   const kinds: MeetingSeriesOverrideKind[] = [];
   if (base.date !== final.date) kinds.push("DATE");
   if (base.startTime !== final.startTime || base.endTime !== final.endTime) kinds.push("TIME");
+  if (base.meetingMode !== final.meetingMode) kinds.push("MEETING_MODE");
   if (base.roomId !== final.roomId) kinds.push("ROOM");
+  if (base.onlineJoinUrl !== final.onlineJoinUrl) kinds.push("ONLINE_JOIN_URL");
   if (base.title !== final.title) kinds.push("TITLE");
   if (base.description !== final.description) kinds.push("DESCRIPTION");
   if (!equalNumberArrays(base.attendeeUserIds, final.attendeeUserIds)) kinds.push("ATTENDEES");
@@ -282,7 +284,9 @@ function occurrenceFromBase(
     endTime: input.defaults.endTime,
     startAtUtc: originalWindow.startAtUtc.toISOString(),
     endAtUtc: originalWindow.endAtUtc.toISOString(),
+    meetingMode: input.defaults.meetingMode,
     roomId: input.defaults.roomId,
+    onlineJoinUrl: input.defaults.onlineJoinUrl,
     title: input.defaults.title,
     description: input.defaults.description,
     organizerAttending: input.defaults.organizerAttending,
@@ -299,6 +303,9 @@ function applyOverride(
   const finalStartTime = exception.startTime ?? base.startTime;
   const finalEndTime = exception.endTime ?? base.endTime;
   const window = meetingSeriesWindowToUtc(finalDate, finalStartTime, finalEndTime);
+  const meetingMode = exception.meetingMode ?? base.meetingMode;
+  const rawRoomId = exception.roomId !== undefined ? exception.roomId : base.roomId;
+  const rawOnlineJoinUrl = exception.onlineJoinUrl !== undefined ? exception.onlineJoinUrl : base.onlineJoinUrl;
   const final = {
     ...base,
     date: finalDate,
@@ -306,7 +313,9 @@ function applyOverride(
     endTime: finalEndTime,
     startAtUtc: window.startAtUtc.toISOString(),
     endAtUtc: window.endAtUtc.toISOString(),
-    roomId: exception.roomId ?? base.roomId,
+    meetingMode,
+    roomId: meetingMode === "ROOM" ? rawRoomId : null,
+    onlineJoinUrl: meetingMode === "ZOOM" ? rawOnlineJoinUrl : null,
     title: exception.title ?? base.title,
     description: exception.description !== undefined ? exception.description : base.description,
     organizerAttending: exception.organizerAttending ?? base.organizerAttending,
@@ -327,6 +336,9 @@ function addedOccurrence(
   const startTime = exception.startTime ?? input.defaults.startTime;
   const endTime = exception.endTime ?? input.defaults.endTime;
   const window = meetingSeriesWindowToUtc(exception.date, startTime, endTime);
+  const meetingMode = exception.meetingMode ?? input.defaults.meetingMode;
+  const rawRoomId = exception.roomId !== undefined ? exception.roomId : input.defaults.roomId;
+  const rawOnlineJoinUrl = exception.onlineJoinUrl !== undefined ? exception.onlineJoinUrl : input.defaults.onlineJoinUrl;
   const occurrence: Omit<MeetingSeriesResolvedOccurrence, "overrideKinds" | "isCustomized"> = {
     occurrenceKey: `A:${exception.clientOccurrenceId.toLowerCase()}`,
     sequenceNumber,
@@ -341,7 +353,9 @@ function addedOccurrence(
     endTime,
     startAtUtc: window.startAtUtc.toISOString(),
     endAtUtc: window.endAtUtc.toISOString(),
-    roomId: exception.roomId ?? input.defaults.roomId,
+    meetingMode,
+    roomId: meetingMode === "ROOM" ? rawRoomId : null,
+    onlineJoinUrl: meetingMode === "ZOOM" ? rawOnlineJoinUrl : null,
     title: exception.title ?? input.defaults.title,
     description:
       exception.description !== undefined ? exception.description : input.defaults.description,
@@ -356,7 +370,9 @@ function addedOccurrence(
 
   const defaultsAsOccurrence: typeof occurrence = {
     ...occurrence,
+    meetingMode: input.defaults.meetingMode,
     roomId: input.defaults.roomId,
+    onlineJoinUrl: input.defaults.onlineJoinUrl,
     title: input.defaults.title,
     description: input.defaults.description,
     organizerAttending: input.defaults.organizerAttending,
@@ -458,13 +474,13 @@ export function findMeetingSeriesInternalConflicts(
 
   for (let leftIndex = 0; leftIndex < occurrences.length; leftIndex += 1) {
     const left = occurrences[leftIndex];
-    if (!left) continue;
+    if (!left || left.meetingMode !== "ROOM" || left.roomId === null) continue;
     const leftStart = new Date(left.startAtUtc).getTime();
     const leftEnd = new Date(left.endAtUtc).getTime();
 
     for (let rightIndex = leftIndex + 1; rightIndex < occurrences.length; rightIndex += 1) {
       const right = occurrences[rightIndex];
-      if (!right || right.roomId !== left.roomId) continue;
+      if (!right || right.meetingMode !== "ROOM" || right.roomId === null || right.roomId !== left.roomId) continue;
       const rightStart = new Date(right.startAtUtc).getTime();
       const rightEnd = new Date(right.endAtUtc).getTime();
       if (leftStart >= rightEnd || leftEnd <= rightStart) continue;
@@ -479,4 +495,5 @@ export function findMeetingSeriesInternalConflicts(
 
   return conflicts;
 }
+
 

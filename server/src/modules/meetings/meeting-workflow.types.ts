@@ -1,4 +1,4 @@
-import type { MeetingRoom } from "./meetings.types.js";
+import type { MeetingMode, MeetingRoom } from "./meetings.types.js";
 
 export type MeetingStatus = "PENDING_APPROVAL" | "SCHEDULED" | "REJECTED" | "CANCELLED";
 export type MeetingRevisionType = "INITIAL" | "RESCHEDULE";
@@ -23,7 +23,12 @@ export interface MeetingSummary {
   description: string | null;
   status: MeetingStatus;
   organizer: MeetingParticipant;
-  room: MeetingRoom;
+  meetingMode: MeetingMode;
+  room: MeetingRoom | null;
+  onlineJoinUrl: string | null;
+  cancelledAtUtc?: string | null;
+  cancellationReason?: string | null;
+  cancelledBy?: MeetingParticipant | null;
   startAtUtc: string;
   endAtUtc: string;
   schedulingNotes: string | null;
@@ -46,7 +51,12 @@ export interface MeetingAgendaItemInput {
 export interface CreateMeetingInput {
   title: string;
   description?: string | null;
-  roomId: number;
+  meetingMode: MeetingMode;
+  roomId: number | null;
+  onlineJoinUrl: string | null;
+  cancelledAtUtc?: string | null;
+  cancellationReason?: string | null;
+  cancelledBy?: MeetingParticipant | null;
   startAtUtc: string;
   endAtUtc: string;
   organizerAttending: boolean;
@@ -58,7 +68,12 @@ export interface CreateMeetingInput {
 export interface UpdatePendingMeetingScheduleInput {
   revisionId: number;
   revisionRowVersion: string;
-  roomId: number;
+  meetingMode: MeetingMode;
+  roomId: number | null;
+  onlineJoinUrl: string | null;
+  cancelledAtUtc?: string | null;
+  cancellationReason?: string | null;
+  cancelledBy?: MeetingParticipant | null;
   startAtUtc: string;
   endAtUtc: string;
   schedulingNotes?: string | null;
@@ -73,45 +88,38 @@ export interface RejectMeetingRequestInput extends DecideMeetingRequestInput {
   reason?: string | null;
 }
 
-export interface MeetingScheduleFullEntry {
+interface MeetingScheduleSharedEntry {
+  organizer: MeetingParticipant;
+  meetingMode: MeetingMode;
+  room: Pick<MeetingRoom, "id" | "code" | "nameAr" | "nameEn" | "locationText" | "colorKey"> | null;
+  startAtUtc: string;
+  endAtUtc: string;
+}
+
+export interface MeetingScheduleFullEntry extends MeetingScheduleSharedEntry {
   visibility: "FULL";
   meetingId: number;
   title: string;
-  organizer: MeetingParticipant;
-  room: Pick<MeetingRoom, "id" | "code" | "nameAr" | "nameEn" | "locationText" | "colorKey">;
-  startAtUtc: string;
-  endAtUtc: string;
+  onlineJoinUrl: string | null;
   participantCount: number;
   agendaTopicCount: number;
   agendaPlannedMinutes: number;
   hasPendingReschedule: boolean;
 }
 
-export interface MeetingSchedulePreviewEntry {
+export interface MeetingSchedulePreviewEntry extends MeetingScheduleSharedEntry {
   visibility: "PREVIEW";
   meetingId: null;
   title: string;
-  organizer: MeetingParticipant;
-  room: Pick<MeetingRoom, "id" | "code" | "nameAr" | "nameEn" | "locationText" | "colorKey">;
-  startAtUtc: string;
-  endAtUtc: string;
 }
 
-export interface MeetingScheduleBusyEntry {
+export interface MeetingScheduleBusyEntry extends MeetingScheduleSharedEntry {
   visibility: "BUSY";
   meetingId: null;
   title: null;
-  organizer: MeetingParticipant;
-  room: Pick<MeetingRoom, "id" | "code" | "nameAr" | "nameEn" | "locationText" | "colorKey">;
-  startAtUtc: string;
-  endAtUtc: string;
 }
 
 export type MeetingScheduleEntry =
   | MeetingScheduleFullEntry
   | MeetingSchedulePreviewEntry
   | MeetingScheduleBusyEntry;
-
-
-
-

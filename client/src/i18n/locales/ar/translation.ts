@@ -291,6 +291,8 @@ export const arTranslation = {
     open: 'فتح قائمة الإنشاء السريع',
     task: 'مهمة جديدة',
     taskDescription: 'تُحفظ في قائمتك الحالية أو قائمة مهامي ويمكن تغيير القائمة قبل الحفظ.',
+    meeting: 'إنشاء اجتماع',
+    meetingDescription: 'أنشئ اجتماع قاعة أو اجتماع Zoom وفق صلاحيات الاجتماعات الممنوحة لك.',
     kpiTask: 'مهمة مؤشر جديدة',
     kpiTaskDescription: 'اختر دورة العمل ثم مؤشر الأداء المناسب.',
     kpiTaskDescriptionWithCycle: 'سيتم اختيار «{{name}}» مبدئياً ويمكن تغيير السياق عند الحاجة.',
@@ -643,11 +645,19 @@ export const arTranslation = {
     meetingOrganizer: 'منظم الاجتماعات',
     meetingOrganizerShort: 'منظم',
     meetingOrganizerDescription:
-      'يمكنه إنشاء طلبات الاجتماعات وإدارة الاجتماعات التي ينظمها في المراحل اللاحقة.',
+      'مسمى الصلاحية الموحّدة القديم محفوظ للتوافق.',
+    meetingRoomOrganizer: 'منظم اجتماعات القاعات',
+    meetingRoomOrganizerShort: 'منظم قاعات',
+    meetingRoomOrganizerDescription:
+      'يمكنه إنشاء وإدارة طلبات الاجتماعات داخل القاعات. اجتماعات القاعات تحتاج موافقة المنسق.',
+    meetingZoomOrganizer: 'منظم اجتماعات Zoom',
+    meetingZoomOrganizerShort: 'منظم Zoom',
+    meetingZoomOrganizerDescription:
+      'يمكنه جدولة وإدارة اجتماعات Zoom مباشرة دون موافقة المنسق.',
     meetingCoordinator: 'منسق الاجتماعات',
     meetingCoordinatorShort: 'منسق',
     meetingCoordinatorDescription:
-      'يمكنه تنسيق طلبات الاجتماعات وجدولة الاجتماعات مباشرة دون موافقة في المراحل اللاحقة.',
+      'يمكنه اعتماد وتنسيق اجتماعات القاعات. جدولة Zoom تحتاج صلاحية منظم Zoom بشكل مستقل.',
     filters: {
       all: 'الكل',
       role: 'الدور',
@@ -1651,6 +1661,25 @@ export const arTranslation = {
     },
   },
   meetings: {
+    zoom: {
+      roomType: 'اجتماع داخل قاعة',
+      roomTypeHint: 'يستخدم قاعة فعلية ويتبع مسار موافقة منسق الاجتماعات.',
+      zoomType: 'اجتماع Zoom',
+      zoomTypeHint: 'يُجدول مباشرة دون موافقة المنسق، ويلزم إدخال رابط Zoom صالح.',
+      online: 'عبر الإنترنت',
+      join: 'الانضمام إلى Zoom',
+      joinLink: 'رابط اجتماع Zoom',
+      joinLinkTitle: 'رابط اجتماع Zoom',
+      joinLinkHint: 'أدخل رابط الانضمام عبر HTTPS الذي سيستخدمه المشاركون المدعوون.',
+      invalidJoinLink: 'أدخل رابط اجتماع Zoom صالحاً عبر HTTPS.',
+      scheduleTitle: 'جدولة Zoom',
+      scheduleDescription: 'اختر التاريخ والوقت وأضف رابط Zoom. اجتماعات Zoom لا تحجز قاعة فعلية.',
+      dateTitle: 'تاريخ الاجتماع',
+      dateHint: 'تتبع اجتماعات Zoom نفس قواعد أوقات الجدولة الخاصة بالاجتماعات.',
+      saveDirectSchedule: 'حفظ موعد Zoom',
+      zoomRescheduleHint: 'تُطبق تغييرات موعد Zoom مباشرة ويتم إشعار المشاركين بعد الحفظ.',
+      roomRescheduleHint: 'التحويل إلى قاعة ينشئ طلب إعادة جدولة يحتاج موافقة المنسق.',
+    },
     report: {
       automatic: {
         compact: {
@@ -2278,7 +2307,7 @@ export const arTranslation = {
         'أدخل عنوان الاجتماع والمشاركين والمرفقات الاختيارية. يمكنك توسيع هذا القسم للتركيز عليه دون فقد ملخص الجدولة.',
       scheduleTitle: 'اختر الموعد',
       scheduleDescription:
-        'اختر متى وأين وكم سيستغرق الاجتماع، ثم اختر وقتاً واضحاً يعرض البداية والنهاية مع حالة الإتاحة.',
+        'اختر التاريخ والموقع ووقت البداية ووقت النهاية. سيحسب TaskHub مدة الاجتماع تلقائياً ويعرض حالة الإتاحة للفترة المحددة.',
       startFromTemplate: 'البدء من قالب',
       templateHint: 'اختياري — أعد استخدام إعداد اجتماع خاص بك ثم عدّل أي بيانات تحتاجها.',
       templatePlaceholder: 'اختر قالب اجتماع',
@@ -2465,6 +2494,11 @@ export const arTranslation = {
       nonBlocking: 'هذا تنبيه للجدولة فقط ولا يمنع إنشاء الاجتماع أو إعادة جدولته.',
       summary: 'يوجد لدى {{count}} مشارك اجتماع مجدول آخر يتعارض مع هذا الوقت.',
       conflictLabel: 'تعارض في الجدول',
+      anotherMeeting: 'اجتماع آخر',
+      organizer: 'المنظم: {{name}}',
+      meetingRoom: 'قاعة اجتماع',
+      previewOnly: 'معاينة الجدول',
+      openMeeting: 'فتح الاجتماع',
       moreConflicts: '+{{count}} اجتماع متعارض إضافي',
       showAll: 'عرض جميع التعارضات ({{count}})',
       showLess: 'عرض تعارضات أقل',
@@ -2561,8 +2595,14 @@ export const arTranslation = {
       revisionStatus: { PENDING: 'معلق', APPROVED: 'معتمد', REJECTED: 'مرفوض' },
       cancelMeeting: 'إلغاء الاجتماع',
       cancelTitle: 'إلغاء الاجتماع',
-      cancelDescription: 'إلغاء “{{title}}”؟ سيبقى السجل محفوظاً وسيتم تحرير حجز القاعة الحالي.',
+      cancelDescription: 'إلغاء “{{title}}”؟ سيبقى الاجتماع وسجله محفوظين، ويجب إدخال سبب الإلغاء.',
       cancelReason: 'سبب الإلغاء',
+      cancelReasonRequired: 'مطلوب. اكتب سبب إلغاء هذا الاجتماع.',
+      cancellationDetailsTitle: 'تم إلغاء الاجتماع',
+      cancellationReasonLabel: 'السبب',
+      cancellationReasonUnavailable: 'لم يتم تسجيل سبب الإلغاء.',
+      cancelledBy: 'أُلغي بواسطة {{name}}',
+      cancelledAt: 'وقت الإلغاء {{value}}',
       cancelled: 'تم إلغاء الاجتماع.',
       cancelError: 'تعذر إلغاء الاجتماع.',
       rescheduleQueue: 'طلبات إعادة الجدولة',
@@ -2940,9 +2980,14 @@ export const arTranslation = {
       MEETING_ROOM_TIME_CONFLICT: 'قاعة الاجتماع المحددة محجوزة بالفعل خلال هذا الوقت.',
       MEETING_SCHEDULE_IN_PAST: 'وقت بدء الاجتماع قد مضى. اختر وقتاً لاحقاً.',
       MEETING_ALREADY_STARTED:
-        'بدأ هذا الاجتماع بالفعل، ولم يعد من الممكن إلغاؤه أو إعادة جدولته.',
+        'بدأ هذا الاجتماع بالفعل، ولم يعد من الممكن إعادة جدولته.',
       INVALID_MEETING_TIME_INCREMENT: 'يجب أن تكون أوقات بداية ونهاية الاجتماع بفواصل 15 دقيقة.',
       MEETING_ROOM_CAPACITY_EXCEEDED: 'سعة قاعة الاجتماع المحددة غير كافية.',
+      ROOM_MEETING_ORGANIZER_REQUIRED: 'تتطلب هذه العملية صلاحية منظم اجتماعات القاعات.',
+      ZOOM_MEETING_ORGANIZER_REQUIRED: 'تتطلب هذه العملية صلاحية منظم اجتماعات Zoom.',
+      INVALID_ZOOM_JOIN_URL: 'أدخل رابط اجتماع Zoom صالحاً عبر HTTPS.',
+      MEETING_ROOM_REQUIRED: 'اختر قاعة لاجتماع القاعة.',
+      COORDINATOR_ROOM_MEETING_REQUIRED: 'إجراءات موافقة المنسق تنطبق على اجتماعات القاعات فقط.',
       ACTIVE_MEETING_ROOM_REQUIRED: 'اختر قاعة اجتماع نشطة.',
       MEETING_ROOM_SCHEDULE_BUSY: 'توجد عملية جدولة أخرى تستخدم هذه القاعة حالياً. حاول مرة أخرى.',
       MEETING_WORKSPACE_STALE: 'تم تعديل الاجتماع بعد فتحه. أعد التحميل ثم حاول مرة أخرى.',
@@ -3649,20 +3694,3 @@ export const arTranslation = {
     backHome: 'العودة إلى الرئيسية',
   },
 } as const
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -1,9 +1,14 @@
 export const MEETING_PERMISSION_CODES = [
-  "MEETING_ORGANIZE",
+  "MEETING_ORGANIZE_ROOM",
+  "MEETING_ORGANIZE_ZOOM",
   "MEETING_COORDINATE",
 ] as const;
 
-export type MeetingPermissionCode = (typeof MEETING_PERMISSION_CODES)[number];
+export type MeetingPersistedPermissionCode = (typeof MEETING_PERMISSION_CODES)[number];
+export type MeetingPermissionCode = MeetingPersistedPermissionCode | "MEETING_ORGANIZE";
+
+export const MEETING_MODES = ["ROOM", "ZOOM"] as const;
+export type MeetingMode = (typeof MEETING_MODES)[number];
 
 export const MEETING_ROOM_COLOR_KEYS = [
   "BLUE",

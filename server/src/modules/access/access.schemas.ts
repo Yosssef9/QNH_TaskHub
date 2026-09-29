@@ -32,6 +32,8 @@ export const updateAccessBodySchema = z.object({
   procurementAccess: procurementAccessSchema,
   kpiWorkCyclesAccess: z.boolean(),
   meetingOrganizeEnabled: z.boolean().optional(),
+  meetingRoomOrganizeEnabled: z.boolean().optional(),
+  meetingZoomOrganizeEnabled: z.boolean().optional(),
   meetingCoordinateEnabled: z.boolean().optional(),
 });
 
@@ -63,3 +65,4 @@ export type AccessListQueryInput = z.infer<typeof accessListQuerySchema>;
 export type AccessUserParams = z.infer<typeof accessUserParamsSchema>;
 export type UpdateAccessBody = z.infer<typeof updateAccessBodySchema>;
 export type ContractDelegationBody = z.infer<typeof contractDelegationBodySchema>;
+

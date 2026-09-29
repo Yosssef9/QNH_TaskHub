@@ -2,11 +2,13 @@ import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
 
 import { toApiClientError } from '@/lib/api-error'
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 
 import { useActiveMeetingRooms } from '../hooks/use-meeting-rooms'
 import { useDirectCoordinatorReschedule } from '../hooks/use-meetings'
 import { participantUserIdsFromMeeting } from '../meeting-participant-availability'
-import type { MeetingDetail } from '../types/meeting.types'
+import type { MeetingDetail, MeetingMode } from '../types/meeting.types'
+import { canOrganizeZoomMeetings } from '../meeting-access'
 import { CoordinatorScheduleEditorDialog } from './CoordinatorScheduleEditorDialog'
 
 export function CoordinatorDirectRescheduleDialog({
@@ -19,12 +21,15 @@ export function CoordinatorDirectRescheduleDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const { t } = useTranslation()
+  const currentUser = useCurrentUser()
   const rooms = useActiveMeetingRooms()
   const mutation = useDirectCoordinatorReschedule()
   const meeting = detail.meeting
 
   async function save(input: {
-    roomId: number
+    meetingMode: MeetingMode
+    roomId: number | null
+    onlineJoinUrl: string | null
     startAtUtc: string
     endAtUtc: string
     schedulingNotes: string | null
@@ -49,7 +54,9 @@ export function CoordinatorDirectRescheduleDialog({
 
   const currentSchedule = {
     label: t('meetings.coordinatorSchedule.currentSchedule'),
+    meetingMode: meeting.meetingMode,
     room: meeting.room,
+    onlineJoinUrl: meeting.onlineJoinUrl,
     startAtUtc: meeting.startAtUtc,
     endAtUtc: meeting.endAtUtc,
   }
@@ -67,7 +74,10 @@ export function CoordinatorDirectRescheduleDialog({
       roomsPending={rooms.isPending}
       roomsError={rooms.isError}
       onRetryRooms={() => void rooms.refetch()}
-      initialRoomId={meeting.room.id}
+      initialMeetingMode={meeting.meetingMode}
+      initialRoomId={meeting.room?.id ?? null}
+      initialOnlineJoinUrl={meeting.onlineJoinUrl}
+      allowZoom={canOrganizeZoomMeetings(currentUser.data?.access)}
       initialStartAtUtc={meeting.startAtUtc}
       initialEndAtUtc={meeting.endAtUtc}
       initialNotes={null}

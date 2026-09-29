@@ -1,6 +1,7 @@
 import type { DatabaseTransaction } from "../../database/types.js";
 import { getDatabasePool, sql } from "../../database/sql.js";
 import { normalizeSqlRowVersion, rowVersionToBuffer } from "../../shared/utils/sql-row-version.js";
+import type { MeetingMode, MeetingPersistedPermissionCode, MeetingRoomColorKey } from "./meetings.types.js";
 
 interface RoomScheduleRecord {
   id: number | string;
@@ -23,6 +24,22 @@ export interface ParticipantScheduleConflictRecord {
   meetingId: number | string;
   startAtUtc: Date;
   endAtUtc: Date;
+}
+
+export interface ParticipantConflictVisibleMeetingRecord {
+  meetingId: number | string;
+  visibility: "FULL" | "PREVIEW";
+  title: string;
+  meetingMode: MeetingMode;
+  organizerUserId: number | string;
+  organizerUserCode: string;
+  organizerUserName: string;
+  roomId: number | string | null;
+  roomCode: string | null;
+  roomNameAr: string | null;
+  roomNameEn: string | null;
+  roomLocationText: string | null;
+  roomColorKey: MeetingRoomColorKey | null;
 }
 
 export interface ParticipantMeetingConflictRecord {
@@ -48,7 +65,9 @@ export interface RevisionScheduleRecord {
   revisionId: number;
   revisionType: "INITIAL" | "RESCHEDULE";
   revisionStatus: "PENDING" | "APPROVED" | "REJECTED";
-  roomId: number;
+  meetingMode: MeetingMode;
+  roomId: number | null;
+  onlineJoinUrl: string | null;
   startAtUtc: Date;
   endAtUtc: Date;
   revisionRowVersion: string;
@@ -62,7 +81,9 @@ interface RawRevisionScheduleRecord {
   revisionId: number | string;
   revisionType: RevisionScheduleRecord["revisionType"];
   revisionStatus: RevisionScheduleRecord["revisionStatus"];
-  roomId: number | string;
+  meetingMode: MeetingMode;
+  roomId: number | string | null;
+  onlineJoinUrl: string | null;
   startAtUtc: Date;
   endAtUtc: Date;
   revisionRowVersion: unknown;
@@ -81,7 +102,9 @@ function mapRevisionScheduleRecord(record: RawRevisionScheduleRecord): RevisionS
     revisionId: Number(record.revisionId),
     revisionType: record.revisionType,
     revisionStatus: record.revisionStatus,
-    roomId: Number(record.roomId),
+    meetingMode: record.meetingMode,
+    roomId: record.roomId === null ? null : Number(record.roomId),
+    onlineJoinUrl: record.onlineJoinUrl,
     startAtUtc: record.startAtUtc,
     endAtUtc: record.endAtUtc,
     revisionRowVersion,
@@ -127,7 +150,7 @@ export const meetingSchedulingRepository = {
   async hasActiveMeetingPermission(
     transaction: DatabaseTransaction,
     userId: number,
-    permissionCode: "MEETING_ORGANIZE" | "MEETING_COORDINATE",
+    permissionCode: MeetingPersistedPermissionCode,
   ): Promise<boolean> {
     const result = await transaction
       .request()
@@ -236,6 +259,111 @@ export const meetingSchedulingRepository = {
         AND revision.end_at_utc > @startAtUtc
         AND (@excludeMeetingId IS NULL OR meeting.id <> @excludeMeetingId)
       ORDER BY attendee.attendee_user_id, revision.start_at_utc, meeting.id;
+    `);
+
+    return result.recordset;
+  },
+
+  async findVisibleParticipantConflictMeetings(input: {
+    viewerUserId: number;
+    participantUserIds: readonly number[];
+    startAtUtc: Date;
+    endAtUtc: Date;
+    excludeMeetingId: number | null;
+    canCoordinateMeetings: boolean;
+    canPreviewRoomMeetings: boolean;
+  }): Promise<ParticipantConflictVisibleMeetingRecord[]> {
+    const participantUserIds = [...new Set(input.participantUserIds)];
+    if (participantUserIds.length === 0) return [];
+
+    const pool = await getDatabasePool();
+    const request = pool
+      .request()
+      .input("viewerUserId", sql.Int, input.viewerUserId)
+      .input("canCoordinateMeetings", sql.Bit, input.canCoordinateMeetings)
+      .input("canPreviewRoomMeetings", sql.Bit, input.canPreviewRoomMeetings)
+      .input("startAtUtc", sql.DateTime2(3), input.startAtUtc)
+      .input("endAtUtc", sql.DateTime2(3), input.endAtUtc)
+      .input("excludeMeetingId", sql.BigInt, input.excludeMeetingId);
+
+    const selectedValues = participantUserIds.map((userId, index) => {
+      const parameter = `visibleParticipantUserId${index}`;
+      request.input(parameter, sql.Int, userId);
+      return `(@${parameter})`;
+    });
+
+    const result = await request.query<ParticipantConflictVisibleMeetingRecord>(`
+      WITH selected_participants (user_id) AS (
+        SELECT user_id
+        FROM (VALUES ${selectedValues.join(", ")}) AS selected(user_id)
+      ), conflict_meetings AS (
+        SELECT DISTINCT meeting.id AS meeting_id
+        FROM selected_participants AS selected
+        INNER JOIN dbo.TM_meeting_attendees AS attendee
+          ON attendee.attendee_user_id = selected.user_id
+        INNER JOIN dbo.TM_meetings AS meeting
+          ON meeting.id = attendee.meeting_id
+        INNER JOIN dbo.TM_meeting_revisions AS revision
+          ON revision.id = meeting.current_revision_id
+         AND revision.meeting_id = meeting.id
+        WHERE meeting.status = 'SCHEDULED'
+          AND revision.revision_status = 'APPROVED'
+          AND revision.start_at_utc < @endAtUtc
+          AND revision.end_at_utc > @startAtUtc
+          AND (@excludeMeetingId IS NULL OR meeting.id <> @excludeMeetingId)
+      )
+      SELECT
+        meeting.id AS meetingId,
+        CAST(CASE
+          WHEN @canCoordinateMeetings = 1
+            OR meeting.organizer_user_id = @viewerUserId
+            OR EXISTS (
+              SELECT 1
+              FROM dbo.TM_meeting_attendees AS viewerAttendee
+              WHERE viewerAttendee.meeting_id = meeting.id
+                AND viewerAttendee.attendee_user_id = @viewerUserId
+            )
+          THEN 'FULL'
+          ELSE 'PREVIEW'
+        END AS VARCHAR(10)) AS visibility,
+        meeting.title,
+        revision.meeting_mode AS meetingMode,
+        organizer.USER_ID AS organizerUserId,
+        organizer.USER_CODE AS organizerUserCode,
+        organizer.USER_NAME AS organizerUserName,
+        room.id AS roomId,
+        room.code AS roomCode,
+        room.name_ar AS roomNameAr,
+        room.name_en AS roomNameEn,
+        room.location_text AS roomLocationText,
+        room.color_key AS roomColorKey
+      FROM conflict_meetings AS conflict
+      INNER JOIN dbo.TM_meetings AS meeting
+        ON meeting.id = conflict.meeting_id
+      INNER JOIN dbo.TM_meeting_revisions AS revision
+        ON revision.id = meeting.current_revision_id
+       AND revision.meeting_id = meeting.id
+      INNER JOIN dbo.users AS organizer
+        ON organizer.USER_ID = meeting.organizer_user_id
+      LEFT JOIN dbo.TM_meeting_rooms AS room
+        ON room.id = revision.room_id
+      WHERE meeting.status = 'SCHEDULED'
+        AND revision.revision_status = 'APPROVED'
+        AND (
+          @canCoordinateMeetings = 1
+          OR meeting.organizer_user_id = @viewerUserId
+          OR EXISTS (
+            SELECT 1
+            FROM dbo.TM_meeting_attendees AS viewerAttendee
+            WHERE viewerAttendee.meeting_id = meeting.id
+              AND viewerAttendee.attendee_user_id = @viewerUserId
+          )
+          OR (
+            @canPreviewRoomMeetings = 1
+            AND revision.meeting_mode = 'ROOM'
+          )
+        )
+      ORDER BY meeting.id;
     `);
 
     return result.recordset;
@@ -368,7 +496,9 @@ export const meetingSchedulingRepository = {
           r.id AS revisionId,
           r.revision_type AS revisionType,
           r.revision_status AS revisionStatus,
+          r.meeting_mode AS meetingMode,
           r.room_id AS roomId,
+          r.online_join_url AS onlineJoinUrl,
           r.start_at_utc AS startAtUtc,
           r.end_at_utc AS endAtUtc,
           r.row_version AS revisionRowVersion
@@ -518,5 +648,3 @@ export const meetingSchedulingRepository = {
       `);
   },
 };
-
-

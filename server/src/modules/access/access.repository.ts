@@ -64,7 +64,7 @@ function kpiWorkCyclesPermissionColumn(alias: string): string {
 
 function meetingPermissionExistsExpression(
   alias: string,
-  permissionCode: "MEETING_ORGANIZE" | "MEETING_COORDINATE",
+  permissionCode: "MEETING_ORGANIZE_ROOM" | "MEETING_ORGANIZE_ZOOM" | "MEETING_COORDINATE",
 ): string {
   return `EXISTS (
       SELECT 1 FROM dbo.TM_meeting_user_permissions AS permission
@@ -75,15 +75,21 @@ function meetingPermissionExistsExpression(
 }
 
 function meetingPermissionColumns(alias: string): string {
+  const roomOrganizer = meetingPermissionExistsExpression(alias, "MEETING_ORGANIZE_ROOM");
+  const zoomOrganizer = meetingPermissionExistsExpression(alias, "MEETING_ORGANIZE_ZOOM");
   return `
-    CAST(CASE WHEN ${meetingPermissionExistsExpression(alias, "MEETING_ORGANIZE")} THEN 1 ELSE 0 END AS BIT) AS meetingOrganizeEnabled,
+    CAST(CASE WHEN (${roomOrganizer}) OR (${zoomOrganizer}) THEN 1 ELSE 0 END AS BIT) AS meetingOrganizeEnabled,
+    CAST(CASE WHEN ${roomOrganizer} THEN 1 ELSE 0 END AS BIT) AS meetingRoomOrganizeEnabled,
+    CAST(CASE WHEN ${zoomOrganizer} THEN 1 ELSE 0 END AS BIT) AS meetingZoomOrganizeEnabled,
     CAST(CASE WHEN ${meetingPermissionExistsExpression(alias, "MEETING_COORDINATE")} THEN 1 ELSE 0 END AS BIT) AS meetingCoordinateEnabled`;
 }
 
 function accessFilterClause(alias: string, accessAlias: string): string {
   const procurementAccess = procurementHasAccessExpression(alias);
   const kpiWorkCyclesAccess = kpiWorkCyclesHasAccessExpression(alias);
-  const organizer = meetingPermissionExistsExpression(alias, "MEETING_ORGANIZE");
+  const roomOrganizer = meetingPermissionExistsExpression(alias, "MEETING_ORGANIZE_ROOM");
+  const zoomOrganizer = meetingPermissionExistsExpression(alias, "MEETING_ORGANIZE_ZOOM");
+  const organizer = `((${roomOrganizer}) OR (${zoomOrganizer}))`;
   const coordinator = meetingPermissionExistsExpression(alias, "MEETING_COORDINATE");
 
   return `
@@ -129,8 +135,9 @@ function accessSortExpression(sortBy: AccessSortBy, alias: string, accessAlias: 
       return kpiWorkCyclesHasAccessExpression(alias);
     case "meetings":
       return `(
-        CASE WHEN ${meetingPermissionExistsExpression(alias, "MEETING_ORGANIZE")} THEN 1 ELSE 0 END
-        + CASE WHEN ${meetingPermissionExistsExpression(alias, "MEETING_COORDINATE")} THEN 2 ELSE 0 END
+        CASE WHEN ${meetingPermissionExistsExpression(alias, "MEETING_ORGANIZE_ROOM")} THEN 1 ELSE 0 END
+        + CASE WHEN ${meetingPermissionExistsExpression(alias, "MEETING_ORGANIZE_ZOOM")} THEN 2 ELSE 0 END
+        + CASE WHEN ${meetingPermissionExistsExpression(alias, "MEETING_COORDINATE")} THEN 4 ELSE 0 END
       )`;
     case "status":
       return `CASE WHEN ${accessAlias}.portal_user_id IS NULL THEN 0 WHEN ${accessAlias}.is_active = 0 THEN 1 ELSE 2 END`;
@@ -255,9 +262,21 @@ export async function findCurrentAccessForUpdate(
       CAST(CASE WHEN EXISTS (
         SELECT 1 FROM dbo.TM_meeting_user_permissions AS permission
         WHERE permission.portal_user_id = access.portal_user_id
-          AND permission.permission_code = 'MEETING_ORGANIZE'
+          AND permission.permission_code IN ('MEETING_ORGANIZE_ROOM', 'MEETING_ORGANIZE_ZOOM')
           AND permission.is_active = 1
       ) THEN 1 ELSE 0 END AS BIT) AS meetingOrganizeEnabled,
+      CAST(CASE WHEN EXISTS (
+        SELECT 1 FROM dbo.TM_meeting_user_permissions AS permission
+        WHERE permission.portal_user_id = access.portal_user_id
+          AND permission.permission_code = 'MEETING_ORGANIZE_ROOM'
+          AND permission.is_active = 1
+      ) THEN 1 ELSE 0 END AS BIT) AS meetingRoomOrganizeEnabled,
+      CAST(CASE WHEN EXISTS (
+        SELECT 1 FROM dbo.TM_meeting_user_permissions AS permission
+        WHERE permission.portal_user_id = access.portal_user_id
+          AND permission.permission_code = 'MEETING_ORGANIZE_ZOOM'
+          AND permission.is_active = 1
+      ) THEN 1 ELSE 0 END AS BIT) AS meetingZoomOrganizeEnabled,
       CAST(CASE WHEN EXISTS (
         SELECT 1 FROM dbo.TM_meeting_user_permissions AS permission
         WHERE permission.portal_user_id = access.portal_user_id
@@ -336,7 +355,7 @@ async function saveMeetingPermission(
   input: {
     actorUserId: number;
     targetUserId: number;
-    permissionCode: "MEETING_ORGANIZE" | "MEETING_COORDINATE";
+    permissionCode: "MEETING_ORGANIZE_ROOM" | "MEETING_ORGANIZE_ZOOM" | "MEETING_COORDINATE";
     enabled: boolean;
   },
 ): Promise<void> {
@@ -375,15 +394,22 @@ export async function saveMeetingPermissions(
   input: {
     actorUserId: number;
     targetUserId: number;
-    meetingOrganizeEnabled: boolean;
+    meetingRoomOrganizeEnabled: boolean;
+    meetingZoomOrganizeEnabled: boolean;
     meetingCoordinateEnabled: boolean;
   },
 ): Promise<void> {
   await saveMeetingPermission(transaction, {
     actorUserId: input.actorUserId,
     targetUserId: input.targetUserId,
-    permissionCode: "MEETING_ORGANIZE",
-    enabled: input.meetingOrganizeEnabled,
+    permissionCode: "MEETING_ORGANIZE_ROOM",
+    enabled: input.meetingRoomOrganizeEnabled,
+  });
+  await saveMeetingPermission(transaction, {
+    actorUserId: input.actorUserId,
+    targetUserId: input.targetUserId,
+    permissionCode: "MEETING_ORGANIZE_ZOOM",
+    enabled: input.meetingZoomOrganizeEnabled,
   });
   await saveMeetingPermission(transaction, {
     actorUserId: input.actorUserId,
@@ -448,3 +474,4 @@ export const accessRepository = {
   ensureContractSettingsInTransaction,
   findDelegationParticipantForUpdate,
 };
+

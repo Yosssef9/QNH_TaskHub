@@ -8,6 +8,8 @@ import {
   Save,
   Trash2,
   UsersRound,
+  Video,
+  DoorOpen,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -25,9 +27,11 @@ import { MeetingAgendaEditor, type MeetingAgendaDraftItem } from '../components/
 import { MeetingParticipantConflictNotice } from '../components/MeetingParticipantConflictNotice'
 import { MeetingParticipantPicker } from '../components/MeetingParticipantPicker'
 import { MeetingSchedulePicker } from '../components/MeetingSchedulePicker'
+import { ZoomMeetingSchedulePanel } from '../components/ZoomMeetingSchedulePanel'
+import { isValidZoomJoinUrl } from '../meeting-online-location'
 import { useMeetingParticipantAvailability } from '../hooks/use-meetings'
 import { buildParticipantAvailabilityInput } from '../meeting-participant-availability'
-import type { MeetingParticipant, MeetingRoom } from '../types/meeting.types'
+import type { MeetingMode, MeetingParticipant, MeetingRoom } from '../types/meeting.types'
 import { MeetingSeriesFilePicker, type MeetingSeriesDraftFile } from './MeetingSeriesFilePicker'
 import type {
   MeetingSeriesDefaultsInput,
@@ -38,7 +42,9 @@ export interface MeetingSeriesOccurrenceScheduleValues {
   date: string
   startTime: string
   endTime: string
-  roomId: number
+  meetingMode: MeetingMode
+  roomId: number | null
+  onlineJoinUrl: string | null
 }
 
 export interface MeetingSeriesOccurrenceDetailValues {
@@ -102,6 +108,7 @@ export function MeetingSeriesOccurrenceEditor({
   participantLoadingMore,
   participantHasMore,
   saving = false,
+  canZoom = false,
   commonAttachmentFiles,
   attachmentFiles,
   attachmentMaxCount,
@@ -128,6 +135,7 @@ export function MeetingSeriesOccurrenceEditor({
   participantLoadingMore: boolean
   participantHasMore: boolean
   saving?: boolean
+  canZoom?: boolean
   commonAttachmentFiles: readonly MeetingSeriesDraftFile[]
   attachmentFiles: MeetingSeriesDraftFile[]
   attachmentMaxCount: number
@@ -148,7 +156,9 @@ export function MeetingSeriesOccurrenceEditor({
   const [date, setDate] = useState(occurrence.date)
   const [startTime, setStartTime] = useState(occurrence.startTime)
   const [endTime, setEndTime] = useState(occurrence.endTime)
-  const [roomId, setRoomId] = useState<number>(occurrence.roomId)
+  const [meetingMode, setMeetingMode] = useState<MeetingMode>(occurrence.meetingMode)
+  const [roomId, setRoomId] = useState<number | null>(occurrence.roomId)
+  const [onlineJoinUrl, setOnlineJoinUrl] = useState(occurrence.onlineJoinUrl ?? '')
   const [title, setTitle] = useState(occurrence.title)
   const [description, setDescription] = useState(occurrence.description ?? '')
   const [organizerAttending, setOrganizerAttending] = useState(occurrence.organizerAttending)
@@ -159,7 +169,9 @@ export function MeetingSeriesOccurrenceEditor({
     setDate(occurrence.date)
     setStartTime(occurrence.startTime)
     setEndTime(occurrence.endTime)
+    setMeetingMode(occurrence.meetingMode)
     setRoomId(occurrence.roomId)
+    setOnlineJoinUrl(occurrence.onlineJoinUrl ?? '')
     setTitle(occurrence.title)
     setDescription(occurrence.description ?? '')
     setOrganizerAttending(occurrence.organizerAttending)
@@ -241,6 +253,8 @@ export function MeetingSeriesOccurrenceEditor({
         .filter(
           (item) =>
             item.occurrenceKey !== occurrence.occurrenceKey &&
+            meetingMode === 'ROOM' &&
+            item.meetingMode === 'ROOM' &&
             item.date === date &&
             item.roomId === roomId,
         )
@@ -249,13 +263,21 @@ export function MeetingSeriesOccurrenceEditor({
           endTime: item.endTime,
           label: item.title,
         })),
-    [date, occurrence.occurrenceKey, roomId, seriesOccurrences],
+    [date, meetingMode, occurrence.occurrenceKey, roomId, seriesOccurrences],
   )
 
   function saveAll() {
-    if (!date || !roomId || invalidTime || !detailsStructurallyValid) return
+    const locationValid = meetingMode === 'ROOM' ? roomId !== null : isValidZoomJoinUrl(onlineJoinUrl)
+    if (!date || !locationValid || invalidTime || !detailsStructurallyValid) return
 
-    onSaveSchedule({ date, startTime, endTime, roomId })
+    onSaveSchedule({
+      date,
+      startTime,
+      endTime,
+      meetingMode,
+      roomId: meetingMode === 'ROOM' ? roomId : null,
+      onlineJoinUrl: meetingMode === 'ZOOM' ? onlineJoinUrl.trim() : null,
+    })
     onSaveDetails({
       title: title.trim(),
       description: description.trim() || null,
@@ -530,27 +552,53 @@ export function MeetingSeriesOccurrenceEditor({
         </section>
 
         <div className="min-h-0 xl:overflow-y-auto xl:[scrollbar-width:thin]">
-          <MeetingSchedulePicker
-            date={date}
-            roomId={roomId}
-            rooms={[...rooms]}
-            participantCount={participantCount}
-            startTime={startTime}
-            endTime={endTime}
-            allowBusySelection
-            showDurationPicker={false}
-            directTimeRangeSelection
-            supplementalBusyRanges={supplementalBusyRanges}
-            heading={t('meetings.series.redesign.scheduleWorkspaceTitle')}
-            description={t('meetings.series.redesign.scheduleWorkspaceHint')}
-            disabled={saving}
-            onDateChange={setDate}
-            onRoomChange={(value) => value !== null && setRoomId(value)}
-            onTimeChange={(nextStartTime, nextEndTime) => {
-              setStartTime(nextStartTime)
-              setEndTime(nextEndTime)
-            }}
-          />
+          <div className="border-b p-4 sm:p-5">
+            <p className="text-sm font-semibold">{t('meetings.zoom.zoomType')}</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <button type="button" className={cn('flex items-start gap-2 rounded-xl border p-3 text-start', meetingMode === 'ROOM' ? 'border-primary bg-primary/5' : 'hover:bg-muted/40')} onClick={() => { setMeetingMode('ROOM'); setOnlineJoinUrl('') }}>
+                <DoorOpen aria-hidden="true" className="mt-0.5 size-4" />
+                <span><span className="block text-sm font-semibold">{t('meetings.zoom.roomType')}</span><span className="text-muted-foreground block text-xs">{t('meetings.zoom.roomTypeHint')}</span></span>
+              </button>
+              {canZoom ? (
+                <button type="button" className={cn('flex items-start gap-2 rounded-xl border p-3 text-start', meetingMode === 'ZOOM' ? 'border-[#2D8CFF]/60 bg-[#2D8CFF]/5' : 'hover:bg-muted/40')} onClick={() => { setMeetingMode('ZOOM'); setRoomId(null) }}>
+                  <Video aria-hidden="true" className="mt-0.5 size-4 text-[#2D8CFF]" />
+                  <span><span className="block text-sm font-semibold">{t('meetings.zoom.zoomType')}</span><span className="text-muted-foreground block text-xs">{t('meetings.zoom.zoomTypeHint')}</span></span>
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {meetingMode === 'ROOM' ? (
+            <MeetingSchedulePicker
+              date={date}
+              roomId={roomId}
+              rooms={[...rooms]}
+              participantCount={participantCount}
+              startTime={startTime}
+              endTime={endTime}
+              allowBusySelection
+              showDurationPicker={false}
+              directTimeRangeSelection
+              supplementalBusyRanges={supplementalBusyRanges}
+              heading={t('meetings.series.redesign.scheduleWorkspaceTitle')}
+              description={t('meetings.series.redesign.scheduleWorkspaceHint')}
+              disabled={saving}
+              onDateChange={setDate}
+              onRoomChange={setRoomId}
+              onTimeChange={(nextStartTime, nextEndTime) => { setStartTime(nextStartTime); setEndTime(nextEndTime) }}
+            />
+          ) : (
+            <ZoomMeetingSchedulePanel
+              date={date}
+              startTime={startTime}
+              endTime={endTime}
+              onlineJoinUrl={onlineJoinUrl}
+              disabled={saving}
+              errors={!onlineJoinUrl || isValidZoomJoinUrl(onlineJoinUrl) ? undefined : { onlineJoinUrl: t('meetings.zoom.invalidJoinLink') }}
+              onDateChange={setDate}
+              onTimeChange={(nextStartTime, nextEndTime) => { setStartTime(nextStartTime); setEndTime(nextEndTime) }}
+              onJoinUrlChange={setOnlineJoinUrl}
+            />
+          )}
         </div>
       </div>
 
@@ -567,7 +615,7 @@ export function MeetingSeriesOccurrenceEditor({
 
         <Button
           type="button"
-          disabled={saving || !date || !roomId || invalidTime || !detailsStructurallyValid}
+          disabled={saving || !date || invalidTime || !detailsStructurallyValid || (meetingMode === 'ROOM' ? !roomId : !isValidZoomJoinUrl(onlineJoinUrl))}
           onClick={saveAll}
         >
           <Save aria-hidden="true" className="size-4" />
@@ -584,6 +632,7 @@ export function MeetingSeriesAddOccurrenceDialog({
   existingOccurrences,
   participantCount,
   initialValues,
+  canZoom = false,
   onOpenChange,
   onAdd,
 }: {
@@ -592,6 +641,7 @@ export function MeetingSeriesAddOccurrenceDialog({
   existingOccurrences: readonly MeetingSeriesPreviewOccurrence[]
   participantCount: number
   initialValues: MeetingSeriesOccurrenceScheduleValues
+  canZoom?: boolean
   onOpenChange: (open: boolean) => void
   onAdd: (values: MeetingSeriesOccurrenceScheduleValues) => void
 }) {
@@ -599,27 +649,31 @@ export function MeetingSeriesAddOccurrenceDialog({
   const [date, setDate] = useState(initialValues.date)
   const [startTime, setStartTime] = useState(initialValues.startTime)
   const [endTime, setEndTime] = useState(initialValues.endTime)
-  const [roomId, setRoomId] = useState(initialValues.roomId)
+  const [meetingMode, setMeetingMode] = useState<MeetingMode>(initialValues.meetingMode)
+  const [roomId, setRoomId] = useState<number | null>(initialValues.roomId)
+  const [onlineJoinUrl, setOnlineJoinUrl] = useState(initialValues.onlineJoinUrl ?? '')
 
   useEffect(() => {
     if (!open) return
     setDate(initialValues.date)
     setStartTime(initialValues.startTime)
     setEndTime(initialValues.endTime)
+    setMeetingMode(initialValues.meetingMode)
     setRoomId(initialValues.roomId)
+    setOnlineJoinUrl(initialValues.onlineJoinUrl ?? '')
   }, [initialValues, open])
 
   const invalidTime = !startTime || !endTime || endTime <= startTime
   const supplementalBusyRanges = useMemo(
     () =>
       existingOccurrences
-        .filter((item) => item.date === date && item.roomId === roomId)
+        .filter((item) => meetingMode === 'ROOM' && item.meetingMode === 'ROOM' && item.date === date && item.roomId === roomId)
         .map((item) => ({
           startTime: item.startTime,
           endTime: item.endTime,
           label: item.title,
         })),
-    [date, existingOccurrences, roomId],
+    [date, existingOccurrences, meetingMode, roomId],
   )
 
   return (
@@ -644,7 +698,13 @@ export function MeetingSeriesAddOccurrenceDialog({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <MeetingSchedulePicker
+          <div className="border-b p-4 sm:p-5">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button type="button" className={cn('flex items-start gap-2 rounded-xl border p-3 text-start', meetingMode === 'ROOM' ? 'border-primary bg-primary/5' : 'hover:bg-muted/40')} onClick={() => { setMeetingMode('ROOM'); setOnlineJoinUrl('') }}><DoorOpen className="mt-0.5 size-4" /><span><span className="block text-sm font-semibold">{t('meetings.zoom.roomType')}</span><span className="text-muted-foreground block text-xs">{t('meetings.zoom.roomTypeHint')}</span></span></button>
+              {canZoom ? <button type="button" className={cn('flex items-start gap-2 rounded-xl border p-3 text-start', meetingMode === 'ZOOM' ? 'border-[#2D8CFF]/60 bg-[#2D8CFF]/5' : 'hover:bg-muted/40')} onClick={() => { setMeetingMode('ZOOM'); setRoomId(null) }}><Video className="mt-0.5 size-4 text-[#2D8CFF]" /><span><span className="block text-sm font-semibold">{t('meetings.zoom.zoomType')}</span><span className="text-muted-foreground block text-xs">{t('meetings.zoom.zoomTypeHint')}</span></span></button> : null}
+            </div>
+          </div>
+          {meetingMode === 'ROOM' ? <MeetingSchedulePicker
             date={date}
             roomId={roomId}
             rooms={[...rooms]}
@@ -658,12 +718,9 @@ export function MeetingSeriesAddOccurrenceDialog({
             heading={t('meetings.series.redesign.addMeetingScheduleTitle')}
             description={t('meetings.series.redesign.addMeetingScheduleHint')}
             onDateChange={setDate}
-            onRoomChange={(value) => value !== null && setRoomId(value)}
-            onTimeChange={(nextStartTime, nextEndTime) => {
-              setStartTime(nextStartTime)
-              setEndTime(nextEndTime)
-            }}
-          />
+            onRoomChange={setRoomId}
+            onTimeChange={(nextStartTime, nextEndTime) => { setStartTime(nextStartTime); setEndTime(nextEndTime) }}
+          /> : <ZoomMeetingSchedulePanel date={date} startTime={startTime} endTime={endTime} onlineJoinUrl={onlineJoinUrl} onDateChange={setDate} onTimeChange={(nextStartTime, nextEndTime) => { setStartTime(nextStartTime); setEndTime(nextEndTime) }} onJoinUrlChange={setOnlineJoinUrl} />}
         </div>
 
         <div className="bg-background flex flex-wrap items-center justify-between gap-3 border-t px-5 py-3.5 sm:px-6">
@@ -676,9 +733,9 @@ export function MeetingSeriesAddOccurrenceDialog({
             </Button>
             <Button
               type="button"
-              disabled={!date || invalidTime || !roomId}
+              disabled={!date || invalidTime || (meetingMode === 'ROOM' ? !roomId : !isValidZoomJoinUrl(onlineJoinUrl))}
               onClick={() => {
-                onAdd({ date, startTime, endTime, roomId })
+                onAdd({ date, startTime, endTime, meetingMode, roomId: meetingMode === 'ROOM' ? roomId : null, onlineJoinUrl: meetingMode === 'ZOOM' ? onlineJoinUrl.trim() : null })
                 onOpenChange(false)
               }}
             >

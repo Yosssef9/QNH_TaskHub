@@ -1,4 +1,4 @@
-import { Gauge, ListChecks, ListTodo, Loader2, Plus, Repeat2 } from 'lucide-react'
+import { CalendarPlus2, Gauge, ListChecks, ListTodo, Loader2, Plus, Repeat2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -9,6 +9,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { hasKpiWorkCyclesAccess } from '@/features/auth/access-permissions'
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { KpiEditorDialog } from '@/features/kpis/components/KpiEditorDialog'
+import { MeetingEditorDialog } from '@/features/meetings/components/MeetingEditorDialog'
+import { canCoordinateMeetings, canOrganizeAnyMeetings } from '@/features/meetings/meeting-access'
 import { useKpis } from '@/features/kpis/hooks/use-kpis'
 import { useLists } from '@/features/lists/hooks/use-lists'
 import { TaskEditorDialog } from '@/features/tasks/components/TaskEditorDialog'
@@ -17,7 +19,7 @@ import { useWorkCycles } from '@/features/work-cycles/hooks/use-work-cycles'
 import type { KpiInstance, WorkCycle } from '@/features/work-cycles/types/work-cycle.types'
 import { cn } from '@/lib/cn'
 
-type QuickCreateTarget = 'TASK' | 'KPI_TASK' | 'WORK_CYCLE' | 'KPI_TEMPLATE' | null
+type QuickCreateTarget = 'TASK' | 'MEETING' | 'KPI_TASK' | 'WORK_CYCLE' | 'KPI_TEMPLATE' | null
 
 function parsePositiveId(value: string | undefined): number | null {
   if (!value) return null
@@ -66,6 +68,8 @@ export function QuickCreateMenu() {
 
   const currentUser = useCurrentUser()
   const kpiWorkCyclesAccess = hasKpiWorkCyclesAccess(currentUser.data?.access)
+  const meetingCreateAvailable = canOrganizeAnyMeetings(currentUser.data?.access)
+  const meetingCreateMode = canCoordinateMeetings(currentUser.data?.access) ? 'DIRECT' : 'REQUEST'
   const listsQuery = useLists()
   const cyclesQuery = useWorkCycles(kpiWorkCyclesAccess)
   const kpisQuery = useKpis(kpiWorkCyclesAccess)
@@ -181,6 +185,14 @@ export function QuickCreateMenu() {
               disabled={taskDisabled}
               onClick={() => choose('TASK')}
             />
+            {meetingCreateAvailable ? (
+              <QuickCreateItem
+                icon={CalendarPlus2}
+                label={t('quickCreate.meeting')}
+                description={t('quickCreate.meetingDescription')}
+                onClick={() => choose('MEETING')}
+              />
+            ) : null}
             {kpiWorkCyclesAccess ? (
               <>
                 <QuickCreateItem
@@ -215,6 +227,15 @@ export function QuickCreateMenu() {
           ) : null}
         </PopoverContent>
       </Popover>
+
+      {target === 'MEETING' && meetingCreateAvailable ? (
+        <MeetingEditorDialog
+          key="quick-meeting"
+          open
+          mode={meetingCreateMode}
+          onOpenChange={(open) => !open && setTarget(null)}
+        />
+      ) : null}
 
       {target === 'TASK' && lists.length > 0 ? (
         <TaskEditorDialog

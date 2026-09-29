@@ -76,8 +76,14 @@ export const accessService: AccessService = {
         activeAdminCount,
       });
 
-      const meetingOrganizeEnabled =
-        input.meetingOrganizeEnabled ?? currentAccess?.meetingOrganizeEnabled ?? false;
+      const meetingRoomOrganizeEnabled =
+        input.meetingRoomOrganizeEnabled ??
+        input.meetingOrganizeEnabled ??
+        currentAccess?.meetingRoomOrganizeEnabled ??
+        currentAccess?.meetingOrganizeEnabled ??
+        false;
+      const meetingZoomOrganizeEnabled =
+        input.meetingZoomOrganizeEnabled ?? currentAccess?.meetingZoomOrganizeEnabled ?? false;
       const meetingCoordinateEnabled =
         input.meetingCoordinateEnabled ?? currentAccess?.meetingCoordinateEnabled ?? false;
 
@@ -104,7 +110,8 @@ export const accessService: AccessService = {
       await accessRepository.saveMeetingPermissions(transaction, {
         actorUserId,
         targetUserId: input.userId,
-        meetingOrganizeEnabled,
+        meetingRoomOrganizeEnabled,
+        meetingZoomOrganizeEnabled,
         meetingCoordinateEnabled,
       });
 
@@ -176,4 +183,5 @@ export const accessService: AccessService = {
     return accessPermissionsRepository.getContractAccessAdminData();
   },
 };
+
 

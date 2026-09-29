@@ -33,6 +33,8 @@ export interface AccessUser {
   procurementAccess: ProcurementAccessState
   kpiWorkCyclesAccess: boolean
   meetingOrganizeEnabled?: boolean
+  meetingRoomOrganizeEnabled?: boolean
+  meetingZoomOrganizeEnabled?: boolean
   meetingCoordinateEnabled?: boolean
 }
 
@@ -62,7 +64,9 @@ export interface UpdateAccessInput {
   isActive: boolean
   procurementAccess: ProcurementAccessState
   kpiWorkCyclesAccess: boolean
-  meetingOrganizeEnabled: boolean
+  meetingOrganizeEnabled?: boolean
+  meetingRoomOrganizeEnabled: boolean
+  meetingZoomOrganizeEnabled: boolean
   meetingCoordinateEnabled: boolean
 }
 
@@ -95,3 +99,4 @@ export interface UpdateContractDelegationInput {
   view: boolean
   manageAttachments: boolean
 }
+

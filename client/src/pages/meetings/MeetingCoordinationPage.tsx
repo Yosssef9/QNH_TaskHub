@@ -257,9 +257,9 @@ export function MeetingCoordinationPage() {
 
   const rooms = useMemo(() => {
     const map = new Map<number, MeetingRoom>()
-    for (const meeting of requestItems) map.set(meeting.room.id, meeting.room)
+    for (const meeting of requestItems) if (meeting.room) map.set(meeting.room.id, meeting.room)
     for (const item of rescheduleItems) {
-      map.set(item.requestedRevision.room.id, item.requestedRevision.room)
+      if (item.requestedRevision.room) map.set(item.requestedRevision.room.id, item.requestedRevision.room)
     }
 
     return [...map.values()].sort((left, right) => {
@@ -288,7 +288,7 @@ export function MeetingCoordinationPage() {
     return key >= todayKey && key <= nextSevenEnd
   }
 
-  function matchesSearch(meeting: MeetingSummary, room: MeetingRoom): boolean {
+  function matchesSearch(meeting: MeetingSummary, room: MeetingRoom | null): boolean {
     const normalized = search.trim().toLocaleLowerCase(i18n.language)
     if (!normalized) return true
 
@@ -309,7 +309,7 @@ export function MeetingCoordinationPage() {
 
   const filteredRequests = requestItems.filter(
     (meeting) =>
-      (roomFilter === 'ALL' || meeting.room.id === Number(roomFilter)) &&
+      (roomFilter === 'ALL' || meeting.room?.id === Number(roomFilter)) &&
       (organizerFilter === 'ALL' || meeting.organizer.userId === Number(organizerFilter)) &&
       matchesDate(meeting.startAtUtc) &&
       matchesSearch(meeting, meeting.room),
@@ -318,7 +318,7 @@ export function MeetingCoordinationPage() {
   const filteredReschedules = rescheduleItems.filter((item) => {
     const requested = item.requestedRevision
     return (
-      (roomFilter === 'ALL' || requested.room.id === Number(roomFilter)) &&
+      (roomFilter === 'ALL' || requested.room?.id === Number(roomFilter)) &&
       (organizerFilter === 'ALL' ||
         item.meeting.organizer.userId === Number(organizerFilter)) &&
       matchesDate(requested.startAtUtc) &&
@@ -808,3 +808,4 @@ export function MeetingCoordinationPage() {
     </div>
   )
 }
+

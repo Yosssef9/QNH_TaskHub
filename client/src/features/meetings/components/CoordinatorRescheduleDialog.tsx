@@ -6,7 +6,7 @@ import { toApiClientError } from '@/lib/api-error'
 import { useActiveMeetingRooms } from '../hooks/use-meeting-rooms'
 import { useAdjustAndApproveMeetingReschedule } from '../hooks/use-meetings'
 import { participantUserIdsFromMeeting } from '../meeting-participant-availability'
-import type { MeetingRescheduleQueueItem } from '../types/meeting.types'
+import type { MeetingMode, MeetingRescheduleQueueItem } from '../types/meeting.types'
 import { CoordinatorScheduleEditorDialog } from './CoordinatorScheduleEditorDialog'
 
 export function CoordinatorRescheduleDialog({
@@ -24,11 +24,14 @@ export function CoordinatorRescheduleDialog({
   const revision = item.requestedRevision
 
   async function save(input: {
-    roomId: number
+    meetingMode: MeetingMode
+    roomId: number | null
+    onlineJoinUrl: string | null
     startAtUtc: string
     endAtUtc: string
     schedulingNotes: string | null
   }) {
+    if (input.meetingMode !== 'ROOM' || input.roomId === null) return
     try {
       await mutation.mutateAsync({
         meetingId: item.meeting.id,
@@ -50,6 +53,7 @@ export function CoordinatorRescheduleDialog({
 
   const currentSchedule = {
     label: t('meetings.coordinatorSchedule.currentSchedule'),
+    meetingMode: item.meeting.meetingMode,
     room: item.meeting.room,
     startAtUtc: item.meeting.startAtUtc,
     endAtUtc: item.meeting.endAtUtc,
@@ -57,6 +61,7 @@ export function CoordinatorRescheduleDialog({
 
   const organizerRequest = {
     label: t('meetings.coordinatorSchedule.organizerRequest'),
+    meetingMode: 'ROOM' as const,
     room: revision.room,
     startAtUtc: revision.startAtUtc,
     endAtUtc: revision.endAtUtc,
@@ -76,7 +81,7 @@ export function CoordinatorRescheduleDialog({
       roomsPending={rooms.isPending}
       roomsError={rooms.isError}
       onRetryRooms={() => void rooms.refetch()}
-      initialRoomId={revision.room.id}
+      initialRoomId={revision.room?.id ?? null}
       initialStartAtUtc={revision.startAtUtc}
       initialEndAtUtc={revision.endAtUtc}
       initialNotes={revision.schedulingNotes}

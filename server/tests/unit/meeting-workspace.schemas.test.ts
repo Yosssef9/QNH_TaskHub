@@ -30,8 +30,19 @@ describe("Meeting workspace schemas", () => {
     expect(result.success).toBe(false);
   });
 
-  it("requires Meeting concurrency for cancellation", () => {
+  it("requires Meeting concurrency and a non-empty cancellation reason", () => {
     expect(cancelMeetingBodySchema.safeParse({ meetingRowVersion: "bad" }).success).toBe(false);
+    expect(
+      cancelMeetingBodySchema.safeParse({
+        meetingRowVersion: "0x0000000000000001",
+      }).success,
+    ).toBe(false);
+    expect(
+      cancelMeetingBodySchema.safeParse({
+        meetingRowVersion: "0x0000000000000001",
+        reason: "",
+      }).success,
+    ).toBe(false);
     expect(
       cancelMeetingBodySchema.safeParse({
         meetingRowVersion: "0x0000000000000001",

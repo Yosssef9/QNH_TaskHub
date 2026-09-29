@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const repository = vi.hoisted(() => ({
   findParticipantScheduleConflicts: vi.fn(),
+  findVisibleParticipantConflictMeetings: vi.fn(),
 }));
 
 vi.mock("../../src/modules/meetings/meeting-scheduling.repository.js", () => ({
@@ -18,7 +19,9 @@ import { meetingSchedulingService } from "../../src/modules/meetings/meeting-sch
 describe("Meeting participant availability", () => {
   beforeEach(() => {
     repository.findParticipantScheduleConflicts.mockReset();
+    repository.findVisibleParticipantConflictMeetings.mockReset();
     repository.findParticipantScheduleConflicts.mockResolvedValue([]);
+    repository.findVisibleParticipantConflictMeetings.mockResolvedValue([]);
   });
 
   it("reports no conflicts without changing scheduling eligibility", async () => {
@@ -66,9 +69,115 @@ describe("Meeting participant availability", () => {
       participant: { userCode: "U007", userName: "Sara" },
     });
     expect(result.conflicts.find((item) => item.participant.userId === 7)?.overlaps).toHaveLength(3);
+    expect(result.conflicts.find((item) => item.participant.userId === 7)?.overlaps[0]?.meeting).toBeNull();
+    expect(repository.findVisibleParticipantConflictMeetings).not.toHaveBeenCalled();
     expect(repository.findParticipantScheduleConflicts).toHaveBeenCalledWith(
       expect.objectContaining({ excludeMeetingId: 99 }),
     );
+  });
+
+
+  it("returns full conflict Meeting details only when the viewer is authorized", async () => {
+    repository.findParticipantScheduleConflicts.mockResolvedValue([
+      {
+        userId: 7,
+        userCode: "U007",
+        userName: "Sara",
+        meetingId: 15,
+        startAtUtc: new Date("2026-09-28T07:00:00Z"),
+        endAtUtc: new Date("2026-09-28T08:00:00Z"),
+      },
+    ]);
+    repository.findVisibleParticipantConflictMeetings.mockResolvedValue([
+      {
+        meetingId: 15,
+        visibility: "FULL",
+        title: "Operations Review",
+        meetingMode: "ROOM",
+        organizerUserId: 20,
+        organizerUserCode: "U020",
+        organizerUserName: "Ahmed",
+        roomId: 3,
+        roomCode: "BR",
+        roomNameAr: "قاعة الاجتماعات",
+        roomNameEn: "Board Room",
+        roomLocationText: "First floor",
+        roomColorKey: "GREEN",
+      },
+    ]);
+
+    const result = await meetingSchedulingService.getParticipantAvailability(
+      {
+        startAtUtc: "2026-09-28T07:00:00.000Z",
+        endAtUtc: "2026-09-28T08:00:00.000Z",
+        participantUserIds: [7],
+      },
+      {
+        userId: 99,
+        canCoordinateMeetings: true,
+        canPreviewRoomMeetings: true,
+      },
+    );
+
+    expect(result.conflicts[0]?.overlaps[0]?.meeting).toEqual({
+      visibility: "FULL",
+      meetingId: 15,
+      title: "Operations Review",
+      meetingMode: "ROOM",
+      organizer: { userId: 20, userCode: "U020", userName: "Ahmed" },
+      room: {
+        id: 3,
+        code: "BR",
+        nameAr: "قاعة الاجتماعات",
+        nameEn: "Board Room",
+        locationText: "First floor",
+        colorKey: "GREEN",
+      },
+    });
+  });
+
+  it("keeps preview-only conflicts non-navigable and hides unauthorized Meeting metadata", async () => {
+    repository.findParticipantScheduleConflicts.mockResolvedValue([
+      { userId: 7, userCode: "U007", userName: "Sara", meetingId: 15, startAtUtc: new Date("2026-09-28T07:00:00Z"), endAtUtc: new Date("2026-09-28T07:30:00Z") },
+      { userId: 7, userCode: "U007", userName: "Sara", meetingId: 16, startAtUtc: new Date("2026-09-28T07:30:00Z"), endAtUtc: new Date("2026-09-28T08:00:00Z") },
+    ]);
+    repository.findVisibleParticipantConflictMeetings.mockResolvedValue([
+      {
+        meetingId: 15,
+        visibility: "PREVIEW",
+        title: "Room Preview",
+        meetingMode: "ROOM",
+        organizerUserId: 20,
+        organizerUserCode: "U020",
+        organizerUserName: "Ahmed",
+        roomId: 3,
+        roomCode: "BR",
+        roomNameAr: "قاعة الاجتماعات",
+        roomNameEn: "Board Room",
+        roomLocationText: null,
+        roomColorKey: "GREEN",
+      },
+    ]);
+
+    const result = await meetingSchedulingService.getParticipantAvailability(
+      {
+        startAtUtc: "2026-09-28T07:00:00.000Z",
+        endAtUtc: "2026-09-28T08:00:00.000Z",
+        participantUserIds: [7],
+      },
+      {
+        userId: 99,
+        canCoordinateMeetings: false,
+        canPreviewRoomMeetings: true,
+      },
+    );
+
+    expect(result.conflicts[0]?.overlaps[0]?.meeting).toMatchObject({
+      visibility: "PREVIEW",
+      meetingId: null,
+      title: "Room Preview",
+    });
+    expect(result.conflicts[0]?.overlaps[1]?.meeting).toBeNull();
   });
 
   it("validates the request window and participant limit", () => {

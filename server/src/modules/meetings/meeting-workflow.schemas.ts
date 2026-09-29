@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { isValidZoomJoinUrl } from "./meeting-online-location.js";
+
 const utcDateTimeSchema = z.string().datetime({ offset: true });
 const rowVersionSchema = z.string().regex(/^0x[0-9A-Fa-f]{16}$/);
 
@@ -12,19 +14,58 @@ const nullableTrimmed = (max: number) =>
     .optional()
     .transform((value) => (value && value.length > 0 ? value : null));
 
+const meetingLocationFields = {
+  meetingMode: z.enum(["ROOM", "ZOOM"]).default("ROOM"),
+  roomId: z.coerce.number().int().positive().nullable().optional().transform((value) => value ?? null),
+  onlineJoinUrl: nullableTrimmed(2048),
+};
+
+function validateLocation(
+  value: { meetingMode: "ROOM" | "ZOOM"; roomId: number | null; onlineJoinUrl: string | null },
+  ctx: z.RefinementCtx,
+) {
+  if (value.meetingMode === "ROOM") {
+    if (value.roomId === null) {
+      ctx.addIssue({ code: "custom", path: ["roomId"], message: "Meeting Room is required." });
+    }
+    if (value.onlineJoinUrl !== null) {
+      ctx.addIssue({ code: "custom", path: ["onlineJoinUrl"], message: "Room Meetings cannot store an online join link." });
+    }
+    return;
+  }
+
+  if (value.roomId !== null) {
+    ctx.addIssue({ code: "custom", path: ["roomId"], message: "Zoom Meetings do not reserve a Meeting Room." });
+  }
+  if (value.onlineJoinUrl === null || !isValidZoomJoinUrl(value.onlineJoinUrl)) {
+    ctx.addIssue({ code: "custom", path: ["onlineJoinUrl"], message: "Enter a valid HTTPS Zoom Meeting link." });
+  }
+}
+
 function withValidSchedule<T extends z.ZodRawShape>(shape: T) {
   return z.object(shape).superRefine((value, ctx) => {
-    const candidate = value as { startAtUtc?: unknown; endAtUtc?: unknown };
-    if (typeof candidate.startAtUtc !== "string" || typeof candidate.endAtUtc !== "string") {
-      return;
+    const candidate = value as {
+      startAtUtc?: unknown;
+      endAtUtc?: unknown;
+      meetingMode?: unknown;
+      roomId?: unknown;
+      onlineJoinUrl?: unknown;
+    };
+    if (typeof candidate.startAtUtc === "string" && typeof candidate.endAtUtc === "string") {
+      if (new Date(candidate.endAtUtc).getTime() <= new Date(candidate.startAtUtc).getTime()) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["endAtUtc"],
+          message: "Meeting end time must be after its start time.",
+        });
+      }
     }
-
-    if (new Date(candidate.endAtUtc).getTime() <= new Date(candidate.startAtUtc).getTime()) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["endAtUtc"],
-        message: "Meeting end time must be after its start time.",
-      });
+    if (
+      (candidate.meetingMode === "ROOM" || candidate.meetingMode === "ZOOM") &&
+      (typeof candidate.roomId === "number" || candidate.roomId === null) &&
+      (typeof candidate.onlineJoinUrl === "string" || candidate.onlineJoinUrl === null)
+    ) {
+      validateLocation(candidate as { meetingMode: "ROOM" | "ZOOM"; roomId: number | null; onlineJoinUrl: string | null }, ctx);
     }
   });
 }
@@ -45,7 +86,7 @@ const meetingAgendaItemSchema = z.object({
 const meetingContentFields = {
   title: z.string().trim().min(1).max(250),
   description: nullableTrimmed(10000),
-  roomId: z.coerce.number().int().positive(),
+  ...meetingLocationFields,
   startAtUtc: utcDateTimeSchema,
   endAtUtc: utcDateTimeSchema,
   organizerAttending: z.boolean(),
@@ -69,7 +110,7 @@ export const meetingRequestParamsSchema = z.object({
 export const updateMeetingScheduleBodySchema = withValidSchedule({
   revisionId: z.coerce.number().int().positive(),
   revisionRowVersion: rowVersionSchema,
-  roomId: z.coerce.number().int().positive(),
+  ...meetingLocationFields,
   startAtUtc: utcDateTimeSchema,
   endAtUtc: utcDateTimeSchema,
   schedulingNotes: nullableTrimmed(1000),
@@ -96,21 +137,11 @@ export const meetingScheduleQuerySchema = z
     const from = new Date(value.fromAtUtc).getTime();
     const to = new Date(value.toAtUtc).getTime();
     if (to <= from) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["toAtUtc"],
-        message: "Schedule range end must be after its start.",
-      });
+      ctx.addIssue({ code: "custom", path: ["toAtUtc"], message: "Schedule range end must be after its start." });
       return;
     }
-
-    const maximumRangeMs = 62 * 24 * 60 * 60 * 1000;
-    if (to - from > maximumRangeMs) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["toAtUtc"],
-        message: "Meeting schedule range cannot exceed 62 days.",
-      });
+    if (to - from > 62 * 24 * 60 * 60 * 1000) {
+      ctx.addIssue({ code: "custom", path: ["toAtUtc"], message: "Meeting schedule range cannot exceed 62 days." });
     }
   });
 
@@ -121,5 +152,3 @@ export type UpdateMeetingScheduleBody = z.infer<typeof updateMeetingScheduleBody
 export type DecideMeetingRequestBody = z.infer<typeof decideMeetingRequestBodySchema>;
 export type RejectMeetingRequestBody = z.infer<typeof rejectMeetingRequestBodySchema>;
 export type MeetingScheduleQuery = z.infer<typeof meetingScheduleQuerySchema>;
-
-

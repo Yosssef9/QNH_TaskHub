@@ -49,8 +49,11 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
     user.procurementAccess,
   )
   const [kpiWorkCyclesAccess, setKpiWorkCyclesAccess] = useState(user.kpiWorkCyclesAccess)
-  const [meetingOrganizeEnabled, setMeetingOrganizeEnabled] = useState(
-    user.meetingOrganizeEnabled ?? false,
+  const [meetingRoomOrganizeEnabled, setMeetingRoomOrganizeEnabled] = useState(
+    user.meetingRoomOrganizeEnabled ?? user.meetingOrganizeEnabled ?? false,
+  )
+  const [meetingZoomOrganizeEnabled, setMeetingZoomOrganizeEnabled] = useState(
+    user.meetingZoomOrganizeEnabled ?? false,
   )
   const [meetingCoordinateEnabled, setMeetingCoordinateEnabled] = useState(
     user.meetingCoordinateEnabled ?? false,
@@ -68,7 +71,8 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
         isActive,
         procurementAccess,
         kpiWorkCyclesAccess,
-        meetingOrganizeEnabled,
+        meetingRoomOrganizeEnabled,
+        meetingZoomOrganizeEnabled,
         meetingCoordinateEnabled,
       },
       {
@@ -202,15 +206,29 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
 
             <div className="bg-muted/60 flex items-center justify-between gap-4 rounded-lg border p-3">
               <div>
-                <p className="text-sm font-medium">{t('access.meetingOrganizer')}</p>
+                <p className="text-sm font-medium">{t('access.meetingRoomOrganizer')}</p>
                 <p className="text-muted-foreground mt-1 text-xs leading-5">
-                  {t('access.meetingOrganizerDescription')}
+                  {t('access.meetingRoomOrganizerDescription')}
                 </p>
               </div>
               <Switch
-                checked={meetingOrganizeEnabled}
-                aria-label={t('access.meetingOrganizer')}
-                onCheckedChange={setMeetingOrganizeEnabled}
+                checked={meetingRoomOrganizeEnabled}
+                aria-label={t('access.meetingRoomOrganizer')}
+                onCheckedChange={setMeetingRoomOrganizeEnabled}
+              />
+            </div>
+
+            <div className="bg-muted/60 flex items-center justify-between gap-4 rounded-lg border p-3">
+              <div>
+                <p className="text-sm font-medium">{t('access.meetingZoomOrganizer')}</p>
+                <p className="text-muted-foreground mt-1 text-xs leading-5">
+                  {t('access.meetingZoomOrganizerDescription')}
+                </p>
+              </div>
+              <Switch
+                checked={meetingZoomOrganizeEnabled}
+                aria-label={t('access.meetingZoomOrganizer')}
+                onCheckedChange={setMeetingZoomOrganizeEnabled}
               />
             </div>
 
@@ -243,4 +261,5 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
     </Dialog>
   )
 }
+
 

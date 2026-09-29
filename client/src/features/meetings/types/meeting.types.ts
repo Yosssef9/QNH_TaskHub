@@ -29,6 +29,7 @@ export interface UpdateMeetingRoomInput extends SaveMeetingRoomInput {
 }
 
 export type MeetingStatus = 'PENDING_APPROVAL' | 'SCHEDULED' | 'REJECTED' | 'CANCELLED'
+export type MeetingMode = 'ROOM' | 'ZOOM'
 
 export interface MeetingParticipant {
   userId: number
@@ -49,7 +50,12 @@ export interface MeetingSummary {
   description: string | null
   status: MeetingStatus
   organizer: MeetingParticipant
-  room: MeetingRoom
+  meetingMode: MeetingMode
+  room: MeetingRoom | null
+  onlineJoinUrl: string | null
+  cancelledAtUtc?: string | null
+  cancellationReason?: string | null
+  cancelledBy?: MeetingParticipant | null
   startAtUtc: string
   endAtUtc: string
   schedulingNotes: string | null
@@ -85,9 +91,19 @@ export interface MeetingParticipantConflictInput {
   excludeMeetingId?: number | null
 }
 
+export interface MeetingParticipantConflictMeetingDetail {
+  visibility: 'FULL' | 'PREVIEW'
+  meetingId: number | null
+  title: string
+  meetingMode: MeetingMode
+  organizer: MeetingParticipant
+  room: Pick<MeetingRoom, 'id' | 'code' | 'nameAr' | 'nameEn' | 'locationText' | 'colorKey'> | null
+}
+
 export interface MeetingParticipantConflictWindow {
   startAtUtc: string
   endAtUtc: string
+  meeting?: MeetingParticipantConflictMeetingDetail | null
 }
 
 export interface MeetingParticipantScheduleConflict {
@@ -129,7 +145,12 @@ export interface MeetingAgendaItem {
 export interface SaveMeetingInput {
   title: string
   description: string | null
-  roomId: number
+  meetingMode: MeetingMode
+  roomId: number | null
+  onlineJoinUrl: string | null
+  cancelledAtUtc?: string | null
+  cancellationReason?: string | null
+  cancelledBy?: MeetingParticipant | null
   startAtUtc: string
   endAtUtc: string
   organizerAttending: boolean
@@ -142,7 +163,12 @@ export interface UpdatePendingMeetingScheduleInput {
   meetingId: number
   revisionId: number
   revisionRowVersion: string
-  roomId: number
+  meetingMode: MeetingMode
+  roomId: number | null
+  onlineJoinUrl: string | null
+  cancelledAtUtc?: string | null
+  cancellationReason?: string | null
+  cancelledBy?: MeetingParticipant | null
   startAtUtc: string
   endAtUtc: string
   schedulingNotes: string | null
@@ -160,7 +186,8 @@ export interface RejectMeetingRequestInput extends DecideMeetingRequestInput {
 
 interface MeetingScheduleSharedEntry {
   organizer: MeetingParticipant
-  room: Pick<MeetingRoom, 'id' | 'code' | 'nameAr' | 'nameEn' | 'locationText' | 'colorKey'>
+  meetingMode: MeetingMode
+  room: Pick<MeetingRoom, 'id' | 'code' | 'nameAr' | 'nameEn' | 'locationText' | 'colorKey'> | null
   startAtUtc: string
   endAtUtc: string
 }
@@ -169,6 +196,7 @@ export interface MeetingScheduleFullEntry extends MeetingScheduleSharedEntry {
   visibility: 'FULL'
   meetingId: number
   title: string
+  onlineJoinUrl: string | null
   participantCount: number
   agendaTopicCount: number
   agendaPlannedMinutes: number
@@ -201,7 +229,12 @@ export interface MeetingRevisionDetail {
   revisionNumber: number
   revisionType: MeetingRevisionType
   revisionStatus: MeetingRevisionStatus
-  room: MeetingRoom
+  meetingMode: MeetingMode
+  room: MeetingRoom | null
+  onlineJoinUrl: string | null
+  cancelledAtUtc?: string | null
+  cancellationReason?: string | null
+  cancelledBy?: MeetingParticipant | null
   startAtUtc: string
   endAtUtc: string
   schedulingNotes: string | null
@@ -274,7 +307,12 @@ export interface MeetingRescheduleQueueItem {
 export interface RequestMeetingRescheduleInput {
   meetingId: number
   meetingRowVersion: string
-  roomId: number
+  meetingMode: MeetingMode
+  roomId: number | null
+  onlineJoinUrl: string | null
+  cancelledAtUtc?: string | null
+  cancellationReason?: string | null
+  cancelledBy?: MeetingParticipant | null
   startAtUtc: string
   endAtUtc: string
 }
@@ -284,7 +322,12 @@ export interface UpdateOrganizerRescheduleInput {
   meetingId: number
   revisionId: number
   revisionRowVersion: string
-  roomId: number
+  meetingMode: MeetingMode
+  roomId: number | null
+  onlineJoinUrl: string | null
+  cancelledAtUtc?: string | null
+  cancellationReason?: string | null
+  cancelledBy?: MeetingParticipant | null
   startAtUtc: string
   endAtUtc: string
 }
@@ -296,7 +339,12 @@ export interface CancelMeetingRescheduleRequestInput extends DecideMeetingResche
 export interface DirectCoordinatorRescheduleInput {
   meetingId: number
   meetingRowVersion: string
-  roomId: number
+  meetingMode: MeetingMode
+  roomId: number | null
+  onlineJoinUrl: string | null
+  cancelledAtUtc?: string | null
+  cancellationReason?: string | null
+  cancelledBy?: MeetingParticipant | null
   startAtUtc: string
   endAtUtc: string
   schedulingNotes: string | null
@@ -306,7 +354,12 @@ export interface UpdateMeetingRescheduleInput {
   meetingId: number
   revisionId: number
   revisionRowVersion: string
-  roomId: number
+  meetingMode: MeetingMode
+  roomId: number | null
+  onlineJoinUrl: string | null
+  cancelledAtUtc?: string | null
+  cancellationReason?: string | null
+  cancelledBy?: MeetingParticipant | null
   startAtUtc: string
   endAtUtc: string
   schedulingNotes: string | null
@@ -325,7 +378,7 @@ export interface RejectMeetingRescheduleInput extends DecideMeetingRescheduleInp
 export interface CancelMeetingInput {
   meetingId: number
   meetingRowVersion: string
-  reason: string | null
+  reason: string
 }
 
 export interface MeetingAttachment {
@@ -345,6 +398,7 @@ export interface MeetingTemplate {
   title: string
   description: string | null
   durationMinutes: number
+  meetingMode: MeetingMode
   defaultRoom: MeetingRoom | null
   organizerAttending: boolean
   attendees: MeetingParticipant[]
@@ -356,6 +410,7 @@ export interface SaveMeetingTemplateInput {
   title: string
   description: string | null
   durationMinutes: number
+  meetingMode: MeetingMode
   defaultRoomId: number | null
   organizerAttending: boolean
   attendeeUserIds: number[]
@@ -365,5 +420,3 @@ export interface UpdateMeetingTemplateInput extends SaveMeetingTemplateInput {
   templateId: number
   rowVersion: string
 }
-
-

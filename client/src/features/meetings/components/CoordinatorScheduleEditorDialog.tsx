@@ -5,6 +5,8 @@ import {
   ChevronDown,
   Clock3,
   DoorOpen,
+  Building2,
+  Video,
   Loader2,
   MessageSquareText,
   UsersRound,
@@ -27,8 +29,10 @@ import {
 
 import { useMeetingParticipantAvailability } from '../hooks/use-meetings'
 import { buildParticipantAvailabilityInput } from '../meeting-participant-availability'
-import type { MeetingRoom } from '../types/meeting.types'
+import type { MeetingMode, MeetingRoom } from '../types/meeting.types'
+import { isValidZoomJoinUrl } from '../meeting-online-location'
 import { MeetingParticipantConflictNotice } from './MeetingParticipantConflictNotice'
+import { ZoomMeetingSchedulePanel } from './ZoomMeetingSchedulePanel'
 import {
   MeetingSchedulePicker,
   type MeetingScheduleSelectionState,
@@ -36,7 +40,9 @@ import {
 
 interface ScheduleSnapshot {
   label: string
-  room: MeetingRoom
+  meetingMode?: MeetingMode
+  room: MeetingRoom | null
+  onlineJoinUrl?: string | null
   startAtUtc: string
   endAtUtc: string
   emphasis?: 'neutral' | 'requested'
@@ -54,7 +60,10 @@ interface CoordinatorScheduleEditorDialogProps {
   roomsPending?: boolean
   roomsError?: boolean
   onRetryRooms?: () => void
-  initialRoomId: number
+  initialMeetingMode?: MeetingMode
+  initialRoomId: number | null
+  initialOnlineJoinUrl?: string | null
+  allowZoom?: boolean
   initialStartAtUtc: string
   initialEndAtUtc: string
   initialNotes?: string | null
@@ -64,7 +73,9 @@ interface CoordinatorScheduleEditorDialogProps {
   savePending?: boolean
   saveLabel: string
   onSave: (input: {
-    roomId: number
+    meetingMode: MeetingMode
+    roomId: number | null
+    onlineJoinUrl: string | null
     startAtUtc: string
     endAtUtc: string
     schedulingNotes: string | null
@@ -120,8 +131,8 @@ function SnapshotCard({
           {formatTime(snapshot.endAtUtc, locale, timeFormat)}
         </span>
         <span className="inline-flex min-w-0 items-center gap-1.5">
-          <DoorOpen aria-hidden="true" className="size-3.5 shrink-0" />
-          <span className="truncate">{roomName(snapshot.room, arabic)}</span>
+          {(snapshot.meetingMode ?? 'ROOM') === 'ZOOM' ? <Video aria-hidden="true" className="size-3.5 shrink-0" /> : <DoorOpen aria-hidden="true" className="size-3.5 shrink-0" />}
+          <span className="truncate">{(snapshot.meetingMode ?? 'ROOM') === 'ZOOM' ? 'Zoom' : snapshot.room ? roomName(snapshot.room, arabic) : '—'}</span>
         </span>
       </div>
     </div>
@@ -140,7 +151,10 @@ export function CoordinatorScheduleEditorDialog({
   roomsPending = false,
   roomsError = false,
   onRetryRooms,
+  initialMeetingMode = 'ROOM',
   initialRoomId,
+  initialOnlineJoinUrl = null,
+  allowZoom = false,
   initialStartAtUtc,
   initialEndAtUtc,
   initialNotes = null,
@@ -157,6 +171,8 @@ export function CoordinatorScheduleEditorDialog({
   const arabic = i18n.language.startsWith('ar')
   const locale = arabic ? 'ar-SA-u-ca-gregory' : 'en-SA'
 
+  const [meetingMode, setMeetingMode] = useState<MeetingMode>(initialMeetingMode)
+  const [onlineJoinUrl, setOnlineJoinUrl] = useState(initialOnlineJoinUrl ?? '')
   const [roomId, setRoomId] = useState<number | null>(initialRoomId)
   const [date, setDate] = useState(() => formatRiyadhDateInput(initialStartAtUtc))
   const [startTime, setStartTime] = useState(() => formatRiyadhTimeInput(initialStartAtUtc))
@@ -169,6 +185,8 @@ export function CoordinatorScheduleEditorDialog({
 
   useEffect(() => {
     if (!open) return
+    setMeetingMode(initialMeetingMode)
+    setOnlineJoinUrl(initialOnlineJoinUrl ?? '')
     setRoomId(initialRoomId)
     setDate(formatRiyadhDateInput(initialStartAtUtc))
     setStartTime(formatRiyadhTimeInput(initialStartAtUtc))
@@ -178,7 +196,9 @@ export function CoordinatorScheduleEditorDialog({
     setSelectionState(null)
   }, [
     initialEndAtUtc,
+    initialMeetingMode,
     initialNotes,
+    initialOnlineJoinUrl,
     initialRoomId,
     initialStartAtUtc,
     open,
@@ -215,11 +235,14 @@ export function CoordinatorScheduleEditorDialog({
     open ? participantAvailabilityInput : null,
   )
 
+  const validLocation = meetingMode === 'ZOOM' ? isValidZoomJoinUrl(onlineJoinUrl) : selectedRoom !== null
   const newSnapshot: ScheduleSnapshot | null =
-    selectedRoom && selectedStartAtUtc && selectedEndAtUtc
+    validLocation && selectedStartAtUtc && selectedEndAtUtc
       ? {
           label: t('meetings.coordinatorSchedule.newSchedule'),
-          room: selectedRoom,
+          meetingMode,
+          room: meetingMode === 'ROOM' ? selectedRoom : null,
+          onlineJoinUrl: meetingMode === 'ZOOM' ? onlineJoinUrl.trim() : null,
           startAtUtc: selectedStartAtUtc,
           endAtUtc: selectedEndAtUtc,
         }
@@ -228,24 +251,31 @@ export function CoordinatorScheduleEditorDialog({
   const hasScheduleChanged =
     newSnapshot !== null &&
     (
-      newSnapshot.room.id !== comparisonBaseline.room.id ||
+      (newSnapshot.meetingMode ?? 'ROOM') !== (comparisonBaseline.meetingMode ?? 'ROOM') ||
+      newSnapshot.room?.id !== comparisonBaseline.room?.id ||
+      newSnapshot.onlineJoinUrl !== (comparisonBaseline.onlineJoinUrl ?? null) ||
       new Date(newSnapshot.startAtUtc).getTime() !==
         new Date(comparisonBaseline.startAtUtc).getTime() ||
       new Date(newSnapshot.endAtUtc).getTime() !==
         new Date(comparisonBaseline.endAtUtc).getTime()
     )
 
+  const zoomTimeValid = selectedStartAtUtc !== null && selectedEndAtUtc !== null && new Date(selectedStartAtUtc).getTime() > Date.now() && new Date(selectedEndAtUtc).getTime() > new Date(selectedStartAtUtc).getTime()
   const canSave =
     !savePending &&
-    roomId !== null &&
-    selectionState?.canSchedule === true &&
     selectedStartAtUtc !== null &&
-    selectedEndAtUtc !== null
+    selectedEndAtUtc !== null &&
+    (meetingMode === 'ZOOM'
+      ? isValidZoomJoinUrl(onlineJoinUrl) && zoomTimeValid
+      : roomId !== null && selectionState?.canSchedule === true)
 
   async function submit() {
-    if (!canSave || roomId === null || !selectedStartAtUtc || !selectedEndAtUtc) return
+    if (!canSave || !selectedStartAtUtc || !selectedEndAtUtc) return
+    if (meetingMode === 'ROOM' && roomId === null) return
     await onSave({
-      roomId,
+      meetingMode,
+      roomId: meetingMode === 'ROOM' ? roomId : null,
+      onlineJoinUrl: meetingMode === 'ZOOM' ? onlineJoinUrl.trim() : null,
       startAtUtc: selectedStartAtUtc,
       endAtUtc: selectedEndAtUtc,
       schedulingNotes: notes.trim() || null,
@@ -336,7 +366,33 @@ export function CoordinatorScheduleEditorDialog({
               </div>
             </section>
 
-            {roomsPending ? (
+            {allowZoom ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button type="button" disabled={savePending} aria-pressed={meetingMode === 'ROOM'} className={cn('flex items-start gap-3 rounded-xl border p-4 text-start', meetingMode === 'ROOM' && 'border-primary bg-primary/5')} onClick={() => { setMeetingMode('ROOM'); setOnlineJoinUrl(''); setSelectionState(null) }}>
+                  <Building2 aria-hidden="true" className="text-primary mt-0.5 size-5" />
+                  <span><span className="block text-sm font-semibold">{t('meetings.zoom.roomType')}</span><span className="text-muted-foreground mt-1 block text-xs">{t('meetings.zoom.roomTypeHint')}</span></span>
+                </button>
+                <button type="button" disabled={savePending} aria-pressed={meetingMode === 'ZOOM'} className={cn('flex items-start gap-3 rounded-xl border p-4 text-start', meetingMode === 'ZOOM' && 'border-[#2D8CFF]/60 bg-[#2D8CFF]/5')} onClick={() => { setMeetingMode('ZOOM'); setRoomId(null); setSelectionState(null) }}>
+                  <Video aria-hidden="true" className="mt-0.5 size-5 text-[#2D8CFF]" />
+                  <span><span className="block text-sm font-semibold">{t('meetings.zoom.zoomType')}</span><span className="text-muted-foreground mt-1 block text-xs">{t('meetings.zoom.zoomTypeHint')}</span></span>
+                </button>
+              </div>
+            ) : null}
+
+            {meetingMode === 'ZOOM' ? (
+              <div className="overflow-hidden rounded-2xl border bg-muted/10 shadow-sm">
+                <ZoomMeetingSchedulePanel
+                  date={date}
+                  startTime={startTime}
+                  endTime={endTime}
+                  onlineJoinUrl={onlineJoinUrl}
+                  disabled={savePending}
+                  onDateChange={setDate}
+                  onTimeChange={(nextStartTime, nextEndTime) => { setStartTime(nextStartTime); setEndTime(nextEndTime) }}
+                  onJoinUrlChange={setOnlineJoinUrl}
+                />
+              </div>
+            ) : roomsPending ? (
               <div className="text-muted-foreground flex min-h-48 items-center justify-center gap-2 rounded-2xl border bg-muted/10 text-sm">
                 <Loader2 aria-hidden="true" className="size-4 animate-spin" />
                 {t('meetings.coordinatorSchedule.loadingRooms')}
@@ -364,6 +420,8 @@ export function CoordinatorScheduleEditorDialog({
                   excludeMeetingId={excludeMeetingId}
                   heading={t('meetings.coordinatorSchedule.pickerTitle')}
                   description={t('meetings.coordinatorSchedule.pickerDescription')}
+                  showDurationPicker={false}
+                  directTimeRangeSelection
                   onSelectionStateChange={setSelectionState}
                   onDateChange={setDate}
                   onRoomChange={setRoomId}
@@ -375,7 +433,7 @@ export function CoordinatorScheduleEditorDialog({
               </div>
             )}
 
-            {!roomsPending && !roomsError ? (
+            {meetingMode === 'ROOM' && !roomsPending && !roomsError ? (
               <div className={cn('flex items-start gap-2 rounded-xl border p-3.5 text-sm', statusClass)}>
                 {selectionState?.isChecking ? (
                   <Loader2 aria-hidden="true" className="mt-0.5 size-4 shrink-0 animate-spin" />

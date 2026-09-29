@@ -778,7 +778,9 @@ export function MeetingFollowUpPanel({
 
   const decisionLaunchRequest =
     launchRequest?.kind === 'DECISION' ? launchRequest : localDecisionLaunch
-  const roomName = i18n.language.startsWith('ar') ? meeting.room.nameAr : meeting.room.nameEn
+  const roomName = meeting.meetingMode === 'ZOOM' || !meeting.room
+    ? t('meetings.zoom.zoomType')
+    : i18n.language.startsWith('ar') ? meeting.room.nameAr : meeting.room.nameEn
 
   function handleDecisionLaunchHandled() {
     if (launchRequest?.kind === 'DECISION') onLaunchRequestHandled?.()
@@ -1554,6 +1556,7 @@ export function MeetingFollowUpPanel({
     </div>
   )
 }
+
 
 
 

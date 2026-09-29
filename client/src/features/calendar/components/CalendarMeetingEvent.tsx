@@ -1,4 +1,4 @@
-import { CalendarClock, ListChecks, MapPin, UsersRound } from 'lucide-react'
+import { CalendarClock, ListChecks, MapPin, UsersRound, Video } from 'lucide-react'
 import type { CSSProperties, ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -109,7 +109,13 @@ export function CalendarMeetingEvent({
   const cardRef = useRef<HTMLDivElement>(null)
   const [renderedSize, setRenderedSize] = useState<RenderedSize | null>(null)
   const isArabic = i18n.language.toLowerCase().startsWith('ar')
-  const roomName = isArabic ? meeting.room.nameAr : meeting.room.nameEn
+  const isZoom = meeting.meetingMode === 'ZOOM'
+  const roomName = isZoom
+    ? t('meetings.zoom.online')
+    : meeting.room
+      ? (isArabic ? meeting.room.nameAr : meeting.room.nameEn)
+      : '—'
+  const LocationIcon = isZoom ? Video : MapPin
   const isBusy = meeting.visibility === 'BUSY'
   const isFull = meeting.visibility === 'FULL'
   const isPreview = meeting.visibility === 'PREVIEW'
@@ -128,7 +134,7 @@ export function CalendarMeetingEvent({
     (renderedSize
       ? renderedSize.height < 58 || renderedSize.width < 132
       : minutes <= 45)
-  const accent = getMeetingRoomAccent(meeting.room.colorKey)
+  const accent = isZoom ? '#2D8CFF' : getMeetingRoomAccent(meeting.room?.colorKey ?? null)
   const style = { '--meeting-room-accent': accent } as CSSProperties
 
   useEffect(() => {
@@ -217,7 +223,7 @@ export function CalendarMeetingEvent({
             </span>
           </div>
           <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
-            <MapPin aria-hidden="true" className="size-4 shrink-0" />
+            <LocationIcon aria-hidden="true" className="size-4 shrink-0" />
             <span className="min-w-0 truncate">{roomName}</span>
           </div>
         </div>
@@ -286,7 +292,7 @@ export function CalendarMeetingEvent({
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground sm:text-sm">
                 <span className="inline-flex min-w-0 items-center gap-1.5">
-                  <MapPin aria-hidden="true" className="size-3.5 shrink-0" />
+                  <LocationIcon aria-hidden="true" className="size-3.5 shrink-0" />
                   <span className="truncate">{roomName}</span>
                 </span>
                 {!isBusy ? (
@@ -444,7 +450,7 @@ export function CalendarMeetingEvent({
                   {rangeText}
                 </div>
                 <div className="meeting-card-room flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground sm:text-[11px]">
-                  <MapPin aria-hidden="true" className="size-3 shrink-0" />
+                  <LocationIcon aria-hidden="true" className="size-3 shrink-0" />
                   <span className="min-w-0 truncate">{roomName}</span>
                 </div>
               </div>
@@ -466,7 +472,7 @@ export function CalendarMeetingEvent({
                   {rangeText}
                 </div>
                 <div className="meeting-card-room flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground sm:text-[11px]">
-                  <MapPin aria-hidden="true" className="size-3.5 shrink-0" />
+                  <LocationIcon aria-hidden="true" className="size-3.5 shrink-0" />
                   <span className="min-w-0 truncate">{roomName}</span>
                 </div>
               </div>
@@ -495,4 +501,5 @@ export function CalendarMeetingEvent({
     </Tooltip>
   )
 }
+
 

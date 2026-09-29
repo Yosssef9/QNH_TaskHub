@@ -184,14 +184,17 @@ export const meetingFollowUpService = {
         title: meeting.title,
         status: meeting.status,
         organizer: meeting.organizer,
-        room: {
-          id: meeting.room.id,
-          code: meeting.room.code,
-          nameAr: meeting.room.nameAr,
-          nameEn: meeting.room.nameEn,
-          locationText: meeting.room.locationText,
-          colorKey: meeting.room.colorKey,
-        },
+        meetingMode: meeting.meetingMode,
+        room: meeting.room
+          ? {
+              id: meeting.room.id,
+              code: meeting.room.code,
+              nameAr: meeting.room.nameAr,
+              nameEn: meeting.room.nameEn,
+              locationText: meeting.room.locationText,
+              colorKey: meeting.room.colorKey,
+            }
+          : null,
         startAtUtc: meeting.startAtUtc,
         endAtUtc: meeting.endAtUtc,
         participantCount: meeting.participantCount,
@@ -310,6 +313,7 @@ export const meetingFollowUpService = {
     return { notes };
   },
 };
+
 
 
 

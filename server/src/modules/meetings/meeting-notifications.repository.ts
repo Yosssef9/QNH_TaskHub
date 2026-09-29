@@ -1,6 +1,7 @@
 import type { DatabaseTransaction } from "../../database/types.js";
 import { getDatabasePool, sql } from "../../database/sql.js";
 import type { NotificationType } from "../notifications/notifications.types.js";
+import type { MeetingMode } from "./meetings.types.js";
 
 export interface MeetingNotificationSnapshot {
   meetingId: number;
@@ -13,13 +14,17 @@ export interface MeetingNotificationSnapshot {
   revisionType: "INITIAL" | "RESCHEDULE";
   revisionStatus: "PENDING" | "APPROVED" | "REJECTED";
   currentRevisionId: number | null;
-  roomId: number;
-  roomNameAr: string;
-  roomNameEn: string;
+  meetingMode: MeetingMode;
+  roomId: number | null;
+  roomNameAr: string | null;
+  roomNameEn: string | null;
+  onlineJoinUrl: string | null;
   startAtUtc: Date;
   endAtUtc: Date;
+  previousMeetingMode: MeetingMode | null;
   previousRoomNameAr: string | null;
   previousRoomNameEn: string | null;
+  previousOnlineJoinUrl: string | null;
   previousStartAtUtc: Date | null;
   previousEndAtUtc: Date | null;
 }
@@ -50,8 +55,10 @@ export interface MeetingSeriesNotificationMeeting {
   title: string;
   startAtUtc: Date;
   endAtUtc: Date;
-  roomNameAr: string;
-  roomNameEn: string;
+  meetingMode: MeetingMode;
+  roomNameAr: string | null;
+  roomNameEn: string | null;
+  onlineJoinUrl: string | null;
   ownerIsAttendee: boolean;
 }
 
@@ -78,13 +85,17 @@ interface MeetingNotificationRecord {
   revisionType: MeetingNotificationSnapshot["revisionType"];
   revisionStatus: MeetingNotificationSnapshot["revisionStatus"];
   currentRevisionId: number | string | null;
-  roomId: number | string;
-  roomNameAr: string;
-  roomNameEn: string;
+  meetingMode: MeetingMode;
+  roomId: number | string | null;
+  roomNameAr: string | null;
+  roomNameEn: string | null;
+  onlineJoinUrl: string | null;
   startAtUtc: Date;
   endAtUtc: Date;
+  previousMeetingMode: MeetingMode | null;
   previousRoomNameAr: string | null;
   previousRoomNameEn: string | null;
+  previousOnlineJoinUrl: string | null;
   previousStartAtUtc: Date | null;
   previousEndAtUtc: Date | null;
   timeFormat?: "12H" | "24H" | null;
@@ -105,13 +116,17 @@ function mapSnapshot(record: MeetingNotificationRecord): MeetingNotificationSnap
     revisionType: record.revisionType,
     revisionStatus: record.revisionStatus,
     currentRevisionId: record.currentRevisionId == null ? null : Number(record.currentRevisionId),
-    roomId: Number(record.roomId),
+    meetingMode: record.meetingMode,
+    roomId: record.roomId == null ? null : Number(record.roomId),
     roomNameAr: record.roomNameAr,
     roomNameEn: record.roomNameEn,
+    onlineJoinUrl: record.onlineJoinUrl,
     startAtUtc: record.startAtUtc,
     endAtUtc: record.endAtUtc,
+    previousMeetingMode: record.previousMeetingMode,
     previousRoomNameAr: record.previousRoomNameAr,
     previousRoomNameEn: record.previousRoomNameEn,
+    previousOnlineJoinUrl: record.previousOnlineJoinUrl,
     previousStartAtUtc: record.previousStartAtUtc,
     previousEndAtUtc: record.previousEndAtUtc,
   };
@@ -135,13 +150,17 @@ export const meetingNotificationsRepository = {
           revision.revision_type AS revisionType,
           revision.revision_status AS revisionStatus,
           meeting.current_revision_id AS currentRevisionId,
+          revision.meeting_mode AS meetingMode,
           revision.room_id AS roomId,
           room.name_ar AS roomNameAr,
           room.name_en AS roomNameEn,
+          revision.online_join_url AS onlineJoinUrl,
           revision.start_at_utc AS startAtUtc,
           revision.end_at_utc AS endAtUtc,
+          previousSchedule.previousMeetingMode,
           previousSchedule.previousRoomNameAr,
           previousSchedule.previousRoomNameEn,
+          previousSchedule.previousOnlineJoinUrl,
           previousSchedule.previousStartAtUtc,
           previousSchedule.previousEndAtUtc
         FROM dbo.TM_meetings AS meeting
@@ -149,15 +168,17 @@ export const meetingNotificationsRepository = {
         INNER JOIN dbo.TM_meeting_revisions AS revision
           ON revision.meeting_id = meeting.id AND revision.id = @revisionId
         LEFT JOIN dbo.users AS decisionActor ON decisionActor.USER_ID = revision.approved_by_user_id
-        INNER JOIN dbo.TM_meeting_rooms AS room ON room.id = revision.room_id
+        LEFT JOIN dbo.TM_meeting_rooms AS room ON room.id = revision.room_id
         OUTER APPLY (
           SELECT TOP (1)
+            prior.meeting_mode AS previousMeetingMode,
             previousRoom.name_ar AS previousRoomNameAr,
             previousRoom.name_en AS previousRoomNameEn,
+            prior.online_join_url AS previousOnlineJoinUrl,
             prior.start_at_utc AS previousStartAtUtc,
             prior.end_at_utc AS previousEndAtUtc
           FROM dbo.TM_meeting_revisions AS prior
-          INNER JOIN dbo.TM_meeting_rooms AS previousRoom ON previousRoom.id = prior.room_id
+          LEFT JOIN dbo.TM_meeting_rooms AS previousRoom ON previousRoom.id = prior.room_id
           WHERE prior.meeting_id = meeting.id
             AND prior.revision_status = 'APPROVED'
             AND prior.revision_number < revision.revision_number
@@ -183,13 +204,17 @@ export const meetingNotificationsRepository = {
         revision.revision_type AS revisionType,
         revision.revision_status AS revisionStatus,
         meeting.current_revision_id AS currentRevisionId,
+        revision.meeting_mode AS meetingMode,
         revision.room_id AS roomId,
         room.name_ar AS roomNameAr,
         room.name_en AS roomNameEn,
+        revision.online_join_url AS onlineJoinUrl,
         revision.start_at_utc AS startAtUtc,
         revision.end_at_utc AS endAtUtc,
+        previousSchedule.previousMeetingMode,
         previousSchedule.previousRoomNameAr,
         previousSchedule.previousRoomNameEn,
+        previousSchedule.previousOnlineJoinUrl,
         previousSchedule.previousStartAtUtc,
         previousSchedule.previousEndAtUtc
       FROM dbo.TM_meetings AS meeting
@@ -197,15 +222,17 @@ export const meetingNotificationsRepository = {
       INNER JOIN dbo.TM_meeting_revisions AS revision
         ON revision.id = meeting.current_revision_id AND revision.meeting_id = meeting.id
       LEFT JOIN dbo.users AS decisionActor ON decisionActor.USER_ID = revision.approved_by_user_id
-      INNER JOIN dbo.TM_meeting_rooms AS room ON room.id = revision.room_id
+      LEFT JOIN dbo.TM_meeting_rooms AS room ON room.id = revision.room_id
       OUTER APPLY (
         SELECT TOP (1)
+          prior.meeting_mode AS previousMeetingMode,
           previousRoom.name_ar AS previousRoomNameAr,
           previousRoom.name_en AS previousRoomNameEn,
+          prior.online_join_url AS previousOnlineJoinUrl,
           prior.start_at_utc AS previousStartAtUtc,
           prior.end_at_utc AS previousEndAtUtc
         FROM dbo.TM_meeting_revisions AS prior
-        INNER JOIN dbo.TM_meeting_rooms AS previousRoom ON previousRoom.id = prior.room_id
+        LEFT JOIN dbo.TM_meeting_rooms AS previousRoom ON previousRoom.id = prior.room_id
         WHERE prior.meeting_id = meeting.id
           AND prior.revision_status = 'APPROVED'
           AND prior.revision_number < revision.revision_number
@@ -289,8 +316,10 @@ export const meetingNotificationsRepository = {
         title: string;
         startAtUtc: Date;
         endAtUtc: Date;
-        roomNameAr: string;
-        roomNameEn: string;
+        meetingMode: MeetingMode;
+        roomNameAr: string | null;
+        roomNameEn: string | null;
+        onlineJoinUrl: string | null;
         ownerIsAttendee: boolean | number;
       }>(`
         WITH series_meetings AS (
@@ -323,8 +352,10 @@ export const meetingNotificationsRepository = {
           meeting.title,
           revision.start_at_utc AS startAtUtc,
           revision.end_at_utc AS endAtUtc,
+          revision.meeting_mode AS meetingMode,
           room.name_ar AS roomNameAr,
           room.name_en AS roomNameEn,
+          revision.online_join_url AS onlineJoinUrl,
           CAST(CASE WHEN EXISTS (
             SELECT 1
             FROM dbo.TM_meeting_attendees AS attendee
@@ -335,7 +366,7 @@ export const meetingNotificationsRepository = {
         INNER JOIN dbo.TM_meetings AS meeting ON meeting.id = recipient.meetingId
         INNER JOIN dbo.TM_meeting_revisions AS revision
           ON revision.id = meeting.current_revision_id AND revision.meeting_id = meeting.id
-        INNER JOIN dbo.TM_meeting_rooms AS room ON room.id = revision.room_id
+        LEFT JOIN dbo.TM_meeting_rooms AS room ON room.id = revision.room_id
         INNER JOIN dbo.TM_meeting_series AS series ON series.id = @seriesId
         INNER JOIN dbo.users AS organizer ON organizer.USER_ID = series.created_by_user_id
         INNER JOIN dbo.users AS ownerPortal ON ownerPortal.USER_ID = recipient.ownerUserId AND ownerPortal.IS_ACTIVE = 1
@@ -350,7 +381,7 @@ export const meetingNotificationsRepository = {
     const byOwner = new Map<number, MeetingSeriesNotificationRecipient>();
     for (const row of result.recordset) {
       const owner = Number(row.ownerUserId);
-      const current = byOwner.get(owner) ?? {
+      const current: MeetingSeriesNotificationRecipient = byOwner.get(owner) ?? {
         ownerUserId: owner,
         ownerUserName: row.ownerUserName,
         organizerUserId: Number(row.organizerUserId),
@@ -365,8 +396,10 @@ export const meetingNotificationsRepository = {
         title: row.title,
         startAtUtc: row.startAtUtc,
         endAtUtc: row.endAtUtc,
+        meetingMode: row.meetingMode,
         roomNameAr: row.roomNameAr,
         roomNameEn: row.roomNameEn,
+        onlineJoinUrl: row.onlineJoinUrl,
         ownerIsAttendee: Boolean(row.ownerIsAttendee),
       });
       byOwner.set(owner, current);
@@ -446,14 +479,14 @@ export const meetingNotificationsRepository = {
           @owner AS ownerUserId,
           CONVERT(VARCHAR(220), CONCAT('MEETING_START_REMINDER:', meeting.id, ':', revision.id)) AS dedupeKey,
           meeting.title AS subjectTitle,
-          CASE WHEN settings.language_code = 'AR' THEN room.name_ar ELSE room.name_en END AS contextTitle,
+          CASE WHEN revision.meeting_mode = 'ZOOM' THEN N'Zoom Meeting' WHEN settings.language_code = 'AR' THEN room.name_ar ELSE room.name_en END AS contextTitle,
           meeting.id AS meetingId,
           revision.id AS revisionId,
           CAST(revision.start_at_utc AS DATE) AS eventDate
         FROM dbo.TM_meetings AS meeting
         INNER JOIN dbo.TM_meeting_revisions AS revision
           ON revision.id = meeting.current_revision_id AND revision.meeting_id = meeting.id
-        INNER JOIN dbo.TM_meeting_rooms AS room ON room.id = revision.room_id
+        LEFT JOIN dbo.TM_meeting_rooms AS room ON room.id = revision.room_id
         INNER JOIN dbo.TM_user_settings AS settings ON settings.portal_user_id = @owner
         WHERE meeting.status = 'SCHEDULED'
           AND settings.meeting_start_reminder_enabled = 1
@@ -501,13 +534,17 @@ export const meetingNotificationsRepository = {
           revision.revision_type AS revisionType,
           revision.revision_status AS revisionStatus,
           meeting.current_revision_id AS currentRevisionId,
+          revision.meeting_mode AS meetingMode,
           revision.room_id AS roomId,
           room.name_ar AS roomNameAr,
           room.name_en AS roomNameEn,
+          revision.online_join_url AS onlineJoinUrl,
           revision.start_at_utc AS startAtUtc,
           revision.end_at_utc AS endAtUtc,
+          previousSchedule.previousMeetingMode,
           previousSchedule.previousRoomNameAr,
           previousSchedule.previousRoomNameEn,
+          previousSchedule.previousOnlineJoinUrl,
           previousSchedule.previousStartAtUtc,
           previousSchedule.previousEndAtUtc,
           COALESCE(ownerSettings.time_format, '12H') AS timeFormat,
@@ -536,15 +573,17 @@ export const meetingNotificationsRepository = {
         INNER JOIN dbo.TM_meeting_revisions AS revision
           ON revision.meeting_id = meeting.id AND revision.id = @revisionId
         LEFT JOIN dbo.users AS decisionActor ON decisionActor.USER_ID = revision.approved_by_user_id
-        INNER JOIN dbo.TM_meeting_rooms AS room ON room.id = revision.room_id
+        LEFT JOIN dbo.TM_meeting_rooms AS room ON room.id = revision.room_id
         OUTER APPLY (
           SELECT TOP (1)
+            prior.meeting_mode AS previousMeetingMode,
             previousRoom.name_ar AS previousRoomNameAr,
             previousRoom.name_en AS previousRoomNameEn,
+            prior.online_join_url AS previousOnlineJoinUrl,
             prior.start_at_utc AS previousStartAtUtc,
             prior.end_at_utc AS previousEndAtUtc
           FROM dbo.TM_meeting_revisions AS prior
-          INNER JOIN dbo.TM_meeting_rooms AS previousRoom ON previousRoom.id = prior.room_id
+          LEFT JOIN dbo.TM_meeting_rooms AS previousRoom ON previousRoom.id = prior.room_id
           WHERE prior.meeting_id = meeting.id
             AND prior.revision_status = 'APPROVED'
             AND prior.revision_number < revision.revision_number

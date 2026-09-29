@@ -11,6 +11,8 @@ import {
   Sparkles,
   UserRound,
   UsersRound,
+  Video,
+  Building2,
   X,
 } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
@@ -54,16 +56,20 @@ import {
 } from '../meeting-attachment-policy'
 import type {
   MeetingAvailabilityInput,
+  MeetingMode,
   MeetingParticipant,
   MeetingTemplate,
 } from '../types/meeting.types'
 import { buildParticipantAvailabilityInput } from '../meeting-participant-availability'
+import { canOrganizeRoomMeetings, canOrganizeZoomMeetings } from '../meeting-access'
+import { isValidZoomJoinUrl } from '../meeting-online-location'
 import {
   MeetingAgendaEditor,
   type MeetingAgendaDraftItem,
 } from './MeetingAgendaEditor'
 import { MeetingParticipantPicker } from './MeetingParticipantPicker'
 import { MeetingParticipantConflictNotice } from './MeetingParticipantConflictNotice'
+import { ZoomMeetingSchedulePanel } from './ZoomMeetingSchedulePanel'
 import {
   MeetingSchedulePicker,
   type MeetingScheduleFocusField,
@@ -76,6 +82,7 @@ type MeetingEditorFocusMode = 'NONE' | 'DETAILS' | 'SCHEDULE'
 interface MeetingEditorValidationErrors extends MeetingScheduleValidationErrors {
   title?: string
   attendees?: string
+  onlineJoinUrl?: string
 }
 
 export interface MeetingEditorInitialSchedule {
@@ -89,7 +96,9 @@ export interface MeetingEditorInitialValues {
   title: string
   description?: string | null
   durationMinutes: number
+  meetingMode?: MeetingMode
   roomId?: number | null
+  onlineJoinUrl?: string | null
   organizerAttending?: boolean
   attendees: MeetingParticipant[]
   followUpOfMeetingId?: number | null
@@ -254,6 +263,8 @@ export function MeetingEditorDialog({
   const queryClient = useQueryClient()
   const attachmentInputRef = useRef<HTMLInputElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
+  const canRoom = canOrganizeRoomMeetings(currentUser.data?.access)
+  const canZoom = canOrganizeZoomMeetings(currentUser.data?.access)
 
   const initialDurationMinutes = initialValues?.durationMinutes ?? template?.durationMinutes ?? 60
   const scheduleStartsUnselected = initialValues?.scheduleStartsUnselected === true
@@ -278,6 +289,13 @@ export function MeetingEditorDialog({
       : defaultSchedule.endTime,
   )
   const [timeSelected, setTimeSelected] = useState(!scheduleStartsUnselected)
+  const [meetingMode, setMeetingMode] = useState<MeetingMode>(() => {
+    const preferred = initialValues?.meetingMode ?? template?.meetingMode ?? 'ROOM'
+    if (preferred === 'ZOOM' && canZoom) return 'ZOOM'
+    if (preferred === 'ROOM' && canRoom) return 'ROOM'
+    return canZoom ? 'ZOOM' : 'ROOM'
+  })
+  const [onlineJoinUrl, setOnlineJoinUrl] = useState(initialValues?.onlineJoinUrl ?? '')
   const [roomId, setRoomId] = useState<number | null>(() => {
     if (initialValues) return initialValues.roomId ?? null
     return initialSchedule?.roomId ?? (template?.defaultRoom?.isActive ? template.defaultRoom.id : null)
@@ -373,7 +391,7 @@ export function MeetingEditorDialog({
         ? 'xl:grid-cols-[12rem_minmax(0,1fr)]'
         : 'xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.3fr)]'
 
-  const availabilityInput = timeSelected
+  const availabilityInput = meetingMode === 'ROOM' && timeSelected
     ? buildAvailabilityInput({
         roomId,
         date,
@@ -411,7 +429,10 @@ export function MeetingEditorDialog({
     setDescription(selected.description ?? '')
     setAgendaItems([])
     setAgendaErrors({})
-    setRoomId(selected.defaultRoom?.isActive ? selected.defaultRoom.id : null)
+    const nextMode: MeetingMode = selected.meetingMode === 'ZOOM' && canZoom ? 'ZOOM' : canRoom ? 'ROOM' : 'ZOOM'
+    setMeetingMode(nextMode)
+    setOnlineJoinUrl('')
+    setRoomId(nextMode === 'ROOM' && selected.defaultRoom?.isActive ? selected.defaultRoom.id : null)
     setOrganizerAttending(selected.organizerAttending)
     setAttendeeUserIds(selected.attendees.map((attendee) => attendee.userId))
     setSelectedParticipantOptions(selected.attendees.map(participantOption))
@@ -541,14 +562,17 @@ export function MeetingEditorDialog({
       nextErrors.attendees = t('meetings.create.validation.attendeeRequired')
     }
     if (!date) nextErrors.date = t('meetings.create.validation.dateRequired')
-    if (!roomId) nextErrors.room = t('meetings.create.validation.roomRequired')
+    if (meetingMode === 'ROOM' && !roomId) nextErrors.room = t('meetings.create.validation.roomRequired')
+    if (meetingMode === 'ZOOM' && !isValidZoomJoinUrl(onlineJoinUrl)) {
+      nextErrors.onlineJoinUrl = t('meetings.zoom.invalidJoinLink')
+    }
 
     const startMinutes = Number(startTime.slice(0, 2)) * 60 + Number(startTime.slice(3, 5))
     const endMinutes = Number(endTime.slice(0, 2)) * 60 + Number(endTime.slice(3, 5))
     if (!timeSelected) {
       nextErrors.time = t('meetings.create.validation.timeRequired')
     } else if (!startTime || !endTime || endMinutes <= startMinutes) {
-      nextErrors.duration = t('meetings.create.validation.durationRequired')
+      nextErrors.time = t('meetings.create.validation.timeRequired')
     } else if (startMinutes % 15 !== 0 || endMinutes % 15 !== 0) {
       nextErrors.time = t('meetings.create.validation.timeIncrement')
     } else {
@@ -562,18 +586,18 @@ export function MeetingEditorDialog({
       }
     }
 
-    if (!nextErrors.time && roomId && participantCount > 0 && !availabilityInput) {
+    if (meetingMode === 'ROOM' && !nextErrors.time && roomId && participantCount > 0 && !availabilityInput) {
       nextErrors.time = t('meetings.create.validation.timeRequired')
     }
 
-    if (mode === 'DIRECT' && selectedRoom && selectedRoom.capacity < participantCount) {
+    if (meetingMode === 'ROOM' && mode === 'DIRECT' && selectedRoom && selectedRoom.capacity < participantCount) {
       nextErrors.capacity = t('meetings.create.validation.capacity', {
         participants: participantCount,
         capacity: selectedRoom.capacity,
       })
     }
 
-    if (mode === 'DIRECT' && availabilityInput && !nextErrors.capacity) {
+    if (meetingMode === 'ROOM' && mode === 'DIRECT' && availabilityInput && !nextErrors.capacity) {
       if (availability.isFetching || availability.isPending) {
         nextErrors.time = t('meetings.create.validation.availabilityChecking')
       } else if (availability.isError || !availability.data) {
@@ -591,13 +615,13 @@ export function MeetingEditorDialog({
     }
 
     setValidationErrors(nextErrors)
-    const order: Array<'title' | 'attendees' | Exclude<MeetingScheduleFocusField, null>> = [
+    const order: Array<keyof MeetingEditorValidationErrors> = [
       'title',
       'attendees',
+      'onlineJoinUrl',
       'date',
       'room',
       'capacity',
-      'duration',
       'time',
     ]
     const firstFieldError = order.find((field) => field && nextErrors[field])
@@ -620,6 +644,8 @@ export function MeetingEditorDialog({
       focusValidationError('title')
     } else if (firstFieldError === 'attendees') {
       setFocusMode('DETAILS')
+    } else if (firstFieldError === 'onlineJoinUrl') {
+      setFocusMode('SCHEDULE')
     } else if (firstAgendaError) {
       focusAgendaError(firstAgendaError.clientId)
     } else if (firstFieldError) {
@@ -629,15 +655,26 @@ export function MeetingEditorDialog({
   }
 
   async function submit() {
-    if (isSaving || !validateBeforeSubmit() || !availabilityInput) return
+    if (isSaving || !validateBeforeSubmit()) return
+    let startAtUtc: string
+    let endAtUtc: string
+    try {
+      startAtUtc = riyadhLocalDateTimeToUtcIso(date, startTime)
+      endAtUtc = riyadhLocalDateTimeToUtcIso(date, endTime)
+    } catch {
+      return
+    }
+    if (meetingMode === 'ROOM' && !availabilityInput) return
 
     try {
       const meeting = await saveMutation.mutateAsync({
         title: title.trim(),
         description: description.trim() || null,
-        roomId: availabilityInput.roomId,
-        startAtUtc: availabilityInput.startAtUtc,
-        endAtUtc: availabilityInput.endAtUtc,
+        meetingMode,
+        roomId: meetingMode === 'ROOM' ? roomId : null,
+        onlineJoinUrl: meetingMode === 'ZOOM' ? onlineJoinUrl.trim() : null,
+        startAtUtc,
+        endAtUtc,
         organizerAttending,
         attendeeUserIds,
         agendaItems: agendaItems.map((item) => ({
@@ -658,7 +695,7 @@ export function MeetingEditorDialog({
       }
 
       toast.success(
-        t(mode === 'DIRECT' ? 'meetings.directScheduled' : 'meetings.requestSubmitted'),
+        t(meetingMode === 'ZOOM' || mode === 'DIRECT' ? 'meetings.directScheduled' : 'meetings.requestSubmitted'),
       )
       if (failedUploads > 0) {
         toast.error(
@@ -777,6 +814,55 @@ export function MeetingEditorDialog({
               </div>
             </div>
           </header>
+
+          {canRoom && canZoom ? (
+            <div className="border-b px-5 py-4 sm:px-6">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  aria-pressed={meetingMode === 'ROOM'}
+                  className={cn(
+                    'flex items-start gap-3 rounded-xl border p-4 text-start transition',
+                    meetingMode === 'ROOM' ? 'border-primary bg-primary/5 ring-1 ring-primary/15' : 'hover:bg-muted/40',
+                  )}
+                  onClick={() => {
+                    setMeetingMode('ROOM')
+                    setOnlineJoinUrl('')
+                    clearValidationError('onlineJoinUrl')
+                  }}
+                >
+                  <Building2 aria-hidden="true" className="text-primary mt-0.5 size-5" />
+                  <span>
+                    <span className="block text-sm font-semibold">{t('meetings.zoom.roomType')}</span>
+                    <span className="text-muted-foreground mt-1 block text-xs leading-5">{t('meetings.zoom.roomTypeHint')}</span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  aria-pressed={meetingMode === 'ZOOM'}
+                  className={cn(
+                    'flex items-start gap-3 rounded-xl border p-4 text-start transition',
+                    meetingMode === 'ZOOM' ? 'border-[#2D8CFF]/60 bg-[#2D8CFF]/5 ring-1 ring-[#2D8CFF]/15' : 'hover:bg-muted/40',
+                  )}
+                  onClick={() => {
+                    setMeetingMode('ZOOM')
+                    setRoomId(null)
+                    clearValidationError('room')
+                    clearValidationError('capacity')
+                    clearValidationError('time')
+                  }}
+                >
+                  <Video aria-hidden="true" className="mt-0.5 size-5 text-[#2D8CFF]" />
+                  <span>
+                    <span className="block text-sm font-semibold">{t('meetings.zoom.zoomType')}</span>
+                    <span className="text-muted-foreground mt-1 block text-xs leading-5">{t('meetings.zoom.zoomTypeHint')}</span>
+                  </span>
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           <div
             className={cn(
@@ -945,7 +1031,7 @@ export function MeetingEditorDialog({
                   selectedOptions={selectedParticipantOptions}
                   searchValue={participantSearch}
                   participantCount={participantCount}
-                  roomCapacity={selectedRoom?.capacity ?? null}
+                  roomCapacity={meetingMode === 'ROOM' ? (selectedRoom?.capacity ?? null) : null}
                   loading={participantQuery.isPending}
                   loadingMore={participantQuery.isFetchingNextPage}
                   hasMore={participantQuery.hasNextPage}
@@ -1097,6 +1183,30 @@ export function MeetingEditorDialog({
             )}
 
             {focusMode !== 'DETAILS' ? (
+              meetingMode === 'ZOOM' ? (
+                <ZoomMeetingSchedulePanel
+                  date={date}
+                  startTime={startTime}
+                  endTime={endTime}
+                  onlineJoinUrl={onlineJoinUrl}
+                  disabled={isSaving}
+                  focused={focusMode === 'SCHEDULE'}
+                  errors={validationErrors}
+                  onFocusToggle={() => setFocusMode((current) => (current === 'SCHEDULE' ? 'NONE' : 'SCHEDULE'))}
+                  onDateChange={(nextDate) => {
+                    setDate(nextDate)
+                    if (nextDate) clearValidationError('date')
+                  }}
+                  onTimeChange={(nextStart, nextEnd) => {
+                    setStartTime(nextStart)
+                    setEndTime(nextEnd)
+                    setTimeSelected(true)
+                    clearValidationError('time')
+                  }}
+                  onJoinUrlChange={setOnlineJoinUrl}
+                  onValidationClear={(field) => clearValidationError(field)}
+                />
+              ) : (
               <MeetingSchedulePicker
                 date={date}
                 roomId={roomId}
@@ -1129,23 +1239,16 @@ export function MeetingEditorDialog({
                   clearValidationError('capacity')
                   clearValidationError('time')
                 }}
-                onDurationChange={
-                  scheduleStartsUnselected
-                    ? (minutes) => {
-                        setEndTime(addMinutes(startTime, minutes))
-                        clearValidationError('duration')
-                        clearValidationError('time')
-                      }
-                    : undefined
-                }
+                showDurationPicker={false}
+                directTimeRangeSelection
                 onTimeChange={(nextStart, nextEnd) => {
                   setStartTime(nextStart)
                   setEndTime(nextEnd)
                   setTimeSelected(true)
-                  clearValidationError('duration')
                   clearValidationError('time')
                 }}
               />
+              )
             ) : (
               <aside
                 className="bg-muted/20 flex min-h-44 flex-col justify-between gap-5 border-b p-4 xl:min-h-full xl:border-b-0"
@@ -1163,9 +1266,9 @@ export function MeetingEditorDialog({
                   <p className="mt-2 text-sm font-semibold">{selectedDateSummary}</p>
                   <p className="mt-1 text-xs font-medium tabular-nums">{selectedTimeSummary}</p>
                   <p className="text-muted-foreground mt-2 line-clamp-2 text-xs leading-5">
-                    {roomName ?? t('meetings.create.scheduleSummaryEmpty')}
+                    {meetingMode === 'ZOOM' ? t('meetings.zoom.zoomType') : (roomName ?? t('meetings.create.scheduleSummaryEmpty'))}
                   </p>
-                  {selectedRoom ? (
+                  {meetingMode === 'ROOM' && selectedRoom ? (
                     <p className="text-muted-foreground mt-1 text-xs">
                       {t('meetings.create.capacitySummary', {
                         participants: participantCount,
@@ -1187,7 +1290,7 @@ export function MeetingEditorDialog({
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
                   <span className="font-semibold">{t('meetings.create.summaryTitle')}</span>
-                  {availabilityInput && roomName ? (
+                  {(meetingMode === 'ZOOM' && date && timeSelected && onlineJoinUrl.trim()) || (availabilityInput && roomName) ? (
                     <>
                       <span className="text-muted-foreground">•</span>
                       <span>{selectedDateSummary}</span>
@@ -1196,7 +1299,7 @@ export function MeetingEditorDialog({
                         {selectedTimeSummary}
                       </span>
                       <span className="text-muted-foreground">•</span>
-                      <span>{roomName}</span>
+                      <span>{meetingMode === 'ZOOM' ? t('meetings.zoom.zoomType') : roomName}</span>
                       <span className="text-muted-foreground">•</span>
                       <span>{t('meetings.participantCount', { count: participantCount })}</span>
                       <span className="text-muted-foreground">•</span>
@@ -1215,7 +1318,7 @@ export function MeetingEditorDialog({
                   )}
                 </div>
 
-                {availabilityInput ? (
+                {meetingMode === 'ROOM' && availabilityInput ? (
                   <div className="mt-2 flex items-start gap-2 text-xs">
                     {availability.isFetching ? (
                       <Loader2
@@ -1276,7 +1379,7 @@ export function MeetingEditorDialog({
                   {isSaving ? (
                     <Loader2 aria-hidden="true" className="size-4 animate-spin" />
                   ) : null}
-                  {t(mode === 'DIRECT' ? 'meetings.scheduleNow' : 'meetings.submitRequest')}
+                  {t(meetingMode === 'ZOOM' || mode === 'DIRECT' ? 'meetings.scheduleNow' : 'meetings.submitRequest')}
                 </Button>
               </div>
             </div>

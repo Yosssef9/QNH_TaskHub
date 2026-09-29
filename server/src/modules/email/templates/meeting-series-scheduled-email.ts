@@ -15,8 +15,10 @@ const meetingSchema = z.object({
   title: z.string().min(1),
   startAtUtc: z.string().datetime(),
   endAtUtc: z.string().datetime(),
-  roomNameAr: z.string(),
-  roomNameEn: z.string(),
+  meetingMode: z.enum(["ROOM", "ZOOM"]).default("ROOM"),
+  roomNameAr: z.string().nullable(),
+  roomNameEn: z.string().nullable(),
+  onlineJoinUrl: z.string().url().nullable().optional(),
   scheduleConflict: meetingScheduleConflictSchema.nullable().optional(),
 });
 
@@ -53,6 +55,9 @@ export function renderMeetingSeriesScheduledEmail(
   const data = schema.parse(payload);
   const ar = language === "ar";
   const href = joinAbsoluteUrl(context.taskHubUrl, data.href);
+  const location = (meeting: (typeof data.meetings)[number]) => meeting.meetingMode === "ZOOM"
+    ? (ar ? "Zoom · عبر الإنترنت" : "Zoom · Online")
+    : (ar ? meeting.roomNameAr : meeting.roomNameEn) ?? (ar ? "قاعة غير محددة" : "Room not specified");
   const visible = data.meetings.slice(0, 10);
   const conflicting = data.meetings.filter((meeting) => meeting.scheduleConflict);
   const conflictWarning = renderMeetingScheduleConflictWarning({
@@ -75,7 +80,7 @@ export function renderMeetingSeriesScheduledEmail(
     { label: ar ? "عدد الاجتماعات" : "Meetings", value: String(data.meetingCount) },
     ...visible.map((meeting) => ({
       label: `#${meeting.sequenceNumber}`,
-      value: `${formatDateTime(meeting.startAtUtc, language, data.timeFormat)} · ${ar ? meeting.roomNameAr : meeting.roomNameEn}${meeting.scheduleConflict ? (ar ? " · ⚠ تعارض في الموعد" : " · ⚠ Schedule conflict") : ""}`,
+      value: `${formatDateTime(meeting.startAtUtc, language, data.timeFormat)} · ${location(meeting)}${meeting.scheduleConflict ? (ar ? " · ⚠ تعارض في الموعد" : " · ⚠ Schedule conflict") : ""}`,
     })),
     ...(data.meetingCount > visible.length
       ? [{ label: ar ? "المزيد" : "More", value: ar ? `و${data.meetingCount - visible.length} اجتماعات أخرى` : `${data.meetingCount - visible.length} more Meetings` }]
@@ -107,7 +112,7 @@ export function renderMeetingSeriesScheduledEmail(
   });
 
   const meetingText = visible
-    .map((meeting) => `#${meeting.sequenceNumber} — ${formatDateTime(meeting.startAtUtc, language, data.timeFormat)} — ${ar ? meeting.roomNameAr : meeting.roomNameEn}${meeting.scheduleConflict ? (ar ? " — ⚠ تعارض في الموعد" : " — ⚠ Schedule conflict") : ""}`)
+    .map((meeting) => `#${meeting.sequenceNumber} — ${formatDateTime(meeting.startAtUtc, language, data.timeFormat)} — ${location(meeting)}${meeting.scheduleConflict ? (ar ? " — ⚠ تعارض في الموعد" : " — ⚠ Schedule conflict") : ""}`)
     .join("\n");
   const warningText = conflictWarning.text
     ? `\n\n${conflictWarning.text}${conflictOverflowText ? `\n${conflictOverflowText}` : ""}`

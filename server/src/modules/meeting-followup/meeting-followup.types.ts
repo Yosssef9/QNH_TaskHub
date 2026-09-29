@@ -1,5 +1,5 @@
 import type { MeetingParticipant, MeetingStatus } from "../meetings/meeting-workflow.types.js";
-import type { MeetingRoom } from "../meetings/meetings.types.js";
+import type { MeetingMode, MeetingRoom } from "../meetings/meetings.types.js";
 
 export interface MeetingDecision {
   id: number;
@@ -55,7 +55,8 @@ export interface RelatedMeeting {
   title: string;
   status: MeetingStatus;
   organizer: MeetingParticipant;
-  room: Pick<MeetingRoom, "id" | "code" | "nameAr" | "nameEn" | "locationText" | "colorKey">;
+  meetingMode: MeetingMode;
+  room: Pick<MeetingRoom, "id" | "code" | "nameAr" | "nameEn" | "locationText" | "colorKey"> | null;
   startAtUtc: string;
   endAtUtc: string;
   participantCount: number;
@@ -65,3 +66,4 @@ export interface RelatedMeeting {
 export interface RelatedMeetingFamily {
   items: RelatedMeeting[];
 }
+

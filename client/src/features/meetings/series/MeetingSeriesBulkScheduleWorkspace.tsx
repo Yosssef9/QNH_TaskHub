@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Clock3, DoorOpen, Loader2 } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Clock3, DoorOpen, Loader2, Video } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -53,7 +53,9 @@ function stripScheduleOverrideFields(
     date: _date,
     startTime: _startTime,
     endTime: _endTime,
+    meetingMode: _meetingMode,
     roomId: _roomId,
+    onlineJoinUrl: _onlineJoinUrl,
     ...rest
   } = item
   return rest
@@ -75,7 +77,7 @@ function applyScheduleChangesToInput(
   for (const occurrence of occurrences) {
     const nextStartTime = values.startTime ?? occurrence.startTime
     const nextEndTime = values.endTime ?? occurrence.endTime
-    const nextRoomId = values.roomId ?? occurrence.roomId
+    const nextRoomId = occurrence.meetingMode === 'ROOM' ? (values.roomId ?? occurrence.roomId) : null
     const addedId = addedClientIdFromKey(occurrence.occurrenceKey)
 
     if (addedId) {
@@ -119,7 +121,7 @@ function applyScheduleChangesToInput(
     ) {
       next.endTime = nextEndTime
     }
-    if (nextRoomId !== input.defaults.roomId) {
+    if (occurrence.meetingMode === 'ROOM' && nextRoomId !== input.defaults.roomId) {
       next.roomId = nextRoomId
     }
 
@@ -142,9 +144,10 @@ function roomLabel(room: MeetingRoom, arabic: boolean): string {
 
 function roomNameById(
   rooms: readonly MeetingRoom[],
-  roomId: number,
+  roomId: number | null,
   arabic: boolean,
 ): string {
+  if (roomId === null) return 'Zoom'
   const room = rooms.find((item) => item.id === roomId)
   return room ? roomLabel(room, arabic) : String(roomId)
 }
@@ -178,6 +181,7 @@ export function MeetingSeriesBulkScheduleWorkspace({
   )
   const firstOccurrence = selectedOccurrences[0] ?? null
   const selectedCount = selectedOccurrences.length
+  const allSelectedRoom = selectedOccurrences.length > 0 && selectedOccurrences.every((occurrence) => occurrence.meetingMode === 'ROOM' && occurrence.roomId !== null)
 
   const [changeRoom, setChangeRoom] = useState(false)
   const [roomId, setRoomId] = useState<number | null>(null)
@@ -221,13 +225,13 @@ export function MeetingSeriesBulkScheduleWorkspace({
 
   const proposedValues = useMemo<MeetingSeriesBulkScheduleValues>(
     () => ({
-      ...(changeRoom && roomId ? { roomId } : {}),
+      ...(allSelectedRoom && changeRoom && roomId ? { roomId } : {}),
       ...(changeTime ? { startTime, endTime } : {}),
     }),
-    [changeRoom, changeTime, endTime, roomId, startTime],
+    [allSelectedRoom, changeRoom, changeTime, endTime, roomId, startTime],
   )
 
-  const hasProposedChange = changeRoom || changeTime
+  const hasProposedChange = (allSelectedRoom && changeRoom) || changeTime
   const candidateInput = useMemo(
     () =>
       previewInput && hasProposedChange && !invalidTime
@@ -270,6 +274,7 @@ export function MeetingSeriesBulkScheduleWorkspace({
           previewMeetingSeries(roomInput as MeetingSeriesPreviewInput),
         enabled:
           open &&
+          allSelectedRoom &&
           previewInput !== null &&
           selectedCount > 0 &&
           !invalidTime &&
@@ -352,6 +357,8 @@ export function MeetingSeriesBulkScheduleWorkspace({
       )
         .filter(
           (occurrence) =>
+            focusedOccurrence.meetingMode === 'ROOM' &&
+            occurrence.meetingMode === 'ROOM' &&
             occurrence.occurrenceKey !== focusedOccurrence.occurrenceKey &&
             occurrence.date === focusedOccurrence.date &&
             occurrence.roomId === focusedOccurrence.roomId,
@@ -437,6 +444,7 @@ export function MeetingSeriesBulkScheduleWorkspace({
           <div className="grid min-h-0 flex-1 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
             <div className="min-h-0 overflow-y-auto border-b p-4 sm:p-5 xl:border-b-0 xl:border-e">
               <div className="space-y-4">
+                {allSelectedRoom ? (
                 <Card className="p-4">
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex items-start gap-3">
@@ -519,6 +527,14 @@ export function MeetingSeriesBulkScheduleWorkspace({
                     })}
                   </div>
                 </Card>
+                ) : (
+                  <Card className="p-4">
+                    <div className="flex items-start gap-3">
+                      <span className="bg-[#2D8CFF]/10 text-[#2D8CFF] grid size-9 shrink-0 place-items-center rounded-lg"><Video aria-hidden="true" className="size-4" /></span>
+                      <div><p className="text-sm font-semibold">{t('meetings.zoom.zoomType')}</p><p className="text-muted-foreground mt-0.5 text-xs">{t('meetings.zoom.zoomTypeHint')}</p></div>
+                    </div>
+                  </Card>
+                )}
 
                 <Card className="p-4">
                   <div className="flex items-center justify-between gap-4">
@@ -699,25 +715,34 @@ export function MeetingSeriesBulkScheduleWorkspace({
                     isError={focusedOccurrence.participantAvailabilityCheckFailed}
                   />
 
-                  <MeetingSchedulePicker
-                    date={focusedOccurrence.date}
-                    roomId={focusedOccurrence.roomId}
-                    rooms={[...rooms]}
-                    participantCount={focusedOccurrence.participantCount}
-                    startTime={focusedOccurrence.startTime}
-                    endTime={focusedOccurrence.endTime}
-                    timeSelected
-                    disabled
-                    allowBusySelection
-                    showDurationPicker={false}
-                    directTimeRangeSelection
-                    supplementalBusyRanges={supplementalBusyRanges}
-                    heading={t('meetings.series.bulk.dayTimelineTitle')}
-                    description={t('meetings.series.bulk.dayTimelineHint')}
-                    onDateChange={() => undefined}
-                    onRoomChange={() => undefined}
-                    onTimeChange={() => undefined}
-                  />
+                  {focusedOccurrence.meetingMode === 'ROOM' && focusedOccurrence.roomId !== null ? (
+                    <MeetingSchedulePicker
+                      date={focusedOccurrence.date}
+                      roomId={focusedOccurrence.roomId}
+                      rooms={[...rooms]}
+                      participantCount={focusedOccurrence.participantCount}
+                      startTime={focusedOccurrence.startTime}
+                      endTime={focusedOccurrence.endTime}
+                      timeSelected
+                      disabled
+                      allowBusySelection
+                      showDurationPicker={false}
+                      directTimeRangeSelection
+                      supplementalBusyRanges={supplementalBusyRanges}
+                      heading={t('meetings.series.bulk.dayTimelineTitle')}
+                      description={t('meetings.series.bulk.dayTimelineHint')}
+                      onDateChange={() => undefined}
+                      onRoomChange={() => undefined}
+                      onTimeChange={() => undefined}
+                    />
+                  ) : (
+                    <Card className="p-5">
+                      <div className="flex items-start gap-3">
+                        <span className="bg-[#2D8CFF]/10 text-[#2D8CFF] grid size-10 shrink-0 place-items-center rounded-xl"><Video aria-hidden="true" className="size-5" /></span>
+                        <div><p className="font-semibold">{t('meetings.zoom.zoomType')}</p><p className="text-muted-foreground mt-1 text-sm">{t('meetings.zoom.online')} · {formatClockTime(focusedOccurrence.startTime, locale, timeFormat)} – {formatClockTime(focusedOccurrence.endTime, locale, timeFormat)}</p></div>
+                      </div>
+                    </Card>
+                  )}
                 </div>
               ) : (
                 <div className="grid min-h-72 place-items-center text-center">

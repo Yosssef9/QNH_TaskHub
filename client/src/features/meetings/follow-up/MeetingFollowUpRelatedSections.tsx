@@ -4,6 +4,7 @@ import {
   MapPin,
   UserRound,
   UsersRound,
+  Video,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
@@ -43,7 +44,9 @@ function RelatedMeetingRow({ meeting, compact = false }: { meeting: RelatedMeeti
   const { i18n, t } = useTranslation()
   const timeFormat = useTimeFormatPreference()
   const locale = i18n.language.startsWith('ar') ? 'ar-SA' : 'en-SA'
-  const roomName = i18n.language.startsWith('ar') ? meeting.room.nameAr : meeting.room.nameEn
+  const roomName = meeting.meetingMode === 'ZOOM' || !meeting.room
+    ? t('meetings.zoom.zoomType')
+    : i18n.language.startsWith('ar') ? meeting.room.nameAr : meeting.room.nameEn
 
   return (
     <article
@@ -66,7 +69,7 @@ function RelatedMeetingRow({ meeting, compact = false }: { meeting: RelatedMeeti
           {!compact ? (
             <div className="text-muted-foreground mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
               <span className="inline-flex items-center gap-1.5">
-                <MapPin aria-hidden="true" className="size-3.5" />
+                {meeting.meetingMode === 'ZOOM' ? <Video aria-hidden="true" className="size-3.5" /> : <MapPin aria-hidden="true" className="size-3.5" />}
                 {roomName}
               </span>
               <span className="inline-flex items-center gap-1.5">
@@ -256,7 +259,9 @@ export function useFollowUpMeetingScheduling(detail: MeetingDetail) {
       title: followUpTitle,
       description: detail.meeting.description,
       durationMinutes,
-      roomId: detail.meeting.room.isActive ? detail.meeting.room.id : null,
+      meetingMode: detail.meeting.meetingMode,
+      roomId: detail.meeting.meetingMode === 'ROOM' && detail.meeting.room?.isActive ? detail.meeting.room.id : null,
+      onlineJoinUrl: '', 
       ...(mode === 'REQUEST' ? { organizerAttending: detail.meeting.organizerAttending } : {}),
       attendees: mode === 'REQUEST' ? detail.meeting.attendees : copiedAttendees,
       followUpOfMeetingId: detail.meeting.id,
@@ -292,5 +297,6 @@ export function ScheduleFollowUpMeetingDialog({
     />
   )
 }
+
 
 

@@ -6,7 +6,7 @@ import { toApiClientError } from '@/lib/api-error'
 import { useActiveMeetingRooms } from '../hooks/use-meeting-rooms'
 import { useAdjustAndApproveMeetingRequest } from '../hooks/use-meetings'
 import { participantUserIdsFromMeeting } from '../meeting-participant-availability'
-import type { MeetingSummary } from '../types/meeting.types'
+import type { MeetingMode, MeetingSummary } from '../types/meeting.types'
 import { CoordinatorScheduleEditorDialog } from './CoordinatorScheduleEditorDialog'
 
 interface CoordinatorMeetingScheduleDialogProps {
@@ -25,11 +25,14 @@ export function CoordinatorMeetingScheduleDialog({
   const adjustAndApprove = useAdjustAndApproveMeetingRequest()
 
   async function save(input: {
-    roomId: number
+    meetingMode: MeetingMode
+    roomId: number | null
+    onlineJoinUrl: string | null
     startAtUtc: string
     endAtUtc: string
     schedulingNotes: string | null
   }) {
+    if (input.meetingMode !== 'ROOM' || input.roomId === null) return
     try {
       await adjustAndApprove.mutateAsync({
         meetingId: meeting.id,
@@ -51,6 +54,7 @@ export function CoordinatorMeetingScheduleDialog({
 
   const requestedSchedule = {
     label: t('meetings.coordinatorSchedule.requestedSchedule'),
+    meetingMode: 'ROOM' as const,
     room: meeting.room,
     startAtUtc: meeting.startAtUtc,
     endAtUtc: meeting.endAtUtc,
@@ -70,7 +74,7 @@ export function CoordinatorMeetingScheduleDialog({
       roomsPending={rooms.isPending}
       roomsError={rooms.isError}
       onRetryRooms={() => void rooms.refetch()}
-      initialRoomId={meeting.room.id}
+      initialRoomId={meeting.room?.id ?? null}
       initialStartAtUtc={meeting.startAtUtc}
       initialEndAtUtc={meeting.endAtUtc}
       initialNotes={meeting.schedulingNotes}
