@@ -11,6 +11,7 @@ import {
   RefreshCcw,
   UserRound,
   UsersRound,
+  Video,
   X,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -23,10 +24,14 @@ import { getMeetingRoomAccent } from '@/features/meetings/meeting-room-colors'
 import { useTimeFormatPreference } from '@/features/preferences/hooks/use-time-format'
 import { formatTimeRange } from '@/lib/date-time'
 
-import type { MeetingRescheduleQueueItem, MeetingRoom } from '../types/meeting.types'
+import type { MeetingMode, MeetingRescheduleQueueItem, MeetingRoom } from '../types/meeting.types'
 
-function cardSurface(room: MeetingRoom): CSSProperties {
-  const accent = getMeetingRoomAccent(room.colorKey)
+function scheduleAccent(meetingMode: MeetingMode, room: MeetingRoom | null): string {
+  return meetingMode === 'ZOOM' ? '#2D8CFF' : getMeetingRoomAccent(room?.colorKey ?? null)
+}
+
+function cardSurface(meetingMode: MeetingMode, room: MeetingRoom | null): CSSProperties {
+  const accent = scheduleAccent(meetingMode, room)
   return {
     borderInlineStart: `3px solid ${accent}`,
     background: `linear-gradient(135deg,
@@ -37,6 +42,7 @@ function cardSurface(room: MeetingRoom): CSSProperties {
 
 function ScheduleBlock({
   label,
+  meetingMode,
   room,
   startAtUtc,
   endAtUtc,
@@ -46,7 +52,8 @@ function ScheduleBlock({
   requested = false,
 }: {
   label: string
-  room: MeetingRoom
+  meetingMode: MeetingMode
+  room: MeetingRoom | null
   startAtUtc: string
   endAtUtc: string
   locale: string
@@ -55,8 +62,14 @@ function ScheduleBlock({
   requested?: boolean
 }) {
   const { t } = useTranslation()
-  const roomName = arabic ? room.nameAr : room.nameEn
-  const accent = getMeetingRoomAccent(room.colorKey)
+  const isZoom = meetingMode === 'ZOOM'
+  const locationName = isZoom
+    ? t('meetings.zoom.online')
+    : room
+      ? (arabic ? room.nameAr : room.nameEn)
+      : '—'
+  const accent = scheduleAccent(meetingMode, room)
+  const LocationIcon = isZoom ? Video : DoorOpen
   const dateLabel = new Intl.DateTimeFormat(locale, {
     weekday: 'long',
     day: 'numeric',
@@ -95,12 +108,14 @@ function ScheduleBlock({
           className="size-2.5 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/15"
           style={{ backgroundColor: accent }}
         />
-        <DoorOpen aria-hidden="true" className="text-muted-foreground size-3.5 shrink-0" />
-        <span className="truncate font-medium">{roomName}</span>
+        <LocationIcon aria-hidden="true" className="text-muted-foreground size-3.5 shrink-0" />
+        <span className="truncate font-medium">{locationName}</span>
       </div>
-      <p className="text-muted-foreground mt-1 truncate ps-4 text-[11px]">
-        {room.locationText ?? t('meetings.noRoomLocation')}
-      </p>
+      {!isZoom ? (
+        <p className="text-muted-foreground mt-1 truncate ps-4 text-[11px]">
+          {room?.locationText ?? t('meetings.noRoomLocation')}
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -135,7 +150,7 @@ export function MeetingRescheduleQueueCard({
   return (
     <Card
       className="group overflow-hidden border-border/70 p-0 shadow-sm hover:border-border hover:shadow-md"
-      style={cardSurface(revision.room)}
+      style={cardSurface(revision.meetingMode, revision.room)}
     >
       <div className="p-4 sm:p-5">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
@@ -169,6 +184,7 @@ export function MeetingRescheduleQueueCard({
         <div className="mt-4 grid items-stretch gap-3 border-y border-border/65 py-4 lg:grid-cols-[1fr_auto_1fr]">
           <ScheduleBlock
             label={t('meetings.coordinatorSchedule.currentSchedule')}
+            meetingMode={item.meeting.meetingMode}
             room={item.meeting.room}
             startAtUtc={item.meeting.startAtUtc}
             endAtUtc={item.meeting.endAtUtc}
@@ -183,6 +199,7 @@ export function MeetingRescheduleQueueCard({
           </div>
           <ScheduleBlock
             label={t('meetings.coordinatorSchedule.organizerRequest')}
+            meetingMode={revision.meetingMode}
             room={revision.room}
             startAtUtc={revision.startAtUtc}
             endAtUtc={revision.endAtUtc}

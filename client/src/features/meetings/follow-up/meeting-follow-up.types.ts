@@ -1,4 +1,4 @@
-import type { MeetingParticipant, MeetingRoom, MeetingStatus } from '../types/meeting.types'
+import type { MeetingMode, MeetingParticipant, MeetingRoom, MeetingStatus } from '../types/meeting.types'
 
 export interface MeetingDecision {
   id: number

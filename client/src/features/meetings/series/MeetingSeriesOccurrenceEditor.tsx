@@ -593,7 +593,9 @@ export function MeetingSeriesOccurrenceEditor({
               endTime={endTime}
               onlineJoinUrl={onlineJoinUrl}
               disabled={saving}
-              errors={!onlineJoinUrl || isValidZoomJoinUrl(onlineJoinUrl) ? undefined : { onlineJoinUrl: t('meetings.zoom.invalidJoinLink') }}
+              {...(!onlineJoinUrl || isValidZoomJoinUrl(onlineJoinUrl)
+                ? {}
+                : { errors: { onlineJoinUrl: t('meetings.zoom.invalidJoinLink') } })}
               onDateChange={setDate}
               onTimeChange={(nextStartTime, nextEndTime) => { setStartTime(nextStartTime); setEndTime(nextEndTime) }}
               onJoinUrlChange={setOnlineJoinUrl}

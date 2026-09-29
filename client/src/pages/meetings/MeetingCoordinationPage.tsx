@@ -297,9 +297,9 @@ export function MeetingCoordinationPage() {
       meeting.description ?? '',
       meeting.organizer.userName,
       meeting.organizer.userCode,
-      room.nameAr,
-      room.nameEn,
-      room.locationText ?? '',
+      room?.nameAr ?? '',
+      room?.nameEn ?? '',
+      room?.locationText ?? '',
     ]
       .join(' ')
       .toLocaleLowerCase(i18n.language)
