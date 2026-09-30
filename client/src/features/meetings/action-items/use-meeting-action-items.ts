@@ -13,11 +13,11 @@ import type {
   ReassignMeetingActionItemInput,
 } from './meeting-action-items.types'
 
-export function useMeetingActionItems(meetingId: number | null) {
+export function useMeetingActionItems(meetingId: number | null, enabled = true) {
   return useQuery({
     queryKey: ['meetings', 'action-items', meetingId],
     queryFn: () => getMeetingActionItems(meetingId!),
-    enabled: meetingId !== null,
+    enabled: meetingId !== null && enabled,
   })
 }
 

@@ -16,7 +16,6 @@ import {
   Paperclip,
   RefreshCcw,
   Save,
-  UserRound,
   UsersRound,
   Video,
   ExternalLink,
@@ -38,7 +37,6 @@ import { Button } from '@/components/ui/button'
 import { buttonStyles } from '@/components/ui/button.styles'
 import { Card } from '@/components/ui/card'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { CoordinatorDirectRescheduleDialog } from '@/features/meetings/components/CoordinatorDirectRescheduleDialog'
 import { CoordinatorMeetingScheduleDialog } from '@/features/meetings/components/CoordinatorMeetingScheduleDialog'
@@ -47,8 +45,10 @@ import { MeetingAgendaDisplay } from '@/features/meetings/components/MeetingAgen
 import { MeetingAgendaWorkspace } from '@/features/meetings/components/MeetingAgendaWorkspace'
 import { MeetingFilesPanel } from '@/features/meetings/components/MeetingFilesPanel'
 import { MeetingFilesPreview } from '@/features/meetings/components/MeetingFilesPreview'
+import { MeetingParticipantsWorkspace } from '@/features/meetings/components/MeetingParticipantsWorkspace'
 import { MeetingReportStatusPanel } from '@/features/meetings/reports/MeetingReportStatusPanel'
 import { MeetingFollowUpPanel } from '@/features/meetings/action-items/MeetingFollowUpPanel'
+import { useMeetingActionItems } from '@/features/meetings/action-items/use-meeting-action-items'
 import type {
   MeetingFollowUpLaunchRequest,
   MeetingFollowUpSectionKey,
@@ -58,19 +58,16 @@ import { MeetingTemplateEditorDialog } from '@/features/meetings/components/Meet
 import {
   useApproveMeetingRequest,
   useApproveMeetingReschedule,
-  useBulkUpdateMeetingAttendance,
   useCancelMeeting,
   useMeetingDetail,
   useRejectMeetingRequest,
   useRejectMeetingReschedule,
   useCancelMeetingRescheduleRequest,
-  useUpdateMeetingAttendance,
 } from '@/features/meetings/hooks/use-meetings'
 import type {
   MeetingActivityItem,
   MeetingAttendanceStatus,
   MeetingMode,
-  MeetingParticipant,
   MeetingRevisionDetail,
   MeetingRoom,
   MeetingStatus,
@@ -269,9 +266,10 @@ function ActivityMetadata({ item }: { item: MeetingActivityItem }) {
 }
 
 
-type MeetingDetailsTab = 'OVERVIEW' | 'AGENDA' | 'FILES' | 'FOLLOW_UP' | 'ACTIVITY'
+type MeetingDetailsTab = 'OVERVIEW' | 'PARTICIPANTS' | 'AGENDA' | 'FILES' | 'FOLLOW_UP' | 'ACTIVITY'
 
 function meetingDetailsTabFromSearch(value: string | null): MeetingDetailsTab {
+  if (value === 'participants') return 'PARTICIPANTS'
   if (value === 'agenda') return 'AGENDA'
   if (value === 'files') return 'FILES'
   if (value === 'follow-up') return 'FOLLOW_UP'
@@ -280,6 +278,7 @@ function meetingDetailsTabFromSearch(value: string | null): MeetingDetailsTab {
 }
 
 function meetingDetailsTabSearchValue(tab: MeetingDetailsTab): string | null {
+  if (tab === 'PARTICIPANTS') return 'participants'
   if (tab === 'AGENDA') return 'agenda'
   if (tab === 'FILES') return 'files'
   if (tab === 'FOLLOW_UP') return 'follow-up'
@@ -300,16 +299,6 @@ function meetingStatusVariant(status: MeetingStatus) {
   if (status === 'PENDING_APPROVAL') return 'warning' as const
   if (status === 'REJECTED') return 'destructive' as const
   return 'secondary' as const
-}
-
-function participantInitials(participant: MeetingParticipant): string {
-  const parts = participant.userName.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return participant.userCode.slice(0, 2).toUpperCase()
-  return parts
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase()
 }
 
 function roomAccentSurface(room: MeetingRoom | null, arabic: boolean): CSSProperties {
@@ -398,8 +387,9 @@ export function MeetingDetailsPage() {
   const withdrawReschedule = useCancelMeetingRescheduleRequest()
   const approveReschedule = useApproveMeetingReschedule()
   const rejectReschedule = useRejectMeetingReschedule()
-  const updateAttendance = useUpdateMeetingAttendance()
-  const bulkUpdateAttendance = useBulkUpdateMeetingAttendance()
+  const meetingActionItemsEnabled =
+    query.data?.meeting.status === 'SCHEDULED' || query.data?.meeting.status === 'CANCELLED'
+  const meetingActionItems = useMeetingActionItems(validMeetingId, meetingActionItemsEnabled)
 
   const [organizerScheduleOpen, setOrganizerScheduleOpen] = useState(false)
   const [coordinatorInitialAdjustOpen, setCoordinatorInitialAdjustOpen] = useState(false)
@@ -449,9 +439,6 @@ export function MeetingDetailsPage() {
   const meetingHasStarted =
     meeting.status === 'SCHEDULED' && new Date(meeting.startAtUtc).getTime() <= nowMs
 
-  const attendanceByUserId = new Map(
-    detail.attendance.map((item) => [item.participant.userId, item] as const),
-  )
   const attendanceCounts = detail.attendance.reduce(
     (counts, item) => {
       counts[item.status] += 1
@@ -459,8 +446,8 @@ export function MeetingDetailsPage() {
     },
     { NOT_MARKED: 0, ATTENDED: 0, ABSENT: 0 } as Record<MeetingAttendanceStatus, number>,
   )
-  const attendanceMutationPending = updateAttendance.isPending || bulkUpdateAttendance.isPending
-  const currentUserIsOrganizer = currentUser.data?.user.userId === meeting.organizer.userId
+  const actionItemSummary = meetingActionItems.data?.items ?? []
+  const participantsWithActionItems = new Set(actionItemSummary.map((item) => item.assigneeUserId)).size
 
   const roomById = new Map<number, MeetingRoom>()
   if (meeting.room) roomById.set(meeting.room.id, meeting.room)
@@ -505,40 +492,6 @@ export function MeetingDetailsPage() {
       revision,
     })),
   ].sort((left, right) => new Date(right.at).getTime() - new Date(left.at).getTime())
-
-  async function changeAttendance(participantUserId: number, status: MeetingAttendanceStatus) {
-    try {
-      await updateAttendance.mutateAsync({ meetingId: meeting.id, participantUserId, status })
-      toast.success(t('meetings.workspace.attendance.updated'))
-    } catch (error) {
-      const apiError = toApiClientError(error)
-      toast.error(
-        t(`meetings.errors.${apiError.code}`, {
-          defaultValue: t('meetings.workspace.attendance.updateError'),
-        }),
-      )
-    }
-  }
-
-  async function changeAllAttendance(status: 'ATTENDED' | 'NOT_MARKED') {
-    try {
-      await bulkUpdateAttendance.mutateAsync({ meetingId: meeting.id, status })
-      toast.success(
-        t(
-          status === 'ATTENDED'
-            ? 'meetings.workspace.attendance.markAllSuccess'
-            : 'meetings.workspace.attendance.clearSuccess',
-        ),
-      )
-    } catch (error) {
-      const apiError = toApiClientError(error)
-      toast.error(
-        t(`meetings.errors.${apiError.code}`, {
-          defaultValue: t('meetings.workspace.attendance.updateError'),
-        }),
-      )
-    }
-  }
 
   async function cancel() {
     const reason = cancelReason.trim()
@@ -943,6 +896,7 @@ export function MeetingDetailsPage() {
       >
         {([
           ['OVERVIEW', LayoutGrid, t('meetings.workspace.tabs.overview')],
+          ['PARTICIPANTS', UsersRound, t('meetings.workspace.tabs.participants')],
           ['AGENDA', ListChecks, t('meetings.workspace.tabs.agenda')],
           ['FILES', Paperclip, t('meetings.workspace.tabs.files')],
           ['FOLLOW_UP', ClipboardCheck, t('meetings.workspace.tabs.followUp')],
@@ -973,7 +927,7 @@ export function MeetingDetailsPage() {
         <div role="tabpanel" className="space-y-4">
           <div className="grid gap-4 xl:grid-cols-2">
             <Card
-              className="overflow-hidden border-border/70 p-0 shadow-sm"
+              className="overflow-hidden border-border/70 p-0 shadow-sm xl:h-[22rem]"
               style={roomAccentSurface(meeting.room, arabic)}
             >
               <div className="p-5 sm:p-6">
@@ -1047,164 +1001,61 @@ export function MeetingDetailsPage() {
               </div>
             </Card>
 
-            <Card className="border-border/70 p-5 shadow-sm sm:p-6">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 grid size-10 place-items-center rounded-xl">
-                    <UsersRound aria-hidden="true" className="size-5" />
-                  </span>
-                  <div>
-                    <h2 className="font-bold">{t('meetings.workspace.participants')}</h2>
-                    <p className="text-muted-foreground mt-0.5 text-xs">
-                      {t('meetings.workspace.participantCount', { count: meeting.participantCount })}
-                    </p>
+            <Card className="border-border/70 p-0 shadow-sm xl:h-[22rem]">
+              <button
+                type="button"
+                className="focus-visible:ring-ring flex h-full w-full flex-col p-5 text-start outline-none transition-colors hover:bg-muted/15 focus-visible:ring-2 focus-visible:ring-inset sm:p-6"
+                onClick={() => selectDetailsTab('PARTICIPANTS')}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 grid size-10 shrink-0 place-items-center rounded-xl">
+                      <UsersRound aria-hidden="true" className="size-5" />
+                    </span>
+                    <div className="min-w-0">
+                      <h2 className="font-bold">{t('meetings.workspace.participants')}</h2>
+                      <p className="text-muted-foreground mt-0.5 text-xs">
+                        {t('meetings.workspace.participantCount', { count: meeting.participantCount })}
+                      </p>
+                    </div>
                   </div>
+                  <ArrowLeft aria-hidden="true" className={cn("text-muted-foreground mt-1 size-4", !arabic && "rotate-180")} />
                 </div>
 
-                {detail.permissions.canManageAttendance && meetingHasStarted && detail.attendance.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={attendanceMutationPending}
-                      onClick={() => void changeAllAttendance('ATTENDED')}
-                    >
-                      {t('meetings.workspace.attendance.markAll')}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={attendanceMutationPending}
-                      onClick={() => void changeAllAttendance('NOT_MARKED')}
-                    >
-                      {t('meetings.workspace.attendance.clear')}
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-
-              {detail.attendance.length > 0 ? (
-                <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                <div className="mt-5 grid grid-cols-3 gap-2 text-center">
                   <div className="bg-emerald-500/10 rounded-lg px-2 py-2.5">
-                    <p className="text-emerald-700 dark:text-emerald-300 text-lg font-bold tabular-nums">
-                      {attendanceCounts.ATTENDED}
-                    </p>
-                    <p className="text-muted-foreground text-[11px]">
-                      {t('meetings.workspace.attendance.status.ATTENDED')}
-                    </p>
+                    <p className="text-emerald-700 dark:text-emerald-300 text-lg font-bold tabular-nums">{attendanceCounts.ATTENDED}</p>
+                    <p className="text-muted-foreground text-[11px]">{t('meetings.workspace.attendance.status.ATTENDED')}</p>
                   </div>
                   <div className="bg-destructive/10 rounded-lg px-2 py-2.5">
-                    <p className="text-destructive text-lg font-bold tabular-nums">
-                      {attendanceCounts.ABSENT}
-                    </p>
-                    <p className="text-muted-foreground text-[11px]">
-                      {t('meetings.workspace.attendance.status.ABSENT')}
-                    </p>
+                    <p className="text-destructive text-lg font-bold tabular-nums">{attendanceCounts.ABSENT}</p>
+                    <p className="text-muted-foreground text-[11px]">{t('meetings.workspace.attendance.status.ABSENT')}</p>
                   </div>
                   <div className="bg-muted/50 rounded-lg px-2 py-2.5">
                     <p className="text-lg font-bold tabular-nums">{attendanceCounts.NOT_MARKED}</p>
-                    <p className="text-muted-foreground text-[11px]">
-                      {t('meetings.workspace.attendance.status.NOT_MARKED')}
+                    <p className="text-muted-foreground text-[11px]">{t('meetings.workspace.attendance.status.NOT_MARKED')}</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div className="rounded-xl border border-border/70 px-3.5 py-3">
+                    <p className="text-muted-foreground text-[11px] font-medium">{t('meetings.participantsWorkspace.summary.actionItems')}</p>
+                    <p className="mt-1 text-xl font-bold tabular-nums">
+                      {!meetingActionItemsEnabled ? 0 : meetingActionItems.isPending ? '…' : meetingActionItems.isError ? '—' : actionItemSummary.length}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/70 px-3.5 py-3">
+                    <p className="text-muted-foreground text-[11px] font-medium">{t('meetings.participantsWorkspace.summary.withTasks')}</p>
+                    <p className="mt-1 text-xl font-bold tabular-nums">
+                      {!meetingActionItemsEnabled ? 0 : meetingActionItems.isPending ? '…' : meetingActionItems.isError ? '—' : participantsWithActionItems}
                     </p>
                   </div>
                 </div>
-              ) : null}
 
-              {currentUserIsOrganizer &&
-              meeting.status === 'SCHEDULED' &&
-              !meetingHasStarted ? (
-                <div className="bg-muted/25 text-muted-foreground mt-4 rounded-xl border border-dashed px-3.5 py-3 text-xs leading-5">
-                  {t('meetings.workspace.attendance.availableAtStart')}
-                </div>
-              ) : null}
-
-              <div className="mt-5 space-y-2">
-                {[meeting.organizer, ...meeting.attendees].map((participant) => {
-                  const organizer = participant.userId === meeting.organizer.userId
-                  const attendance = attendanceByUserId.get(participant.userId) ?? null
-                  const attendanceVariant =
-                    attendance?.status === 'ATTENDED'
-                      ? 'success'
-                      : attendance?.status === 'ABSENT'
-                        ? 'destructive'
-                        : 'secondary'
-
-                  return (
-                    <div
-                      key={`${organizer ? 'organizer' : 'attendee'}-${participant.userId}`}
-                      className="hover:bg-muted/25 flex flex-wrap items-center gap-3 rounded-xl border border-border/70 px-3.5 py-3 transition-colors"
-                    >
-                      <span className="bg-primary/10 text-primary grid size-10 shrink-0 place-items-center rounded-full text-xs font-bold">
-                        {participantInitials(participant)}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="truncate text-sm font-semibold">{participant.userName}</p>
-                          {organizer ? (
-                            <>
-                              <Badge variant="secondary" className="text-[10px]">
-                                {t('meetings.organizer')}
-                              </Badge>
-                              <Badge
-                                variant={meeting.organizerAttending ? 'success' : 'secondary'}
-                                className="text-[10px]"
-                              >
-                                {t(
-                                  meeting.organizerAttending
-                                    ? 'meetings.workspace.organizerAttending'
-                                    : 'meetings.workspace.organizerNotAttending',
-                                )}
-                              </Badge>
-                            </>
-                          ) : null}
-                        </div>
-                        <p className="text-muted-foreground mt-0.5 text-xs">{participant.userCode}</p>
-                      </div>
-
-                      {attendance ? (
-                        detail.permissions.canManageAttendance && meetingHasStarted ? (
-                          <Select
-                            value={attendance.status}
-                            disabled={attendanceMutationPending}
-                            onValueChange={(value) =>
-                              void changeAttendance(
-                                participant.userId,
-                                value as MeetingAttendanceStatus,
-                              )
-                            }
-                          >
-                            <SelectTrigger
-                              className="w-36"
-                              aria-label={t('meetings.workspace.attendance.statusLabel', {
-                                name: participant.userName,
-                              })}
-                            >
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="NOT_MARKED">
-                                {t('meetings.workspace.attendance.status.NOT_MARKED')}
-                              </SelectItem>
-                              <SelectItem value="ATTENDED">
-                                {t('meetings.workspace.attendance.status.ATTENDED')}
-                              </SelectItem>
-                              <SelectItem value="ABSENT">
-                                {t('meetings.workspace.attendance.status.ABSENT')}
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <Badge variant={attendanceVariant}>
-                            {t(`meetings.workspace.attendance.status.${attendance.status}`)}
-                          </Badge>
-                        )
-                      ) : null}
-
-                      <UserRound aria-hidden="true" className="text-muted-foreground size-4" />
-                    </div>
-                  )
-                })}
-              </div>
+                <span className="text-primary mt-auto inline-flex items-center gap-2 pt-4 text-sm font-semibold">
+                  {t('meetings.participantsWorkspace.viewParticipants')}
+                </span>
+              </button>
             </Card>
           </div>
 
@@ -1404,6 +1255,16 @@ export function MeetingDetailsPage() {
               </button>
             </Card>
           </div>
+        </div>
+      ) : null}
+
+      {activeTab === 'PARTICIPANTS' ? (
+        <div role="tabpanel">
+          <MeetingParticipantsWorkspace
+            detail={detail}
+            meetingHasStarted={meetingHasStarted}
+            onOpenAllActionItems={() => selectFollowUpSection('action-items')}
+          />
         </div>
       ) : null}
 

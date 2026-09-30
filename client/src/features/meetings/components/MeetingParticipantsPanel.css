@@ -36,27 +36,3 @@
     text-align: end;
   }
 }
-
-/*
- * The Meeting Overview becomes a two-column layout at the xl breakpoint.
- * Keep that row at a predictable visual height regardless of whether the
- * Meeting has 2 participants or 100. The Current Schedule sibling already
- * stretches to the grid row height, so controlling the Participants card
- * keeps both Overview cards equal without changing schedule content.
- *
- * Only the roster scrolls; the Participants heading, attendance totals,
- * before-start notice and bulk actions remain visible.
- */
-@media (min-width: 80rem) {
-  .meeting-participants-panel {
-    display: flex;
-    block-size: 30rem;
-    flex-direction: column;
-  }
-
-  .meeting-participants-list {
-    min-block-size: 0;
-    max-block-size: none;
-    flex: 1 1 auto;
-  }
-}

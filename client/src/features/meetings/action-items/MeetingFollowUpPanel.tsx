@@ -16,7 +16,6 @@ import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
 
-import { DatePicker } from '@/components/shared/DatePicker'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { LoadingState } from '@/components/shared/LoadingState'
@@ -24,10 +23,8 @@ import { taskHubEase, taskHubItemMotion } from '@/components/shared/TaskHubMotio
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import {
@@ -72,9 +69,9 @@ import type {
   AssignedActionItemDueFilter,
   MeetingActionItem,
 } from './meeting-action-items.types'
+import { MeetingActionItemCreateDialog } from './MeetingActionItemCreateDialog'
 import { MeetingActionTaskCard } from './MeetingActionTaskCard'
 import {
-  useCreateMeetingActionItem,
   useMeetingActionItemAssignees,
   useMeetingActionItems,
   useReassignMeetingActionItem,
@@ -270,11 +267,11 @@ export function MeetingFollowUpPanel({
   const actionItems = useMeetingActionItems(meeting.id)
   const canCreate = actionItems.data?.canCreate === true
   const assignees = useMeetingActionItemAssignees(meeting.id, isOrganizer)
-  const createMutation = useCreateMeetingActionItem(meeting.id)
   const statusMutation = useChangeTaskStatus()
   const scheduling = useFollowUpMeetingScheduling(detail)
 
   const [createOpen, setCreateOpen] = useState(false)
+  const [createAgendaItemId, setCreateAgendaItemId] = useState<number | null>(null)
   const [localDecisionLaunch, setLocalDecisionLaunch] = useState<MeetingFollowUpLaunchRequest | null>(null)
   const [taskId, setTaskId] = useState<number | null>(null)
   const [reassignItem, setReassignItem] = useState<MeetingActionItem | null>(null)
@@ -290,34 +287,17 @@ export function MeetingFollowUpPanel({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
   const [groupBy, setGroupBy] = useState<FollowUpGroupBy>('NONE')
 
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [assignee, setAssignee] = useState('')
-  const [priority, setPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH'>('MEDIUM')
-  const [dueDate, setDueDate] = useState('')
-  const [agenda, setAgenda] = useState('NONE')
-
   useEffect(() => {
     if (!launchRequest || launchRequest.kind !== 'ACTION_ITEM') return
-    setAgenda(String(launchRequest.agendaItemId))
+    setCreateAgendaItemId(launchRequest.agendaItemId)
     setCreateOpen(true)
     onLaunchRequestHandled?.()
   }, [launchRequest, onLaunchRequestHandled])
 
-  const eligibleAssignees = useMemo(
-    () => assignees.data?.filter((item) => item.eligible) ?? [],
-    [assignees.data],
-  )
-  const selectedAssignee = useMemo(
-    () => assignees.data?.find((item) => String(item.userId) === assignee) ?? null,
-    [assignee, assignees.data],
-  )
   const selectedReassignAssignee = useMemo(
     () => assignees.data?.find((item) => String(item.userId) === reassignAssignee) ?? null,
     [assignees.data, reassignAssignee],
   )
-  const hasNoEligibleAssignees =
-    !assignees.isPending && assignees.data !== undefined && eligibleAssignees.length === 0
   const reassignMutation = useReassignMeetingActionItem(meeting.id, reassignItem?.taskId ?? 0)
 
   const allItems = actionItems.data?.items ?? []
@@ -444,15 +424,6 @@ export function MeetingFollowUpPanel({
         ? t('meetings.followUp.noAgendaGroup')
         : detail.agendaItems.find((item) => item.id === agendaFilter)?.topic ?? ''
 
-  function resetCreateForm() {
-    setTitle('')
-    setDescription('')
-    setAssignee('')
-    setPriority('MEDIUM')
-    setDueDate('')
-    setAgenda('NONE')
-  }
-
   function clearStructuredFilters() {
     setStatusFilter(undefined)
     setPriorityFilter(undefined)
@@ -502,6 +473,11 @@ export function MeetingFollowUpPanel({
     onSectionChange?.('action-items')
   }
 
+  function openCreateActionItem() {
+    setCreateAgendaItemId(null)
+    setCreateOpen(true)
+  }
+
   function openDecisionCreate() {
     setLocalDecisionLaunch((current) => ({
       kind: 'DECISION',
@@ -519,28 +495,6 @@ export function MeetingFollowUpPanel({
           void actionItems.refetch()
         },
         onError: () => toast.error(t('tasks.errors.status')),
-      },
-    )
-  }
-
-  function submitCreate() {
-    if (!title.trim() || !assignee) return
-    createMutation.mutate(
-      {
-        title: title.trim(),
-        description: description.trim() || null,
-        priority,
-        dueDate: dueDate || null,
-        assigneeUserId: Number(assignee),
-        agendaItemId: agenda === 'NONE' ? null : Number(agenda),
-      },
-      {
-        onSuccess: () => {
-          toast.success(t('meetings.followUp.actionCreated'))
-          setCreateOpen(false)
-          resetCreateForm()
-        },
-        onError: () => toast.error(t('meetings.followUp.actionCreateError')),
       },
     )
   }
@@ -848,7 +802,7 @@ export function MeetingFollowUpPanel({
 
               <div className="flex flex-col gap-2">
                 {isOrganizer && canCreate ? (
-                  <Button onClick={() => setCreateOpen(true)}>
+                  <Button onClick={openCreateActionItem}>
                     <Plus aria-hidden="true" className="size-4" />
                     {t('meetings.followUp.addAction')}
                   </Button>
@@ -969,7 +923,7 @@ export function MeetingFollowUpPanel({
             onBack={() => onSectionChange?.(null)}
             action={
               isOrganizer && canCreate ? (
-                <Button onClick={() => setCreateOpen(true)}>
+                <Button onClick={openCreateActionItem}>
                   <Plus aria-hidden="true" className="size-4" />
                   {t('meetings.followUp.addAction')}
                 </Button>
@@ -1101,7 +1055,7 @@ export function MeetingFollowUpPanel({
                 {...(isOrganizer && canCreate
                   ? {
                       action: (
-                        <Button onClick={() => setCreateOpen(true)}>
+                        <Button onClick={openCreateActionItem}>
                           <Plus className="size-4" />
                           {t('meetings.followUp.addAction')}
                         </Button>
@@ -1247,219 +1201,18 @@ export function MeetingFollowUpPanel({
         initialValues={scheduling.initialValues}
       />
 
-      <Dialog
+      <MeetingActionItemCreateDialog
+        meetingId={meeting.id}
+        agendaItems={detail.agendaItems}
+        assignees={assignees.data ?? []}
+        assigneesLoading={assignees.isPending}
         open={createOpen}
         onOpenChange={(open) => {
-          if (!createMutation.isPending) {
-            setCreateOpen(open)
-            if (!open) resetCreateForm()
-          }
+          setCreateOpen(open)
+          if (!open) setCreateAgendaItemId(null)
         }}
-      >
-        <DialogContent
-          variant="modal"
-          closeLabel={t('common.close')}
-          className="w-[min(38rem,calc(100vw-2rem))] max-w-none"
-        >
-          <div className="flex items-start gap-3 pe-10">
-            <div className="bg-primary/10 text-primary grid size-11 shrink-0 place-items-center rounded-xl">
-              <Plus className="size-5" />
-            </div>
-            <div className="min-w-0">
-              <DialogTitle>{t('meetings.followUp.newAction')}</DialogTitle>
-              <DialogDescription className="text-muted-foreground mt-1 max-w-lg text-sm leading-6">
-                {t('meetings.followUp.newActionDescription')}
-              </DialogDescription>
-            </div>
-          </div>
-
-          <div className="mt-6 space-y-5">
-            <div className="space-y-1.5">
-              <label htmlFor="meeting-action-title" className="text-sm font-medium">
-                {t('meetings.followUp.taskTitle')}
-                <span className="text-destructive ms-1" aria-hidden="true">
-                  *
-                </span>
-              </label>
-              <Input
-                id="meeting-action-title"
-                autoFocus
-                maxLength={1000}
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">
-                {t('meetings.followUp.assignTo')}
-                <span className="text-destructive ms-1" aria-hidden="true">
-                  *
-                </span>
-              </label>
-              <Select value={assignee} onValueChange={setAssignee}>
-                <SelectTrigger className="h-12">
-                  <SelectValue placeholder={t('meetings.followUp.assignTo')}>
-                    {selectedAssignee ? (
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="bg-primary/10 text-primary grid size-7 shrink-0 place-items-center rounded-full">
-                          <UserRound aria-hidden="true" className="size-3.5" />
-                        </span>
-                        <span className="truncate">{selectedAssignee.userName}</span>
-                      </span>
-                    ) : null}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {assignees.isPending ? (
-                    <SelectItem value="__LOADING__" disabled>
-                      {t('common.loading')}
-                    </SelectItem>
-                  ) : assignees.data?.length ? (
-                    assignees.data.map((option) => (
-                      <SelectItem
-                        key={option.userId}
-                        value={String(option.userId)}
-                        textValue={option.userName}
-                        disabled={!option.eligible}
-                      >
-                        <span className="flex min-w-0 items-center gap-2.5">
-                          <span className="bg-primary/10 text-primary grid size-7 shrink-0 place-items-center rounded-full">
-                            <UserRound aria-hidden="true" className="size-3.5" />
-                          </span>
-                          <span className="min-w-0">
-                            <span className="block truncate">{option.userName}</span>
-                            <span className="text-muted-foreground block truncate text-xs">
-                              {option.userCode}
-                              {!option.eligible
-                                ? ` · ${t('meetings.followUp.noTaskHubAccess')}`
-                                : ''}
-                            </span>
-                          </span>
-                        </span>
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="__EMPTY__" disabled>
-                      {t('meetings.followUp.noEligibleAssignees')}
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-              {hasNoEligibleAssignees ? (
-                <p className="border-warning/25 bg-warning/10 text-warning-foreground rounded-lg border px-3 py-2 text-xs leading-5">
-                  {t('meetings.followUp.noEligibleAssigneesDescription')}
-                </p>
-              ) : null}
-            </div>
-
-            <div className="grid items-start gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">{t('tasks.priority')}</label>
-                <Select
-                  value={priority}
-                  onValueChange={(value) => setPriority(value as typeof priority)}
-                >
-                  <SelectTrigger className="h-12">
-                    <SelectValue>
-                      <TaskPriorityIndicator priority={priority} pill />
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="LOW" textValue={t('tasks.priorities.LOW')}>
-                      <TaskPriorityIndicator priority="LOW" />
-                    </SelectItem>
-                    <SelectItem value="MEDIUM" textValue={t('tasks.priorities.MEDIUM')}>
-                      <TaskPriorityIndicator priority="MEDIUM" />
-                    </SelectItem>
-                    <SelectItem value="HIGH" textValue={t('tasks.priorities.HIGH')}>
-                      <TaskPriorityIndicator priority="HIGH" />
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">
-                  {t('tasks.dueDate')}
-                  <span className="text-muted-foreground ms-1 text-xs font-normal">
-                    · {t('meetings.followUp.optional')}
-                  </span>
-                </label>
-                <DatePicker value={dueDate} onChange={setDueDate} />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">
-                {t('meetings.followUp.relatedAgenda')}
-                <span className="text-muted-foreground ms-1 text-xs font-normal">
-                  · {t('meetings.followUp.optional')}
-                </span>
-              </label>
-              <Select value={agenda} onValueChange={setAgenda}>
-                <SelectTrigger className="h-12">
-                  <SelectValue placeholder={t('meetings.followUp.relatedAgenda')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NONE">{t('common.none')}</SelectItem>
-                  {detail.agendaItems.length === 0 ? (
-                    <SelectItem value="__NO_AGENDA__" disabled>
-                      {t('meetings.followUp.noAgendaTopics')}
-                    </SelectItem>
-                  ) : (
-                    detail.agendaItems.map((item) => (
-                      <SelectItem key={item.id} value={String(item.id)}>
-                        {item.topic}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <label htmlFor="meeting-action-description" className="text-sm font-medium">
-                {t('meetings.followUp.description')}
-                <span className="text-muted-foreground ms-1 text-xs font-normal">
-                  · {t('meetings.followUp.optional')}
-                </span>
-              </label>
-              <Textarea
-                id="meeting-action-description"
-                rows={3}
-                maxLength={4000}
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-              />
-            </div>
-
-            <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
-              <Button
-                variant="outline"
-                disabled={createMutation.isPending}
-                onClick={() => {
-                  setCreateOpen(false)
-                  resetCreateForm()
-                }}
-              >
-                {t('common.cancel')}
-              </Button>
-              <Button
-                disabled={
-                  createMutation.isPending ||
-                  !title.trim() ||
-                  !assignee ||
-                  eligibleAssignees.length === 0
-                }
-                onClick={submitCreate}
-              >
-                {t('meetings.followUp.createAction')}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+        initialAgendaItemId={createAgendaItemId}
+      />
 
       <Dialog
         open={reassignItem !== null}
@@ -1527,7 +1280,7 @@ export function MeetingFollowUpPanel({
                   )}
                 </SelectContent>
               </Select>
-              {hasNoEligibleAssignees ? (
+              {!assignees.isPending && (assignees.data?.filter((item) => item.eligible).length ?? 0) === 0 ? (
                 <p className="border-warning/25 bg-warning/10 text-warning-foreground rounded-lg border px-3 py-2 text-xs leading-5">
                   {t('meetings.followUp.noEligibleAssigneesDescription')}
                 </p>
