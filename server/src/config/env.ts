@@ -23,7 +23,9 @@ const envSchema = z
 
     CORS_ORIGIN: z.string().trim().min(1).default("http://localhost:5173"),
 
-    LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
+    LOG_LEVEL: z
+      .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
+      .default("info"),
 
     PORTAL_JWT_SECRET: z.string().trim().min(1, "PORTAL_JWT_SECRET is required"),
 
@@ -53,15 +55,26 @@ const envSchema = z
     MEETING_REPORT_TIMEOUT_MS: z.coerce.number().int().min(5000).max(120000).default(45000),
     MEETING_REPORT_MAX_CONCURRENT: z.coerce.number().int().min(1).max(4).default(2),
 
+    MEETING_REPORT_GRACE_MINUTES: z.coerce.number().int().min(0).max(1440).default(30),
 
     PROCUREMENT_SYNC_ENABLED: booleanString.prefault("false"),
     PROCUREMENT_SYNC_INTERVAL_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
     PROCUREMENT_SYNC_RUN_ON_START: booleanString.prefault("true"),
-    PROCUREMENT_SYNC_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(60_000).max(3_600_000).default(600_000),
+    PROCUREMENT_SYNC_REQUEST_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(60_000)
+      .max(3_600_000)
+      .default(600_000),
 
     // Uses the existing email worker. The SQL activation cutoff prevents historical mail floods.
     MEETING_REPORT_EMAIL_ENABLED: booleanString.prefault("true"),
-    MEETING_REPORT_EMAIL_MAX_PDF_BYTES: z.coerce.number().int().min(1_048_576).max(20_971_520).default(10_485_760),
+    MEETING_REPORT_EMAIL_MAX_PDF_BYTES: z.coerce
+      .number()
+      .int()
+      .min(1_048_576)
+      .max(20_971_520)
+      .default(10_485_760),
 
     EMAIL_ENABLED: booleanString.prefault("false"),
     EMAIL_PROVIDER: z.enum(["SMTP"]).default("SMTP"),
@@ -119,5 +132,3 @@ const envSchema = z
   });
 
 export const env = envSchema.parse(process.env);
-
-
