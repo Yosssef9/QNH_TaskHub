@@ -46,6 +46,7 @@ import { MeetingAgendaWorkspace } from '@/features/meetings/components/MeetingAg
 import { MeetingFilesPanel } from '@/features/meetings/components/MeetingFilesPanel'
 import { MeetingFilesPreview } from '@/features/meetings/components/MeetingFilesPreview'
 import { MeetingParticipantsWorkspace } from '@/features/meetings/components/MeetingParticipantsWorkspace'
+import { MeetingOutlookSyncPanel } from '@/features/meetings/components/MeetingOutlookSyncPanel'
 import { MeetingReportStatusPanel } from '@/features/meetings/reports/MeetingReportStatusPanel'
 import { MeetingFollowUpPanel } from '@/features/meetings/action-items/MeetingFollowUpPanel'
 import { useMeetingActionItems } from '@/features/meetings/action-items/use-meeting-action-items'
@@ -1058,6 +1059,10 @@ export function MeetingDetailsPage() {
               </button>
             </Card>
           </div>
+
+          {meeting.status === 'SCHEDULED' || meeting.status === 'CANCELLED' ? (
+            <MeetingOutlookSyncPanel meetingId={meeting.id} organizerUserId={meeting.organizer.userId} />
+          ) : null}
 
           {pendingReschedule ? (
             <Card className="border-warning/35 bg-warning/5 p-5 shadow-sm">

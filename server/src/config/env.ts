@@ -57,6 +57,27 @@ const envSchema = z
 
     MEETING_REPORT_GRACE_MINUTES: z.coerce.number().int().min(0).max(1440).default(30),
 
+    // Outlook Calendar integration. Disabled until the Microsoft Entra application is configured.
+    OUTLOOK_CALENDAR_SYNC_ENABLED: booleanString.prefault("false"),
+    MS_GRAPH_TENANT_ID: optionalTrimmedString,
+    MS_GRAPH_CLIENT_ID: optionalTrimmedString,
+    MS_GRAPH_CLIENT_SECRET: optionalTrimmedString,
+    OUTLOOK_SYNC_WORKER_INTERVAL_MS: z.coerce
+      .number()
+      .int()
+      .min(5000)
+      .max(300000)
+      .default(30000),
+    OUTLOOK_SYNC_POLL_INTERVAL_MINUTES: z.coerce.number().int().min(1).max(1440).default(3),
+    OUTLOOK_GRAPH_REQUEST_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(5000)
+      .max(120000)
+      .default(30000),
+    OUTLOOK_SYNC_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(5),
+    OUTLOOK_SYNC_PROCESSING_TIMEOUT_MINUTES: z.coerce.number().int().min(1).max(60).default(10),
+
     PROCUREMENT_SYNC_ENABLED: booleanString.prefault("false"),
     PROCUREMENT_SYNC_INTERVAL_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
     PROCUREMENT_SYNC_RUN_ON_START: booleanString.prefault("true"),
@@ -128,6 +149,24 @@ const envSchema = z
         path: value.SMTP_USER ? ["SMTP_PASSWORD"] : ["SMTP_USER"],
         message: "SMTP_USER and SMTP_PASSWORD must either both be configured or both be empty",
       });
+    }
+
+    if (value.OUTLOOK_CALENDAR_SYNC_ENABLED) {
+      const requiredGraphSettings = [
+        ["MS_GRAPH_TENANT_ID", value.MS_GRAPH_TENANT_ID],
+        ["MS_GRAPH_CLIENT_ID", value.MS_GRAPH_CLIENT_ID],
+        ["MS_GRAPH_CLIENT_SECRET", value.MS_GRAPH_CLIENT_SECRET],
+      ] as const;
+
+      for (const [setting, configuredValue] of requiredGraphSettings) {
+        if (!configuredValue) {
+          ctx.addIssue({
+            code: "custom",
+            path: [setting],
+            message: `${setting} is required when OUTLOOK_CALENDAR_SYNC_ENABLED=true`,
+          });
+        }
+      }
     }
   });
 

@@ -4,6 +4,7 @@ import { logger } from "./config/logger.js";
 import { closeDatabasePool } from "./database/sql.js";
 import { startEmailWorker } from "./modules/email/email-worker.js";
 import { startProcurementSyncWorker } from "./modules/procurement/procurement-sync.worker.js";
+import { startOutlookCalendarWorker } from "./modules/outlook-calendar/outlook-calendar.worker.js";
 
 const server = app.listen(env.PORT, () => {
   logger.info({ port: env.PORT }, "QNH Task Management API started");
@@ -11,6 +12,7 @@ const server = app.listen(env.PORT, () => {
 
 const emailWorker = startEmailWorker();
 const procurementSyncWorker = startProcurementSyncWorker();
+const outlookCalendarWorker = startOutlookCalendarWorker();
 let isShuttingDown = false;
 
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
@@ -22,6 +24,12 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   logger.info({ signal }, "Shutting down API");
 
   server.close(async (serverError) => {
+    try {
+      await outlookCalendarWorker.stop();
+    } catch (outlookWorkerError) {
+      logger.error({ err: outlookWorkerError }, "Failed to stop Outlook Calendar worker cleanly");
+    }
+
     try {
       await procurementSyncWorker.stop();
     } catch (procurementWorkerError) {

@@ -20,12 +20,16 @@ import {
   getCoordinatorReschedules,
   getMeetingAttachments,
   getMeetingDetail,
+  getMeetingOutlookSyncStatus,
   getMeetingSchedule,
   getMeetingTemplates,
   getMyMeetingRequests,
   getMyMeetings,
   rejectMeetingRequest,
   rejectMeetingReschedule,
+  retryMeetingOutlookSync,
+  restoreMeetingOutlookSync,
+  recreateMeetingOutlookSync,
   removeMeetingAttachment,
   requestMeetingReschedule,
   searchMeetingParticipants,
@@ -306,3 +310,43 @@ export function useArchiveMeetingTemplate() {
 }
 
 
+
+export function useMeetingOutlookSync(meetingId: number | null) {
+  return useQuery({
+    queryKey: [...meetingsQueryKey, 'outlook-sync', meetingId],
+    queryFn: () => getMeetingOutlookSyncStatus(meetingId as number),
+    enabled: meetingId !== null,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  })
+}
+
+export function useRetryMeetingOutlookSync() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ meetingId }: { meetingId: number }) => retryMeetingOutlookSync(meetingId),
+    onSuccess: (_result, input) => {
+      void client.invalidateQueries({ queryKey: [...meetingsQueryKey, 'outlook-sync', input.meetingId] })
+    },
+  })
+}
+
+export function useRestoreMeetingOutlookSync() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ meetingId }: { meetingId: number }) => restoreMeetingOutlookSync(meetingId),
+    onSuccess: (_result, input) => {
+      void client.invalidateQueries({ queryKey: [...meetingsQueryKey, 'outlook-sync', input.meetingId] })
+    },
+  })
+}
+
+export function useRecreateMeetingOutlookSync() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ meetingId }: { meetingId: number }) => recreateMeetingOutlookSync(meetingId),
+    onSuccess: (_result, input) => {
+      void client.invalidateQueries({ queryKey: [...meetingsQueryKey, 'outlook-sync', input.meetingId] })
+    },
+  })
+}

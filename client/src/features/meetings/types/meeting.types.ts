@@ -31,6 +31,53 @@ export interface UpdateMeetingRoomInput extends SaveMeetingRoomInput {
 export type MeetingStatus = 'PENDING_APPROVAL' | 'SCHEDULED' | 'REJECTED' | 'CANCELLED'
 export type MeetingMode = 'ROOM' | 'ZOOM'
 
+export type OutlookSyncStatus =
+  | 'NOT_SYNCED'
+  | 'SYNCING'
+  | 'IN_SYNC'
+  | 'SYNCED_WITH_WARNINGS'
+  | 'OUTLOOK_CHANGED'
+  | 'OUTLOOK_DELETED'
+  | 'SYNC_FAILED'
+
+export type OutlookSyncDifferenceField =
+  | 'SUBJECT'
+  | 'START'
+  | 'END'
+  | 'LOCATION'
+  | 'ATTENDEES'
+  | 'TASKHUB_LINK'
+  | 'ZOOM_URL'
+  | 'DESCRIPTION'
+
+export interface MeetingOutlookSyncDifference {
+  field: OutlookSyncDifferenceField
+  taskHubValue: string
+  outlookValue: string
+}
+
+export interface MeetingOutlookSyncStatus {
+  meetingId: number
+  organizerUserId: number
+  organizerEmail: string | null
+  organizerUserPrincipalName: string | null
+  status: OutlookSyncStatus
+  graphWebLink: string | null
+  desiredRevisionId: number | null
+  syncedRevisionId: number | null
+  missingEmailParticipantCount: number
+  lastSyncedAtUtc: string | null
+  lastCheckedAtUtc: string | null
+  lastErrorCode: string | null
+  lastErrorMessage: string | null
+  differences: MeetingOutlookSyncDifference[]
+}
+
+export interface MeetingOutlookSyncResponse {
+  enabled: boolean
+  status: MeetingOutlookSyncStatus | null
+}
+
 export interface MeetingParticipant {
   userId: number
   userCode: string

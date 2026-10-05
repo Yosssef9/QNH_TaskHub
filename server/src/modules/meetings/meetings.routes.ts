@@ -52,6 +52,7 @@ import {
   coordinatorDirectRescheduleMeeting,
   downloadMeetingAttachment,
   getMeetingDetail,
+  getMeetingOutlookSyncStatus,
   getMeetingSeriesDetail,
   getMeetingSeriesLinkForMeeting,
   listActiveMeetingRooms,
@@ -68,6 +69,9 @@ import {
   previewMeetingSeries,
   rejectMeetingRequest,
   rejectMeetingReschedule,
+  retryMeetingOutlookSync,
+  restoreMeetingOutlookSync,
+  recreateMeetingOutlookSync,
   removeMeetingAttachment,
   requestMeetingReschedule,
   searchMeetingParticipants,
@@ -435,6 +439,27 @@ meetingsRouter.get(
   "/:meetingId/report.pdf",
   validateRequest({ params: meetingReportParamsSchema, query: meetingReportQuerySchema }),
   exportMeetingReportPdf,
+);
+
+meetingsRouter.get(
+  "/:meetingId/outlook-sync",
+  validateRequest({ params: meetingWorkspaceParamsSchema }),
+  getMeetingOutlookSyncStatus,
+);
+meetingsRouter.post(
+  "/:meetingId/outlook-sync/retry",
+  validateRequest({ params: meetingWorkspaceParamsSchema }),
+  retryMeetingOutlookSync,
+);
+meetingsRouter.post(
+  "/:meetingId/outlook-sync/restore",
+  validateRequest({ params: meetingWorkspaceParamsSchema }),
+  restoreMeetingOutlookSync,
+);
+meetingsRouter.post(
+  "/:meetingId/outlook-sync/recreate",
+  validateRequest({ params: meetingWorkspaceParamsSchema }),
+  recreateMeetingOutlookSync,
 );
 
 meetingsRouter.get(

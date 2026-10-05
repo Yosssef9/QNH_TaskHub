@@ -20,6 +20,7 @@ import {
 import { meetingSchedulingRepository } from "./meeting-scheduling.repository.js";
 import { meetingSchedulingService } from "./meeting-scheduling.service.js";
 import { meetingNotificationsService } from "./meeting-notifications.service.js";
+import { outlookCalendarService } from "../outlook-calendar/outlook-calendar.service.js";
 import {
   meetingWorkspaceRepository,
   mapMeetingAttachmentRecord,
@@ -617,8 +618,10 @@ export const meetingWorkspaceService = {
       }
       return { revisionId: created.revisionId, direct: false };
     });
-    if (result.direct) await meetingNotificationsService.safeRescheduled(meetingId, result.revisionId);
-    else await meetingNotificationsService.safeRescheduleRequested(meetingId, result.revisionId);
+    if (result.direct) {
+      await meetingNotificationsService.safeRescheduled(meetingId, result.revisionId);
+      await outlookCalendarService.safeMeetingScheduled(meetingId);
+    } else await meetingNotificationsService.safeRescheduleRequested(meetingId, result.revisionId);
     return loadDetail(actorUserId, access, meetingId);
   },
 
@@ -651,8 +654,10 @@ export const meetingWorkspaceService = {
       }
       return "PENDING" as const;
     });
-    if (outcome === "DIRECT") await meetingNotificationsService.safeRescheduled(meetingId, input.revisionId);
-    else await meetingNotificationsService.safeRequestUpdated(meetingId, input.revisionId);
+    if (outcome === "DIRECT") {
+      await meetingNotificationsService.safeRescheduled(meetingId, input.revisionId);
+      await outlookCalendarService.safeMeetingScheduled(meetingId);
+    } else await meetingNotificationsService.safeRequestUpdated(meetingId, input.revisionId);
     return loadDetail(actorUserId, access, meetingId);
   },
 
@@ -895,6 +900,7 @@ export const meetingWorkspaceService = {
     });
 
     await meetingNotificationsService.safeRescheduled(meetingId, input.revisionId);
+    await outlookCalendarService.safeMeetingScheduled(meetingId);
     return loadDetail(actorUserId, access, meetingId);
   },
 
@@ -928,6 +934,7 @@ export const meetingWorkspaceService = {
       return created.revisionId;
     });
     await meetingNotificationsService.safeRescheduled(meetingId, revisionId);
+    await outlookCalendarService.safeMeetingScheduled(meetingId);
     return loadDetail(actorUserId, access, meetingId);
   },
 
@@ -974,6 +981,7 @@ export const meetingWorkspaceService = {
       );
     });
     await meetingNotificationsService.safeRescheduled(meetingId, input.revisionId);
+    await outlookCalendarService.safeMeetingScheduled(meetingId);
   },
 
   async rejectReschedule(
@@ -1056,6 +1064,7 @@ export const meetingWorkspaceService = {
       );
     });
     await meetingNotificationsService.safeCancelled(meetingId);
+    await outlookCalendarService.safeMeetingCancelled(meetingId);
     return loadDetail(actorUserId, access, meetingId);
   },
 

@@ -12,6 +12,7 @@ import { meetingSchedulingService } from "./meeting-scheduling.service.js";
 import { meetingWorkflowRepository } from "./meeting-workflow.repository.js";
 import { meetingWorkspaceRepository } from "./meeting-workspace.repository.js";
 import { meetingNotificationsService } from "./meeting-notifications.service.js";
+import { outlookCalendarService } from "../outlook-calendar/outlook-calendar.service.js";
 import type {
   CreateMeetingInput,
   MeetingAgendaItemInput,
@@ -410,6 +411,7 @@ export const meetingWorkflowService = {
 
     if (created.meetingMode === "ZOOM") {
       await meetingNotificationsService.safeInitialScheduled(created.meetingId, created.revisionId, false);
+      await outlookCalendarService.safeMeetingScheduled(created.meetingId);
     } else {
       await meetingNotificationsService.safeRequestSubmitted(created.meetingId, created.revisionId);
     }
@@ -439,6 +441,7 @@ export const meetingWorkflowService = {
     });
 
     await meetingNotificationsService.safeInitialScheduled(created.meetingId, created.revisionId, false);
+    await outlookCalendarService.safeMeetingScheduled(created.meetingId);
     return requireSummary(created.meetingId);
   },
 
@@ -483,8 +486,10 @@ export const meetingWorkflowService = {
       return "PENDING" as const;
     });
 
-    if (outcome === "SCHEDULED") await meetingNotificationsService.safeInitialScheduled(meetingId, input.revisionId, false);
-    else await meetingNotificationsService.safeRequestUpdated(meetingId, input.revisionId);
+    if (outcome === "SCHEDULED") {
+      await meetingNotificationsService.safeInitialScheduled(meetingId, input.revisionId, false);
+      await outlookCalendarService.safeMeetingScheduled(meetingId);
+    } else await meetingNotificationsService.safeRequestUpdated(meetingId, input.revisionId);
     return requireSummary(meetingId);
   },
 
@@ -626,6 +631,7 @@ export const meetingWorkflowService = {
     });
 
     await meetingNotificationsService.safeInitialScheduled(meetingId, input.revisionId, true);
+    await outlookCalendarService.safeMeetingScheduled(meetingId);
     return requireSummary(meetingId);
   },
 
@@ -662,6 +668,7 @@ export const meetingWorkflowService = {
     });
 
     await meetingNotificationsService.safeInitialScheduled(meetingId, input.revisionId, true);
+    await outlookCalendarService.safeMeetingScheduled(meetingId);
     return requireSummary(meetingId);
   },
 

@@ -37,6 +37,7 @@ import type { MeetingParticipantAvailability } from "./meeting-scheduling.types.
 import { meetingSchedulingRepository } from "./meeting-scheduling.repository.js";
 import { meetingSchedulingService } from "./meeting-scheduling.service.js";
 import { meetingNotificationsService } from "./meeting-notifications.service.js";
+import { outlookCalendarService } from "../outlook-calendar/outlook-calendar.service.js";
 import { storeMeetingAttachment, removeStoredMeetingAttachment } from "./meeting-attachment-storage.js";
 import { validateMeetingAttachmentFile } from "./meeting-attachment-validation.js";
 import { MAX_MEETING_ATTACHMENTS } from "./meeting-attachment-upload.middleware.js";
@@ -553,6 +554,9 @@ export const meetingSeriesService = {
     });
 
     await meetingNotificationsService.safeSeriesScheduled(result.seriesId);
+    for (const meetingId of result.meetingIds) {
+      await outlookCalendarService.safeMeetingScheduled(meetingId);
+    }
     return result;
   },
 

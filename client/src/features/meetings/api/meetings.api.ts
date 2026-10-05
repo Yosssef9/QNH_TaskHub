@@ -33,6 +33,7 @@ import type {
   UpdateMeetingRoomInput,
   UpdateMeetingTemplateInput,
   UpdatePendingMeetingScheduleInput,
+  MeetingOutlookSyncResponse,
 } from '../types/meeting.types'
 
 export async function getActiveMeetingRooms(): Promise<MeetingRoom[]> {
@@ -410,4 +411,23 @@ export async function archiveMeetingTemplate(input: { templateId: number; rowVer
   await apiClient.post(`/meetings/templates/${input.templateId}/archive`, {
     rowVersion: input.rowVersion,
   })
+}
+
+export async function getMeetingOutlookSyncStatus(meetingId: number): Promise<MeetingOutlookSyncResponse> {
+  const response = await apiClient.get<ApiSuccessResponse<MeetingOutlookSyncResponse>>(
+    `/meetings/${meetingId}/outlook-sync`,
+  )
+  return response.data.data
+}
+
+export async function retryMeetingOutlookSync(meetingId: number): Promise<void> {
+  await apiClient.post(`/meetings/${meetingId}/outlook-sync/retry`)
+}
+
+export async function restoreMeetingOutlookSync(meetingId: number): Promise<void> {
+  await apiClient.post(`/meetings/${meetingId}/outlook-sync/restore`)
+}
+
+export async function recreateMeetingOutlookSync(meetingId: number): Promise<void> {
+  await apiClient.post(`/meetings/${meetingId}/outlook-sync/recreate`)
 }

@@ -4,6 +4,9 @@ import { AppError } from "../../shared/errors/app-error.js";
 import { getValidatedRequestPart } from "../../shared/http/validated-request.js";
 import type { ApiSuccessResponse } from "../../shared/types/result.js";
 import type { TaskHubAccess } from "../auth/auth.types.js";
+import { getOutlookCalendarRuntimeState } from "../outlook-calendar/outlook-calendar.config.js";
+import { outlookCalendarService } from "../outlook-calendar/outlook-calendar.service.js";
+import type { OutlookSyncStatusView } from "../outlook-calendar/outlook-calendar.types.js";
 import type {
   CreateMeetingBody,
   DecideMeetingRequestBody,
@@ -389,6 +392,69 @@ export const listMeetingSchedule: RequestHandler = async (req, res) => {
     data: { entries },
   };
   res.status(200).json(body);
+};
+
+export const getMeetingOutlookSyncStatus: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
+  await meetingWorkspaceService.getDetail(actorUserId(req), currentAccess(req), params.meetingId);
+  const runtime = getOutlookCalendarRuntimeState();
+  const status = await outlookCalendarService.getStatus(params.meetingId);
+  const body: ApiSuccessResponse<{ enabled: boolean; status: OutlookSyncStatusView | null }> = {
+    success: true,
+    data: { enabled: runtime.enabled, status },
+  };
+  res.status(200).json(body);
+};
+
+export const retryMeetingOutlookSync: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
+  const userId = actorUserId(req);
+  const access = currentAccess(req);
+  const detail = await meetingWorkspaceService.getDetail(userId, access, params.meetingId);
+  if (detail.meeting.organizer.userId !== userId && !access.meetingCoordinateEnabled) {
+    throw new AppError({
+      statusCode: 403,
+      code: "OUTLOOK_SYNC_RETRY_FORBIDDEN",
+      message: "Only the Meeting Organizer or a Coordinator can retry Outlook synchronization.",
+    });
+  }
+  await outlookCalendarService.retry(params.meetingId, userId);
+  const body: ApiSuccessResponse<{ accepted: true }> = { success: true, data: { accepted: true } };
+  res.status(202).json(body);
+};
+
+export const restoreMeetingOutlookSync: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
+  const userId = actorUserId(req);
+  const access = currentAccess(req);
+  const detail = await meetingWorkspaceService.getDetail(userId, access, params.meetingId);
+  if (detail.meeting.organizer.userId !== userId && !access.meetingCoordinateEnabled) {
+    throw new AppError({
+      statusCode: 403,
+      code: "OUTLOOK_SYNC_RESTORE_FORBIDDEN",
+      message: "Only the Meeting Organizer or a Coordinator can restore Outlook from TaskHub.",
+    });
+  }
+  await outlookCalendarService.restore(params.meetingId, userId);
+  const body: ApiSuccessResponse<{ accepted: true }> = { success: true, data: { accepted: true } };
+  res.status(202).json(body);
+};
+
+export const recreateMeetingOutlookSync: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
+  const userId = actorUserId(req);
+  const access = currentAccess(req);
+  const detail = await meetingWorkspaceService.getDetail(userId, access, params.meetingId);
+  if (detail.meeting.organizer.userId !== userId && !access.meetingCoordinateEnabled) {
+    throw new AppError({
+      statusCode: 403,
+      code: "OUTLOOK_SYNC_RECREATE_FORBIDDEN",
+      message: "Only the Meeting Organizer or a Coordinator can recreate the Outlook Meeting.",
+    });
+  }
+  await outlookCalendarService.recreate(params.meetingId, userId);
+  const body: ApiSuccessResponse<{ accepted: true }> = { success: true, data: { accepted: true } };
+  res.status(202).json(body);
 };
 
 export const getMeetingDetail: RequestHandler = async (req, res) => {
