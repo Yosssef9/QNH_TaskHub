@@ -50,6 +50,11 @@ const notificationIcons: Record<NotificationType, LucideIcon> = {
   GENERAL_TASK_ASSIGNED: CalendarClock,
   GENERAL_SUBTASK_ASSIGNED: CalendarClock,
   GENERAL_TASK_COMPLETED: CheckCheck,
+  GENERAL_ASSIGNMENT_REMOVED: AlertTriangle,
+  GENERAL_TASK_DUE_CHANGED: Clock3,
+  GENERAL_SUBTASK_DUE_CHANGED: Clock3,
+  GENERAL_TASK_REOPENED: Clock3,
+  GENERAL_SUBTASK_COMPLETED: CheckCheck,
 }
 
 const notificationTones: Record<NotificationType, string> = {
@@ -77,6 +82,11 @@ const notificationTones: Record<NotificationType, string> = {
   GENERAL_TASK_ASSIGNED: 'bg-primary/10 text-primary',
   GENERAL_SUBTASK_ASSIGNED: 'bg-primary/10 text-primary',
   GENERAL_TASK_COMPLETED: 'bg-success/10 text-success',
+  GENERAL_ASSIGNMENT_REMOVED: 'bg-warning/10 text-warning-foreground',
+  GENERAL_TASK_DUE_CHANGED: 'bg-warning/10 text-warning-foreground',
+  GENERAL_SUBTASK_DUE_CHANGED: 'bg-warning/10 text-warning-foreground',
+  GENERAL_TASK_REOPENED: 'bg-info/10 text-info-foreground',
+  GENERAL_SUBTASK_COMPLETED: 'bg-success/10 text-success',
 }
 
 function formatDate(value: string | null, locale: string): string | null {

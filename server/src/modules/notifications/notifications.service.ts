@@ -40,8 +40,22 @@ export function notificationHref(record: NotificationRecord): string {
       record.notificationType === "GENERAL_SUBTASK_ASSIGNED") {
     return taskId === null ? "/assigned-to-me" : `/assigned-to-me?taskId=${taskId}`;
   }
+  if (record.notificationType === "GENERAL_SUBTASK_COMPLETED") {
+    return taskId === null ? "/assigned-to-me" :
+      (listId === null ? `/assigned-to-me?taskId=${taskId}` : `/lists/${listId}?taskId=${taskId}`);
+  }
+  if (record.notificationType === "GENERAL_ASSIGNMENT_REMOVED") return "/assigned-to-me";
+  if (record.notificationType === "GENERAL_TASK_REOPENED") {
+    return taskId === null ? "/assigned-to-me" :
+      (listId === null ? `/assigned-to-me?taskId=${taskId}` : `/lists/${listId}?taskId=${taskId}`);
+  }
+  if (record.notificationType === "GENERAL_TASK_DUE_CHANGED" ||
+      record.notificationType === "GENERAL_SUBTASK_DUE_CHANGED") {
+    return taskId === null ? "/assigned-to-me" : `/assigned-to-me?taskId=${taskId}`;
+  }
   if (record.notificationType === "GENERAL_TASK_COMPLETED") {
-    return listId === null || taskId === null ? "/" : `/lists/${listId}?taskId=${taskId}`;
+    return taskId === null ? "/assigned-to-me" :
+      (listId === null ? `/assigned-to-me?taskId=${taskId}` : `/lists/${listId}?taskId=${taskId}`);
   }
 
   if (record.notificationType === "MEETING_ACTION_ITEM_ASSIGNED") {

@@ -4,9 +4,7 @@ import type { EmailTemplateKey, OperationalEmailTemplateKey } from "./email.type
 export function templateKeyForNotification(type: NotificationType): OperationalEmailTemplateKey {
   switch (type) {
     case "MEETING_START_REMINDER":
-    case "GENERAL_TASK_ASSIGNED":
-    case "GENERAL_SUBTASK_ASSIGNED":
-    case "GENERAL_TASK_COMPLETED":
+    case "GENERAL_SUBTASK_COMPLETED":
       throw new Error(`${type} is in-app only and does not have an operational email template.`);
     default:
       return type;
@@ -37,6 +35,13 @@ export function notificationTypeForTemplate(
     case "MEETING_SERIES_SCHEDULED":
     case "MEETING_ACTION_ITEM_ASSIGNED":
     case "MEETING_ACTION_ITEM_COMPLETED":
+    case "GENERAL_TASK_ASSIGNED":
+    case "GENERAL_SUBTASK_ASSIGNED":
+    case "GENERAL_ASSIGNMENT_REMOVED":
+    case "GENERAL_TASK_DUE_CHANGED":
+    case "GENERAL_SUBTASK_DUE_CHANGED":
+    case "GENERAL_TASK_COMPLETED":
+    case "GENERAL_TASK_REOPENED":
       return templateKey;
     // Reports are email-only jobs, handled by the report processor, not notification sync.
     case "MEETING_REPORT_AVAILABLE":

@@ -428,3 +428,7 @@ If documentation and implementation conflict on privacy, security, ownership, or
 
 
 
+
+## General task assignment email notifications (migration 049)
+
+General task and subtask notification emails reuse the existing notification/outbox worker, are independently preference-controlled, and recheck recipient assignment at queue/send time. Former assignees receive generic removal notices without task content. Intermediate subtask completion is in-app only. See `docs/GLOBAL_TASK_ASSIGNMENT_EMAILS.md`. Preserve existing meeting and private KPI boundaries.

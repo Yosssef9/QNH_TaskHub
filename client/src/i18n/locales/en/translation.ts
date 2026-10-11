@@ -284,6 +284,11 @@ export const enTranslation = {
       GENERAL_TASK_ASSIGNED: 'Task assigned',
       GENERAL_SUBTASK_ASSIGNED: 'Subtask assigned',
       GENERAL_TASK_COMPLETED: 'Task completed',
+      GENERAL_ASSIGNMENT_REMOVED: 'Assignment removed',
+      GENERAL_TASK_DUE_CHANGED: 'Task due date changed',
+      GENERAL_SUBTASK_DUE_CHANGED: 'Subtask due date changed',
+      GENERAL_TASK_REOPENED: 'Task reopened',
+      GENERAL_SUBTASK_COMPLETED: 'Subtask completed',
     },
   },
   portal: {
@@ -3765,6 +3770,7 @@ export const enTranslation = {
         cycles: 'Work Cycles',
         kpis: 'KPIs',
         meetings: 'Meetings',
+        assignments: 'Task assignments',
       },
       types: {
         TASK_OVERDUE: {
@@ -3844,6 +3850,34 @@ export const enTranslation = {
         MEETING_ACTION_ITEM_COMPLETED: {
           title: 'Meeting action item completed',
           description: 'Email me when a meeting action item is completed.',
+        },
+        GENERAL_TASK_ASSIGNED: {
+          title: 'Main task assigned',
+          description: 'Notify me when someone assigns a task to me.',
+        },
+        GENERAL_SUBTASK_ASSIGNED: {
+          title: 'Subtask assigned',
+          description: 'Notify me when I am responsible for a subtask.',
+        },
+        GENERAL_ASSIGNMENT_REMOVED: {
+          title: 'Assignment removed',
+          description: 'Notify me when a task or subtask is reassigned away from me.',
+        },
+        GENERAL_TASK_DUE_CHANGED: {
+          title: 'Task deadline changed',
+          description: 'Notify me when a task assigned to me gets a new due date.',
+        },
+        GENERAL_SUBTASK_DUE_CHANGED: {
+          title: 'Subtask deadline changed',
+          description: 'Notify me when the due date of my subtask changes.',
+        },
+        GENERAL_TASK_COMPLETED: {
+          title: 'Main task completed',
+          description: 'Notify me when a general task I created or am responsible for is completed.',
+        },
+        GENERAL_TASK_REOPENED: {
+          title: 'Task reopened',
+          description: 'Notify me when a task I am responsible for is reopened.',
         },
         MEETING_REPORT_AVAILABLE: {
           title: 'Meeting report after the Meeting',

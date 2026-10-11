@@ -16,6 +16,7 @@ import { renderKpiMeasurementDueEmail } from "./kpi-measurement-due-email.js";
 import { renderMeetingLifecycleEmail } from "./meeting-lifecycle-email.js";
 import { renderMeetingSeriesScheduledEmail } from "./meeting-series-scheduled-email.js";
 import { renderMeetingActionItemEmail } from "./meeting-action-item-email.js";
+import { renderGeneralTaskEmail } from "./general-task-email.js";
 import { renderMeetingReportEmail } from "./meeting-report-email.js";
 import { renderTaskDueTodayEmail } from "./task-due-today-email.js";
 import { renderTaskOverdueEmail } from "./task-overdue-email.js";
@@ -77,8 +78,17 @@ export function renderEmailTemplate(
     case "MEETING_ACTION_ITEM_ASSIGNED":
     case "MEETING_ACTION_ITEM_COMPLETED":
       return renderMeetingActionItemEmail(templateKey, payload, language, context);
+    case "GENERAL_TASK_ASSIGNED":
+    case "GENERAL_SUBTASK_ASSIGNED":
+    case "GENERAL_ASSIGNMENT_REMOVED":
+    case "GENERAL_TASK_DUE_CHANGED":
+    case "GENERAL_SUBTASK_DUE_CHANGED":
+    case "GENERAL_TASK_COMPLETED":
+    case "GENERAL_TASK_REOPENED":
+      return renderGeneralTaskEmail(templateKey, payload, language, context);
   }
 }
+
 
 
 

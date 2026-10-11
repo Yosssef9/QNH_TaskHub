@@ -20,6 +20,7 @@ import {
 import type { NotificationType } from "../notifications/notifications.types.js";
 import { workCyclesService } from "../work-cycles/work-cycles.service.js";
 import { meetingActionItemsService } from "../meeting-action-items/meeting-action-items.service.js";
+import { buildGeneralAssignmentEmailPayload, isGeneralAssignmentMailEvent, refreshGeneralAssignmentEmailPayload } from "../general-task-assignments/general-task-assignments.email.js";
 import { meetingNotificationsService } from "../meetings/meeting-notifications.service.js";
 import { emailService } from "./email.service.js";
 import {
@@ -75,6 +76,14 @@ function asEmailPreferenceEvent(type: NotificationType): EmailPreferenceEvent | 
       return null;
     case "MEETING_ACTION_ITEM_ASSIGNED":
     case "MEETING_ACTION_ITEM_COMPLETED":
+      return type;
+    case "GENERAL_TASK_ASSIGNED":
+    case "GENERAL_SUBTASK_ASSIGNED":
+    case "GENERAL_ASSIGNMENT_REMOVED":
+    case "GENERAL_TASK_DUE_CHANGED":
+    case "GENERAL_SUBTASK_DUE_CHANGED":
+    case "GENERAL_TASK_COMPLETED":
+    case "GENERAL_TASK_REOPENED":
       return type;
     default:
       return null;
@@ -338,6 +347,14 @@ async function buildPayload(
         ? payload
         : null;
     }
+    case "GENERAL_TASK_ASSIGNED":
+    case "GENERAL_SUBTASK_ASSIGNED":
+    case "GENERAL_ASSIGNMENT_REMOVED":
+    case "GENERAL_TASK_DUE_CHANGED":
+    case "GENERAL_SUBTASK_DUE_CHANGED":
+    case "GENERAL_TASK_COMPLETED":
+    case "GENERAL_TASK_REOPENED":
+      return buildGeneralAssignmentEmailPayload(candidate.ownerUserId, candidate.notificationType, candidate);
     default:
       return null;
   }
@@ -493,6 +510,10 @@ export const operationalEmailService = {
         ? { delivery, payload }
         : null;
     }
+    if (isGeneralAssignmentMailEvent(type)) {
+      const refreshed = await refreshGeneralAssignmentEmailPayload(ownerUserId, type, payload);
+      return refreshed ? { delivery, payload: refreshed } : null;
+    }
     if (type.startsWith("MEETING_")) {
       const refreshedPayload = await meetingNotificationsService.refreshEmailPayloadAtSend(
         ownerUserId,
@@ -547,6 +568,7 @@ export const operationalEmailService = {
     return processed;
   },
 };
+
 
 
 

@@ -48,6 +48,13 @@ function asTemplateKey(value: string): EmailTemplateKey {
     case "MEETING_SERIES_SCHEDULED":
     case "MEETING_ACTION_ITEM_ASSIGNED":
     case "MEETING_ACTION_ITEM_COMPLETED":
+    case "GENERAL_TASK_ASSIGNED":
+    case "GENERAL_SUBTASK_ASSIGNED":
+    case "GENERAL_ASSIGNMENT_REMOVED":
+    case "GENERAL_TASK_DUE_CHANGED":
+    case "GENERAL_SUBTASK_DUE_CHANGED":
+    case "GENERAL_TASK_COMPLETED":
+    case "GENERAL_TASK_REOPENED":
       return value;
     default:
       throw new Error(`Unsupported email template key: ${value}`);
@@ -239,6 +246,7 @@ export function startEmailWorker(): EmailWorkerHandle {
     },
   };
 }
+
 
 
 

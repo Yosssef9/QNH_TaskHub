@@ -282,6 +282,11 @@ export const arTranslation = {
       GENERAL_TASK_ASSIGNED: 'تم إسناد مهمة',
       GENERAL_SUBTASK_ASSIGNED: 'تم إسناد مهمة فرعية',
       GENERAL_TASK_COMPLETED: 'تم إنجاز المهمة',
+      GENERAL_ASSIGNMENT_REMOVED: 'تم إلغاء الإسناد',
+      GENERAL_TASK_DUE_CHANGED: 'تم تغيير موعد المهمة',
+      GENERAL_SUBTASK_DUE_CHANGED: 'تم تغيير موعد المهمة الفرعية',
+      GENERAL_TASK_REOPENED: 'تمت إعادة فتح المهمة',
+      GENERAL_SUBTASK_COMPLETED: 'تم إنجاز مهمة فرعية',
     },
   },
   portal: {
@@ -3696,6 +3701,7 @@ export const arTranslation = {
         cycles: 'دورات العمل',
         kpis: 'مؤشرات الأداء',
         meetings: 'الاجتماعات',
+        assignments: 'المهام المسندة',
       },
       types: {
         TASK_OVERDUE: {
@@ -3770,6 +3776,34 @@ export const arTranslation = {
         MEETING_ACTION_ITEM_COMPLETED: {
           title: 'تم إنجاز بند متابعة للاجتماع',
           description: 'استلام بريد إلكتروني عند إكمال بند متابعة للاجتماع.',
+        },
+        GENERAL_TASK_ASSIGNED: {
+          title: 'تم إسناد مهمة رئيسية',
+          description: 'أرسل لي بريداً عند إسناد مهمة رئيسية إليّ.',
+        },
+        GENERAL_SUBTASK_ASSIGNED: {
+          title: 'تم إسناد مهمة فرعية',
+          description: 'أرسل لي بريداً عند إسناد مهمة فرعية إليّ.',
+        },
+        GENERAL_ASSIGNMENT_REMOVED: {
+          title: 'تم إلغاء الإسناد',
+          description: 'أرسل لي بريداً عند نقل مهمة أو مهمة فرعية من مسؤوليتي إلى شخص آخر.',
+        },
+        GENERAL_TASK_DUE_CHANGED: {
+          title: 'تغيير موعد المهمة',
+          description: 'أرسل لي بريداً عند تغيير تاريخ استحقاق مهمة مسندة إليّ.',
+        },
+        GENERAL_SUBTASK_DUE_CHANGED: {
+          title: 'تغيير موعد المهمة الفرعية',
+          description: 'أرسل لي بريداً عند تغيير تاريخ استحقاق مهمة فرعية مسندة إليّ.',
+        },
+        GENERAL_TASK_COMPLETED: {
+          title: 'اكتمال المهمة الرئيسية',
+          description: 'أرسل لي بريداً عند اكتمال مهمة عامة أنشأتها أو أسندت إليّ.',
+        },
+        GENERAL_TASK_REOPENED: {
+          title: 'إعادة فتح مهمة',
+          description: 'أرسل لي بريداً عند إعادة فتح مهمة تقع ضمن مسؤوليتي.',
         },
         MEETING_REPORT_AVAILABLE: {
           title: 'تقرير الاجتماع بعد انتهائه',

@@ -48,6 +48,15 @@ const taskEvents: EmailPreferenceEvent[] = [
   'HIGH_PRIORITY_TASK_DUE_TOMORROW',
   'TASK_DUE_TODAY',
 ]
+const generalAssignmentEvents: EmailPreferenceEvent[] = [
+  'GENERAL_TASK_ASSIGNED',
+  'GENERAL_SUBTASK_ASSIGNED',
+  'GENERAL_ASSIGNMENT_REMOVED',
+  'GENERAL_TASK_DUE_CHANGED',
+  'GENERAL_SUBTASK_DUE_CHANGED',
+  'GENERAL_TASK_COMPLETED',
+  'GENERAL_TASK_REOPENED',
+]
 const cycleEvents: EmailPreferenceEvent[] = [
   'CURRENT_CYCLE_ENDING_SOON',
   'CURRENT_CYCLE_PAST_END',
@@ -293,6 +302,14 @@ export function EmailSettingsPanel({ settings }: EmailSettingsPanelProps) {
             onChange={setPreference}
           />
           <PreferenceGroup
+            icon={BellRing}
+            title={t('emailSettings.events.groups.assignments')}
+            events={generalAssignmentEvents}
+            values={preferenceMap}
+            disabled={!settings.notificationsEnabled || updateMutation.isPending}
+            onChange={setPreference}
+          />
+          <PreferenceGroup
             icon={Mail}
             title={t('emailSettings.events.groups.cycles')}
             events={cycleEvents}
@@ -477,6 +494,7 @@ function PreferenceGroup({
     </section>
   )
 }
+
 
 
 

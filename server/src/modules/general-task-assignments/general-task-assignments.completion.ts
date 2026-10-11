@@ -5,6 +5,7 @@ import { notificationsRepository } from "../notifications/notifications.reposito
 import { tasksRepository } from "../tasks/tasks.repository.js";
 import type { TaskRecord } from "../tasks/tasks.types.js";
 import { generalTaskAssignmentsRepository, setAutoParentStatus } from "./general-task-assignments.repository.js";
+import { notifyGeneralTask } from "./general-task-assignments.email-events.js";
 
 /** Called with the parent row locked within the same transaction as the subtask write. */
 export async function reconcileParentCompletion(transaction: DatabaseTransaction,
@@ -33,20 +34,22 @@ export async function reconcileParentCompletion(transaction: DatabaseTransaction
     } else {
       const general = await generalTaskAssignmentsRepository.findContext(taskId, transaction);
       if (general) {
-        const recipients=new Set([ownerUserId,general.assigneeUserId].filter(
-          (id):id is number => id!==null && id!==actorUserId));
-        for (const recipient of recipients) {
-          await notificationsRepository.ensureGeneralTaskNotification(recipient, {
-            type:"GENERAL_TASK_COMPLETED",taskId,listId:task.listId,
-            subjectTitle:task.title,contextTitle:"All subtasks completed",
-            dedupeKey:`GENERAL_TASK_COMPLETED:${taskId}:${recipient}:${Date.now()}`,
-          },transaction);
-        }
+        await notifyGeneralTask(transaction, [ownerUserId, general.assigneeUserId], actorUserId, {
+          type: "GENERAL_TASK_COMPLETED", taskId, listId: task.listId, taskOwnerUserId: ownerUserId,
+          subjectTitle: task.title, contextTitle: "All subtasks completed",
+        });
       }
     }
   } else if (!shouldComplete && task.status === "DONE" && task.autoCompletedFromSubtasks) {
     await setAutoParentStatus(transaction, ownerUserId, taskId, "IN_PROGRESS");
     await tasksRepository.addActivity(transaction, ownerUserId, taskId, "STATUS_CHANGED",
       {from:"DONE",to:"IN_PROGRESS",automatic:true},actorUserId);
+    const general = await generalTaskAssignmentsRepository.findContext(taskId, transaction);
+    if (general) {
+      await notifyGeneralTask(transaction, [ownerUserId, general.assigneeUserId], actorUserId, {
+        type: "GENERAL_TASK_REOPENED", taskId, listId: task.listId, taskOwnerUserId: ownerUserId,
+        subjectTitle: task.title, contextTitle: "Main task reopened",
+      });
+    }
   }
 }

@@ -83,7 +83,7 @@ export const generalTaskAssignmentsRepository = {
     assigneeUserId: number | null): Promise<void> {
     await transaction.request().input("ownerUserId", sql.Int, ownerUserId)
       .input("subtaskId", sql.BigInt, subtaskId).input("assigneeUserId", sql.Int, assigneeUserId)
-      .query(`UPDATE dbo.TM_subtasks SET assignee_user_id=@assigneeUserId,updated_at_utc=SYSUTCDATETIME()
+      .query(`UPDATE dbo.TM_subtasks SET assignee_user_id=@assigneeUserId,assignment_changed_at_utc=SYSUTCDATETIME(),updated_at_utc=SYSUTCDATETIME()
         WHERE id=@subtaskId AND owner_user_id=@ownerUserId AND deleted_at_utc IS NULL;`);
   },
 

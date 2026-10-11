@@ -16,6 +16,7 @@ export interface NotificationRecord {
   meetingId: number | string | null;
   meetingSeriesId: number | string | null;
   meetingRevisionId: number | string | null;
+  subtaskId: number | string | null;
   eventDate: Date | null;
   actualValue: number | null;
   targetValue: number | null;
@@ -77,10 +78,14 @@ const activeTaskContainer = `(
 )`;
 
 export interface GeneralTaskNotificationInput {
-  type: "GENERAL_TASK_ASSIGNED" | "GENERAL_SUBTASK_ASSIGNED" | "GENERAL_TASK_COMPLETED";
+  type: "GENERAL_TASK_ASSIGNED" | "GENERAL_SUBTASK_ASSIGNED" | "GENERAL_TASK_COMPLETED"
+    | "GENERAL_ASSIGNMENT_REMOVED" | "GENERAL_TASK_DUE_CHANGED"
+    | "GENERAL_SUBTASK_DUE_CHANGED" | "GENERAL_TASK_REOPENED" | "GENERAL_SUBTASK_COMPLETED";
   dedupeKey: string;
   taskId: number;
   listId: number | null;
+  subtaskId?: number | null;
+  eventDate?: string | null;
   subjectTitle: string;
   contextTitle: string;
 }
@@ -96,11 +101,14 @@ export const notificationsRepository = {
       .input("context", sql.NVarChar(500), input.contextTitle)
       .input("taskId", sql.BigInt, input.taskId)
       .input("listId", sql.BigInt, input.listId)
+      .input("subtaskId", sql.BigInt, input.subtaskId ?? null)
+      .input("eventDate", sql.Date, input.eventDate ?? null)
       .query(`IF NOT EXISTS (SELECT 1 FROM dbo.TM_notifications WITH (UPDLOCK,HOLDLOCK)
                   WHERE owner_user_id=@ownerUserId AND dedupe_key=@dedupe)
         INSERT dbo.TM_notifications(owner_user_id,notification_type,dedupe_key,subject_title,
-          context_title,task_id,list_id,email_processed_at_utc)
-        VALUES(@ownerUserId,@type,@dedupe,@title,@context,@taskId,@listId,SYSUTCDATETIME());`);
+          context_title,task_id,list_id,subtask_id,event_date,email_processed_at_utc)
+        VALUES(@ownerUserId,@type,@dedupe,@title,@context,@taskId,@listId,@subtaskId,@eventDate,
+          CASE WHEN @type='GENERAL_SUBTASK_COMPLETED' THEN SYSUTCDATETIME() ELSE NULL END);`);
   },
   async ensureMeetingActionItemNotification(
     owner: number,
@@ -182,6 +190,7 @@ export const notificationsRepository = {
         meeting_id AS meetingId,
         meeting_series_id AS meetingSeriesId,
         meeting_revision_id AS meetingRevisionId,
+        subtask_id AS subtaskId,
         event_date AS eventDate,
         actual_value AS actualValue,
         target_value AS targetValue,
@@ -611,6 +620,7 @@ export const notificationsRepository = {
           meeting_id AS meetingId,
           meeting_series_id AS meetingSeriesId,
           meeting_revision_id AS meetingRevisionId,
+        subtask_id AS subtaskId,
           event_date AS eventDate,
           actual_value AS actualValue,
           target_value AS targetValue,

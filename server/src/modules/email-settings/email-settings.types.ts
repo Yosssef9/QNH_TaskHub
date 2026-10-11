@@ -20,6 +20,13 @@ export const EMAIL_PREFERENCE_EVENTS = [
 
   "MEETING_ACTION_ITEM_ASSIGNED",
   "MEETING_ACTION_ITEM_COMPLETED",
+  "GENERAL_TASK_ASSIGNED",
+  "GENERAL_SUBTASK_ASSIGNED",
+  "GENERAL_ASSIGNMENT_REMOVED",
+  "GENERAL_TASK_DUE_CHANGED",
+  "GENERAL_SUBTASK_DUE_CHANGED",
+  "GENERAL_TASK_COMPLETED",
+  "GENERAL_TASK_REOPENED",
   "MEETING_REPORT_AVAILABLE",
 ] as const;
 
@@ -60,4 +67,5 @@ export interface OperationalEmailDelivery {
   recipient: ResolvedEmailRecipient;
   language: "ar" | "en";
 }
+
 

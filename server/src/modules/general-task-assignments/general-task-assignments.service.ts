@@ -5,8 +5,8 @@ import { resolveTaskAccess } from "../meeting-action-items/meeting-action-items.
 import { taskDetailsRepository } from "../task-details/task-details.repository.js";
 import { tasksRepository } from "../tasks/tasks.repository.js";
 import { assertTaskWritable } from "../tasks/tasks.policy.js";
-import { notificationsRepository } from "../notifications/notifications.repository.js";
 import { generalTaskAssignmentsRepository as repo } from "./general-task-assignments.repository.js";
+import { notifyGeneralTask, notifyRemovedAssignment } from "./general-task-assignments.email-events.js";
 
 const missing = () => new AppError({statusCode:404,code:"TASK_NOT_FOUND",message:"Task not found."});
 const denied = () => new AppError({statusCode:403,code:"TASK_ASSIGNMENT_FORBIDDEN",message:"Only the creator may manage assignments."});
@@ -32,13 +32,12 @@ export const generalTaskAssignmentsService = {
       await repo.ensureRelation(transaction, taskId, actorUserId, actorUserId, assigneeUserId, true);
       await tasksRepository.addActivity(transaction, actorUserId, taskId, "GENERAL_TASK_ASSIGNED",
         { previousAssigneeUserId: prior?.assigneeUserId ?? null, assigneeUserId }, actorUserId);
-      if (assigneeUserId !== null && assigneeUserId !== actorUserId) {
-        await notificationsRepository.ensureGeneralTaskNotification(assigneeUserId, {
-          type:"GENERAL_TASK_ASSIGNED", taskId, listId:task.listId,
-          subjectTitle: task.title, contextTitle:"Task assigned to you",
-          dedupeKey:`GENERAL_TASK_ASSIGNED:${taskId}:${assigneeUserId}:${Date.now()}`,
-        }, transaction);
-      }
+      await notifyRemovedAssignment(transaction, actorUserId,
+        prior?.assigneeUserId ?? null, taskId, null);
+      await notifyGeneralTask(transaction, [assigneeUserId], actorUserId, {
+        type: "GENERAL_TASK_ASSIGNED", taskId, listId: task.listId,
+        subjectTitle: task.title, contextTitle: "Task assigned to you",
+      });
     });
     return repo.findContext(taskId);
   },
@@ -62,12 +61,12 @@ export const generalTaskAssignmentsService = {
       await tasksRepository.addActivity(transaction, actorUserId, link.taskId,
         "GENERAL_SUBTASK_ASSIGNED", {subtaskId, assigneeUserId}, actorUserId);
       const next = await repo.effectiveSubtaskAssignee(actorUserId, subtaskId, transaction);
-      if (next !== null && next !== actorUserId && next !== former) {
-        await notificationsRepository.ensureGeneralTaskNotification(next, {
-          type:"GENERAL_SUBTASK_ASSIGNED",taskId:link.taskId,listId:task.listId,
-          subjectTitle:task.title,contextTitle:"Subtask assigned to you",
-          dedupeKey:`GENERAL_SUBTASK_ASSIGNED:${subtaskId}:${next}:${Date.now()}`,
-        },transaction);
+      if (next !== former) {
+        await notifyRemovedAssignment(transaction, actorUserId, former, link.taskId, subtaskId);
+        await notifyGeneralTask(transaction, [next], actorUserId, {
+          type: "GENERAL_SUBTASK_ASSIGNED", taskId: link.taskId, listId: task.listId,
+          subtaskId, subjectTitle: task.title, contextTitle: "Subtask assigned to you",
+        });
       }
     });
     return { taskId: link.taskId, subtaskId };

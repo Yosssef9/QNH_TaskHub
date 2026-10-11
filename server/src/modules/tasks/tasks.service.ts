@@ -5,6 +5,7 @@ import { resolveKpiTaskDates } from "../kpis/kpi-task-dates.js";
 import { resolveTaskAccess } from "../meeting-action-items/meeting-action-items.access.js";
 import { meetingSchedulingRepository } from "../meetings/meeting-scheduling.repository.js";
 import { notificationsRepository } from "../notifications/notifications.repository.js";
+import { notifyGeneralTask } from "../general-task-assignments/general-task-assignments.email-events.js";
 import { generalTaskAssignmentsRepository } from "../general-task-assignments/general-task-assignments.repository.js";
 import { workCyclesService } from "../work-cycles/work-cycles.service.js";
 import { mapTask } from "./tasks.mapper.js";
@@ -124,13 +125,10 @@ export const tasksService = {
         }
         await generalTaskAssignmentsRepository.ensureRelation(transaction, createdId, ownerUserId,
           ownerUserId, input.assigneeUserId, true);
-        if (input.assigneeUserId !== ownerUserId) {
-          await notificationsRepository.ensureGeneralTaskNotification(input.assigneeUserId, {
-            type:"GENERAL_TASK_ASSIGNED", taskId:createdId, listId,
-            subjectTitle:input.title, contextTitle:"Task assigned to you",
-            dedupeKey:`GENERAL_TASK_ASSIGNED:${createdId}:${input.assigneeUserId}`,
-          }, transaction);
-        }
+        await notifyGeneralTask(transaction, [input.assigneeUserId], ownerUserId, {
+          type: "GENERAL_TASK_ASSIGNED", taskId: createdId, listId,
+          subjectTitle: input.title, contextTitle: "Task assigned to you",
+        });
       }
       await tasksRepository.addActivity(transaction, ownerUserId, createdId, "CREATED", {
         listId,
@@ -242,6 +240,14 @@ export const tasksService = {
         { fromListId: current.listId, toListId: destinationListId },
         actorUserId,
       );
+      if (access.generalAssignment && dueDate !== toDateOnly(current.dueDate)) {
+        await notifyGeneralTask(transaction, [access.generalAssignment.assigneeUserId], actorUserId, {
+          type: "GENERAL_TASK_DUE_CHANGED", taskId, listId: destinationListId,
+          subjectTitle: input.title ?? current.title, contextTitle: "Task deadline updated",
+          eventDate: dueDate,
+        });
+      }
+
     });
 
     return loadTask(ownerUserId, taskId);
@@ -340,6 +346,16 @@ export const tasksService = {
         actorUserId,
       );
 
+      if (access.generalAssignment &&
+          (input.status === "DONE" || (currentStatus === "DONE" &&
+            (input.status === "TODO" || input.status === "IN_PROGRESS")))) {
+        await notifyGeneralTask(transaction,
+          [ownerUserId, access.generalAssignment.assigneeUserId], actorUserId, {
+            type: input.status === "DONE" ? "GENERAL_TASK_COMPLETED" : "GENERAL_TASK_REOPENED",
+            taskId, listId: current.listId, taskOwnerUserId: ownerUserId, subjectTitle: current.title,
+            contextTitle: input.status === "DONE" ? "Main task completed" : "Main task reopened",
+          });
+      }
       if (access.context) {
         await meetingSchedulingRepository.addActivity(transaction, access.context.meetingId, actorUserId,
           "ACTION_ITEM_STATUS_CHANGED", {

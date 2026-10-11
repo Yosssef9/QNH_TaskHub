@@ -8,7 +8,7 @@ import { workCyclesService } from "../work-cycles/work-cycles.service.js";
 import { resolveTaskAccess } from "../meeting-action-items/meeting-action-items.access.js";
 import { generalTaskAssignmentsRepository } from "../general-task-assignments/general-task-assignments.repository.js";
 import { reconcileParentCompletion } from "../general-task-assignments/general-task-assignments.completion.js";
-import { notificationsRepository } from "../notifications/notifications.repository.js";
+import { notifyGeneralTask } from "../general-task-assignments/general-task-assignments.email-events.js";
 import { mapTask } from "../tasks/tasks.mapper.js";
 import { assertTaskWritable } from "../tasks/tasks.policy.js";
 import { tasksRepository } from "../tasks/tasks.repository.js";
@@ -159,13 +159,11 @@ export const taskDetailsService = {
         }
         await generalTaskAssignmentsRepository.ensureRelation(transaction, taskId, ownerUserId, actorUserId, null);
         await generalTaskAssignmentsRepository.setSubtaskAssignee(transaction, ownerUserId, created, input.assigneeUserId);
-        if (input.assigneeUserId !== actorUserId) {
-          await notificationsRepository.ensureGeneralTaskNotification(input.assigneeUserId, {
-            type:"GENERAL_SUBTASK_ASSIGNED",taskId,listId:task.listId,
-            subjectTitle:task.title,contextTitle:"Subtask assigned to you",
-            dedupeKey:`GENERAL_SUBTASK_ASSIGNED:${created}:${input.assigneeUserId}`,
-          },transaction);
-        }
+        await notifyGeneralTask(transaction, [input.assigneeUserId], actorUserId, {
+          type: "GENERAL_SUBTASK_ASSIGNED", taskId, subtaskId: created,
+          listId: task.listId, subjectTitle: task.title,
+          contextTitle: "Subtask assigned to you",
+        });
       }
       await reconcileParentCompletion(transaction, task, ownerUserId, taskId, actorUserId);
       await tasksRepository.addActivity(
@@ -217,6 +215,15 @@ export const taskDetailsService = {
         transaction, ownerUserId, Number(current.taskId), "SUBTASK_UPDATED",
         { subtaskId }, actorUserId,
       );
+      if (access.generalAssignment && dueDate !== (current.dueDate?.toISOString().slice(0, 10) ?? null)) {
+        const recipient = await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
+          ownerUserId, subtaskId, transaction);
+        await notifyGeneralTask(transaction, [recipient], actorUserId, {
+          type: "GENERAL_SUBTASK_DUE_CHANGED", taskId: Number(current.taskId),
+          listId: task.listId, subtaskId, eventDate: dueDate,
+          subjectTitle: task.title, contextTitle: "Subtask deadline updated",
+        });
+      }
       return Number(current.taskId);
     });
     const subtask = await taskDetailsRepository.findSubtask(ownerUserId, subtaskId);
@@ -280,6 +287,18 @@ export const taskDetailsService = {
         );
         await reconcileParentCompletion(transaction, task, resolved.ownerUserId,
           Number(current.taskId), actorUserId);
+        if (isCompleted && resolved.generalAssignment) {
+          const progress = await generalTaskAssignmentsRepository.countIncompleteSubtasks(
+            transaction, Number(current.taskId), resolved.ownerUserId);
+          if (progress.incomplete > 0) {
+            await notifyGeneralTask(transaction,
+              [resolved.ownerUserId, resolved.generalAssignment.assigneeUserId], actorUserId, {
+                type: "GENERAL_SUBTASK_COMPLETED", taskId: Number(current.taskId),
+                listId: task.listId, taskOwnerUserId: resolved.ownerUserId, subjectTitle: task.title,
+                contextTitle: "A subtask was completed",
+              });
+          }
+        }
       }
       return Number(current.taskId);
     });
