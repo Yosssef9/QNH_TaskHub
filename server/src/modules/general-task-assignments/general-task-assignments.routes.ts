@@ -62,7 +62,11 @@ const assignedSearchSchema=searchSchema.extend({
 });
 generalTaskAssignmentsRouter.get("/assigned",validateRequest({query:assignedSearchSchema}),async(req,res)=>{
   const query=getValidatedRequestPart<z.infer<typeof assignedSearchSchema>>(req,"query");
-  res.json({success:true,data:await listGeneralAssignments(actor(req),query.page,query.pageSize,query.search,{status:query.status,priority:query.priority,due:query.due,sortBy:query.sortBy,sortDirection:query.sortDirection})});
+  res.json({success:true,data:await listGeneralAssignments(actor(req),query.page,query.pageSize,query.search,{
+    ...(query.status !== undefined ? {status:query.status} : {}),
+    ...(query.priority !== undefined ? {priority:query.priority} : {}),
+    due:query.due,sortBy:query.sortBy,sortDirection:query.sortDirection,
+  })});
 });
 
 generalTaskAssignmentsRouter.get('/eligible-users/:userId',

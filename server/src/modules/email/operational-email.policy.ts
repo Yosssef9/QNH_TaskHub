@@ -4,6 +4,9 @@ import type { EmailTemplateKey, OperationalEmailTemplateKey } from "./email.type
 export function templateKeyForNotification(type: NotificationType): OperationalEmailTemplateKey {
   switch (type) {
     case "MEETING_START_REMINDER":
+    case "GENERAL_TASK_ASSIGNED":
+    case "GENERAL_SUBTASK_ASSIGNED":
+    case "GENERAL_TASK_COMPLETED":
       throw new Error(`${type} is in-app only and does not have an operational email template.`);
     default:
       return type;
@@ -50,6 +53,7 @@ export function isContractNotificationType(
 ): type is "CONTRACT_EXPIRATION_REMINDER" | "CONTRACT_NOTICE_DEADLINE_REMINDER" {
   return type === "CONTRACT_EXPIRATION_REMINDER" || type === "CONTRACT_NOTICE_DEADLINE_REMINDER";
 }
+
 
 
 
