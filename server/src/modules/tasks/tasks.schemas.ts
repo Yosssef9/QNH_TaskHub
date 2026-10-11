@@ -63,6 +63,7 @@ export const createTaskBodySchema = z
     priority: z.enum(TASK_PRIORITIES).default("MEDIUM"),
     startDate: dateOnlySchema.nullable().optional(),
     dueDate: dateOnlySchema.nullable().optional(),
+    assigneeUserId: z.number().int().positive().nullable().optional(),
   })
   .superRefine(validateDateRange);
 
@@ -107,3 +108,4 @@ export type TaskListQueryInput = z.infer<typeof taskListQuerySchema>;
 export type CreateTaskBody = z.infer<typeof createTaskBodySchema>;
 export type UpdateTaskBody = z.infer<typeof updateTaskBodySchema>;
 export type ChangeTaskStatusBody = z.infer<typeof changeTaskStatusBodySchema>;
+

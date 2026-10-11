@@ -22,7 +22,8 @@ const taskSelect = `
   instance.kpi_id AS kpiId, instance.cycle_id AS cycleId, cycle.title AS cycleTitle,
   instance.name_snapshot AS kpiName, instance.icon_key_snapshot AS kpiIconKey,
   instance.color_snapshot AS kpiColor, cycle.closed_at_utc AS cycleClosedAtUtc,
-  task.title, task.description, task.status,
+  task.title, task.description, task.completion_summary AS completionSummary,
+  task.auto_completed_from_subtasks AS autoCompletedFromSubtasks, task.status,
   task.priority, task.start_date AS startDate, task.due_date AS dueDate, task.reference_date AS referenceDate,
   task.display_order AS displayOrder, task.created_at_utc AS createdAtUtc,
   task.updated_at_utc AS updatedAtUtc, task.completed_at_utc AS completedAtUtc,
@@ -302,7 +303,7 @@ export const tasksRepository = {
       .input("taskId", sql.BigInt, taskId)
       .input("status", sql.VarChar(20), status)
       .input("reason", sql.NVarChar(1000), reason).query(`
-        UPDATE dbo.TM_tasks SET status=@status, updated_at_utc=SYSUTCDATETIME(),
+        UPDATE dbo.TM_tasks SET status=@status, auto_completed_from_subtasks=0, updated_at_utc=SYSUTCDATETIME(),
           completed_at_utc=CASE WHEN @status='DONE' THEN SYSUTCDATETIME() ELSE NULL END,
           cancelled_at_utc=CASE WHEN @status='CANCELLED' THEN SYSUTCDATETIME() ELSE NULL END,
           cancellation_reason=CASE WHEN @status='CANCELLED' THEN @reason ELSE NULL END
@@ -344,3 +345,4 @@ export const tasksRepository = {
         VALUES (@taskId, @ownerUserId, @actorUserId, @type, @data);`);
   },
 };
+

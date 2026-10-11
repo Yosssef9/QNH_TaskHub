@@ -31,6 +31,8 @@ export interface TaskRecord {
   cycleClosedAtUtc: Date | null;
   title: string;
   description: string | null;
+  completionSummary?: string | null;
+  autoCompletedFromSubtasks?: boolean;
   status: string;
   priority: string;
   startDate: Date | null;
@@ -70,6 +72,7 @@ export interface PersonalTask {
   isReadOnly: boolean;
   title: string;
   description: string | null;
+  completionSummary: string | null;
   status: TaskStatus;
   priority: TaskPriority;
   startDate: string | null;
@@ -133,6 +136,7 @@ export interface CreateTaskInput {
   priority: TaskPriority;
   startDate?: string | null | undefined;
   dueDate?: string | null | undefined;
+  assigneeUserId?: number | null | undefined;
 }
 
 export interface UpdateTaskInput {
@@ -149,3 +153,4 @@ export interface ChangeTaskStatusInput {
   status: TaskStatus;
   cancellationReason?: string | undefined;
 }
+

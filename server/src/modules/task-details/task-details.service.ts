@@ -6,6 +6,9 @@ import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
 import { parsePositiveIntegerId } from "../../shared/utils/id.utils.js";
 import { workCyclesService } from "../work-cycles/work-cycles.service.js";
 import { resolveTaskAccess } from "../meeting-action-items/meeting-action-items.access.js";
+import { generalTaskAssignmentsRepository } from "../general-task-assignments/general-task-assignments.repository.js";
+import { reconcileParentCompletion } from "../general-task-assignments/general-task-assignments.completion.js";
+import { notificationsRepository } from "../notifications/notifications.repository.js";
 import { mapTask } from "../tasks/tasks.mapper.js";
 import { assertTaskWritable } from "../tasks/tasks.policy.js";
 import { tasksRepository } from "../tasks/tasks.repository.js";
@@ -73,17 +76,40 @@ export const taskDetailsService = {
       taskDetailsRepository.listActivity(resolved.ownerUserId, taskId),
     ]);
     const completed = subtasks.filter((item) => item.isCompleted).length;
+    const isRestricted = !!resolved.generalAssignment && actorUserId !== resolved.ownerUserId;
+    const ownIds = isRestricted ? new Set(await generalTaskAssignmentsRepository.visibleSubtaskIds(taskId, actorUserId)) : null;
+    const visibleSubtasks = ownIds ? subtasks.filter(item => ownIds.has(Number(item.id))) : subtasks;
+    const visibleAttachments = ownIds ? attachments.filter(item => item.subtaskId === null || ownIds.has(Number(item.subtaskId))) : attachments;
+    const visibleActivity = ownIds ? activity.filter(item => {
+      // List/detail/change history about sibling subtasks is never returned to another executor.
+      if (item.activityType === "SUBTASKS_REORDERED") return false;
+      if (item.activityType === "GENERAL_SUBTASK_ASSIGNED") return false;
+      if (item.activityType.startsWith("SUBTASK") || item.activityType === "ATTACHMENT_ADDED" ||
+          item.activityType === "ATTACHMENT_REMOVED") {
+        let event: Record<string, unknown> | null = null;
+        try { event = item.eventDataJson ? JSON.parse(item.eventDataJson) as Record<string, unknown> : null; }
+        catch { return false; }
+        if (event?.subtaskId !== undefined && event.subtaskId !== null) {
+          return ownIds.has(Number(event.subtaskId));
+        }
+        // Old removal events omitted subtask identity: keep them private rather than leak a filename.
+        return item.activityType === "ATTACHMENT_ADDED";
+      }
+      return ["STATUS_CHANGED","CREATED","COMPLETION_SUMMARY_UPDATED","GENERAL_TASK_ASSIGNED"].includes(item.activityType);
+    }) : activity;
     const mappedTask = mapTask(task);
     return {
       task: {
         ...mappedTask,
-        isReadOnly: mappedTask.isReadOnly || resolved.capabilities.role === "VIEWER",
+        ...(isRestricted ? {listId:null} : {}),
+        isReadOnly: mappedTask.isReadOnly || !resolved.capabilities.canEditDetails,
       },
       actionItem: resolved.context,
+      generalAssignment: resolved.generalAssignment ?? null,
       capabilities: resolved.capabilities,
-      subtasks: subtasks.map(mapSubtask),
-      attachments: attachments.map(mapAttachment),
-      activity: activity.map(mapActivity),
+      subtasks: visibleSubtasks.map(mapSubtask),
+      attachments: visibleAttachments.map(mapAttachment),
+      activity: visibleActivity.map(mapActivity),
       progress: {
         completed,
         total: subtasks.length,
@@ -95,7 +121,7 @@ export const taskDetailsService = {
   async createSubtask(
     actorUserId: number,
     taskId: number,
-    input: { title: string; dueDate?: string | null | undefined },
+    input: { title: string; dueDate?: string | null | undefined; assigneeUserId?: number | null | undefined },
   ) {
     let ownerUserId = actorUserId;
     const id = await withTransaction(async (transaction) => {
@@ -125,6 +151,23 @@ export const taskDetailsService = {
           message: "Subtask could not be created.",
         });
       }
+      if (input.assigneeUserId !== undefined && input.assigneeUserId !== null) {
+        if (access.context || task.kpiInstanceId !== null ||
+            !(await generalTaskAssignmentsRepository.isEligibleUser(input.assigneeUserId, transaction))) {
+          throw new AppError({statusCode:400,code:"SUBTASK_ASSIGNEE_INVALID",
+            message:"Individual subtask assignment requires an active normal task user."});
+        }
+        await generalTaskAssignmentsRepository.ensureRelation(transaction, taskId, ownerUserId, actorUserId, null);
+        await generalTaskAssignmentsRepository.setSubtaskAssignee(transaction, ownerUserId, created, input.assigneeUserId);
+        if (input.assigneeUserId !== actorUserId) {
+          await notificationsRepository.ensureGeneralTaskNotification(input.assigneeUserId, {
+            type:"GENERAL_SUBTASK_ASSIGNED",taskId,listId:task.listId,
+            subjectTitle:task.title,contextTitle:"Subtask assigned to you",
+            dedupeKey:`GENERAL_SUBTASK_ASSIGNED:${created}:${input.assigneeUserId}`,
+          },transaction);
+        }
+      }
+      await reconcileParentCompletion(transaction, task, ownerUserId, taskId, actorUserId);
       await tasksRepository.addActivity(
         transaction, ownerUserId, taskId, "SUBTASK_CREATED",
         { subtaskId: created, title: input.title }, actorUserId,
@@ -200,6 +243,12 @@ export const taskDetailsService = {
         });
       }
 
+      if (resolved.generalAssignment &&
+          (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
+            resolved.ownerUserId, subtaskId, transaction)) !== actorUserId) {
+        throw new AppError({statusCode:403,code:"SUBTASK_NOT_ASSIGNED_TO_YOU",
+          message:"Only your assigned subtasks can be completed."});
+      }
       const current = await taskDetailsRepository.findSubtask(
         resolved.ownerUserId,
         subtaskId,
@@ -229,6 +278,8 @@ export const taskDetailsService = {
           { subtaskId },
           actorUserId,
         );
+        await reconcileParentCompletion(transaction, task, resolved.ownerUserId,
+          Number(current.taskId), actorUserId);
       }
       return Number(current.taskId);
     });
@@ -257,6 +308,7 @@ export const taskDetailsService = {
       if (!task) throw notFound();
       assertTaskWritable(task);
       await taskDetailsRepository.deleteSubtask(transaction, access.ownerUserId, subtaskId);
+      await reconcileParentCompletion(transaction, task, access.ownerUserId, Number(current.taskId), actorUserId);
       await tasksRepository.addActivity(
         transaction, access.ownerUserId, Number(current.taskId), "SUBTASK_DELETED",
         { subtaskId, title: current.title }, actorUserId,
@@ -328,6 +380,13 @@ export const taskDetailsService = {
         message: "You cannot upload files to this Task.",
       });
     }
+    if (preflight.generalAssignment && actorUserId !== preflight.ownerUserId) {
+      const permitted = parent.subtaskId
+        ? (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(preflight.ownerUserId, parent.subtaskId)) === actorUserId
+        : preflight.generalAssignment.assigneeUserId === actorUserId;
+      if (!permitted) throw new AppError({statusCode:403,code:"ATTACHMENT_UPLOAD_FORBIDDEN",
+        message:"Upload only to your own assigned work."});
+    }
     const task = await assertTask(preflight.ownerUserId, taskId);
     assertTaskWritable(task);
     const originalFileName = Array.from(path.basename(file.originalname))
@@ -345,6 +404,14 @@ export const taskDetailsService = {
             code: "ATTACHMENT_UPLOAD_FORBIDDEN",
             message: "You cannot upload files to this Task.",
           });
+        }
+        if (resolved.generalAssignment && actorUserId !== resolved.ownerUserId) {
+          const permitted = parent.subtaskId
+            ? (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
+                resolved.ownerUserId, parent.subtaskId, transaction)) === actorUserId
+            : resolved.generalAssignment.assigneeUserId === actorUserId;
+          if (!permitted) throw new AppError({statusCode:403,code:"ATTACHMENT_UPLOAD_FORBIDDEN",
+            message:"Upload only to your own assigned work."});
         }
         const currentTask = await tasksRepository.findOwnedForUpdate(
           transaction,
@@ -395,6 +462,11 @@ export const taskDetailsService = {
     if (!accessRow) throw attachmentNotFound();
     const resolved = await resolveTaskAccess(actorUserId, accessRow.taskId);
     if (!resolved) throw attachmentNotFound();
+    if (resolved.generalAssignment && actorUserId !== resolved.ownerUserId &&
+      accessRow.subtaskId !== null &&
+      (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(resolved.ownerUserId, accessRow.subtaskId)) !== actorUserId) {
+      throw attachmentNotFound();
+    }
     const attachment = await taskDetailsRepository.findAttachment(resolved.ownerUserId, id);
     if (!attachment) throw attachmentNotFound();
     return { attachment, buffer: await readAttachment(attachment.storageKey) };
@@ -405,6 +477,13 @@ export const taskDetailsService = {
     if (!accessRow) throw attachmentNotFound();
     const resolved = await resolveTaskAccess(actorUserId, accessRow.taskId);
     if (!resolved) throw attachmentNotFound();
+    if (resolved.generalAssignment && actorUserId !== resolved.ownerUserId &&
+        (accessRow.subtaskId === null
+          ? resolved.generalAssignment.assigneeUserId !== actorUserId
+          : (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
+              resolved.ownerUserId, accessRow.subtaskId)) !== actorUserId)) {
+      throw attachmentNotFound();
+    }
     const mayDelete = mayDeleteAttachment(resolved, actorUserId, accessRow.uploadedByUserId);
     if (!mayDelete) throw new AppError({ statusCode: 403, code: "ATTACHMENT_DELETE_FORBIDDEN", message: "Only the Task owner or the current assignee who uploaded the file may delete it." });
     const record = await withTransaction(async (transaction) => {
@@ -415,6 +494,13 @@ export const taskDetailsService = {
         transaction,
       );
       if (!currentAccess) throw attachmentNotFound();
+      if (currentAccess.generalAssignment && actorUserId !== currentAccess.ownerUserId &&
+          (accessRow.subtaskId === null
+            ? currentAccess.generalAssignment.assigneeUserId !== actorUserId
+            : (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
+                currentAccess.ownerUserId, accessRow.subtaskId, transaction)) !== actorUserId)) {
+        throw attachmentNotFound();
+      }
       const canDelete = mayDeleteAttachment(
         currentAccess, actorUserId, accessRow.uploadedByUserId,
       );
@@ -449,7 +535,8 @@ export const taskDetailsService = {
         currentAccess.ownerUserId,
         accessRow.taskId,
         "ATTACHMENT_REMOVED",
-        { attachmentId: id, fileName: attachment.originalFileName },
+        { attachmentId: id, fileName: attachment.originalFileName,
+          subtaskId: attachment.subtaskId },
         actorUserId,
       );
       return attachment;
@@ -457,5 +544,6 @@ export const taskDetailsService = {
     await removeStoredAttachment(record.storageKey);
   },
 };
+
 
 

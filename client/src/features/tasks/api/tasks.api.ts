@@ -146,10 +146,11 @@ export async function createSubtask(input: {
   taskId: number
   title: string
   dueDate?: string | null
+  assigneeUserId?: number | null
 }): Promise<Subtask> {
   const response = await apiClient.post<ApiSuccessResponse<{ subtask: Subtask }>>(
     `/tasks/${input.taskId}/subtasks`,
-    { title: input.title, dueDate: input.dueDate ?? null },
+    { title: input.title, dueDate: input.dueDate ?? null, ...(input.assigneeUserId != null ? {assigneeUserId: input.assigneeUserId} : {}) },
   )
   return response.data.data.subtask
 }
@@ -232,3 +233,4 @@ export async function getAttachmentPreview(
 export async function deleteAttachment(attachmentId: string): Promise<void> {
   await apiClient.delete(`/attachments/${attachmentId}`)
 }
+

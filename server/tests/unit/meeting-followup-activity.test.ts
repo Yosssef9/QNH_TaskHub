@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it, vi } from "vitest";
+import { generalTaskAssignmentsRepository } from "../../src/modules/general-task-assignments/general-task-assignments.repository.js";
 import * as transactions from "../../src/database/transaction.js";
 import type { DatabaseTransaction } from "../../src/database/types.js";
 import * as contentAccess from "../../src/modules/meetings/meeting-content-access.js";
@@ -42,6 +43,7 @@ function arrange() {
   vi.spyOn(tasksRepository, 'findOwnedForUpdate').mockResolvedValue(taskRecord());
   vi.spyOn(tasksRepository, 'findOwnedById').mockResolvedValue(taskRecord());
   vi.spyOn(tasksRepository, 'changeStatus').mockResolvedValue(undefined);
+  vi.spyOn(generalTaskAssignmentsRepository, 'countIncompleteSubtasks').mockResolvedValue({total:1,incomplete:0});
   vi.spyOn(notificationsRepository, 'ensureMeetingActionItemNotification').mockResolvedValue(undefined);
   const taskPermission = vi.spyOn(taskAccess, 'resolveTaskAccess').mockResolvedValue({ ownerUserId: OWNER, context: actionContext(), capabilities: { role: 'ASSIGNEE', canEditDetails: false, canManageSubtasks: false, canCompleteSubtasks: true, canUploadAttachments: true, canDeleteAnyAttachment: false, canCompleteTask: true, canChangeNonCompletionStatus: true, canDeleteRestoreTask: false } });
   return { transaction, audit, updateDecision, notesLock, taskPermission };
@@ -110,3 +112,4 @@ describe('Follow-up history is recorded with the business write', () => {
     assert.equal(test.audit.mock.calls.length, 0);
   });
 });
+

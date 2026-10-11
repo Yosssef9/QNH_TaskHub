@@ -6,6 +6,8 @@ import { authRepository } from "../auth/auth.repository.js";
 import { canReadMeetingContent } from "../meetings/meeting-content-access.js";
 import { meetingWorkspaceRepository } from "../meetings/meeting-workspace.repository.js";
 import { tasksRepository } from "../tasks/tasks.repository.js";
+import { generalTaskAssignmentsRepository } from "../general-task-assignments/general-task-assignments.repository.js";
+import type { GeneralAssignmentContext } from "../general-task-assignments/general-task-assignments.repository.js";
 import { meetingActionItemsRepository } from "./meeting-action-items.repository.js";
 import type {
   MeetingActionItemCapabilities,
@@ -16,6 +18,7 @@ export interface ResolvedTaskAccess {
   ownerUserId: number;
   context: MeetingActionItemContext | null;
   capabilities: MeetingActionItemCapabilities;
+  generalAssignment?: GeneralAssignmentContext | null;
 }
 
 const normalOwnerCapabilities: MeetingActionItemCapabilities = {
@@ -123,6 +126,34 @@ export async function resolveTaskAccess(
     };
   }
 
+  // General tasks are shared only with their parent assignee or individually assigned
+  // subtask executors. Meeting Action Items retain their separate access policy.
+  const general = await generalTaskAssignmentsRepository.findContext(taskId, transaction);
+  if (general) {
+    if (general.ownerUserId === actorUserId) {
+      return {
+        ownerUserId: general.ownerUserId, context: null, generalAssignment: general,
+        capabilities: {
+          ...actionOwnerCapabilities,
+          canCompleteSubtasks: true, // per-child authorization is checked separately
+          canCompleteTask: general.assigneeUserId === null || general.assigneeUserId === actorUserId,
+        },
+      };
+    }
+    if (includeDeleted || !(await generalTaskAssignmentsRepository.hasAccessToTask(taskId, actorUserId, transaction))) {
+      return null;
+    }
+    const isMainAssignee = general.assigneeUserId === actorUserId;
+    return {
+      ownerUserId: general.ownerUserId, context: null, generalAssignment: general,
+      capabilities: {
+        ...actionAssigneeCapabilities,
+        canCompleteTask: isMainAssignee,
+        canChangeNonCompletionStatus: isMainAssignee,
+      },
+    };
+  }
+
   const owned = transaction
     ? await tasksRepository.findOwnedForUpdate(transaction, actorUserId, taskId, includeDeleted)
     : await tasksRepository.findOwnedById(
@@ -145,5 +176,6 @@ export async function resolveTaskAccess(
     capabilities: normalOwnerCapabilities,
   };
 }
+
 
 

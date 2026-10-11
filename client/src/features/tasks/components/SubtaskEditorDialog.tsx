@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 
+import { TaskAssigneePicker } from '../assignment/TaskAssigneePicker'
 import { useCreateSubtask, useUpdateSubtask } from '../hooks/use-tasks'
 import type { Subtask } from '../types/task.types'
 
@@ -17,6 +18,7 @@ interface Props {
   taskId: number
   subtask: Subtask | null
   dueDateRequired?: boolean
+  generalAssignmentEnabled?: boolean
 }
 
 export function SubtaskEditorDialog({
@@ -25,8 +27,10 @@ export function SubtaskEditorDialog({
   taskId,
   subtask,
   dueDateRequired = false,
+  generalAssignmentEnabled = false,
 }: Props) {
   const { t } = useTranslation()
+  const [assigneeUserId, setAssigneeUserId] = useState<number | null>(null)
   const [title, setTitle] = useState(subtask?.title ?? '')
   const [dueDate, setDueDate] = useState<string | null>(subtask?.dueDate ?? null)
   const [dueDateError, setDueDateError] = useState('')
@@ -51,7 +55,7 @@ export function SubtaskEditorDialog({
     if (subtask) {
       updateMutation.mutate({ subtaskId: subtask.id, title: cleanTitle, dueDate }, options)
     } else {
-      createMutation.mutate({ taskId, title: cleanTitle, dueDate }, options)
+      createMutation.mutate({ taskId, title: cleanTitle, dueDate, ...(generalAssignmentEnabled && assigneeUserId !== null ? {assigneeUserId} : {}) }, options)
     }
   }
 
@@ -89,6 +93,12 @@ export function SubtaskEditorDialog({
               onKeyDown={(event) => event.key === 'Enter' && save()}
             />
           </div>
+          {generalAssignmentEnabled && !subtask ? (
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">{t('tasks.assignment.assignSubtask')}</label>
+              <TaskAssigneePicker value={assigneeUserId} onChange={setAssigneeUserId} inherit />
+            </div>
+          ) : null}
           <DatePicker
             required={dueDateRequired}
             label={t('tasks.dueDate')}
@@ -113,3 +123,4 @@ export function SubtaskEditorDialog({
     </Dialog>
   )
 }
+

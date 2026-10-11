@@ -5,6 +5,7 @@ import { resolveKpiTaskDates } from "../kpis/kpi-task-dates.js";
 import { resolveTaskAccess } from "../meeting-action-items/meeting-action-items.access.js";
 import { meetingSchedulingRepository } from "../meetings/meeting-scheduling.repository.js";
 import { notificationsRepository } from "../notifications/notifications.repository.js";
+import { generalTaskAssignmentsRepository } from "../general-task-assignments/general-task-assignments.repository.js";
 import { workCyclesService } from "../work-cycles/work-cycles.service.js";
 import { mapTask } from "./tasks.mapper.js";
 import { assertTaskStatusTransition, assertTaskWritable } from "./tasks.policy.js";
@@ -95,7 +96,11 @@ export const tasksService = {
     const access = await resolveTaskAccess(actorUserId, taskId);
     if (!access) throw notFound();
     const task = await loadTask(access.ownerUserId, taskId);
-    return { ...task, isReadOnly: task.isReadOnly || access.capabilities.role === "VIEWER" };
+    return {
+      ...task,
+      ...(access.generalAssignment && access.ownerUserId !== actorUserId ? {listId:null} : {}),
+      isReadOnly: task.isReadOnly || !access.capabilities.canEditDetails,
+    };
   },
 
   async create(ownerUserId: number, listId: number, input: CreateTaskInput): Promise<PersonalTask> {
@@ -113,6 +118,20 @@ export const tasksService = {
         });
       }
 
+      if (input.assigneeUserId != null) {
+        if (!(await generalTaskAssignmentsRepository.isEligibleUser(input.assigneeUserId, transaction))) {
+          throw new AppError({statusCode:400,code:"TASK_ASSIGNEE_INVALID",message:"Select an active TaskHub user."});
+        }
+        await generalTaskAssignmentsRepository.ensureRelation(transaction, createdId, ownerUserId,
+          ownerUserId, input.assigneeUserId, true);
+        if (input.assigneeUserId !== ownerUserId) {
+          await notificationsRepository.ensureGeneralTaskNotification(input.assigneeUserId, {
+            type:"GENERAL_TASK_ASSIGNED", taskId:createdId, listId,
+            subjectTitle:input.title, contextTitle:"Task assigned to you",
+            dedupeKey:`GENERAL_TASK_ASSIGNED:${createdId}:${input.assigneeUserId}`,
+          }, transaction);
+        }
+      }
       await tasksRepository.addActivity(transaction, ownerUserId, createdId, "CREATED", {
         listId,
         title: input.title,
@@ -240,6 +259,15 @@ export const tasksService = {
       if (!access) throw notFound();
       ownerUserId = access.ownerUserId;
 
+      if (access.generalAssignment && access.capabilities.role === "OWNER" &&
+          access.generalAssignment.assigneeUserId !== null &&
+          access.generalAssignment.assigneeUserId !== actorUserId && input.status === "DONE") {
+        throw forbidden("GENERAL_TASK_OWNER_CANNOT_COMPLETE", "Only the assigned person can complete this task.");
+      }
+      if (access.generalAssignment && access.capabilities.role === "ASSIGNEE" &&
+          input.status === "CANCELLED") {
+        throw forbidden("GENERAL_TASK_ASSIGNEE_CANNOT_CANCEL", "Only the creator can cancel the task.");
+      }
       if (access.context) {
         if (access.capabilities.role === "OWNER" && input.status === "DONE") {
           throw forbidden(
@@ -277,6 +305,20 @@ export const tasksService = {
       if (!current) throw notFound();
       assertTaskWritable(current);
 
+      if (access.generalAssignment && access.capabilities.role === "ASSIGNEE" &&
+        !access.capabilities.canCompleteTask && input.status === "DONE") {
+        throw forbidden("GENERAL_SUBTASK_ASSIGNEE_CANNOT_COMPLETE_MAIN",
+          "Only the main task assignee can complete the parent task.");
+      }
+      // Existing KPI calculations retain their independent completion lifecycle.
+      if (input.status === "DONE" && current.kpiInstanceId === null) {
+        const progress = await generalTaskAssignmentsRepository.countIncompleteSubtasks(
+          transaction, taskId, ownerUserId);
+        if (progress.incomplete > 0) {
+          throw new AppError({statusCode:409,code:"TASK_SUBTASKS_INCOMPLETE",
+            message:`${progress.incomplete} of ${progress.total} subtasks are incomplete.`});
+        }
+      }
       const currentStatus = mapTask(current).status;
       assertTaskStatusTransition(currentStatus, input.status);
       if (currentStatus === input.status) return;
@@ -426,5 +468,6 @@ export const tasksService = {
     return loadTask(ownerUserId, taskId);
   },
 };
+
 
 

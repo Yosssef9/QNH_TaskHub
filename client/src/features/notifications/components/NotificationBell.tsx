@@ -47,6 +47,9 @@ const notificationIcons: Record<NotificationType, LucideIcon> = {
   MEETING_START_REMINDER: Clock3,
   MEETING_ACTION_ITEM_ASSIGNED: CalendarClock,
   MEETING_ACTION_ITEM_COMPLETED: CheckCheck,
+  GENERAL_TASK_ASSIGNED: CalendarClock,
+  GENERAL_SUBTASK_ASSIGNED: CalendarClock,
+  GENERAL_TASK_COMPLETED: CheckCheck,
 }
 
 const notificationTones: Record<NotificationType, string> = {
@@ -71,6 +74,9 @@ const notificationTones: Record<NotificationType, string> = {
   MEETING_START_REMINDER: 'bg-warning/10 text-warning-foreground',
   MEETING_ACTION_ITEM_ASSIGNED: 'bg-primary/10 text-primary',
   MEETING_ACTION_ITEM_COMPLETED: 'bg-success/10 text-success',
+  GENERAL_TASK_ASSIGNED: 'bg-primary/10 text-primary',
+  GENERAL_SUBTASK_ASSIGNED: 'bg-primary/10 text-primary',
+  GENERAL_TASK_COMPLETED: 'bg-success/10 text-success',
 }
 
 function formatDate(value: string | null, locale: string): string | null {
@@ -340,6 +346,7 @@ function NotificationDetail({
 
   return null
 }
+
 
 
 

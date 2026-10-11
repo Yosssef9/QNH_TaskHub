@@ -8,6 +8,8 @@ export interface SubtaskRecord {
   id: number | string;
   taskId: number | string;
   title: string;
+  assigneeUserId?: number | null;
+  workNotes?: string | null;
   isCompleted: boolean;
   dueDate: Date | null;
   displayOrder: number;
@@ -43,6 +45,8 @@ export interface Subtask {
   id: number;
   taskId: number;
   title: string;
+  assigneeUserId?: number | null;
+  workNotes?: string | null;
   isCompleted: boolean;
   dueDate: string | null;
   displayOrder: number;
@@ -76,9 +80,11 @@ export interface TaskActivity {
 export interface TaskDetails {
   task: PersonalTask;
   actionItem: MeetingActionItemContext | null;
+  generalAssignment?: import("../general-task-assignments/general-task-assignments.repository.js").GeneralAssignmentContext | null;
   capabilities: MeetingActionItemCapabilities;
   subtasks: Subtask[];
   attachments: Attachment[];
   activity: TaskActivity[];
   progress: { completed: number; total: number; percentage: number };
 }
+

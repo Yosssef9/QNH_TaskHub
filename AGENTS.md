@@ -6,7 +6,7 @@
 
 **QNH TaskHub** is an Arabic-first productivity application for QNH Portal users.
 
-The core product lets each user organize private personal work in a permanent **My Tasks** list, create additional private lists, create independently configured KPIs with their own KPI tasks, and use an optional **Procurement** domain containing private Contracts plus shared Procurement master data. The approved **Meetings** module is the deliberate shared-domain exception: it introduces controlled Organizer/Coordinator/attendee relationships without changing the private ownership semantics of Tasks, Lists, KPIs, Work Cycles, or Contracts. Do not infer unrelated collaboration requirements from the Meetings exception or superseded planning material.
+The core product lets each user organize private personal work in a permanent **My Tasks** list, create additional private lists, create independently configured KPIs with their own KPI tasks, and use an optional **Procurement** domain containing private Contracts plus shared Procurement master data. The approved **Meetings** module is the deliberate shared-domain exception: it introduces controlled Organizer/Coordinator/attendee relationships without changing the private ownership semantics of Tasks, Lists, KPIs, Work Cycles, or Contracts. The explicitly approved General Task Assignment Phase 1 now adds limited relationship-scoped sharing of normal tasks, without making personal lists, KPIs, Contracts or other tasks globally visible. Do not infer broader collaboration or hierarchy requirements.
 
 Detailed product behavior is maintained in [`docs/product-requirements.md`](docs/product-requirements.md).
 
@@ -144,7 +144,7 @@ Meetings is TaskHub's first intentionally shared multi-user domain.
 - A custom list is a private personal container.
 - A normal task is created directly inside My Tasks or one custom list.
 - Normal tasks have no KPI target, KPI score, or KPI measurement fields.
-- Do not introduce multi-user collaboration or organizational hierarchy features unless later requested.
+- General Task Assignment Phase 1 is an explicit narrow exception: one optional main assignee and one optional executor per child. The creator retains full task visibility; assignees see the parent and only their own subtasks. No CEO/HOD hierarchy or broad list/KPI visibility.
 
 Task workflow statuses:
 
@@ -355,7 +355,7 @@ A feature that works in the UI but can be bypassed through the API is incomplete
 
 Prioritize business, calculation, and security tests:
 
-- A user can access only their own lists, tasks, subtasks, attachments, KPIs, and measurements.
+- A user can access only their own lists, tasks, subtasks, attachments, KPIs and measurements, **except** exact Task/child resources explicitly assigned through general task or existing Meeting Action Item relationships. Access does not extend to sibling child content.
 - An admin cannot retrieve another user's private work through ordinary resource APIs.
 - My Tasks is created once and cannot be deleted.
 - A normal task has exactly one list and no KPI.
@@ -370,7 +370,7 @@ Prioritize business, calculation, and security tests:
 
 ## 21. Explicitly outside the current MVP
 
-- Multi-user normal-task assignment, sharing, or collaboration outside the approved Meetings domain
+- Multi-assignee tasks, department-wide sharing, hierarchy, or unrestricted collaboration outside the approved single-main-assignee/per-child general task relationships and Meetings domain
 - Organizational hierarchy or shared work containers
 - Admin visibility into private user work
 - Moving tasks between normal lists and KPIs
@@ -422,6 +422,7 @@ If documentation and implementation conflict on privacy, security, ownership, or
 - Quote matrix values are owner-scoped to the authenticated user and must never expose another user's Quotes.
 - Compare calculations require matching Currency and UOM and the UI must explicitly label Actual Purchase versus My Quote rather than relying on color alone.
 - In **Compare** mode, Best Choice is based on an effective comparison price for the selected metric, not on the Quote-vs-Actual percentage gap. Use the compatible private Quote metric when available; otherwise use the Actual Purchase metric. If Actual history exists and the Quote Currency/UOM differs from the Actual scope, the Quote is not eligible and the Actual metric is the fallback. Never compare different Currency/UOM scopes. The lowest effective price wins; exact ties are valid co-winners. Quote-vs-Actual percentage remains informational only.
+
 
 
 

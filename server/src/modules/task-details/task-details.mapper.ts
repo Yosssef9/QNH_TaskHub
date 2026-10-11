@@ -12,6 +12,8 @@ import type {
 export function mapSubtask(record: SubtaskRecord): Subtask {
   return {
     ...record,
+    assigneeUserId: record.assigneeUserId ?? null,
+    workNotes: record.workNotes ?? null,
     id: parsePositiveIntegerId(record.id, "subtask id"),
     taskId: parsePositiveIntegerId(record.taskId, "task id"),
     dueDate: record.dueDate?.toISOString().slice(0, 10) ?? null,
@@ -57,3 +59,4 @@ export function mapActivity(record: ActivityRecord): TaskActivity {
     createdAtUtc: record.createdAtUtc.toISOString(),
   };
 }
+

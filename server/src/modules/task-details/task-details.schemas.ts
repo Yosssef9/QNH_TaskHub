@@ -18,6 +18,7 @@ export const attachmentIdParamsSchema = z.object({ attachmentId: sqlServerGuidSc
 export const createSubtaskBodySchema = z.object({
   title: z.string().trim().min(1).max(1000),
   dueDate: dateOnlySchema.optional(),
+  assigneeUserId: z.number().int().positive().nullable().optional(),
 });
 export const updateSubtaskBodySchema = z
   .object({
@@ -37,3 +38,4 @@ export type CreateSubtaskBody = z.infer<typeof createSubtaskBodySchema>;
 export type UpdateSubtaskBody = z.infer<typeof updateSubtaskBodySchema>;
 export type CompleteSubtaskBody = z.infer<typeof completeSubtaskBodySchema>;
 export type ReorderSubtasksBody = z.infer<typeof reorderSubtasksBodySchema>;
+

@@ -10,6 +10,7 @@ import {
   Paperclip,
   Pencil,
   Plus,
+  UserRound,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
@@ -30,6 +31,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
+import { toApiClientError } from '@/lib/api-error'
 import { useWorkCycle } from '@/features/work-cycles/hooks/use-work-cycles'
 import { parseDateOnly } from '@/lib/date-only'
 import { APP_TIME_ZONE, formatDateTime } from '@/lib/date-time'
@@ -37,6 +42,8 @@ import { useTimeFormatPreference } from '@/features/preferences/hooks/use-time-f
 import { cn } from '@/lib/cn'
 
 import { downloadAttachment } from '../api/tasks.api'
+import { TaskAssigneePicker } from '../assignment/TaskAssigneePicker'
+import { useAssignMainTask, useAssignSubtask, useSaveWorkNotes, useSaveCompletionSummary, useEligibleTaskUser } from '../assignment/use-general-assignment'
 import {
   useCompleteSubtask,
   useDeleteAttachment,
@@ -46,12 +53,21 @@ import {
   useChangeTaskStatus,
   useUploadAttachment,
 } from '../hooks/use-tasks'
-import type { Subtask, TaskAttachment } from '../types/task.types'
+import { TASK_STATUSES } from '../types/task.types'
+import type { Subtask, TaskAttachment, TaskStatus } from '../types/task.types'
 import { AttachmentPreviewDialog } from './AttachmentPreviewDialog'
 import { SubtaskEditorDialog } from './SubtaskEditorDialog'
 import { TaskAttachmentList } from './TaskAttachmentList'
 import { TaskDueIndicator, TaskPriorityIndicator } from './TaskSelectIndicators'
 import { TaskStatusIndicator } from './TaskStatusIndicator'
+
+// Match the existing server-side tasks.policy transition graph. Backend is authoritative.
+const permittedTransitions: Record<TaskStatus, readonly TaskStatus[]> = {
+  TODO: ['IN_PROGRESS', 'DONE', 'CANCELLED'],
+  IN_PROGRESS: ['TODO', 'DONE', 'CANCELLED'],
+  DONE: ['TODO'],
+  CANCELLED: ['TODO'],
+}
 
 interface Props {
   taskId: number | null
@@ -87,11 +103,37 @@ function getCurrentDateOnlyInAppTimeZone(): string {
   return `${values.year}-${values.month}-${values.day}`
 }
 
+function EditableWorkText({ initial, label, canEdit, pending, onSave, maxLength }: {
+  initial: string | null; label: string; canEdit: boolean; pending: boolean;
+  onSave: (text: string | null) => void; maxLength: number
+}) {
+  const { t } = useTranslation()
+  const [value, setValue] = useState(initial ?? '')
+  useEffect(() => setValue(initial ?? ''), [initial])
+  if (!canEdit && !initial) return null
+  const dirty = value.trim() !== (initial ?? '').trim()
+  return <div className="space-y-2">
+    <label className="text-muted-foreground block text-xs font-semibold">{label}</label>
+    {canEdit ? <>
+      <Textarea rows={2} maxLength={maxLength} value={value} disabled={pending}
+        onChange={event => setValue(event.target.value)} aria-label={label} />
+      {dirty ? <div className="flex justify-end"><Button type="button" size="sm" disabled={pending}
+        onClick={() => onSave(value.trim() || null)}>{t('common.save')}</Button></div> : null}
+    </> : <p className="whitespace-pre-wrap break-words text-sm">{initial}</p>}
+  </div>
+}
+
 function SortableSubtaskRow({
   attachments,
   dragDisabled,
   canComplete,
+  canEditNotes,
   canManage,
+  canAssign,
+  assigneePending,
+  notesPending,
+  onAssign,
+  onSaveNotes,
   canUpload,
   canDeleteAttachment,
   index,
@@ -109,7 +151,13 @@ function SortableSubtaskRow({
   attachments: TaskAttachment[]
   dragDisabled: boolean
   canComplete: boolean
+  canEditNotes: boolean
   canManage: boolean
+  canAssign: boolean
+  assigneePending: boolean
+  notesPending: boolean
+  onAssign: (userId: number | null) => void
+  onSaveNotes: (value: string | null) => void
   canUpload: boolean
   canDeleteAttachment: (attachment: TaskAttachment) => boolean
   index: number
@@ -274,6 +322,15 @@ function SortableSubtaskRow({
           ) : null}
         </div>
 
+        {canAssign ? <div className="border-border/80 bg-muted/25 border-t px-4 py-3 space-y-1.5">
+          <label className="text-muted-foreground text-xs font-semibold">{t('tasks.assignment.assignSubtask')}</label>
+          <TaskAssigneePicker value={item.assigneeUserId ?? null} onChange={onAssign}
+            inherit disabled={assigneePending} />
+        </div> : null}
+        {(item.workNotes || canEditNotes) ? <div className="border-border/80 border-t px-4 py-3">
+          <EditableWorkText initial={item.workNotes ?? null} label={t('tasks.assignment.workNotes')}
+            canEdit={canEditNotes} pending={notesPending} onSave={onSaveNotes} maxLength={4000}/>
+        </div> : null}
         {attachments.length > 0 ? (
           <div className="border-border/80 bg-muted/25 border-t px-4 py-3 sm:ps-[6.75rem]">
             <div className="mb-2 flex items-center gap-2 text-xs font-semibold">
@@ -299,6 +356,14 @@ function SortableSubtaskRow({
 export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange }: Props) {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
+  const currentUser = useCurrentUser()
+  const actorId = currentUser.data?.user.userId ?? null
+  const assignMain = useAssignMainTask()
+  const assignChild = useAssignSubtask()
+  const saveNotes = useSaveWorkNotes()
+  const saveSummary = useSaveCompletionSummary()
+  const [cancelOpen, setCancelOpen] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
   const timeFormat = useTimeFormatPreference()
   const [subtaskEditorOpen, setSubtaskEditorOpen] = useState(false)
   const [subtaskEditorSession, setSubtaskEditorSession] = useState(0)
@@ -339,14 +404,26 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
 
   const capabilities = query.data?.capabilities
   const isMeetingViewer = capabilities?.role === 'VIEWER'
-  const readOnly = (query.data?.task.isReadOnly ?? false) || isMeetingViewer
+  // isReadOnly on shared task projections protects metadata edits; use specific
+  // server capabilities for executor operations instead of disabling all controls.
+  const readOnly = isMeetingViewer || Boolean(query.data?.task.kpiInstanceId && query.data.task.isReadOnly)
+  const isGeneralTask = Boolean(query.data && !query.data.actionItem && query.data.task.kpiInstanceId === null)
+  const isOwner = capabilities?.role === 'OWNER'
+  const mainAssigneeId = query.data?.generalAssignment?.assigneeUserId ?? null
+  const ownerId = query.data?.generalAssignment?.ownerUserId ?? actorId
+  const effectiveMainAssignee = mainAssigneeId ?? ownerId
+  const mainAssigneeLookup = useEligibleTaskUser(mainAssigneeId)
+  const canEditSummary = !readOnly && Boolean(
+    query.data?.actionItem ? capabilities?.role === 'ASSIGNEE' :
+      query.data?.generalAssignment ? actorId === effectiveMainAssignee : capabilities?.role === 'OWNER'
+  )
   const canManageSubtasks = !readOnly && (capabilities?.canManageSubtasks ?? true)
   const canCompleteSubtasks = !readOnly && (capabilities?.canCompleteSubtasks ?? true)
   const canUploadAttachments = !readOnly && (capabilities?.canUploadAttachments ?? true)
   const canDeleteAttachment = (item: TaskAttachment) => {
     if (readOnly || !capabilities) return !readOnly
     if (capabilities.canDeleteAnyAttachment) return true
-    return capabilities.role === 'ASSIGNEE' && query.data?.actionItem?.assigneeUserId === item.uploadedByUserId
+    return capabilities.role === 'ASSIGNEE' && item.uploadedByUserId === actorId
   }
   const serverSubtasks = query.data?.subtasks ?? []
   const displayedSubtasks = sameSubtaskSet(orderedSubtasks, serverSubtasks)
@@ -387,6 +464,26 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
       { subtaskId: item.id, isCompleted: !item.isCompleted },
       { onError: () => toast.error(t('tasks.details.errors.subtask')) },
     )
+  }
+
+  function changeDrawerStatus(next: TaskStatus) {
+    if (!taskId || !query.data || next === query.data.task.status) return
+    if (next === 'CANCELLED') { setCancelOpen(true); return }
+    if (next === 'DONE' && query.data.progress.total > query.data.progress.completed) {
+      toast.error(t('tasks.assignment.incompleteToast', {
+        count: query.data.progress.total - query.data.progress.completed,
+        total: query.data.progress.total,
+      }))
+      return
+    }
+    statusMutation.mutate({taskId, status:next}, {
+      onSuccess: () => toast.success(t('tasks.statusUpdated')),
+      onError: error => {
+        const code = toApiClientError(error).code
+        toast.error(code === 'TASK_SUBTASKS_INCOMPLETE'
+          ? t('tasks.assignment.incompleteGeneric') : t('tasks.errors.status'))
+      },
+    })
   }
 
   function upload(file: File, subtaskId?: number) {
@@ -506,75 +603,25 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                             : t('tasks.actionItem.assignedTo', { name: query.data.actionItem.assigneeName })}
                         </p>
                       </div>
-                      {capabilities?.role === 'ASSIGNEE' && !readOnly ? (
-                        <div className="flex flex-wrap gap-2">
-                          {query.data.task.status === 'TODO' ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={statusMutation.isPending}
-                              onClick={() =>
-                                statusMutation.mutate(
-                                  { taskId: query.data.task.id, status: 'IN_PROGRESS' },
-                                  { onError: () => toast.error(t('tasks.errors.status')) },
-                                )
-                              }
-                            >
-                              {t('tasks.actionItem.markInProgress')}
-                            </Button>
-                          ) : null}
-                          {query.data.task.status === 'IN_PROGRESS' ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={statusMutation.isPending}
-                              onClick={() =>
-                                statusMutation.mutate(
-                                  { taskId: query.data.task.id, status: 'TODO' },
-                                  { onError: () => toast.error(t('tasks.errors.status')) },
-                                )
-                              }
-                            >
-                              {t('tasks.backToTodo')}
-                            </Button>
-                          ) : null}
-                          {query.data.task.status !== 'DONE' && query.data.task.status !== 'CANCELLED' ? (
-                            <Button
-                              size="sm"
-                              disabled={statusMutation.isPending}
-                              onClick={() =>
-                                statusMutation.mutate(
-                                  { taskId: query.data.task.id, status: 'DONE' },
-                                  { onError: () => toast.error(t('tasks.errors.status')) },
-                                )
-                              }
-                            >
-                              {t('tasks.actionItem.markComplete')}
-                            </Button>
-                          ) : null}
-                          {query.data.task.status === 'DONE' ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={statusMutation.isPending}
-                              onClick={() =>
-                                statusMutation.mutate(
-                                  { taskId: query.data.task.id, status: 'TODO' },
-                                  { onError: () => toast.error(t('tasks.errors.status')) },
-                                )
-                              }
-                            >
-                              {t('tasks.reopenTask', { title: query.data.task.title })}
-                            </Button>
-                          ) : null}
-                        </div>
-                      ) : null}
+
                     </div>
                   </div>
                 ) : null}
 
                 <div className="grid gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(19rem,0.75fr)]">
                   <main className="min-w-0 space-y-5">
+                    {(canEditSummary || query.data.task.completionSummary) ? <Card>
+                      <CardHeader className="pb-3"><CardTitle>{t('tasks.assignment.completionSummary')}</CardTitle></CardHeader>
+                      <CardContent>
+                        <EditableWorkText key={`summary-${query.data.task.id}`} initial={query.data.task.completionSummary ?? null}
+                          label={t('tasks.assignment.completionSummary')} canEdit={canEditSummary}
+                          pending={saveSummary.isPending} maxLength={10000}
+                          onSave={value => saveSummary.mutate({taskId: query.data.task.id, completionSummary:value}, {
+                            onSuccess: () => toast.success(t('tasks.assignment.notesSaved')),
+                            onError: () => toast.error(t('tasks.assignment.saveFailed')),
+                          })} />
+                      </CardContent>
+                    </Card> : null}
                     <Card>
                       <CardHeader className="flex-row items-center justify-between gap-4 pb-3">
                         <div>
@@ -658,7 +705,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                                     transition={taskHubFadeMotion.transition}
                                     className="text-muted-foreground bg-muted/20 rounded-xl border border-dashed p-8 text-center text-sm"
                                   >
-                                    {t('tasks.details.noSubtasks')}
+                                    {query.data.progress.total > 0 ? t('tasks.assignment.noAssignedSubtasks') : t('tasks.details.noSubtasks')}
                                   </motion.li>
                                 ) : null}
 
@@ -669,8 +716,26 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                                     index={index}
                                     attachments={subtaskAttachments.get(item.id) ?? []}
                                     dragDisabled={!canManageSubtasks || reorderMutation.isPending}
-                                    canComplete={canCompleteSubtasks}
+                                    canComplete={canCompleteSubtasks && (
+                                      !query.data.generalAssignment || actorId === (
+                                        item.assigneeUserId ?? query.data.generalAssignment.assigneeUserId ?? ownerId
+                                      ))}
+                                    canEditNotes={canCompleteSubtasks && (
+                                      !query.data.generalAssignment || actorId === (
+                                        item.assigneeUserId ?? query.data.generalAssignment.assigneeUserId ?? ownerId
+                                      ))}
                                     canManage={canManageSubtasks}
+                                    canAssign={isGeneralTask && isOwner && canManageSubtasks}
+                                    assigneePending={assignChild.isPending}
+                                    notesPending={saveNotes.isPending}
+                                    onAssign={value => assignChild.mutate({subtaskId:item.id,assigneeUserId:value}, {
+                                      onSuccess: () => toast.success(t('tasks.assignment.assignmentSaved')),
+                                      onError: () => toast.error(t('tasks.assignment.saveFailed')),
+                                    })}
+                                    onSaveNotes={value => saveNotes.mutate({subtaskId:item.id,workNotes:value}, {
+                                      onSuccess: () => toast.success(t('tasks.assignment.notesSaved')),
+                                      onError: () => toast.error(t('tasks.assignment.saveFailed')),
+                                    })}
                                     canUpload={canUploadAttachments}
                                     canDeleteAttachment={canDeleteAttachment}
                                     justMoved={recentlyMovedSubtaskId === item.id}
@@ -723,7 +788,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                           <Button
                             size="sm"
                             variant="outline"
-                            disabled={!canUploadAttachments}
+                            disabled={!canUploadAttachments || Boolean(query.data.generalAssignment && actorId !== ownerId && mainAssigneeId !== actorId)}
                             onClick={() => taskFileRef.current?.click()}
                           >
                             <Paperclip className="size-4" />
@@ -761,8 +826,31 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                         <InfoRow
                           icon={Circle}
                           label={t('tasks.sortFields.status')}
-                          value={<TaskStatusIndicator status={query.data.task.status} pill />}
+                          value={(!readOnly && (capabilities?.canCompleteTask || capabilities?.canChangeNonCompletionStatus)) ? (
+                            <Select value={query.data.task.status} onValueChange={value => changeDrawerStatus(value as TaskStatus)}
+                              disabled={statusMutation.isPending}>
+                              <SelectTrigger aria-label={t('tasks.assignment.changeStatus')} className="h-9 w-full">
+                                <SelectValue><TaskStatusIndicator status={query.data.task.status} /></SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>{TASK_STATUSES.filter(value => (
+                                (value === query.data.task.status || permittedTransitions[query.data.task.status].includes(value)) && (
+                                value === 'DONE' ? capabilities?.canCompleteTask :
+                                value === 'CANCELLED' ? (capabilities?.role === 'OWNER' && capabilities.canChangeNonCompletionStatus) :
+                                capabilities?.canChangeNonCompletionStatus)
+                              )).map(value => <SelectItem key={value} value={value}>
+                                <TaskStatusIndicator status={value} />
+                              </SelectItem>)}</SelectContent>
+                            </Select>
+                          ) : <TaskStatusIndicator status={query.data.task.status} pill />}
                         />
+                        {isGeneralTask ? <InfoRow icon={UserRound} label={t('tasks.assignment.assignTo')} value={
+                          isOwner && !readOnly ? <TaskAssigneePicker value={mainAssigneeId} disabled={assignMain.isPending}
+                            onChange={value => assignMain.mutate({taskId:query.data.task.id, assigneeUserId:value}, {
+                              onSuccess: () => toast.success(t('tasks.assignment.assignmentSaved')),
+                              onError: () => toast.error(t('tasks.assignment.saveFailed')),
+                            })} /> : <span>{mainAssigneeId === null ? t('tasks.assignment.unassigned') :
+                              (mainAssigneeLookup.data?.userName ?? t('tasks.assignment.userCode', {code:mainAssigneeId}))}</span>
+                        } /> : null}
                         <InfoRow
                           icon={CalendarDays}
                           label={t('tasks.startDate')}
@@ -872,6 +960,26 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
         onOpenChange={(open) => !open && setPreviewAttachment(null)}
       />
 
+      <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
+        <DialogContent variant="modal" closeLabel={t('common.close')}>
+          <DialogTitle>{t('tasks.cancelTitle')}</DialogTitle>
+          <DialogDescription>{t('tasks.cancelDescription')}</DialogDescription>
+          <label className="mt-4 block text-sm font-medium" htmlFor="drawer-cancel-reason">{t('tasks.cancellationReason')}</label>
+          <Textarea id="drawer-cancel-reason" value={cancelReason} maxLength={1000}
+            onChange={event => setCancelReason(event.target.value)} />
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setCancelOpen(false)}>{t('common.cancel')}</Button>
+            <Button disabled={!cancelReason.trim() || statusMutation.isPending} onClick={() => {
+              if (!taskId) return
+              statusMutation.mutate({taskId,status:'CANCELLED',cancellationReason:cancelReason.trim()}, {
+                onSuccess: () => { setCancelOpen(false); setCancelReason(''); toast.success(t('tasks.statusUpdated')) },
+                onError: () => toast.error(t('tasks.errors.status')),
+              })
+            }}>{t('tasks.cancelTask')}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {taskId && canManageSubtasks ? (
         <SubtaskEditorDialog
           key={subtaskEditorSession}
@@ -880,6 +988,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
           taskId={taskId}
           subtask={editingSubtask}
           dueDateRequired={subtaskDueDateRequired}
+          generalAssignmentEnabled={isGeneralTask}
         />
       ) : null}
     </Dialog>
@@ -907,6 +1016,7 @@ function InfoRow({
     </div>
   )
 }
+
 
 
 

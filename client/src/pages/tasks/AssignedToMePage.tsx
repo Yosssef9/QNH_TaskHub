@@ -26,6 +26,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { useGeneralAssignedTasks } from '@/features/tasks/assignment/use-general-assignment'
+import type { GeneralAssignedTask } from '@/features/tasks/assignment/general-assignment.api'
 import { MeetingActionTaskCard } from '@/features/meetings/action-items/MeetingActionTaskCard'
 import {
   useAssignedMeetingActionItems,
@@ -52,6 +54,7 @@ import {
 import type { TaskPriority, TaskStatus } from '@/features/tasks/types/task.types'
 import { parseDateOnly } from '@/lib/date-only'
 import { cn } from '@/lib/cn'
+import { toApiClientError } from '@/lib/api-error'
 
 const ALL = 'ALL'
 
@@ -114,10 +117,12 @@ function GroupHeading({ item, groupBy }: { item: MeetingActionItem; groupBy: Ass
 }
 
 export function AssignedToMePage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const shouldReduceMotion = useReducedMotion()
+  const [source, setSource] = useState<'ALL' | 'MEETING' | 'GENERAL'>('ALL')
+  const [generalPage, setGeneralPage] = useState(1)
   const [search, setSearch] = useState('')
   const [meetingId, setMeetingId] = useState<number | undefined>()
   const [status, setStatus] = useState<TaskStatus | undefined>()
@@ -142,6 +147,12 @@ export function AssignedToMePage() {
     sortDirection,
     groupBy,
   })
+  const generalQuery = useGeneralAssignedTasks({
+    page: generalPage, pageSize, search,
+    ...(status ? {status} : {}), ...(priority ? {priority} : {}),
+    due, sortBy: sortBy === 'meeting' ? 'assignedAt' : sortBy,
+    sortDirection,
+  }, source !== 'MEETING')
   const statusMutation = useChangeTaskStatus()
   const total = query.data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
@@ -166,12 +177,14 @@ export function AssignedToMePage() {
   }, [searchParams])
 
   function resetPageAnd(action: () => void) {
+    setGeneralPage(1)
     setPage(1)
     action()
   }
 
   function clearStructuredFilters() {
     setPage(1)
+    setGeneralPage(1)
     setMeetingId(undefined)
     setStatus(undefined)
     setPriority(undefined)
@@ -215,7 +228,7 @@ export function AssignedToMePage() {
       { taskId: task.taskId, status: nextStatus },
       {
         onSuccess: () => toast.success(t('tasks.statusUpdated')),
-        onError: () => toast.error(t('tasks.errors.status')),
+        onError: error => toast.error(toApiClientError(error).code === 'TASK_SUBTASKS_INCOMPLETE' ? t('tasks.assignment.incompleteGeneric') : t('tasks.errors.status')),
       },
     )
   }
@@ -275,14 +288,14 @@ export function AssignedToMePage() {
 
   const filterFields = (
     <div className="grid gap-4 sm:grid-cols-2">
-      <div className="space-y-1.5 sm:col-span-2">
+      {source !== 'GENERAL' ? <div className="space-y-1.5 sm:col-span-2">
         <label className="text-muted-foreground text-xs font-medium">
           {t('tasks.assignedToMe.filters.meeting')}
         </label>
         <Select
           value={meetingId ? String(meetingId) : ALL}
           onValueChange={(value) =>
-            resetPageAnd(() => setMeetingId(value === ALL ? undefined : Number(value)))
+            resetPageAnd(() => { setMeetingId(value === ALL ? undefined : Number(value)); if (value !== ALL) setSource('MEETING') })
           }
         >
           <SelectTrigger className="h-10 min-w-0" aria-label={t('tasks.assignedToMe.filters.meeting')}>
@@ -301,7 +314,7 @@ export function AssignedToMePage() {
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </div> : null}
 
       <div className="space-y-1.5">
         <label className="text-muted-foreground text-xs font-medium">
@@ -383,6 +396,18 @@ export function AssignedToMePage() {
     </div>
   )
 
+  const groupedGeneral = useMemo(() => {
+    const rows = generalQuery.data?.items ?? []
+    if (groupBy === 'NONE' || groupBy === 'MEETING') return [{ key: 'all', rows }]
+    const groups = new Map<string, GeneralAssignedTask[]>()
+    for (const row of rows) {
+      const key = groupBy === 'STATUS' ? row.status
+        : groupBy === 'PRIORITY' ? row.priority : row.dueDate ?? 'NO_DATE'
+      groups.set(key, [...(groups.get(key) ?? []), row])
+    }
+    return Array.from(groups, ([key, grouped]) => ({key,rows:grouped}))
+  }, [generalQuery.data?.items, groupBy])
+
   const resultsState = query.isPending
     ? 'loading'
     : query.isError
@@ -399,7 +424,16 @@ export function AssignedToMePage() {
         description={t('tasks.assignedToMe.description')}
       />
 
-      {query.data ? (
+      <div className="flex flex-wrap gap-2" role="group" aria-label={t('tasks.assignment.source')}>
+        {(['ALL','MEETING','GENERAL'] as const).map(value => <Button key={value}
+          variant={source === value ? 'default' : 'outline'}
+          aria-pressed={source === value}
+          onClick={() => { setSource(value); setPage(1); setGeneralPage(1); setMeetingId(undefined); setGroupBy('NONE'); setSortBy('assignedAt') }}>
+          {t(`tasks.assignment.source${value}`)}
+        </Button>)}
+      </div>
+
+      {source === 'MEETING' && query.data ? (
         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border md:grid-cols-5">
           <SummaryButton
             active={!hasFilters}
@@ -449,7 +483,7 @@ export function AssignedToMePage() {
         closeLabel={t('common.close')}
         groupValue={groupBy}
         groupLabel={t('tasks.toolbar.group')}
-        groupOptions={(['NONE', 'MEETING', 'DUE_DATE', 'PRIORITY', 'STATUS'] as const).map((value) => ({
+        groupOptions={(['NONE', ...(source === 'GENERAL' ? [] : ['MEETING']), 'DUE_DATE', 'PRIORITY', 'STATUS'] as const).map((value) => ({
           value,
           label: t(`tasks.assignedToMe.group.${value}`),
         }))}
@@ -458,7 +492,7 @@ export function AssignedToMePage() {
         }
         sortValue={sortBy}
         sortLabel={t('tasks.toolbar.sort')}
-        sortOptions={(['assignedAt', 'dueDate', 'priority', 'title', 'status', 'meeting'] as const).map((value) => ({
+        sortOptions={(['assignedAt', 'dueDate', 'priority', 'title', 'status', ...(source === 'GENERAL' ? [] : ['meeting'])] as const).map((value) => ({
           value,
           label: t(`tasks.assignedToMe.sort.${value}`),
         }))}
@@ -468,6 +502,7 @@ export function AssignedToMePage() {
         sortDirection={sortDirection}
         onSortDirectionChange={(direction) => {
           setPage(1)
+          setGeneralPage(1)
           setSortDirection(direction)
         }}
         sortDirectionLabel={t('tasks.toolbar.sortDirection')}
@@ -477,6 +512,11 @@ export function AssignedToMePage() {
         activeFiltersLabel={t('tasks.toolbar.active')}
       />
 
+      {source !== 'GENERAL' ? <>
+        {source === 'ALL' ? <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">{t('tasks.assignment.sourceMEETING')}</h2>
+          <span className="text-muted-foreground text-xs">{query.data?.total ?? 0}</span>
+        </div> : null}
       <AnimatedState stateKey={resultsState}>
         {query.isPending ? (
           <LoadingState />
@@ -545,6 +585,7 @@ export function AssignedToMePage() {
                     onPageSizeChange={(value) => {
                       setPageSize(value)
                       setPage(1)
+                      setGeneralPage(1)
                     }}
                   />
                 </Card>
@@ -553,8 +594,71 @@ export function AssignedToMePage() {
           </AnimatedFetching>
         )}
       </AnimatedState>
+      </> : null}
+
+      {source !== 'MEETING' ? <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">{t('tasks.assignment.sourceGENERAL')}</h2>
+          <span className="text-muted-foreground text-xs">{generalQuery.data?.total ?? 0}</span>
+        </div>
+        {generalQuery.isPending ? <LoadingState /> : generalQuery.isError ? (
+          <ErrorState onRetry={() => void generalQuery.refetch()} />
+        ) : generalQuery.data?.items.length === 0 ? (
+          <EmptyState icon={Circle}
+            title={t('tasks.assignment.noGeneralTasks')}
+            description={t('tasks.assignment.noGeneralTasksHelp')} />
+        ) : <>
+          <div className="space-y-4">
+            {groupedGeneral.map(group => <div key={group.key} className="space-y-3">
+              {groupBy !== 'NONE' && groupBy !== 'MEETING' ? <h3 className="text-muted-foreground text-xs font-semibold uppercase">
+                {groupBy === 'STATUS' ? t(`tasks.statuses.${group.key}`) :
+                 groupBy === 'PRIORITY' ? t(`tasks.priorities.${group.key}`) :
+                group.key === 'NO_DATE' ? t('tasks.noDueDate') :
+                (parseDateOnly(group.key)?.toLocaleDateString(i18n.language, {day:'numeric',month:'short',year:'numeric'}) ?? group.key)}
+              </h3> : null}
+              <ul className="space-y-3">
+            {group.rows.map((item: GeneralAssignedTask) => (
+              <li key={item.taskId}>
+                <button type="button" className="bg-card hover:border-primary/35 focus-visible:ring-primary flex w-full flex-col gap-3 rounded-xl border p-4 text-start shadow-sm focus-visible:ring-2 focus-visible:outline-none sm:p-5"
+                  onClick={() => openTask(item.taskId)}>
+                  <div className="flex w-full flex-wrap items-center justify-between gap-2">
+                    <strong className="min-w-0 break-words">{item.title}</strong>
+                    <TaskStatusIndicator status={item.status} pill />
+                  </div>
+                  <p className="text-muted-foreground text-xs">
+                    {t('tasks.assignment.createdBy', {name:item.creatorName})}
+                  </p>
+                  {item.assignedSubtasks.length ? <div className="w-full space-y-2 border-t pt-3">
+                    <p className="text-muted-foreground text-xs font-semibold">{t('tasks.assignment.yourSubtasks')}</p>
+                    {item.assignedSubtasks.map(child => <div className="flex items-start gap-2 text-sm" key={child.id}>
+                      {child.isCompleted ? <span className="text-success">✓</span> : <Circle className="text-muted-foreground mt-0.5 size-3.5" />}
+                      <span className="min-w-0 break-words">{child.title}</span>
+                    </div>)}
+                  </div> : null}
+                  <div className="text-muted-foreground flex w-full flex-wrap justify-between gap-3 text-xs">
+                    <span>{item.isMainAssignee ? t('tasks.assignment.mainAssignee') : t('tasks.assignment.subtaskAssignee')}</span>
+                    <span>{t('tasks.assignment.progressCounts', {completed:item.subtaskCompleted,total:item.subtaskTotal})}</span>
+                  </div>
+                </button>
+              </li>
+            ))}
+              </ul>
+            </div>)}
+          </div>
+          <Card className="overflow-hidden p-0">
+            <TablePagination page={generalPage}
+              totalPages={Math.max(1,Math.ceil((generalQuery.data?.total ?? 0)/pageSize))}
+              pageSize={pageSize} totalRows={generalQuery.data?.total ?? 0}
+              startRow={(generalPage-1)*pageSize+1}
+              endRow={Math.min(generalPage*pageSize,generalQuery.data?.total ?? 0)}
+              pageSizes={[10,20,50]} onPageChange={setGeneralPage}
+              onPageSizeChange={value => {setPageSize(value);setGeneralPage(1);setPage(1)}} />
+          </Card>
+        </>}
+      </div> : null}
 
       <TaskDetailsDrawer taskId={taskId} onOpenChange={(open) => !open && closeTask()} />
     </div>
   )
 }
+

@@ -13,6 +13,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type { ComponentProps } from 'react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
+import { toApiClientError } from '@/lib/api-error'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
 
@@ -498,7 +499,7 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
           setCancelling(null)
           setReason('')
         },
-        onError: () => toast.error(t('tasks.errors.status')),
+        onError: error => toast.error(toApiClientError(error).code === 'TASK_SUBTASKS_INCOMPLETE' ? t('tasks.assignment.incompleteGeneric') : t('tasks.errors.status')),
       },
     )
   }
@@ -1000,4 +1001,5 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
     </div>
   )
 }
+
 

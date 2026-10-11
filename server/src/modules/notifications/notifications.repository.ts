@@ -76,7 +76,32 @@ const activeTaskContainer = `(
   (task.kpi_instance_id IS NOT NULL AND cycle.closed_at_utc IS NULL AND cycle.archived_at_utc IS NULL)
 )`;
 
+export interface GeneralTaskNotificationInput {
+  type: "GENERAL_TASK_ASSIGNED" | "GENERAL_SUBTASK_ASSIGNED" | "GENERAL_TASK_COMPLETED";
+  dedupeKey: string;
+  taskId: number;
+  listId: number | null;
+  subjectTitle: string;
+  contextTitle: string;
+}
+
 export const notificationsRepository = {
+  async ensureGeneralTaskNotification(ownerUserId: number, input: GeneralTaskNotificationInput,
+    transaction?: DatabaseTransaction): Promise<void> {
+    const request = transaction ? transaction.request() : (await getDatabasePool()).request();
+    await request.input("ownerUserId", sql.Int, ownerUserId)
+      .input("type", sql.VarChar(40), input.type)
+      .input("dedupe", sql.VarChar(220), input.dedupeKey)
+      .input("title", sql.NVarChar(1000), input.subjectTitle)
+      .input("context", sql.NVarChar(500), input.contextTitle)
+      .input("taskId", sql.BigInt, input.taskId)
+      .input("listId", sql.BigInt, input.listId)
+      .query(`IF NOT EXISTS (SELECT 1 FROM dbo.TM_notifications WITH (UPDLOCK,HOLDLOCK)
+                  WHERE owner_user_id=@ownerUserId AND dedupe_key=@dedupe)
+        INSERT dbo.TM_notifications(owner_user_id,notification_type,dedupe_key,subject_title,
+          context_title,task_id,list_id,email_processed_at_utc)
+        VALUES(@ownerUserId,@type,@dedupe,@title,@context,@taskId,@listId,SYSUTCDATETIME());`);
+  },
   async ensureMeetingActionItemNotification(
     owner: number,
     input: MeetingActionItemNotificationInput,
@@ -699,6 +724,7 @@ export const notificationsRepository = {
     return result.rowsAffected[0] ?? 0;
   },
 };
+
 
 
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it, vi } from "vitest";
 import * as transactions from "../../src/database/transaction.js";
 import type { DatabaseTransaction } from "../../src/database/types.js";
+import { generalTaskAssignmentsRepository } from "../../src/modules/general-task-assignments/general-task-assignments.repository.js";
 import { authRepository } from "../../src/modules/auth/auth.repository.js";
 import { meetingActionItemsRepository } from "../../src/modules/meeting-action-items/meeting-action-items.repository.js";
 import { meetingActionItemsService } from "../../src/modules/meeting-action-items/meeting-action-items.service.js";
@@ -34,12 +35,13 @@ function arrange(uploadedByUserId = ASSIGNEE) {
   const activity = vi.spyOn(tasksRepository, "addActivity").mockResolvedValue(undefined);
   const meetingActivity = vi.spyOn(meetingSchedulingRepository, "addActivity").mockResolvedValue(undefined);
   const notification = vi.spyOn(notificationsRepository, "ensureMeetingActionItemNotification").mockResolvedValue(undefined);
+  vi.spyOn(generalTaskAssignmentsRepository,"countIncompleteSubtasks").mockResolvedValue({total:1,incomplete:0});
   vi.spyOn(taskDetailsRepository, "listSubtasks").mockResolvedValue([subtaskRecord()]);
   vi.spyOn(taskDetailsRepository, "listAttachments").mockResolvedValue([attachmentRecord({ uploadedByUserId })]);
   vi.spyOn(taskDetailsRepository, "listActivity").mockResolvedValue([]);
   vi.spyOn(taskDetailsRepository, "findSubtaskAccess").mockResolvedValue({ taskId: TASK, ownerUserId: OWNER });
   vi.spyOn(taskDetailsRepository, "findSubtask").mockResolvedValue(subtaskRecord());
-  vi.spyOn(taskDetailsRepository, "findAttachmentAccess").mockResolvedValue({ taskId: TASK, ownerUserId: OWNER, uploadedByUserId });
+  vi.spyOn(taskDetailsRepository, "findAttachmentAccess").mockResolvedValue({ taskId: TASK, ownerUserId: OWNER, subtaskId: null, uploadedByUserId });
   const file = vi.spyOn(taskDetailsRepository, "findAttachment").mockResolvedValue(attachmentRecord({ uploadedByUserId }));
   const createSubtask = vi.spyOn(taskDetailsRepository, "createSubtask").mockResolvedValue(SUBTASK);
   const updateSubtask = vi.spyOn(taskDetailsRepository, "updateSubtask").mockResolvedValue(undefined);
@@ -257,6 +259,7 @@ describe("Existing Organizer and assignee behavior", () => {
 
   it("still lets the current assignee complete a subtask", async () => {
     const mocks = arrange();
+    vi.mocked(generalTaskAssignmentsRepository.countIncompleteSubtasks).mockResolvedValueOnce({total:1,incomplete:1});
     await taskDetailsService.completeSubtask(ASSIGNEE, SUBTASK, true);
     assert.equal(mocks.completeSubtask.mock.calls.length, 1);
   });
@@ -284,4 +287,5 @@ describe("Existing Organizer and assignee behavior", () => {
     assert.equal(mocks.deleteFile.mock.calls.length, 1);
   });
 });
+
 

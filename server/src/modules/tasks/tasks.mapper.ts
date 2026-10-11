@@ -41,6 +41,7 @@ export function mapTask(record: TaskRecord): PersonalTask {
     isReadOnly: record.cycleClosedAtUtc !== null,
     title: record.title,
     description: record.description,
+    completionSummary: record.completionSummary ?? null,
     status: record.status as PersonalTask["status"],
     priority: record.priority as PersonalTask["priority"],
     startDate: dateOnly(record.startDate),
@@ -80,4 +81,5 @@ export function mapTask(record: TaskRecord): PersonalTask {
           },
   };
 }
+
 

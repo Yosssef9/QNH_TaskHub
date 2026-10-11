@@ -32,6 +32,7 @@ export interface PersonalTask {
   isReadOnly: boolean
   title: string
   description: string | null
+  completionSummary?: string | null
   status: TaskStatus
   priority: TaskPriority
   startDate: string | null
@@ -88,12 +89,15 @@ export interface SaveTaskInput {
   dueDate?: string | null
   listId?: number
   referenceDate?: string | null
+  assigneeUserId?: number | null
 }
 
 export interface Subtask {
   id: number
   taskId: number
   title: string
+  assigneeUserId?: number | null
+  workNotes?: string | null
   isCompleted: boolean
   dueDate: string | null
   displayOrder: number
@@ -154,14 +158,25 @@ export interface TaskCapabilities {
   canDeleteRestoreTask: boolean
 }
 
+export interface GeneralAssignmentContext {
+  taskId: number
+  ownerUserId: number
+  assigneeUserId: number | null
+  assignedByUserId: number
+  assignedAtUtc: string
+  rowVersion: string
+}
+
 export interface TaskDetails {
   task: PersonalTask
   actionItem: TaskActionItemContext | null
+  generalAssignment?: GeneralAssignmentContext | null
   capabilities: TaskCapabilities
   subtasks: Subtask[]
   attachments: TaskAttachment[]
   activity: TaskActivity[]
   progress: { completed: number; total: number; percentage: number }
 }
+
 
 

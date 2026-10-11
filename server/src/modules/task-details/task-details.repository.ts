@@ -12,7 +12,7 @@ export const taskDetailsRepository = {
     const result = await request
       .input("ownerUserId", sql.Int, ownerUserId)
       .input("taskId", sql.BigInt, taskId)
-      .query<SubtaskRecord>(`SELECT id, task_id AS taskId, title, is_completed AS isCompleted,
+      .query<SubtaskRecord>(`SELECT id, task_id AS taskId, title, work_notes AS workNotes, assignee_user_id AS assigneeUserId, is_completed AS isCompleted,
         due_date AS dueDate, display_order AS displayOrder, created_at_utc AS createdAtUtc,
         updated_at_utc AS updatedAtUtc, completed_at_utc AS completedAtUtc
         FROM dbo.TM_subtasks WHERE owner_user_id=@ownerUserId AND task_id=@taskId
@@ -64,6 +64,7 @@ export const taskDetailsRepository = {
       .input("ownerUserId", sql.Int, ownerUserId)
       .input("subtaskId", sql.BigInt, subtaskId)
       .query<SubtaskRecord>(`SELECT TOP(1) subtask.id, subtask.task_id AS taskId, subtask.title,
+        subtask.work_notes AS workNotes, subtask.assignee_user_id AS assigneeUserId,
         subtask.is_completed AS isCompleted, subtask.due_date AS dueDate,
         subtask.display_order AS displayOrder, subtask.created_at_utc AS createdAtUtc,
         subtask.updated_at_utc AS updatedAtUtc, subtask.completed_at_utc AS completedAtUtc
@@ -87,15 +88,15 @@ export const taskDetailsRepository = {
 
   async findAttachmentAccess(id: string) {
     const pool=await getDatabasePool();
-    const result=await pool.request().input("id",sql.UniqueIdentifier,id).query<{ownerUserId:number;taskId:number|string|null;uploadedByUserId:number}>(`
+    const result=await pool.request().input("id",sql.UniqueIdentifier,id).query<{ownerUserId:number;taskId:number|string|null;subtaskId:number|string|null;uploadedByUserId:number}>(`
       SELECT TOP(1) attachment.owner_user_id AS ownerUserId,
         COALESCE(attachment.task_id,subtask.task_id) AS taskId,
-        attachment.uploaded_by_user_id AS uploadedByUserId
+        attachment.subtask_id AS subtaskId, attachment.uploaded_by_user_id AS uploadedByUserId
       FROM dbo.TM_attachments attachment
       LEFT JOIN dbo.TM_subtasks subtask ON subtask.id=attachment.subtask_id AND subtask.owner_user_id=attachment.owner_user_id
       WHERE attachment.id=@id AND attachment.deleted_at_utc IS NULL;`);
     const row=result.recordset[0];
-    return row && row.taskId!==null ? {ownerUserId:Number(row.ownerUserId),taskId:Number(row.taskId),uploadedByUserId:Number(row.uploadedByUserId)} : null;
+    return row && row.taskId!==null ? {ownerUserId:Number(row.ownerUserId),taskId:Number(row.taskId),subtaskId:row.subtaskId===null?null:Number(row.subtaskId),uploadedByUserId:Number(row.uploadedByUserId)} : null;
   },
 
   async createSubtask(
@@ -245,4 +246,5 @@ export const taskDetailsRepository = {
         WHERE id=@id AND owner_user_id=@ownerUserId AND deleted_at_utc IS NULL;`);
   },
 };
+
 

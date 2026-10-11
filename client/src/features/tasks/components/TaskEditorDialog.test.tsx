@@ -16,9 +16,20 @@ const mutations = vi.hoisted(() => ({
   update: vi.fn(),
 }))
 
+const pickerUsers = vi.hoisted(() => ({items: [
+  {userId:77,userName:'Sara User',userCode:'U077'},
+]}))
+
 const deadlineQuery = vi.hoisted(() => ({
   data: undefined as { dueDate: string } | undefined,
   isError: false,
+}))
+
+// The user picker is optional in this editor; isolate its async directory lookup
+// so the existing task-create/KPI form tests do not need a network QueryClient.
+vi.mock('../assignment/use-general-assignment', () => ({
+  useEligibleTaskUsers: () => ({data:{items:pickerUsers.items},isLoading:false,isError:false,isFetching:false}),
+  useEligibleTaskUser: () => ({data:null}),
 }))
 
 vi.mock('@/features/kpis/hooks/use-kpis', () => ({
@@ -129,6 +140,19 @@ describe('TaskEditorDialog', () => {
     Object.values(mutations).forEach((mock) => mock.mockReset())
     deadlineQuery.data = undefined
     deadlineQuery.isError = false
+  })
+
+  it('includes a single optional assignee when creating an ordinary task', async () => {
+    const user = userEvent.setup()
+    renderDialog({ open: true, onOpenChange: vi.fn(), listId: 1, lists, task: null })
+    await user.type(screen.getByLabelText('عنوان المهمة'), 'تجهيز التقرير')
+    await user.click(screen.getByRole('button', { name: 'إسناد إلى' }))
+    await user.click(screen.getByRole('option', { name: /Sara User/ }))
+    await user.click(screen.getByRole('button', { name: 'حفظ' }))
+    expect(mutations.create).toHaveBeenCalledWith(
+      expect.objectContaining({values:expect.objectContaining({assigneeUserId:77})}),
+      expect.anything(),
+    )
   })
 
   it('creates a normal private-list task', async () => {
@@ -296,3 +320,4 @@ describe('TaskEditorDialog', () => {
     expect(mutations.createKpi).not.toHaveBeenCalled()
   })
 })
+

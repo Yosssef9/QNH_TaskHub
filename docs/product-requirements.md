@@ -4,9 +4,9 @@
 
 ## Product summary
 
-QNH TaskHub is an Arabic-first productivity application authenticated through QNH Portal. Normal Tasks, Lists, KPIs, Work Cycles, Contracts, and future Price Quotes remain private owner-scoped domains. Procurement Items, Suppliers, and imported purchase transactions are intentionally shared among Procurement-enabled users. The Meetings module is the deliberate shared-domain exception and uses relationship-aware authorization for Organizers, Coordinators, attendees, room scheduling, and later Meeting Action Items.
+QNH TaskHub is an Arabic-first productivity application authenticated through QNH Portal. Normal Tasks, Lists, KPIs, Work Cycles, Contracts, and future Price Quotes remain owner-scoped domains; the explicitly approved General Task Assignment workflow provides limited per-task/per-subtask access to named assignees without sharing lists, KPIs or Contracts. Procurement Items, Suppliers, and imported purchase transactions are intentionally shared among Procurement-enabled users. The Meetings module is the deliberate shared-domain exception and uses relationship-aware authorization for Organizers, Coordinators, attendees, room scheduling, and later Meeting Action Items.
 
-The Meetings exception must not weaken the privacy model of existing owner-scoped domains. Superseded planning material must not be used to introduce unrelated multi-user or organizational workflows.
+Meeting Action Items and general task assignments must not weaken the privacy model of unrelated owner-scoped domains. Superseded planning material must not be used to introduce unrelated multi-user or organizational workflows.
 
 The product should feel simple enough to use without documentation. The Arabic dashboard image supplied during planning is a style reference only.
 
@@ -450,7 +450,7 @@ User-authored email templates are not planned. Users customize delivery preferen
 
 ## Deferred functionality
 
-- Multi-user assignment, sharing, or organizational workflows
+- Multiple users assigned to one task/subtask, department-wide sharing, CEO/HOD hierarchy, or generalized collaboration outside the approved named-assignee workflow
 - Moving normal tasks into KPIs or KPI tasks into lists
 - Arbitrary KPI formula builder
 - Advanced collaboration, workflows, and analytics outside the explicitly approved Meetings domain
@@ -541,3 +541,9 @@ User-authored email templates are not planned. Users customize delivery preferen
 - Report jobs are claimed individually with a unique claim token and lease heartbeat. SMTP failures reuse existing retry/backoff policy. Ordinary email processing stays in the same worker and is isolated from report-scan failures. No report request is run inside a Meeting business transaction.
 - The status panel reports actual outbox evidence, activation/catch-up eligibility and last completed scan. Sender enabled or scan timestamp is not proof of SMTP acceptance. Sent does not prove inbox arrival or reading, and SMTP retries cannot guarantee exactly-once external delivery in every failure window.
 - See `MEETING_REPORT_AUTOMATIC_EMAIL.md` for activation, controls, migration, deployment, validation and rollback. No new runtime dependencies or font binaries are added by Phase 5.
+
+
+
+## General Task Assignment — Phase 1 backend foundation (migration 048)
+
+This explicitly approved exception permits one optional main assignee for a normal Task and one optional assignee per subtask; a child with no explicit assignee inherits main-assignee responsibility (or creator responsibility when none). The creator retains task and all-child visibility. A named executor sees the parent context, aggregate progress and **only** their own assigned children, attachments and child-specific audit entries. Main-task Completion Summary and per-subtask Work Notes are optional. All non-deleted children completed automatically completes the parent for normal/Meeting tasks, but KPI calculations stay unchanged; manual parent completion is blocked while children remain unfinished. Existing Meeting Action Items keep their Meeting-specific access model. UI and unified source filtering arrive in Phase 2. See `docs/GLOBAL_TASK_ASSIGNMENT_PHASE1.md`.

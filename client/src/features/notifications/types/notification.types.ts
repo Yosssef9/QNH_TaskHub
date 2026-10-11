@@ -20,6 +20,9 @@ export const NOTIFICATION_TYPES = [
   'MEETING_START_REMINDER',
   'MEETING_ACTION_ITEM_ASSIGNED',
   'MEETING_ACTION_ITEM_COMPLETED',
+  'GENERAL_TASK_ASSIGNED',
+  'GENERAL_SUBTASK_ASSIGNED',
+  'GENERAL_TASK_COMPLETED',
 ] as const
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number]
@@ -42,6 +45,7 @@ export interface NotificationListData {
   items: NotificationItem[]
   unreadCount: number
 }
+
 
 
 
