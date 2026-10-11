@@ -98,6 +98,7 @@ export function observeOutlookEvent(
     taskHubLinkPresent: meetingUrl.length > 0 && (bodyHtml.includes(meetingUrl) || bodyText.includes(meetingUrl)),
     zoomLinkPresent: zoomUrl.length === 0 || bodyHtml.includes(zoomUrl) || bodyText.includes(zoomUrl),
     descriptionPresent: description.length === 0 || bodyText.includes(description),
+    bodyTextPreview: bodyText.length > 1200 ? `${bodyText.slice(0, 1200)}…` : bodyText,
   };
   const json = JSON.stringify(observed);
   return { projection: observed, json, hash: hashJson(json) };
@@ -105,6 +106,18 @@ export function observeOutlookEvent(
 
 function sameArray(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+/** Compare sorted attendees as multisets so duplicates are not silently hidden. */
+function unmatchedAttendees(left: readonly string[], right: readonly string[]): string[] {
+  const remaining = new Map<string, number>();
+  for (const email of right) remaining.set(email, (remaining.get(email) ?? 0) + 1);
+  return left.filter((email) => {
+    const count = remaining.get(email) ?? 0;
+    if (count === 0) return true;
+    remaining.set(email, count - 1);
+    return false;
+  });
 }
 
 export function compareOutlookEvent(
@@ -134,6 +147,8 @@ export function compareOutlookEvent(
       field: "ATTENDEES",
       taskHubValue: String(expectedAttendees.length),
       outlookValue: String(observed.attendeeEmails.length),
+      onlyInTaskHub: unmatchedAttendees(expectedAttendees, observed.attendeeEmails),
+      onlyInOutlook: unmatchedAttendees(observed.attendeeEmails, expectedAttendees),
     });
   }
   if (!observed.taskHubLinkPresent) {
@@ -143,7 +158,12 @@ export function compareOutlookEvent(
     differences.push({ field: "ZOOM_URL", taskHubValue: projection.onlineJoinUrl ?? "—", outlookValue: "Missing" });
   }
   if (!observed.descriptionPresent) {
-    differences.push({ field: "DESCRIPTION", taskHubValue: "TaskHub description", outlookValue: "Changed or missing" });
+    differences.push({
+      field: "DESCRIPTION",
+      taskHubValue: normalizeSpaces(projection.description) || "—",
+      outlookValue: observed.bodyTextPreview || "—",
+      ...(observed.bodyTextPreview === undefined ? { outlookValueUnavailable: true } : {}),
+    });
   }
 
   return differences;
@@ -171,6 +191,7 @@ export function parseObservedProjection(value: string | null): OutlookObservedEv
       taskHubLinkPresent: row.taskHubLinkPresent,
       zoomLinkPresent: row.zoomLinkPresent,
       descriptionPresent: row.descriptionPresent,
+      ...(typeof row.bodyTextPreview === "string" ? { bodyTextPreview: row.bodyTextPreview } : {}),
     };
   } catch {
     return null;

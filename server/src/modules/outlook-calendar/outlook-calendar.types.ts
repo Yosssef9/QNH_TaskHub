@@ -21,6 +21,12 @@ export interface OutlookSyncDifference {
   field: OutlookSyncDifferenceField;
   taskHubValue: string;
   outlookValue: string;
+  /** Exact addresses absent from Outlook, rather than only attendee totals. */
+  onlyInTaskHub?: string[];
+  /** Exact addresses absent from TaskHub, rather than only attendee totals. */
+  onlyInOutlook?: string[];
+  /** Existing observed projections lack a body preview until their next poll. */
+  outlookValueUnavailable?: boolean;
 }
 
 export interface OutlookObservedEventProjection {
@@ -32,6 +38,8 @@ export interface OutlookObservedEventProjection {
   taskHubLinkPresent: boolean;
   zoomLinkPresent: boolean;
   descriptionPresent: boolean;
+  /** Sanitized text preview of Outlook's observed body, for human-readable differences. */
+  bodyTextPreview?: string;
 }
 
 export interface OutlookCalendarRuntimeState { enabled: boolean; authMode: "DISABLED" | "CLIENT_SECRET"; workerIntervalMs: number; pollIntervalMinutes: number; graphRequestTimeoutMs: number; maxAttempts: number; processingTimeoutMinutes: number; }

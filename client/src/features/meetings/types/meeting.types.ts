@@ -54,6 +54,9 @@ export interface MeetingOutlookSyncDifference {
   field: OutlookSyncDifferenceField
   taskHubValue: string
   outlookValue: string
+  onlyInTaskHub?: string[]
+  onlyInOutlook?: string[]
+  outlookValueUnavailable?: boolean
 }
 
 export interface MeetingOutlookSyncStatus {

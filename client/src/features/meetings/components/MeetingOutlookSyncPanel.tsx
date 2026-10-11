@@ -35,7 +35,8 @@ export function MeetingOutlookSyncPanel({ meetingId, organizerUserId }: { meetin
   const retry = useRetryMeetingOutlookSync()
   const restore = useRestoreMeetingOutlookSync()
   const recreate = useRecreateMeetingOutlookSync()
-  const [showDifferences, setShowDifferences] = useState(false)
+  // Show detected differences immediately, with an option to collapse the details.
+  const [showDifferences, setShowDifferences] = useState(true)
   const data = query.data
   const status = data?.status ?? null
   const canManage = currentUser.data?.user.userId === organizerUserId || Boolean(currentUser.data?.access.meetingCoordinateEnabled)
@@ -109,8 +110,51 @@ export function MeetingOutlookSyncPanel({ meetingId, organizerUserId }: { meetin
               {status.differences.map((difference) => (
                 <div key={difference.field} className="grid grid-cols-[minmax(7rem,0.7fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 border-t px-3 py-2 text-xs">
                   <span className="font-medium">{t(`meetings.workspace.outlook.fields.${difference.field}`)}</span>
-                  <span className="break-words">{displayDifferenceValue(difference, 'taskHubValue', i18n.language)}</span>
-                  <span className="break-words">{displayDifferenceValue(difference, 'outlookValue', i18n.language)}</span>
+                  {difference.field === 'ATTENDEES' && difference.onlyInTaskHub && difference.onlyInOutlook ? (
+                    <>
+                      {(['onlyInTaskHub', 'onlyInOutlook'] as const).map((side) => (
+                        <div key={side} className="min-w-0 space-y-1.5">
+                          <span className="text-muted-foreground block text-[11px]">
+                            {t(`meetings.workspace.outlook.${side}`)}
+                          </span>
+                          {difference[side]?.length ? (
+                            <ul className="space-y-1" dir="ltr">
+                              {(difference[side] ?? []).map((email, index) => (
+                                <li key={`${email}-${index}`} className="bg-muted/60 rounded px-2 py-1 text-start break-all" dir="ltr">
+                                  {email}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <span className="text-muted-foreground">{t('meetings.workspace.outlook.noUnmatchedAttendees')}</span>
+                          )}
+                          <span className="text-muted-foreground block text-[11px]">
+                            {t('meetings.workspace.outlook.totalAttendees', {
+                              count: Number(side === 'onlyInTaskHub' ? difference.taskHubValue : difference.outlookValue),
+                            })}
+                          </span>
+                        </div>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      <span className="min-w-0 whitespace-pre-wrap break-words">
+                        {displayDifferenceValue(difference, 'taskHubValue', i18n.language)}
+                      </span>
+                      <div className="min-w-0 space-y-1">
+                        <span className="block whitespace-pre-wrap break-words">
+                          {difference.outlookValueUnavailable
+                            ? t('meetings.workspace.outlook.outlookDetailsPending')
+                            : displayDifferenceValue(difference, 'outlookValue', i18n.language)}
+                        </span>
+                        {difference.field === 'DESCRIPTION' && !difference.outlookValueUnavailable ? (
+                          <span className="text-muted-foreground block text-[11px]">
+                            {t('meetings.workspace.outlook.outlookBodyPreview')}
+                          </span>
+                        ) : null}
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
