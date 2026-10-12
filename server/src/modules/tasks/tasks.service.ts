@@ -99,7 +99,7 @@ export const tasksService = {
     const task = await loadTask(access.ownerUserId, taskId);
     return {
       ...task,
-      ...(access.generalAssignment && access.ownerUserId !== actorUserId ? {listId:null} : {}),
+      ...((access.generalAssignment || access.context) && access.ownerUserId !== actorUserId ? {listId:null} : {}),
       isReadOnly: task.isReadOnly || !access.capabilities.canEditDetails,
     };
   },
@@ -240,10 +240,10 @@ export const tasksService = {
         { fromListId: current.listId, toListId: destinationListId },
         actorUserId,
       );
-      if (access.generalAssignment && dueDate !== toDateOnly(current.dueDate)) {
-        await notifyGeneralTask(transaction, [access.generalAssignment.assigneeUserId], actorUserId, {
-          type: "GENERAL_TASK_DUE_CHANGED", taskId, listId: destinationListId,
-          subjectTitle: input.title ?? current.title, contextTitle: "Task deadline updated",
+      if ((access.generalAssignment || access.context) && dueDate !== toDateOnly(current.dueDate)) {
+        await notifyGeneralTask(transaction, [access.context?.assigneeUserId ?? access.generalAssignment?.assigneeUserId], actorUserId, {
+          type: "GENERAL_TASK_DUE_CHANGED", taskId, listId: access.context ? null : destinationListId,
+          subjectTitle: input.title ?? current.title, contextTitle: access.context?.meetingTitle ?? "Task deadline updated",
           eventDate: dueDate,
         });
       }
@@ -355,6 +355,12 @@ export const tasksService = {
             taskId, listId: current.listId, taskOwnerUserId: ownerUserId, subjectTitle: current.title,
             contextTitle: input.status === "DONE" ? "Main task completed" : "Main task reopened",
           });
+      }
+      if (access.context && currentStatus === "DONE" && (input.status === "TODO" || input.status === "IN_PROGRESS")) {
+        await notifyGeneralTask(transaction, [access.context.assigneeUserId], actorUserId, {
+          type: "GENERAL_TASK_REOPENED", taskId, listId: null, taskOwnerUserId: ownerUserId,
+          subjectTitle: current.title, contextTitle: access.context.meetingTitle,
+        });
       }
       if (access.context) {
         await meetingSchedulingRepository.addActivity(transaction, access.context.meetingId, actorUserId,

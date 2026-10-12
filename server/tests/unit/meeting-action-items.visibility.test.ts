@@ -5,6 +5,7 @@ import { authRepository } from "../../src/modules/auth/auth.repository.js";
 import { accessPermissionsRepository } from "../../src/modules/access-permissions/access-permissions.repository.js";
 import { resolveTaskAccess } from "../../src/modules/meeting-action-items/meeting-action-items.access.js";
 import { meetingActionItemsRepository } from "../../src/modules/meeting-action-items/meeting-action-items.repository.js";
+import { generalTaskAssignmentsRepository } from "../../src/modules/general-task-assignments/general-task-assignments.repository.js";
 import { meetingWorkspaceRepository } from "../../src/modules/meetings/meeting-workspace.repository.js";
 import { tasksRepository } from "../../src/modules/tasks/tasks.repository.js";
 import {
@@ -15,6 +16,7 @@ import {
 function arrange() {
   return {
     relation: vi.spyOn(meetingActionItemsRepository, "findContext").mockResolvedValue(actionContext()),
+    visible: vi.spyOn(generalTaskAssignmentsRepository, "visibleSubtaskIds").mockResolvedValue([]),
     profile: vi.spyOn(authRepository, "findAccessProfile").mockResolvedValue(accessProfile()),
     meeting: vi.spyOn(meetingWorkspaceRepository, "findAccessContext").mockResolvedValue(meetingContext()),
     owned: vi.spyOn(tasksRepository, "findOwnedById").mockResolvedValue(null),
@@ -34,7 +36,7 @@ function assertViewer(result: Awaited<ReturnType<typeof resolveTaskAccess>>) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("Meeting Action Item read access", () => {
-  it("preserves Organizer management capabilities without granting completion", async () => {
+  it("allows organizer to manage children but enforces per-child assignment for execution", async () => {
     arrange();
     const resolved = await resolveTaskAccess(OWNER, TASK);
     assert.ok(resolved);
@@ -44,7 +46,7 @@ describe("Meeting Action Item read access", () => {
     assert.equal(resolved.capabilities.canUploadAttachments, true);
     assert.equal(resolved.capabilities.canDeleteAnyAttachment, true);
     assert.equal(resolved.capabilities.canCompleteTask, false);
-    assert.equal(resolved.capabilities.canCompleteSubtasks, false);
+    assert.equal(resolved.capabilities.canCompleteSubtasks, true);
   });
 
   it("preserves the current assignee's execution capabilities", async () => {
@@ -57,6 +59,19 @@ describe("Meeting Action Item read access", () => {
     assert.equal(resolved.capabilities.canUploadAttachments, true);
     assert.equal(resolved.capabilities.canEditDetails, false);
     assert.equal(resolved.capabilities.canDeleteRestoreTask, false);
+  });
+
+  it("grants a meeting subtask executor child-only capabilities, never main status changes", async () => {
+    arrange();
+    vi.spyOn(generalTaskAssignmentsRepository, "visibleSubtaskIds").mockResolvedValue([991]);
+    const access = await resolveTaskAccess(VIEWER, TASK);
+    assert.ok(access);
+    assert.equal(access.capabilities.role, "ASSIGNEE");
+    assert.equal(access.capabilities.canCompleteSubtasks, true);
+    assert.equal(access.capabilities.canUploadAttachments, true);
+    assert.equal(access.capabilities.canCompleteTask, false);
+    assert.equal(access.capabilities.canChangeNonCompletionStatus, false);
+    assert.equal(access.capabilities.canManageSubtasks, false);
   });
 
   it("gives another attendee only Viewer capabilities", async () => {
@@ -180,3 +195,4 @@ describe("Meeting Action Item read access", () => {
     assert.equal(await resolveTaskAccess(VIEWER, TASK), null);
   });
 });
+

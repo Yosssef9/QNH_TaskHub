@@ -44,12 +44,23 @@ export async function reconcileParentCompletion(transaction: DatabaseTransaction
     await setAutoParentStatus(transaction, ownerUserId, taskId, "IN_PROGRESS");
     await tasksRepository.addActivity(transaction, ownerUserId, taskId, "STATUS_CHANGED",
       {from:"DONE",to:"IN_PROGRESS",automatic:true},actorUserId);
-    const general = await generalTaskAssignmentsRepository.findContext(taskId, transaction);
-    if (general) {
-      await notifyGeneralTask(transaction, [ownerUserId, general.assigneeUserId], actorUserId, {
-        type: "GENERAL_TASK_REOPENED", taskId, listId: task.listId, taskOwnerUserId: ownerUserId,
-        subjectTitle: task.title, contextTitle: "Main task reopened",
+    const meeting = await meetingActionItemsRepository.findContext(taskId, transaction);
+    if (meeting) {
+      await meetingSchedulingRepository.addActivity(transaction, meeting.meetingId, actorUserId,
+        "ACTION_ITEM_STATUS_CHANGED", { taskId, taskTitle: task.title,
+          fromTaskStatus: "DONE", toTaskStatus: "IN_PROGRESS", automatic: true });
+      await notifyGeneralTask(transaction, [meeting.assigneeUserId], actorUserId, {
+        type: "GENERAL_TASK_REOPENED", taskId, listId: null, taskOwnerUserId: ownerUserId,
+        subjectTitle: task.title, contextTitle: meeting.meetingTitle,
       });
+    } else {
+      const general = await generalTaskAssignmentsRepository.findContext(taskId, transaction);
+      if (general) {
+        await notifyGeneralTask(transaction, [ownerUserId, general.assigneeUserId], actorUserId, {
+          type: "GENERAL_TASK_REOPENED", taskId, listId: task.listId, taskOwnerUserId: ownerUserId,
+          subjectTitle: task.title, contextTitle: "Main task reopened",
+        });
+      }
     }
   }
 }

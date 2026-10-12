@@ -2,6 +2,7 @@ import { withTransaction } from "../../database/transaction.js";
 import type { DatabaseTransaction } from "../../database/types.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import { resolveTaskAccess } from "../meeting-action-items/meeting-action-items.access.js";
+import { meetingActionItemsRepository } from "../meeting-action-items/meeting-action-items.repository.js";
 import { taskDetailsRepository } from "../task-details/task-details.repository.js";
 import { tasksRepository } from "../tasks/tasks.repository.js";
 import { assertTaskWritable } from "../tasks/tasks.policy.js";
@@ -47,16 +48,24 @@ export const generalTaskAssignmentsService = {
     if (!link) throw missing();
     await withTransaction(async transaction => {
       const access = await resolveTaskAccess(actorUserId, link.taskId, false, transaction);
-      if (!access || access.ownerUserId !== actorUserId || access.context) throw denied();
+      if (!access || access.ownerUserId !== actorUserId) throw denied();
       const task = await tasksRepository.findOwnedForUpdate(transaction, actorUserId, link.taskId);
       if (!task) throw missing();
       assertTaskWritable(task);
       if (task.kpiInstanceId !== null) throw denied();
-      if (assigneeUserId !== null) await validateAssignee(assigneeUserId, transaction);
+      if (assigneeUserId !== null) {
+        if (access.context) {
+          if (!(await meetingActionItemsRepository.eligibleAssignee(transaction, access.context.meetingId,
+              access.context.organizerUserId, assigneeUserId))) {
+            throw new AppError({statusCode:400,code:"MEETING_ACTION_ITEM_ASSIGNEE_INVALID",
+              message:"Choose an eligible Meeting attendee with active TaskHub access."});
+          }
+        } else await validateAssignee(assigneeUserId, transaction);
+      }
       const subtask = await taskDetailsRepository.findSubtask(actorUserId, subtaskId, transaction);
       if (!subtask) throw missing();
       const former = await repo.effectiveSubtaskAssignee(actorUserId, subtaskId, transaction);
-      await repo.ensureRelation(transaction, link.taskId, actorUserId, actorUserId, null);
+      if (!access.context) await repo.ensureRelation(transaction, link.taskId, actorUserId, actorUserId, null);
       await repo.setSubtaskAssignee(transaction, actorUserId, subtaskId, assigneeUserId);
       await tasksRepository.addActivity(transaction, actorUserId, link.taskId,
         "GENERAL_SUBTASK_ASSIGNED", {subtaskId, assigneeUserId}, actorUserId);
@@ -64,8 +73,8 @@ export const generalTaskAssignmentsService = {
       if (next !== former) {
         await notifyRemovedAssignment(transaction, actorUserId, former, link.taskId, subtaskId);
         await notifyGeneralTask(transaction, [next], actorUserId, {
-          type: "GENERAL_SUBTASK_ASSIGNED", taskId: link.taskId, listId: task.listId,
-          subtaskId, subjectTitle: task.title, contextTitle: "Subtask assigned to you",
+          type: "GENERAL_SUBTASK_ASSIGNED", taskId: link.taskId, listId: access.context ? null : task.listId,
+          subtaskId, subjectTitle: task.title, contextTitle: access.context?.meetingTitle ?? "Subtask assigned to you",
         });
       }
     });
@@ -81,7 +90,7 @@ export const generalTaskAssignmentsService = {
       const task = await tasksRepository.findOwnedForUpdate(transaction, access.ownerUserId, link.taskId);
       if (!task) throw missing();
       assertTaskWritable(task);
-      const allowed = access.generalAssignment
+      const allowed = access.generalAssignment || access.context
         ? (await repo.effectiveSubtaskAssignee(access.ownerUserId, subtaskId, transaction)) === actorUserId
         : access.capabilities.canCompleteSubtasks;
       if (!allowed) throw new AppError({statusCode:403,code:"WORK_NOTES_FORBIDDEN",message:"You cannot edit this subtask's Work Notes."});
@@ -102,7 +111,7 @@ export const generalTaskAssignmentsService = {
       assertTaskWritable(task);
       const allowed = access.generalAssignment
         ? (access.generalAssignment.assigneeUserId ?? access.ownerUserId) === actorUserId
-        : (access.context ? access.capabilities.role === "ASSIGNEE" : access.capabilities.role === "OWNER");
+        : (access.context ? access.context.assigneeUserId === actorUserId : access.capabilities.role === "OWNER");
       if (!allowed) throw new AppError({statusCode:403,code:"COMPLETION_SUMMARY_FORBIDDEN",message:"You cannot edit this Completion Summary."});
       await repo.saveCompletionSummary(transaction, access.ownerUserId, taskId, completionSummary);
       await tasksRepository.addActivity(transaction, access.ownerUserId, taskId,

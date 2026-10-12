@@ -46,16 +46,17 @@ async function currentState(recipientId: number, taskId: number, subtaskId: numb
     .input("subtaskId", sql.BigInt, subtaskId)
     .query<EmailState>(`
       SELECT task.id AS taskId, task.title, task.status,
-        task.owner_user_id AS ownerUserId, relation.assignee_user_id AS mainAssigneeId,
-        relation.assigned_at_utc AS assignedAtUtc, task.due_date AS dueDate,
+        task.owner_user_id AS ownerUserId, COALESCE(relation.assignee_user_id, meeting.assignee_user_id) AS mainAssigneeId,
+        COALESCE(relation.assigned_at_utc, meeting.assigned_at_utc) AS assignedAtUtc, task.due_date AS dueDate,
         task.list_id AS listId,
         child.id AS subtaskId, child.title AS subtaskTitle,
         child.due_date AS subtaskDueDate,
         child.assignment_changed_at_utc AS subtaskAssignmentChangedAtUtc,
-        COALESCE(child.assignee_user_id, relation.assignee_user_id, task.owner_user_id)
+        COALESCE(child.assignee_user_id, meeting.assignee_user_id, relation.assignee_user_id, task.owner_user_id)
           AS effectiveSubtaskAssigneeId
       FROM dbo.TM_tasks AS task
-      JOIN dbo.TM_general_task_assignments AS relation ON relation.task_id = task.id
+      LEFT JOIN dbo.TM_general_task_assignments AS relation ON relation.task_id = task.id
+      LEFT JOIN dbo.TM_meeting_action_items AS meeting ON meeting.task_id = task.id
       JOIN dbo.TM_lists AS list ON list.id = task.list_id AND list.archived_at_utc IS NULL
       JOIN dbo.TM_user_access AS access ON access.portal_user_id = @recipient AND access.is_active = 1
       JOIN dbo.users AS portal ON portal.USER_ID = access.portal_user_id AND portal.IS_ACTIVE = 1
@@ -63,7 +64,11 @@ async function currentState(recipientId: number, taskId: number, subtaskId: numb
         AND child.id = @subtaskId AND child.deleted_at_utc IS NULL
       WHERE task.id = @taskId AND task.deleted_at_utc IS NULL
         AND task.kpi_instance_id IS NULL AND task.list_id IS NOT NULL
-        AND NOT EXISTS (SELECT 1 FROM dbo.TM_meeting_action_items WHERE task_id = task.id);
+        AND (relation.task_id IS NOT NULL OR meeting.task_id IS NOT NULL)
+        AND (meeting.task_id IS NULL OR task.owner_user_id = @recipient OR EXISTS (
+          SELECT 1 FROM dbo.TM_meeting_attendees AS invitee
+          WHERE invitee.meeting_id = meeting.meeting_id AND invitee.attendee_user_id = @recipient
+        ));
     `);
   return result.recordset[0] ?? null;
 }

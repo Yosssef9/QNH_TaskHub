@@ -19,6 +19,7 @@ interface Props {
   subtask: Subtask | null
   dueDateRequired?: boolean
   generalAssignmentEnabled?: boolean
+  meetingId?: number | null
 }
 
 export function SubtaskEditorDialog({
@@ -28,6 +29,7 @@ export function SubtaskEditorDialog({
   subtask,
   dueDateRequired = false,
   generalAssignmentEnabled = false,
+  meetingId = null,
 }: Props) {
   const { t } = useTranslation()
   const [assigneeUserId, setAssigneeUserId] = useState<number | null>(null)
@@ -96,7 +98,7 @@ export function SubtaskEditorDialog({
           {generalAssignmentEnabled && !subtask ? (
             <div className="space-y-1.5">
               <label className="text-sm font-medium">{t('tasks.assignment.assignSubtask')}</label>
-              <TaskAssigneePicker value={assigneeUserId} onChange={setAssigneeUserId} inherit />
+              <TaskAssigneePicker value={assigneeUserId} onChange={setAssigneeUserId} inherit meetingId={meetingId} />
             </div>
           ) : null}
           <DatePicker

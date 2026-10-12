@@ -6,21 +6,30 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useEligibleTaskUsers, useEligibleTaskUser } from './use-general-assignment'
+import { useMeetingActionItemAssignees } from '@/features/meetings/action-items/use-meeting-action-items'
 
 /** Single-user picker: selected identity stays visible even when search pagination changes. */
-export function TaskAssigneePicker({ value, onChange, disabled = false, inherit = false }: {
+export function TaskAssigneePicker({ value, onChange, disabled = false, inherit = false, meetingId = null }: {
   value: number | null
   onChange: (value: number | null) => void
   disabled?: boolean
   inherit?: boolean
+  meetingId?: number | null
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [selectedName, setSelectedName] = useState<{id:number; name:string} | null>(null)
-  const query = useEligibleTaskUsers(search, open, page)
-  const selected = query.data?.items.find(user => user.userId === value)
+  const generalQuery = useEligibleTaskUsers(search, open && meetingId === null, page)
+  const meetingQuery = useMeetingActionItemAssignees(meetingId, open && meetingId !== null)
+  const available = meetingId === null ? (generalQuery.data?.items ?? []) :
+    (meetingQuery.data ?? []).filter(user => user.eligible &&
+      `${user.userName} ${user.userCode}`.toLowerCase().includes(search.trim().toLowerCase()))
+  const selected = available.find(user => user.userId === value)
+  const isFetching = meetingId === null ? generalQuery.isFetching : meetingQuery.isFetching
+  const isLoading = meetingId === null ? generalQuery.isLoading : meetingQuery.isLoading
+  const isError = meetingId === null ? generalQuery.isError : meetingQuery.isError
   const byId = useEligibleTaskUser(value)
   const display = value === null
     ? t(inherit ? 'tasks.assignment.inherit' : 'tasks.assignment.unassigned')
@@ -48,7 +57,7 @@ export function TaskAssigneePicker({ value, onChange, disabled = false, inherit 
             <span className="flex items-center gap-2"><X className="size-4" /> {t(inherit ? 'tasks.assignment.inherit' : 'tasks.assignment.unassigned')}</span>
             {value === null ? <Check className="size-4" /> : null}
           </button>
-          {query.data?.items.map(user => (
+          {available.map(user => (
             <button type="button" key={user.userId} role="option" aria-selected={value === user.userId}
               className="hover:bg-muted focus-visible:bg-muted flex w-full items-center justify-between rounded-md px-3 py-2 text-start text-sm"
               onClick={() => { onChange(user.userId); setSelectedName({id:user.userId,name:user.userName}); setOpen(false) }}>
@@ -57,18 +66,18 @@ export function TaskAssigneePicker({ value, onChange, disabled = false, inherit 
               {value === user.userId ? <Check className="size-4 shrink-0" /> : null}
             </button>
           ))}
-          {query.isLoading ? <p className="text-muted-foreground p-2 text-xs">{t('common.loading')}</p> : null}
-          {!query.isLoading && !query.data?.items.length ? <p className="text-muted-foreground p-2 text-xs">{t('tasks.assignment.noUsers')}</p> : null}
-          {query.isError ? <p className="text-destructive p-2 text-xs">{t('tasks.assignment.searchError')}</p> : null}
+          {isLoading ? <p className="text-muted-foreground p-2 text-xs">{t('common.loading')}</p> : null}
+          {!isLoading && !available.length ? <p className="text-muted-foreground p-2 text-xs">{t('tasks.assignment.noUsers')}</p> : null}
+          {isError ? <p className="text-destructive p-2 text-xs">{t('tasks.assignment.searchError')}</p> : null}
         </div>
-        <div className="flex items-center justify-between border-t pt-2">
+        {meetingId === null ? <div className="flex items-center justify-between border-t pt-2">
           <Button type="button" size="sm" variant="outline" disabled={page <= 1}
             onClick={() => setPage(current => current-1)}>{t('pagination.previous')}</Button>
           <span className="text-muted-foreground text-xs">{page}</span>
           <Button type="button" size="sm" variant="outline"
-            disabled={(query.data?.items.length ?? 0) < 50 || query.isFetching}
+            disabled={available.length < 50 || isFetching}
             onClick={() => setPage(current => current+1)}>{t('pagination.next')}</Button>
-        </div>
+        </div> : null}
       </PopoverContent>
     </Popover>
   )

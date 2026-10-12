@@ -449,8 +449,14 @@ export const meetingActionItemsRepository = {
       )
     )`;
 
+    const assignedToActor = `(relation.assignee_user_id = @actorUserId OR EXISTS (
+      SELECT 1 FROM dbo.TM_subtasks AS assignedChild
+      WHERE assignedChild.task_id=relation.task_id AND assignedChild.deleted_at_utc IS NULL
+        AND COALESCE(assignedChild.assignee_user_id, relation.assignee_user_id)=@actorUserId
+    ))`;
+
     const filteredWhere = `
-      relation.assignee_user_id = @actorUserId
+      ${assignedToActor}
       AND ${readableMeeting}
       AND task.deleted_at_utc IS NULL
       AND (@search IS NULL OR task.title LIKE @search OR task.description LIKE @search OR meeting.title LIKE @search)
@@ -520,7 +526,7 @@ export const meetingActionItemsRepository = {
             AND subtask.owner_user_id = task.owner_user_id
             AND subtask.deleted_at_utc IS NULL
         ) AS subtasks
-        WHERE relation.assignee_user_id = @actorUserId
+        WHERE ${assignedToActor}
           AND ${readableMeeting}
           AND task.deleted_at_utc IS NULL;
       `);
@@ -544,7 +550,7 @@ export const meetingActionItemsRepository = {
         FROM dbo.TM_meeting_action_items AS relation
         INNER JOIN dbo.TM_tasks AS task ON task.id = relation.task_id
         INNER JOIN dbo.TM_meetings AS meeting ON meeting.id = relation.meeting_id
-        WHERE relation.assignee_user_id = @actorUserId
+        WHERE ${assignedToActor}
           AND ${readableMeeting}
           AND task.deleted_at_utc IS NULL
         ORDER BY meetingTitle, meetingId;
@@ -562,5 +568,6 @@ export const meetingActionItemsRepository = {
     };
   },
 };
+
 
 

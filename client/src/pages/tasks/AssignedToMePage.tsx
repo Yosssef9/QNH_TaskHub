@@ -46,6 +46,7 @@ import {
 } from '@/features/tasks/components/TaskSelectIndicators'
 import { TaskStatusIndicator } from '@/features/tasks/components/TaskStatusIndicator'
 import { useChangeTaskStatus } from '@/features/tasks/hooks/use-tasks'
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import {
   TASK_DUE_FILTERS,
   TASK_PRIORITIES,
@@ -118,6 +119,7 @@ function GroupHeading({ item, groupBy }: { item: MeetingActionItem; groupBy: Ass
 
 export function AssignedToMePage() {
   const { t, i18n } = useTranslation()
+  const currentUser = useCurrentUser()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const shouldReduceMotion = useReducedMotion()
@@ -558,7 +560,7 @@ export function AssignedToMePage() {
                             <MeetingActionTaskCard
                               item={item}
                               onOpen={() => openTask(item.taskId)}
-                              canChangeStatus
+                              canChangeStatus={item.assigneeUserId === currentUser.data?.user.userId}
                               statusPending={statusMutation.isPending}
                               onStatusChange={(nextStatus) => changeStatus(item, nextStatus)}
                               showMeeting

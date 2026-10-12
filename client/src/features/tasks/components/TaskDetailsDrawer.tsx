@@ -130,6 +130,7 @@ function SortableSubtaskRow({
   canEditNotes,
   canManage,
   canAssign,
+  meetingId,
   assigneePending,
   notesPending,
   onAssign,
@@ -154,6 +155,7 @@ function SortableSubtaskRow({
   canEditNotes: boolean
   canManage: boolean
   canAssign: boolean
+  meetingId: number | null
   assigneePending: boolean
   notesPending: boolean
   onAssign: (userId: number | null) => void
@@ -325,7 +327,7 @@ function SortableSubtaskRow({
         {canAssign ? <div className="border-border/80 bg-muted/25 border-t px-4 py-3 space-y-1.5">
           <label className="text-muted-foreground text-xs font-semibold">{t('tasks.assignment.assignSubtask')}</label>
           <TaskAssigneePicker value={item.assigneeUserId ?? null} onChange={onAssign}
-            inherit disabled={assigneePending} />
+            inherit disabled={assigneePending} meetingId={meetingId} />
         </div> : null}
         {(item.workNotes || canEditNotes) ? <div className="border-border/80 border-t px-4 py-3">
           <EditableWorkText initial={item.workNotes ?? null} label={t('tasks.assignment.workNotes')}
@@ -408,13 +410,14 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
   // server capabilities for executor operations instead of disabling all controls.
   const readOnly = isMeetingViewer || Boolean(query.data?.task.kpiInstanceId && query.data.task.isReadOnly)
   const isGeneralTask = Boolean(query.data && !query.data.actionItem && query.data.task.kpiInstanceId === null)
+  const supportsSubtaskAssignment = Boolean(query.data && (isGeneralTask || query.data.actionItem))
   const isOwner = capabilities?.role === 'OWNER'
   const mainAssigneeId = query.data?.generalAssignment?.assigneeUserId ?? null
-  const ownerId = query.data?.generalAssignment?.ownerUserId ?? actorId
-  const effectiveMainAssignee = mainAssigneeId ?? ownerId
+  const ownerId = query.data?.generalAssignment?.ownerUserId ?? query.data?.actionItem?.organizerUserId ?? actorId
+  const effectiveMainAssignee = query.data?.actionItem?.assigneeUserId ?? mainAssigneeId ?? ownerId
   const mainAssigneeLookup = useEligibleTaskUser(mainAssigneeId)
   const canEditSummary = !readOnly && Boolean(
-    query.data?.actionItem ? capabilities?.role === 'ASSIGNEE' :
+    query.data?.actionItem ? actorId === query.data.actionItem.assigneeUserId :
       query.data?.generalAssignment ? actorId === effectiveMainAssignee : capabilities?.role === 'OWNER'
   )
   const canManageSubtasks = !readOnly && (capabilities?.canManageSubtasks ?? true)
@@ -717,15 +720,12 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                                     attachments={subtaskAttachments.get(item.id) ?? []}
                                     dragDisabled={!canManageSubtasks || reorderMutation.isPending}
                                     canComplete={canCompleteSubtasks && (
-                                      !query.data.generalAssignment || actorId === (
-                                        item.assigneeUserId ?? query.data.generalAssignment.assigneeUserId ?? ownerId
-                                      ))}
+                                      actorId === (item.assigneeUserId ?? effectiveMainAssignee))}
                                     canEditNotes={canCompleteSubtasks && (
-                                      !query.data.generalAssignment || actorId === (
-                                        item.assigneeUserId ?? query.data.generalAssignment.assigneeUserId ?? ownerId
-                                      ))}
+                                      actorId === (item.assigneeUserId ?? effectiveMainAssignee))}
                                     canManage={canManageSubtasks}
-                                    canAssign={isGeneralTask && isOwner && canManageSubtasks}
+                                    canAssign={supportsSubtaskAssignment && isOwner && canManageSubtasks}
+                                    meetingId={query.data.actionItem?.meetingId ?? null}
                                     assigneePending={assignChild.isPending}
                                     notesPending={saveNotes.isPending}
                                     onAssign={value => assignChild.mutate({subtaskId:item.id,assigneeUserId:value}, {
@@ -788,7 +788,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                           <Button
                             size="sm"
                             variant="outline"
-                            disabled={!canUploadAttachments || Boolean(query.data.generalAssignment && actorId !== ownerId && mainAssigneeId !== actorId)}
+                            disabled={!canUploadAttachments || Boolean((query.data.generalAssignment || query.data.actionItem) && actorId !== ownerId && effectiveMainAssignee !== actorId)}
                             onClick={() => taskFileRef.current?.click()}
                           >
                             <Paperclip className="size-4" />
@@ -988,7 +988,8 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
           taskId={taskId}
           subtask={editingSubtask}
           dueDateRequired={subtaskDueDateRequired}
-          generalAssignmentEnabled={isGeneralTask}
+          generalAssignmentEnabled={supportsSubtaskAssignment}
+          meetingId={query.data?.actionItem?.meetingId ?? null}
         />
       ) : null}
     </Dialog>

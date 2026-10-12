@@ -6,6 +6,7 @@ import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
 import { parsePositiveIntegerId } from "../../shared/utils/id.utils.js";
 import { workCyclesService } from "../work-cycles/work-cycles.service.js";
 import { resolveTaskAccess } from "../meeting-action-items/meeting-action-items.access.js";
+import { meetingActionItemsRepository } from "../meeting-action-items/meeting-action-items.repository.js";
 import { generalTaskAssignmentsRepository } from "../general-task-assignments/general-task-assignments.repository.js";
 import { reconcileParentCompletion } from "../general-task-assignments/general-task-assignments.completion.js";
 import { notifyGeneralTask } from "../general-task-assignments/general-task-assignments.email-events.js";
@@ -76,14 +77,14 @@ export const taskDetailsService = {
       taskDetailsRepository.listActivity(resolved.ownerUserId, taskId),
     ]);
     const completed = subtasks.filter((item) => item.isCompleted).length;
-    const isRestricted = !!resolved.generalAssignment && actorUserId !== resolved.ownerUserId;
+    const isRestricted = (!!resolved.generalAssignment || !!resolved.context) && actorUserId !== resolved.ownerUserId;
     const ownIds = isRestricted ? new Set(await generalTaskAssignmentsRepository.visibleSubtaskIds(taskId, actorUserId)) : null;
     const visibleSubtasks = ownIds ? subtasks.filter(item => ownIds.has(Number(item.id))) : subtasks;
     const visibleAttachments = ownIds ? attachments.filter(item => item.subtaskId === null || ownIds.has(Number(item.subtaskId))) : attachments;
     const visibleActivity = ownIds ? activity.filter(item => {
       // List/detail/change history about sibling subtasks is never returned to another executor.
       if (item.activityType === "SUBTASKS_REORDERED") return false;
-      if (item.activityType === "GENERAL_SUBTASK_ASSIGNED") return false;
+      if (item.activityType === "GENERAL_SUBTASK_ASSIGNED" || item.activityType === "MEETING_ACTION_ITEM_REASSIGNED") return false;
       if (item.activityType.startsWith("SUBTASK") || item.activityType === "ATTACHMENT_ADDED" ||
           item.activityType === "ATTACHMENT_REMOVED") {
         let event: Record<string, unknown> | null = null;
@@ -92,8 +93,9 @@ export const taskDetailsService = {
         if (event?.subtaskId !== undefined && event.subtaskId !== null) {
           return ownIds.has(Number(event.subtaskId));
         }
-        // Old removal events omitted subtask identity: keep them private rather than leak a filename.
-        return item.activityType === "ATTACHMENT_ADDED";
+        // Only an explicitly parent-level attachment event can be shared. Missing
+        // subtask identity in legacy events is ambiguous and must stay private.
+        return item.activityType === "ATTACHMENT_ADDED" && event?.subtaskId === null;
       }
       return ["STATUS_CHANGED","CREATED","COMPLETION_SUMMARY_UPDATED","GENERAL_TASK_ASSIGNED"].includes(item.activityType);
     }) : activity;
@@ -152,17 +154,22 @@ export const taskDetailsService = {
         });
       }
       if (input.assigneeUserId !== undefined && input.assigneeUserId !== null) {
-        if (access.context || task.kpiInstanceId !== null ||
-            !(await generalTaskAssignmentsRepository.isEligibleUser(input.assigneeUserId, transaction))) {
+        if (task.kpiInstanceId !== null ||
+            !(access.context
+              ? await meetingActionItemsRepository.eligibleAssignee(transaction, access.context.meetingId,
+                  access.context.organizerUserId, input.assigneeUserId)
+              : await generalTaskAssignmentsRepository.isEligibleUser(input.assigneeUserId, transaction))) {
           throw new AppError({statusCode:400,code:"SUBTASK_ASSIGNEE_INVALID",
             message:"Individual subtask assignment requires an active normal task user."});
         }
-        await generalTaskAssignmentsRepository.ensureRelation(transaction, taskId, ownerUserId, actorUserId, null);
+        if (!access.context) {
+          await generalTaskAssignmentsRepository.ensureRelation(transaction, taskId, ownerUserId, actorUserId, null);
+        }
         await generalTaskAssignmentsRepository.setSubtaskAssignee(transaction, ownerUserId, created, input.assigneeUserId);
         await notifyGeneralTask(transaction, [input.assigneeUserId], actorUserId, {
           type: "GENERAL_SUBTASK_ASSIGNED", taskId, subtaskId: created,
-          listId: task.listId, subjectTitle: task.title,
-          contextTitle: "Subtask assigned to you",
+          listId: access.context ? null : task.listId, subjectTitle: task.title,
+          contextTitle: access.context?.meetingTitle ?? "Subtask assigned to you",
         });
       }
       await reconcileParentCompletion(transaction, task, ownerUserId, taskId, actorUserId);
@@ -215,12 +222,12 @@ export const taskDetailsService = {
         transaction, ownerUserId, Number(current.taskId), "SUBTASK_UPDATED",
         { subtaskId }, actorUserId,
       );
-      if (access.generalAssignment && dueDate !== (current.dueDate?.toISOString().slice(0, 10) ?? null)) {
+      if ((access.generalAssignment || access.context) && dueDate !== (current.dueDate?.toISOString().slice(0, 10) ?? null)) {
         const recipient = await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
           ownerUserId, subtaskId, transaction);
         await notifyGeneralTask(transaction, [recipient], actorUserId, {
           type: "GENERAL_SUBTASK_DUE_CHANGED", taskId: Number(current.taskId),
-          listId: task.listId, subtaskId, eventDate: dueDate,
+          listId: access.context ? null : task.listId, subtaskId, eventDate: dueDate,
           subjectTitle: task.title, contextTitle: "Subtask deadline updated",
         });
       }
@@ -250,7 +257,7 @@ export const taskDetailsService = {
         });
       }
 
-      if (resolved.generalAssignment &&
+      if ((resolved.generalAssignment || resolved.context) &&
           (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
             resolved.ownerUserId, subtaskId, transaction)) !== actorUserId) {
         throw new AppError({statusCode:403,code:"SUBTASK_NOT_ASSIGNED_TO_YOU",
@@ -287,12 +294,12 @@ export const taskDetailsService = {
         );
         await reconcileParentCompletion(transaction, task, resolved.ownerUserId,
           Number(current.taskId), actorUserId);
-        if (isCompleted && resolved.generalAssignment) {
+        if (isCompleted && (resolved.generalAssignment || resolved.context)) {
           const progress = await generalTaskAssignmentsRepository.countIncompleteSubtasks(
             transaction, Number(current.taskId), resolved.ownerUserId);
           if (progress.incomplete > 0) {
             await notifyGeneralTask(transaction,
-              [resolved.ownerUserId, resolved.generalAssignment.assigneeUserId], actorUserId, {
+              [resolved.ownerUserId, resolved.context?.assigneeUserId ?? resolved.generalAssignment?.assigneeUserId], actorUserId, {
                 type: "GENERAL_SUBTASK_COMPLETED", taskId: Number(current.taskId),
                 listId: task.listId, taskOwnerUserId: resolved.ownerUserId, subjectTitle: task.title,
                 contextTitle: "A subtask was completed",
@@ -399,10 +406,10 @@ export const taskDetailsService = {
         message: "You cannot upload files to this Task.",
       });
     }
-    if (preflight.generalAssignment && actorUserId !== preflight.ownerUserId) {
+    if ((preflight.generalAssignment || preflight.context) && actorUserId !== preflight.ownerUserId) {
       const permitted = parent.subtaskId
         ? (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(preflight.ownerUserId, parent.subtaskId)) === actorUserId
-        : preflight.generalAssignment.assigneeUserId === actorUserId;
+        : (preflight.context?.assigneeUserId ?? preflight.generalAssignment?.assigneeUserId) === actorUserId;
       if (!permitted) throw new AppError({statusCode:403,code:"ATTACHMENT_UPLOAD_FORBIDDEN",
         message:"Upload only to your own assigned work."});
     }
@@ -424,11 +431,11 @@ export const taskDetailsService = {
             message: "You cannot upload files to this Task.",
           });
         }
-        if (resolved.generalAssignment && actorUserId !== resolved.ownerUserId) {
+        if ((resolved.generalAssignment || resolved.context) && actorUserId !== resolved.ownerUserId) {
           const permitted = parent.subtaskId
             ? (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
                 resolved.ownerUserId, parent.subtaskId, transaction)) === actorUserId
-            : resolved.generalAssignment.assigneeUserId === actorUserId;
+            : (resolved.context?.assigneeUserId ?? resolved.generalAssignment?.assigneeUserId) === actorUserId;
           if (!permitted) throw new AppError({statusCode:403,code:"ATTACHMENT_UPLOAD_FORBIDDEN",
             message:"Upload only to your own assigned work."});
         }
@@ -481,7 +488,7 @@ export const taskDetailsService = {
     if (!accessRow) throw attachmentNotFound();
     const resolved = await resolveTaskAccess(actorUserId, accessRow.taskId);
     if (!resolved) throw attachmentNotFound();
-    if (resolved.generalAssignment && actorUserId !== resolved.ownerUserId &&
+    if ((resolved.generalAssignment || resolved.context) && actorUserId !== resolved.ownerUserId &&
       accessRow.subtaskId !== null &&
       (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(resolved.ownerUserId, accessRow.subtaskId)) !== actorUserId) {
       throw attachmentNotFound();
@@ -496,9 +503,9 @@ export const taskDetailsService = {
     if (!accessRow) throw attachmentNotFound();
     const resolved = await resolveTaskAccess(actorUserId, accessRow.taskId);
     if (!resolved) throw attachmentNotFound();
-    if (resolved.generalAssignment && actorUserId !== resolved.ownerUserId &&
+    if ((resolved.generalAssignment || resolved.context) && actorUserId !== resolved.ownerUserId &&
         (accessRow.subtaskId === null
-          ? resolved.generalAssignment.assigneeUserId !== actorUserId
+          ? (resolved.context?.assigneeUserId ?? resolved.generalAssignment?.assigneeUserId) !== actorUserId
           : (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
               resolved.ownerUserId, accessRow.subtaskId)) !== actorUserId)) {
       throw attachmentNotFound();
@@ -513,9 +520,9 @@ export const taskDetailsService = {
         transaction,
       );
       if (!currentAccess) throw attachmentNotFound();
-      if (currentAccess.generalAssignment && actorUserId !== currentAccess.ownerUserId &&
+      if ((currentAccess.generalAssignment || currentAccess.context) && actorUserId !== currentAccess.ownerUserId &&
           (accessRow.subtaskId === null
-            ? currentAccess.generalAssignment.assigneeUserId !== actorUserId
+            ? (currentAccess.context?.assigneeUserId ?? currentAccess.generalAssignment?.assigneeUserId) !== actorUserId
             : (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
                 currentAccess.ownerUserId, accessRow.subtaskId, transaction)) !== actorUserId)) {
         throw attachmentNotFound();

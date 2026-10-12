@@ -91,9 +91,10 @@ export const generalTaskAssignmentsRepository = {
     const request = transaction ? transaction.request() : (await getDatabasePool()).request();
     const result = await request.input("ownerUserId", sql.Int, ownerUserId)
       .input("subtaskId", sql.BigInt, subtaskId).query<{ assigneeUserId: number | null }>(`
-      SELECT COALESCE(subtask.assignee_user_id, relation.assignee_user_id, task.owner_user_id) AS assigneeUserId
+      SELECT COALESCE(subtask.assignee_user_id, meeting.assignee_user_id, relation.assignee_user_id, task.owner_user_id) AS assigneeUserId
       FROM dbo.TM_subtasks subtask JOIN dbo.TM_tasks task ON task.id=subtask.task_id
       LEFT JOIN dbo.TM_general_task_assignments relation ON relation.task_id=task.id
+      LEFT JOIN dbo.TM_meeting_action_items meeting ON meeting.task_id=task.id
       WHERE subtask.owner_user_id=@ownerUserId AND subtask.id=@subtaskId
         AND subtask.deleted_at_utc IS NULL AND task.deleted_at_utc IS NULL;`);
     return result.recordset[0]?.assigneeUserId ?? null;
@@ -105,9 +106,10 @@ export const generalTaskAssignmentsRepository = {
       .input("actorUserId", sql.Int, actorUserId).query<{ id: number | string }>(`
       SELECT subtask.id FROM dbo.TM_subtasks subtask
       JOIN dbo.TM_tasks task ON task.id=subtask.task_id AND task.owner_user_id=subtask.owner_user_id
-      JOIN dbo.TM_general_task_assignments relation ON relation.task_id=task.id
-      WHERE task.id=@taskId AND task.deleted_at_utc IS NULL AND subtask.deleted_at_utc IS NULL
-        AND COALESCE(subtask.assignee_user_id,relation.assignee_user_id,task.owner_user_id)=@actorUserId;`);
+      LEFT JOIN dbo.TM_general_task_assignments relation ON relation.task_id=task.id
+      LEFT JOIN dbo.TM_meeting_action_items meeting ON meeting.task_id=task.id
+      WHERE (relation.task_id IS NOT NULL OR meeting.task_id IS NOT NULL) AND task.id=@taskId AND task.deleted_at_utc IS NULL AND subtask.deleted_at_utc IS NULL
+        AND COALESCE(subtask.assignee_user_id,meeting.assignee_user_id,relation.assignee_user_id,task.owner_user_id)=@actorUserId;`);
     return result.recordset.map(row => Number(row.id));
   },
 

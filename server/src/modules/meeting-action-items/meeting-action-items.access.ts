@@ -37,7 +37,7 @@ const actionOwnerCapabilities: MeetingActionItemCapabilities = {
   role: "OWNER",
   canEditDetails: true,
   canManageSubtasks: true,
-  canCompleteSubtasks: false,
+  canCompleteSubtasks: true, // Every child write checks effective assignee separately.
   canUploadAttachments: true,
   canDeleteAnyAttachment: true,
   canCompleteTask: false,
@@ -116,13 +116,15 @@ export async function resolveTaskAccess(
       return null;
     }
 
+    const isMainAssignee = actorUserId === relation.assigneeUserId;
+    const hasOwnSubtask = !isMainAssignee &&
+      (await generalTaskAssignmentsRepository.visibleSubtaskIds(taskId, actorUserId, transaction)).length > 0;
     return {
       ownerUserId: relation.ownerUserId,
       context: relation,
-      capabilities:
-        actorUserId === relation.assigneeUserId
-          ? actionAssigneeCapabilities
-          : actionViewerCapabilities,
+      capabilities: isMainAssignee ? actionAssigneeCapabilities : hasOwnSubtask
+        ? { ...actionAssigneeCapabilities, canCompleteTask: false, canChangeNonCompletionStatus: false }
+        : actionViewerCapabilities,
     };
   }
 

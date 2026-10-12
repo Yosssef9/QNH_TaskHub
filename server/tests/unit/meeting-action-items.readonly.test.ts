@@ -36,6 +36,8 @@ function arrange(uploadedByUserId = ASSIGNEE) {
   const meetingActivity = vi.spyOn(meetingSchedulingRepository, "addActivity").mockResolvedValue(undefined);
   const notification = vi.spyOn(notificationsRepository, "ensureMeetingActionItemNotification").mockResolvedValue(undefined);
   vi.spyOn(generalTaskAssignmentsRepository,"countIncompleteSubtasks").mockResolvedValue({total:1,incomplete:0});
+  vi.spyOn(generalTaskAssignmentsRepository,"visibleSubtaskIds").mockResolvedValue([]);
+  vi.spyOn(generalTaskAssignmentsRepository,"effectiveSubtaskAssignee").mockResolvedValue(ASSIGNEE);
   vi.spyOn(taskDetailsRepository, "listSubtasks").mockResolvedValue([subtaskRecord()]);
   vi.spyOn(taskDetailsRepository, "listAttachments").mockResolvedValue([attachmentRecord({ uploadedByUserId })]);
   vi.spyOn(taskDetailsRepository, "listActivity").mockResolvedValue([]);
@@ -74,13 +76,13 @@ function assertNoWrites(mocks: ReturnType<typeof arrange>) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("Meeting Viewer read-only server enforcement", () => {
-  it("returns full details, subtasks, progress, and attachment metadata read-only", async () => {
+  it("returns parent context and progress but hides another assignee's subtasks", async () => {
     arrange();
     const details = await taskDetailsService.get(VIEWER, TASK);
     assert.equal(details.capabilities.role, "VIEWER");
     assert.equal(details.task.isReadOnly, true);
     assert.equal(details.task.description, "Full task description");
-    assert.equal(details.subtasks[0]?.title, "Shared subtask");
+    assert.deepEqual(details.subtasks, []);
     assert.equal(details.progress.total, 1);
     assert.equal(details.attachments[0]?.originalFileName, "test-report.pdf");
     assert.equal(Object.hasOwn(details.attachments[0]!, "storageKey"), false);
@@ -92,16 +94,25 @@ describe("Meeting Viewer read-only server enforcement", () => {
     assert.equal((await tasksService.get(VIEWER, TASK)).isReadOnly, true);
   });
 
-  for (const parent of ["task", "subtask"] as const) {
-    it(`allows reading a ${parent} attachment through the protected download/preview service`, async () => {
-      const mocks = arrange();
-      mocks.file.mockResolvedValue(attachmentRecord(parent === "subtask" ? { taskId: null, subtaskId: SUBTASK } : {}));
-      const result = await taskDetailsService.download(VIEWER, FILE);
-      assert.equal(result.buffer.toString(), "test");
-      assert.equal(mocks.read.mock.calls.length, 1);
-      assertNoWrites(mocks);
+  it("allows a meeting viewer to download parent-level attachments", async () => {
+    const mocks = arrange();
+    const result = await taskDetailsService.download(VIEWER, FILE);
+    assert.equal(result.buffer.toString(), "test");
+    assert.equal(mocks.read.mock.calls.length, 1);
+    assertNoWrites(mocks);
+  });
+
+  it("rejects direct download of a sibling subtask attachment", async () => {
+    const mocks = arrange();
+    vi.mocked(taskDetailsRepository.findAttachmentAccess).mockResolvedValue({
+      taskId: TASK, ownerUserId: OWNER, subtaskId: SUBTASK, uploadedByUserId: ASSIGNEE,
     });
-  }
+    await assert.rejects(taskDetailsService.download(VIEWER, FILE), {
+      statusCode: 404, code: "ATTACHMENT_NOT_FOUND",
+    });
+    assert.equal(mocks.read.mock.calls.length, 0);
+    assertNoWrites(mocks);
+  });
 
   it("rejects Viewer changes to administrative fields and list placement", async () => {
     const mocks = arrange();
