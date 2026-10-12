@@ -17,6 +17,32 @@ export function outlookLocationName(projection: OutlookMeetingProjection): strin
     .join(" — ");
 }
 
+// Microsoft Graph accepts a local wall-clock time together with a Windows time-zone ID.
+// Keep TaskHub's authoritative meeting instants (and sync hashes) in UTC.
+const OUTLOOK_RIYADH_TIME_ZONE = "Arab Standard Time";
+const riyadhDateTimeParts = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Asia/Riyadh",
+  hourCycle: "h23",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+});
+
+function toRiyadhLocalDateTime(utcIso: string): string {
+  const instant = new Date(utcIso);
+  if (!Number.isFinite(instant.getTime())) {
+    throw new Error("Invalid approved Meeting UTC timestamp.");
+  }
+  const parts = Object.fromEntries(
+    riyadhDateTimeParts.formatToParts(instant).map((part) => [part.type, part.value]),
+  );
+  const fraction = String(instant.getUTCMilliseconds()).padStart(3, "0");
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}.${fraction}`;
+}
+
 function escapeHtml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -82,8 +108,8 @@ export function buildOutlookEventPayload(
     payload: {
       subject: projection.title,
       body: { contentType: "HTML", content: bodyParts.join("") },
-      start: { dateTime: projection.startAtUtc.replace(/Z$/, ""), timeZone: "UTC" },
-      end: { dateTime: projection.endAtUtc.replace(/Z$/, ""), timeZone: "UTC" },
+      start: { dateTime: toRiyadhLocalDateTime(projection.startAtUtc), timeZone: OUTLOOK_RIYADH_TIME_ZONE },
+      end: { dateTime: toRiyadhLocalDateTime(projection.endAtUtc), timeZone: OUTLOOK_RIYADH_TIME_ZONE },
       location: { displayName: outlookLocationName(projection) },
       attendees: state.validAttendees.map((attendee) => ({
         emailAddress: { address: attendee.email!, name: attendee.userName },

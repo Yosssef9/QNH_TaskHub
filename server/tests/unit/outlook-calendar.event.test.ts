@@ -44,6 +44,48 @@ describe("Outlook event payload", () => {
     expect(built.payload.transactionId).toBeTruthy();
   });
 
+  it("creates the Outlook event using Riyadh local time while keeping the authoritative projection in UTC", () => {
+    const built = buildOutlookEventPayload(
+      meeting({
+        startAtUtc: "2026-10-12T11:00:00.000Z",
+        endAtUtc: "2026-10-12T12:00:00.000Z",
+      }),
+      { meetingUrl: "https://taskhub.local/meetings/12" },
+    );
+
+    expect(built.payload.start).toEqual({
+      dateTime: "2026-10-12T14:00:00.000",
+      timeZone: "Arab Standard Time",
+    });
+    expect(built.payload.end).toEqual({
+      dateTime: "2026-10-12T15:00:00.000",
+      timeZone: "Arab Standard Time",
+    });
+    expect(JSON.parse(built.state.json)).toMatchObject({
+      startAtUtc: "2026-10-12T11:00:00.000Z",
+      endAtUtc: "2026-10-12T12:00:00.000Z",
+    });
+  });
+
+  it("converts dates across midnight and retains milliseconds", () => {
+    const built = buildOutlookEventPayload(
+      meeting({
+        startAtUtc: "2026-12-31T22:30:15.123Z",
+        endAtUtc: "2026-12-31T23:30:15.123Z",
+      }),
+      { meetingUrl: "https://taskhub.local/meetings/12" },
+    );
+
+    expect(built.payload.start).toEqual({
+      dateTime: "2027-01-01T01:30:15.123",
+      timeZone: "Arab Standard Time",
+    });
+    expect(built.payload.end).toEqual({
+      dateTime: "2027-01-01T02:30:15.123",
+      timeZone: "Arab Standard Time",
+    });
+  });
+
   it("keeps Zoom as an external Zoom location and link rather than a Teams meeting", () => {
     const built = buildOutlookEventPayload(
       meeting({ meetingMode: "ZOOM", roomNameAr: null, roomNameEn: null, roomLocationText: null, onlineJoinUrl: "https://zoom.us/j/123" }),
