@@ -538,16 +538,16 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
       <DialogContent variant="page" closeLabel={t('common.close')}>
         <AnimatedState stateKey={drawerState}>
           {query.isPending ? (
-            <div className="mx-auto w-full max-w-6xl px-5 py-12 sm:px-8 lg:px-10">
+            <div className="mx-auto w-[94vw] max-w-[90rem] px-5 py-12 sm:px-8 lg:px-10">
               <LoadingState />
             </div>
           ) : query.isError ? (
-            <div className="mx-auto w-full max-w-6xl px-5 py-12 sm:px-8 lg:px-10">
+            <div className="mx-auto w-[94vw] max-w-[90rem] px-5 py-12 sm:px-8 lg:px-10">
               <ErrorState onRetry={() => void query.refetch()} />
             </div>
           ) : (
             query.data && (
-              <div className="mx-auto min-h-full w-full max-w-7xl px-4 py-5 sm:px-7 sm:py-7 lg:px-10 lg:py-8">
+              <div className="mx-auto min-h-full w-[94vw] max-w-[90rem] px-4 py-5 sm:px-7 sm:py-7 lg:px-10 lg:py-8">
                 <header className={cn('bg-background/90 border-border/80 sticky top-0 z-10 mb-5 rounded-2xl border shadow-sm backdrop-blur-md', collaborationActive ? 'p-4 sm:p-5' : 'p-5 sm:p-6')}>
                   <div className="pe-10">
                     <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -1106,6 +1106,7 @@ function InfoRow({
     </div>
   )
 }
+
 
 
 
