@@ -8,6 +8,8 @@ export interface SubtaskRecord {
   id: number | string;
   taskId: number | string;
   title: string;
+  description: string | null;
+  priority: "LOW" | "MEDIUM" | "HIGH";
   assigneeUserId?: number | null;
   workNotes?: string | null;
   isCompleted: boolean;
@@ -36,6 +38,8 @@ export interface ActivityRecord {
   id: number | string;
   actorUserId: number;
   actorName: string;
+  actorUserCode: string | null;
+  actorEmail: string | null;
   activityType: string;
   eventDataJson: string | null;
   createdAtUtc: Date;
@@ -45,6 +49,8 @@ export interface Subtask {
   id: number;
   taskId: number;
   title: string;
+  description: string | null;
+  priority: "LOW" | "MEDIUM" | "HIGH";
   assigneeUserId?: number | null;
   workNotes?: string | null;
   isCompleted: boolean;
@@ -72,12 +78,16 @@ export interface TaskActivity {
   id: number;
   actorUserId: number;
   actorName: string;
+  actorUserCode: string | null;
+  actorEmail: string | null;
   activityType: string;
   eventData: Record<string, unknown> | null;
   createdAtUtc: string;
 }
 
 export interface TaskDetails {
+  collaborationActive?: boolean;
+  sharedPermission?: "VIEW" | "EDIT";
   task: PersonalTask;
   actionItem: MeetingActionItemContext | null;
   generalAssignment?: import("../general-task-assignments/general-task-assignments.repository.js").GeneralAssignmentContext | null;
@@ -87,4 +97,6 @@ export interface TaskDetails {
   activity: TaskActivity[];
   progress: { completed: number; total: number; percentage: number };
 }
+
+
 

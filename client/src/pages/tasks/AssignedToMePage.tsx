@@ -39,12 +39,17 @@ import type {
   MeetingActionItem,
 } from '@/features/meetings/action-items/meeting-action-items.types'
 import { TaskCollectionToolbar } from '@/features/tasks/components/TaskCollectionToolbar'
+import { TaskTypeFilterSelect } from '@/features/tasks/components/TaskTypeFilterSelect'
 import { TaskDetailsDrawer } from '@/features/tasks/components/TaskDetailsDrawer'
 import {
   TaskDueIndicator,
   TaskPriorityIndicator,
 } from '@/features/tasks/components/TaskSelectIndicators'
 import { TaskStatusIndicator } from '@/features/tasks/components/TaskStatusIndicator'
+import { TaskTags } from '@/features/tasks/tags/TaskTags'
+import { TaskTagFilter } from '@/features/tasks/tags/TaskTagFilter'
+import { TaskTeamIndicator } from '@/features/tasks/components/TaskTeamIndicator'
+import { TaskCardLayout } from '@/features/tasks/components/TaskCardLayout'
 import { useChangeTaskStatus } from '@/features/tasks/hooks/use-tasks'
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import {
@@ -52,7 +57,7 @@ import {
   TASK_PRIORITIES,
   TASK_STATUSES,
 } from '@/features/tasks/types/task.types'
-import type { TaskPriority, TaskStatus } from '@/features/tasks/types/task.types'
+import type { TaskPriority, TaskStatus, TaskTypeFilter } from '@/features/tasks/types/task.types'
 import { parseDateOnly } from '@/lib/date-only'
 import { cn } from '@/lib/cn'
 import { toApiClientError } from '@/lib/api-error'
@@ -129,6 +134,9 @@ export function AssignedToMePage() {
   const [meetingId, setMeetingId] = useState<number | undefined>()
   const [status, setStatus] = useState<TaskStatus | undefined>()
   const [priority, setPriority] = useState<TaskPriority | undefined>()
+  const [taskType, setTaskType] = useState<TaskTypeFilter>('ALL')
+  const [tagIds,setTagIds]=useState<number[]>([])
+  const [tagMatch,setTagMatch]=useState<'ANY'|'ALL'|'UNTAGGED'>('ANY')
   const [due, setDue] = useState<AssignedActionItemDueFilter>('ALL')
   const [sortBy, setSortBy] = useState<AssignedActionItemSortField>('assignedAt')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
@@ -145,6 +153,7 @@ export function AssignedToMePage() {
     ...(status ? { status } : {}),
     ...(priority ? { priority } : {}),
     due,
+    taskType,tagIds:tagIds.join(',')||undefined,tagMatch,
     sortBy,
     sortDirection,
     groupBy,
@@ -152,13 +161,13 @@ export function AssignedToMePage() {
   const generalQuery = useGeneralAssignedTasks({
     page: generalPage, pageSize, search,
     ...(status ? {status} : {}), ...(priority ? {priority} : {}),
-    due, sortBy: sortBy === 'meeting' ? 'assignedAt' : sortBy,
+    due, taskType,tagIds:tagIds.join(',')||undefined,tagMatch, sortBy: sortBy === 'meeting' ? 'assignedAt' : sortBy,
     sortDirection,
   }, source !== 'MEETING')
   const statusMutation = useChangeTaskStatus()
   const total = query.data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
-  const hasFilters = Boolean(search || meetingId || status || priority || due !== 'ALL')
+  const hasFilters = Boolean(search || meetingId || status || priority || due !== 'ALL' || taskType !== 'ALL' || tagIds.length>0 || tagMatch==='UNTAGGED')
 
   const groups = useMemo(() => {
     const items = query.data?.items ?? []
@@ -190,6 +199,9 @@ export function AssignedToMePage() {
     setMeetingId(undefined)
     setStatus(undefined)
     setPriority(undefined)
+    setTaskType('ALL')
+    setTagIds([])
+    setTagMatch('ANY')
     setDue('ALL')
   }
 
@@ -239,6 +251,8 @@ export function AssignedToMePage() {
     Number(Boolean(meetingId)) +
     Number(Boolean(status)) +
     Number(Boolean(priority)) +
+    Number(taskType !== 'ALL') +
+    Number(tagIds.length>0 || tagMatch==='UNTAGGED') +
     Number(due !== 'ALL')
 
   const selectedMeetingTitle = meetingId
@@ -265,6 +279,19 @@ export function AssignedToMePage() {
             filter: `${t('tasks.assignedToMe.filters.status')}: ${t(`tasks.statuses.${status}`)}`,
           }),
         }]
+      : []),
+    ...(taskType !== 'ALL'
+      ? [{
+          key: 'taskType',
+          label: `${t('tasks.taskTypeFilter.label')}: ${t(`tasks.taskTypeFilter.${taskType}`)}`,
+          onRemove: () => resetPageAnd(() => setTaskType('ALL')),
+          removeLabel: t('tasks.toolbar.removeFilter', { filter: t(`tasks.taskTypeFilter.${taskType}`) }),
+        }]
+      : []),
+    ...(tagIds.length>0 || tagMatch==='UNTAGGED'
+      ? [{key:'tags',label:`${t('tags.filter')}: ${tagMatch==='UNTAGGED'?t('tags.untagged'):`${tagIds.length} (${tagMatch})`}`,
+          onRemove:()=>resetPageAnd(()=>{setTagIds([]);setTagMatch('ANY')}),
+          removeLabel:t('tasks.toolbar.removeFilter',{filter:t('tags.filter')})}]
       : []),
     ...(priority
       ? [{
@@ -318,31 +345,11 @@ export function AssignedToMePage() {
         </Select>
       </div> : null}
 
-      <div className="space-y-1.5">
-        <label className="text-muted-foreground text-xs font-medium">
-          {t('tasks.assignedToMe.filters.status')}
-        </label>
-        <Select
-          value={status ?? ALL}
-          onValueChange={(value) =>
-            resetPageAnd(() => setStatus(value === ALL ? undefined : (value as TaskStatus)))
-          }
-        >
-          <SelectTrigger className="h-10 min-w-0">
-            <SelectValue>
-              {status ? <TaskStatusIndicator status={status} pill /> : <span>{t('tasks.toolbar.all')}</span>}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>{t('tasks.toolbar.all')}</SelectItem>
-            {TASK_STATUSES.map((value) => (
-              <SelectItem key={value} value={value}>
-                <TaskStatusIndicator status={value} />
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="min-w-0 space-y-1.5">
+        <label className="block text-muted-foreground text-xs font-medium">{t('tasks.taskTypeFilter.label')}</label>
+        <TaskTypeFilterSelect value={taskType} onChange={value => resetPageAnd(() => setTaskType(value))} />
       </div>
+
 
       <div className="space-y-1.5">
         <label className="text-muted-foreground text-xs font-medium">
@@ -369,7 +376,38 @@ export function AssignedToMePage() {
           </SelectContent>
         </Select>
       </div>
+      <div className="space-y-1.5">
+        <label className="text-muted-foreground text-xs font-medium">
+          {t('tasks.assignedToMe.filters.status')}
+        </label>
+        <Select
+          value={status ?? ALL}
+          onValueChange={(value) =>
+            resetPageAnd(() => setStatus(value === ALL ? undefined : (value as TaskStatus)))
+          }
+        >
+          <SelectTrigger className="h-10 min-w-0">
+            <SelectValue>
+              {status ? <TaskStatusIndicator status={status} pill /> : <span>{t('tasks.toolbar.all')}</span>}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>{t('tasks.toolbar.all')}</SelectItem>
+            {TASK_STATUSES.map((value) => (
+              <SelectItem key={value} value={value}>
+                <TaskStatusIndicator status={value} />
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
+
+      <div className="min-w-0 space-y-1.5">
+        <label className="block text-muted-foreground text-xs font-medium">{t('tags.filter')}</label>
+        <TaskTagFilter value={tagIds} onChange={ids => resetPageAnd(() => setTagIds(ids))}
+          match={tagMatch} onMatchChange={value => resetPageAnd(() => setTagMatch(value))} />
+      </div>
       <div className="space-y-1.5 sm:col-span-2">
         <label className="text-muted-foreground text-xs font-medium">
           {t('tasks.assignedToMe.filters.due')}
@@ -621,27 +659,38 @@ export function AssignedToMePage() {
               <ul className="space-y-3">
             {group.rows.map((item: GeneralAssignedTask) => (
               <li key={item.taskId}>
-                <button type="button" className="bg-card hover:border-primary/35 focus-visible:ring-primary flex w-full flex-col gap-3 rounded-xl border p-4 text-start shadow-sm focus-visible:ring-2 focus-visible:outline-none sm:p-5"
-                  onClick={() => openTask(item.taskId)}>
-                  <div className="flex w-full flex-wrap items-center justify-between gap-2">
-                    <strong className="min-w-0 break-words">{item.title}</strong>
-                    <TaskStatusIndicator status={item.status} pill />
-                  </div>
-                  <p className="text-muted-foreground text-xs">
-                    {t('tasks.assignment.createdBy', {name:item.creatorName})}
-                  </p>
-                  {item.assignedSubtasks.length ? <div className="w-full space-y-2 border-t pt-3">
+                <div role="button" tabIndex={0}
+                  className={cn('hover:border-primary/35 focus-visible:ring-primary relative w-full cursor-pointer rounded-xl border border-s-[3px] p-4 text-start shadow-sm focus-visible:ring-2 focus-visible:outline-none sm:p-5',
+                    item.teamTask ? 'border-primary/25 border-s-primary/70 bg-primary/[0.025]' : item.teamRoster?.length ? 'border-s-muted-foreground/35 bg-card' : 'border-s-transparent bg-card')}
+                  onClick={() => openTask(item.taskId)}
+                  onKeyDown={event => {if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault();openTask(item.taskId) }}}>
+                  <TaskCardLayout
+                    title={<div className="min-w-0 space-y-1">
+                      <strong className="block break-words text-base">{item.title}</strong>
+                      <p className="text-muted-foreground text-xs">{t('tasks.assignment.createdBy', { name: item.creatorName })}</p>
+                    </div>}
+                    tags={item.tags?.length ? <TaskTags tags={item.tags} /> : null}
+                    details={<>
+                  {(item.teamRoster?.length || item.teamTask) ? <TaskTeamIndicator
+                    summary={item} subtaskTotal={item.subtaskTotal} subtaskCompleted={item.subtaskCompleted}
+                    className="" /> : null}
+                  {item.teamTask ? <p className="text-muted-foreground text-xs">{t('tasks.teamCards.myPart')}</p> : null}
+                  {item.assignedSubtasks.length ? <div className="space-y-2">
                     <p className="text-muted-foreground text-xs font-semibold">{t('tasks.assignment.yourSubtasks')}</p>
                     {item.assignedSubtasks.map(child => <div className="flex items-start gap-2 text-sm" key={child.id}>
                       {child.isCompleted ? <span className="text-success">✓</span> : <Circle className="text-muted-foreground mt-0.5 size-3.5" />}
                       <span className="min-w-0 break-words">{child.title}</span>
                     </div>)}
                   </div> : null}
-                  <div className="text-muted-foreground flex w-full flex-wrap justify-between gap-3 text-xs">
+                    </>}
+                    metadata={<>
+                      <TaskStatusIndicator status={item.status} pill />
+                  <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                     <span>{item.isMainAssignee ? t('tasks.assignment.mainAssignee') : t('tasks.assignment.subtaskAssignee')}</span>
                     <span>{t('tasks.assignment.progressCounts', {completed:item.subtaskCompleted,total:item.subtaskTotal})}</span>
-                  </div>
-                </button>
+                  </div>                    </>}
+                  />
+                </div>
               </li>
             ))}
               </ul>
@@ -663,4 +712,5 @@ export function AssignedToMePage() {
     </div>
   )
 }
+
 

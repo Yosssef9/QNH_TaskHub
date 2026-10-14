@@ -1,6 +1,8 @@
 import { getDatabasePool, sql } from "../../database/sql.js";
 import type { DatabaseTransaction } from "../../database/types.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
+import { taskTagsSelectSql,taskTagsFilterSql } from "../tags/task-tags.sql.js";
+import { collaborationCardSummarySql, taskTypeConditionSql } from "../collaboration/collaboration-card-summary.sql.js";
 import {
   normalizeSqlRowVersion,
   rowVersionToBuffer,
@@ -42,6 +44,14 @@ interface ListRecord extends RelationshipRecord {
   isOverdue: boolean;
   subtaskTotal: number | string;
   subtaskCompleted: number | string;
+  isCollaborative: boolean;
+  assigneeCount: number | string;
+  teamTask: boolean;
+  teamMemberCount: number | string;
+  mainAssigneeCount: number | string;
+  mainCompletedCount: number | string;
+  teamRosterJson: string | null;
+  taskTagsJson: string | null;
 }
 
 function normalizedRowVersion(value: unknown): string {
@@ -86,6 +96,14 @@ function mapListItem(record: ListRecord): MeetingActionItemListItem {
     isOverdue: Boolean(record.isOverdue),
     subtaskTotal: Number(record.subtaskTotal ?? 0),
     subtaskCompleted: Number(record.subtaskCompleted ?? 0),
+    isCollaborative: Boolean(record.isCollaborative),
+    assigneeCount: record.isCollaborative ? Number(record.assigneeCount ?? 0) : 1,
+    teamTask: Boolean(record.teamTask),
+    teamMemberCount: Number(record.teamMemberCount ?? 0),
+    mainAssigneeCount: Number(record.mainAssigneeCount ?? 0),
+    mainCompletedCount: Number(record.mainCompletedCount ?? 0),
+    teamRoster: record.teamRosterJson ? JSON.parse(record.teamRosterJson) : [],
+    tags:record.taskTagsJson ? JSON.parse(record.taskTagsJson) : [],
     assigneeUserId: context.assigneeUserId,
     assigneeName: context.assigneeName,
     assignedByUserId: context.assignedByUserId,
@@ -131,7 +149,11 @@ const taskColumns = `
   CAST(CASE WHEN task.due_date < @today
     AND task.status NOT IN ('DONE', 'CANCELLED') THEN 1 ELSE 0 END AS BIT) AS isOverdue,
   ISNULL(subtaskSummary.total, 0) AS subtaskTotal,
-  ISNULL(subtaskSummary.completed, 0) AS subtaskCompleted`;
+  ISNULL(subtaskSummary.completed, 0) AS subtaskCompleted,
+  CAST(CASE WHEN EXISTS(SELECT 1 FROM dbo.TM_collaboration_tasks collab
+    WHERE collab.task_id=task.id) THEN 1 ELSE 0 END AS bit) AS isCollaborative,
+  (SELECT COUNT(*) FROM dbo.TM_collaboration_assignments assign
+    WHERE assign.task_id=task.id AND assign.subtask_id IS NULL AND assign.is_active=1) AS assigneeCount`;
 
 const subtaskSummary = `OUTER APPLY (
   SELECT COUNT_BIG(*) AS total,
@@ -182,11 +204,12 @@ export const meetingActionItemsRepository = {
       .request()
       .input("meetingId", sql.BigInt, meetingId)
       .input("organizerUserId", sql.Int, organizerUserId)
-      .query<{ userId: number; userCode: string; userName: string; eligible: boolean }>(`
+      .query<{ userId: number; userCode: string; userName: string; email: string | null; eligible: boolean }>(`
         SELECT
           portal.USER_ID AS userId,
           portal.USER_CODE AS userCode,
-          portal.USER_NAME AS userName,
+          COALESCE(portal.USER_NAME, portal.USER_CODE) AS userName,
+          portal.email AS email,
           CAST(CASE WHEN portal.IS_ACTIVE = 1
             AND access.portal_user_id IS NOT NULL
             AND access.is_active = 1 THEN 1 ELSE 0 END AS BIT) AS eligible
@@ -205,6 +228,7 @@ export const meetingActionItemsRepository = {
       userId: Number(row.userId),
       userCode: row.userCode,
       userName: row.userName,
+      email: row.email,
       eligible: Boolean(row.eligible),
     }));
   },
@@ -346,7 +370,7 @@ export const meetingActionItemsRepository = {
       .input("meetingId", sql.BigInt, meetingId)
       .input("today", sql.Date, getCurrentDateInAppTimeZone())
       .query<ListRecord>(`
-        SELECT ${relationshipSelect}, ${taskColumns}
+        SELECT ${relationshipSelect}, ${taskColumns}, ${collaborationCardSummarySql}, ${taskTagsSelectSql}
         FROM dbo.TM_meeting_action_items AS relation
         ${relationshipJoins}
         ${subtaskSummary}
@@ -427,7 +451,10 @@ export const meetingActionItemsRepository = {
         .input("meetingId", sql.BigInt, query.meetingId ?? null)
         .input("status", sql.VarChar(20), query.status ?? null)
         .input("priority", sql.VarChar(10), query.priority ?? null)
-        .input("due", sql.VarChar(20), query.due);
+        .input("due", sql.VarChar(20), query.due)
+        .input("taskType", sql.VarChar(12), query.taskType ?? "ALL")
+      .input("tagIds",sql.VarChar(240),query.tagIds??null)
+      .input("tagMatch",sql.VarChar(12),query.tagMatch??"ANY");
 
     // SQL projection of the shared Meeting content policy, restricted further
     // to this actor's assignments. Keep in sync with canReadMeetingByRelationship.
@@ -449,11 +476,14 @@ export const meetingActionItemsRepository = {
       )
     )`;
 
-    const assignedToActor = `(relation.assignee_user_id = @actorUserId OR EXISTS (
-      SELECT 1 FROM dbo.TM_subtasks AS assignedChild
-      WHERE assignedChild.task_id=relation.task_id AND assignedChild.deleted_at_utc IS NULL
-        AND COALESCE(assignedChild.assignee_user_id, relation.assignee_user_id)=@actorUserId
-    ))`;
+    const assignedToActor = `((NOT EXISTS (SELECT 1 FROM dbo.TM_collaboration_tasks c
+        WHERE c.task_id=relation.task_id)
+        AND (relation.assignee_user_id = @actorUserId OR EXISTS (
+        SELECT 1 FROM dbo.TM_subtasks AS assignedChild
+        WHERE assignedChild.task_id=relation.task_id AND assignedChild.deleted_at_utc IS NULL
+          AND COALESCE(assignedChild.assignee_user_id, relation.assignee_user_id)=@actorUserId
+      ))) OR EXISTS(SELECT 1 FROM dbo.TM_collaboration_assignments ca
+        WHERE ca.task_id=relation.task_id AND ca.is_active=1 AND ca.assignee_user_id=@actorUserId))`;
 
     const filteredWhere = `
       ${assignedToActor}
@@ -463,6 +493,8 @@ export const meetingActionItemsRepository = {
       AND (@meetingId IS NULL OR relation.meeting_id = @meetingId)
       AND (@status IS NULL OR task.status = @status)
       AND (@priority IS NULL OR task.priority = @priority)
+      AND ${taskTypeConditionSql}
+      AND ${taskTagsFilterSql}
       AND (
         @due = 'ALL'
         OR (@due = 'OVERDUE' AND task.due_date < @today AND task.status NOT IN ('DONE', 'CANCELLED'))
@@ -475,7 +507,7 @@ export const meetingActionItemsRepository = {
       .input("offset", sql.Int, (query.page - 1) * query.pageSize)
       .input("pageSize", sql.Int, query.pageSize);
     const result = await listRequest.query<ListRecord>(`
-      SELECT ${relationshipSelect}, ${taskColumns}
+      SELECT ${relationshipSelect}, ${taskColumns}, ${collaborationCardSummarySql}, ${taskTagsSelectSql}
       FROM dbo.TM_meeting_action_items AS relation
       ${relationshipJoins}
       ${subtaskSummary}
@@ -568,6 +600,8 @@ export const meetingActionItemsRepository = {
     };
   },
 };
+
+
 
 
 

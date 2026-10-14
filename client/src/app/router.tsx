@@ -16,6 +16,7 @@ import { ItemsPage } from '@/pages/items/ItemsPage'
 import { KpisPage } from '@/pages/kpis/KpisPage'
 import { KpiTasksPage } from '@/pages/kpi-tasks/KpiTasksPage'
 import { ListPage } from '@/pages/lists/ListPage'
+import { SharedTasksPage } from '@/pages/tasks/SharedTasksPage'
 import { AssignedToMePage } from '@/pages/tasks/AssignedToMePage'
 import { MeetingCoordinationPage } from '@/pages/meetings/MeetingCoordinationPage'
 import { MeetingDetailsPage } from '@/pages/meetings/MeetingDetailsPage'
@@ -124,6 +125,7 @@ export const router = createBrowserRouter(
         },
 
         { path: 'assigned-to-me', element: <AssignedToMePage /> },
+        { path: 'shared-tasks', element: <SharedTasksPage /> },
 
         {
           path: 'lists/:listId',
@@ -301,6 +303,7 @@ export const router = createBrowserRouter(
     basename: routerBasename,
   },
 )
+
 
 
 

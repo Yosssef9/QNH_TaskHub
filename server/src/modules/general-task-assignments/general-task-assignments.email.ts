@@ -28,6 +28,9 @@ interface EmailState {
   subtaskDueDate: Date | null;
   subtaskAssignmentChangedAtUtc: Date | null;
   effectiveSubtaskAssigneeId: number | null;
+  isCollaborative: boolean;
+  collaborativeMainAssignedAtUtc: Date | null;
+  collaborativeChildAssignedAtUtc: Date | null;
 }
 
 function safePositiveId(value: unknown): number | null {
@@ -53,10 +56,22 @@ async function currentState(recipientId: number, taskId: number, subtaskId: numb
         child.due_date AS subtaskDueDate,
         child.assignment_changed_at_utc AS subtaskAssignmentChangedAtUtc,
         COALESCE(child.assignee_user_id, meeting.assignee_user_id, relation.assignee_user_id, task.owner_user_id)
-          AS effectiveSubtaskAssigneeId
+          AS effectiveSubtaskAssigneeId,
+        CAST(CASE WHEN collaboration.task_id IS NULL THEN 0 ELSE 1 END AS BIT) AS isCollaborative,
+        mainCurrent.assigned_at_utc AS collaborativeMainAssignedAtUtc,
+        childCurrent.assigned_at_utc AS collaborativeChildAssignedAtUtc
       FROM dbo.TM_tasks AS task
       LEFT JOIN dbo.TM_general_task_assignments AS relation ON relation.task_id = task.id
       LEFT JOIN dbo.TM_meeting_action_items AS meeting ON meeting.task_id = task.id
+      LEFT JOIN dbo.TM_collaboration_tasks AS collaboration ON collaboration.task_id=task.id
+      OUTER APPLY (SELECT TOP (1) ca.assigned_at_utc
+        FROM dbo.TM_collaboration_assignments ca
+        WHERE ca.task_id=task.id AND ca.subtask_id IS NULL AND ca.assignee_user_id=@recipient
+          AND ca.is_active=1 ORDER BY ca.id DESC) mainCurrent
+      OUTER APPLY (SELECT TOP (1) ca.assigned_at_utc
+        FROM dbo.TM_collaboration_assignments ca
+        WHERE ca.task_id=task.id AND ca.subtask_id=@subtaskId AND ca.assignee_user_id=@recipient
+          AND ca.is_active=1 ORDER BY ca.id DESC) childCurrent
       JOIN dbo.TM_lists AS list ON list.id = task.list_id AND list.archived_at_utc IS NULL
       JOIN dbo.TM_user_access AS access ON access.portal_user_id = @recipient AND access.is_active = 1
       JOIN dbo.users AS portal ON portal.USER_ID = access.portal_user_id AND portal.IS_ACTIVE = 1
@@ -93,9 +108,10 @@ export async function buildGeneralAssignmentEmailPayload(
   const state = await currentState(recipientUserId, taskId, isChild ? subtaskId : null);
   if (!state || state.status === "CANCELLED" || (isChild && state.subtaskId === null)) return null;
 
-  const assignedToThisUser = isChild
-    ? state.effectiveSubtaskAssigneeId === recipientUserId
-    : state.mainAssigneeId === recipientUserId;
+  const assignedToThisUser = state.isCollaborative
+    ? isChild ? state.collaborativeChildAssignedAtUtc !== null : state.collaborativeMainAssignedAtUtc !== null
+    : isChild ? state.effectiveSubtaskAssigneeId === recipientUserId
+      : state.mainAssigneeId === recipientUserId;
 
   if (event === "GENERAL_ASSIGNMENT_REMOVED") {
     if (assignedToThisUser) return null;
@@ -109,9 +125,10 @@ export async function buildGeneralAssignmentEmailPayload(
     // Drop obsolete assigned notices after an intervening reassignment.
     const recordedAt = input.createdAtUtc instanceof Date
       ? input.createdAtUtc.getTime() : Date.parse(String(input.createdAtUtc));
-    const changedAt = isChild
-      ? (state.subtaskAssignmentChangedAtUtc ?? state.assignedAtUtc).getTime()
-      : state.assignedAtUtc.getTime();
+    const changedAt = state.isCollaborative
+      ? (isChild ? state.collaborativeChildAssignedAtUtc : state.collaborativeMainAssignedAtUtc)!.getTime()
+      : isChild ? (state.subtaskAssignmentChangedAtUtc ?? state.assignedAtUtc).getTime()
+        : state.assignedAtUtc.getTime();
     if (!Number.isFinite(recordedAt) || recordedAt < changedAt) return null;
   }
 
@@ -122,7 +139,8 @@ export async function buildGeneralAssignmentEmailPayload(
   }
 
   if (event === "GENERAL_TASK_COMPLETED" || event === "GENERAL_TASK_REOPENED") {
-    if (recipientUserId !== state.ownerUserId && recipientUserId !== state.mainAssigneeId) return null;
+    if (recipientUserId !== state.ownerUserId &&
+        !(state.isCollaborative ? state.collaborativeMainAssignedAtUtc !== null : recipientUserId === state.mainAssigneeId)) return null;
     if (event === "GENERAL_TASK_COMPLETED" && state.status !== "DONE") return null;
     if (event === "GENERAL_TASK_REOPENED" && state.status !== "TODO" && state.status !== "IN_PROGRESS") return null;
   }
@@ -165,3 +183,4 @@ export async function refreshGeneralAssignmentEmailPayload(
   // Due-date updates can explicitly clear a due date. The null is intentional.
   return result;
 }
+

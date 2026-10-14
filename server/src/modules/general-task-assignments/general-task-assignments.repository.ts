@@ -1,6 +1,8 @@
 import { getDatabasePool, sql } from "../../database/sql.js";
 import type { DatabaseTransaction } from "../../database/types.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
+import { taskTagsSelectSql,taskTagsFilterSql } from "../tags/task-tags.sql.js";
+import { collaborationCardSummarySql, taskTypeConditionSql } from "../collaboration/collaboration-card-summary.sql.js";
 import { normalizeSqlRowVersion } from "../../shared/utils/sql-row-version.js";
 
 export interface GeneralAssignmentContext {
@@ -180,6 +182,11 @@ export interface GeneralAssignedTask {
   subtaskTotal: number;
   subtaskCompleted: number;
   assignedSubtasks: Array<{id:number;title:string;dueDate:string|null;isCompleted:boolean;workNotes:string|null}>;
+  teamTask: boolean;
+  teamMemberCount: number;
+  mainAssigneeCount: number;
+  mainCompletedCount: number;
+  teamRoster: Array<{userId:number;userName:string;userCode:string;email:string|null;mainAssignee:boolean}>;
 }
 export interface GeneralAssignmentListFilters {
   status?: "TODO" | "IN_PROGRESS" | "DONE" | "CANCELLED";
@@ -187,27 +194,38 @@ export interface GeneralAssignmentListFilters {
   due?: "ALL" | "OVERDUE" | "TODAY" | "UPCOMING" | "NO_DATE";
   sortBy?: "assignedAt" | "dueDate" | "priority" | "title" | "status";
   sortDirection?: "asc" | "desc";
+  taskType?: "ALL" | "TEAM" | "SINGLE" | "PERSONAL";
+  tagIds?: string; tagMatch?: "ANY" | "ALL" | "UNTAGGED";
 }
 export async function listGeneralAssignments(actorUserId: number, page: number, pageSize: number, search: string,
   filters: GeneralAssignmentListFilters = {}) {
   const pool=await getDatabasePool();
   const sqlScope = `FROM dbo.TM_general_task_assignments rel
     JOIN dbo.TM_tasks task ON task.id=rel.task_id AND task.owner_user_id=rel.owner_user_id
+    LEFT JOIN dbo.TM_collaboration_tasks collaboration ON collaboration.task_id=task.id
     JOIN dbo.TM_user_access access ON access.portal_user_id=@actor AND access.is_active=1
     JOIN dbo.users portal ON portal.USER_ID=access.portal_user_id AND portal.IS_ACTIVE=1
     WHERE task.deleted_at_utc IS NULL AND task.list_id IS NOT NULL
       AND task.owner_user_id<>@actor
-      AND (rel.assignee_user_id=@actor OR EXISTS (
+      AND ((collaboration.task_id IS NULL AND (rel.assignee_user_id=@actor OR EXISTS (
         SELECT 1 FROM dbo.TM_subtasks child WHERE child.task_id=task.id
           AND child.deleted_at_utc IS NULL AND
-          COALESCE(child.assignee_user_id,rel.assignee_user_id,task.owner_user_id)=@actor))
+          COALESCE(child.assignee_user_id,rel.assignee_user_id,task.owner_user_id)=@actor)))
+        OR (collaboration.task_id IS NOT NULL AND EXISTS(
+          SELECT 1 FROM dbo.TM_collaboration_assignments a WHERE a.task_id=task.id
+            AND a.assignee_user_id=@actor AND a.is_active=1)))
       AND (@search IS NULL OR task.title LIKE @search OR EXISTS (
         SELECT 1 FROM dbo.TM_subtasks child
         WHERE child.task_id=task.id AND child.deleted_at_utc IS NULL
-          AND COALESCE(child.assignee_user_id,rel.assignee_user_id,task.owner_user_id)=@actor
+          AND ((collaboration.task_id IS NULL AND
+            COALESCE(child.assignee_user_id,rel.assignee_user_id,task.owner_user_id)=@actor)
+            OR (collaboration.task_id IS NOT NULL AND EXISTS(SELECT 1 FROM dbo.TM_collaboration_assignments a
+              WHERE a.subtask_id=child.id AND a.assignee_user_id=@actor AND a.is_active=1)))
           AND child.title LIKE @search))
       AND (@status IS NULL OR task.status=@status)
       AND (@priority IS NULL OR task.priority=@priority)
+      AND ${taskTypeConditionSql}
+      AND ${taskTagsFilterSql}
       AND (@due='ALL'
         OR (@due='NO_DATE' AND task.due_date IS NULL)
         OR (@due='OVERDUE' AND task.due_date < @today AND task.status IN ('TODO','IN_PROGRESS'))
@@ -218,6 +236,9 @@ export async function listGeneralAssignments(actorUserId: number, page: number, 
     .input("search",sql.NVarChar(120),search ? `%${search}%`:null)
     .input("status",sql.VarChar(20),filters.status??null)
     .input("priority",sql.VarChar(10),filters.priority??null)
+    .input("taskType",sql.VarChar(12),filters.taskType??"ALL")
+    .input("tagIds",sql.VarChar(240),filters.tagIds??null)
+    .input("tagMatch",sql.VarChar(12),filters.tagMatch??"ANY")
     .input("due",sql.VarChar(10),filters.due??'ALL')
     .input("today",sql.Date,new Date(`${getCurrentDateInAppTimeZone()}T00:00:00.000Z`));
   const count=await addFilters(pool.request())
@@ -230,17 +251,26 @@ export async function listGeneralAssignments(actorUserId: number, page: number, 
     .query<{
       taskId:number|string;title:string;description:string|null;status:string;priority:string;
       dueDate:Date|null;creatorUserId:number;creatorName:string;isMainAssignee:boolean;
-      subtaskTotal:number;subtaskCompleted:number;assignedSubtasksJson:string|null
+      subtaskTotal:number;subtaskCompleted:number;assignedSubtasksJson:string|null;
+      teamTask:boolean;teamMemberCount:number;mainAssigneeCount:number;mainCompletedCount:number;teamRosterJson:string|null;taskTagsJson:string|null
     }>(`SELECT task.id AS taskId,task.title,task.description,task.status,task.priority,
       task.due_date AS dueDate,task.owner_user_id AS creatorUserId,
       COALESCE(creatorPortal.USER_NAME,creatorPortal.USER_CODE) AS creatorName,
-      CAST(CASE WHEN rel.assignee_user_id=@actor THEN 1 ELSE 0 END AS BIT) AS isMainAssignee,
+      CAST(CASE WHEN (collaboration.task_id IS NULL AND rel.assignee_user_id=@actor)
+        OR (collaboration.task_id IS NOT NULL AND EXISTS(SELECT 1 FROM dbo.TM_collaboration_assignments a
+          WHERE a.task_id=task.id AND a.subtask_id IS NULL AND a.is_active=1 AND a.assignee_user_id=@actor))
+        THEN 1 ELSE 0 END AS BIT) AS isMainAssignee,
       (SELECT COUNT(*) FROM dbo.TM_subtasks c WHERE c.task_id=task.id AND c.deleted_at_utc IS NULL) AS subtaskTotal,
       (SELECT COUNT(*) FROM dbo.TM_subtasks c WHERE c.task_id=task.id AND c.deleted_at_utc IS NULL
         AND c.is_completed=1) AS subtaskCompleted,
-      (SELECT s.id,s.title,s.due_date AS dueDate,s.is_completed AS isCompleted,s.work_notes AS workNotes
+      ${collaborationCardSummarySql}, ${taskTagsSelectSql},
+      (SELECT s.id,s.title,s.due_date AS dueDate,s.is_completed AS isCompleted,
+        CASE WHEN collaboration.task_id IS NULL THEN s.work_notes ELSE NULL END AS workNotes
        FROM dbo.TM_subtasks s WHERE s.task_id=task.id AND s.deleted_at_utc IS NULL
-       AND COALESCE(s.assignee_user_id,rel.assignee_user_id,task.owner_user_id)=@actor
+       AND ((collaboration.task_id IS NULL AND
+         COALESCE(s.assignee_user_id,rel.assignee_user_id,task.owner_user_id)=@actor)
+         OR (collaboration.task_id IS NOT NULL AND EXISTS(SELECT 1 FROM dbo.TM_collaboration_assignments a
+           WHERE a.subtask_id=s.id AND a.assignee_user_id=@actor AND a.is_active=1)))
        ORDER BY s.display_order,s.id FOR JSON PATH) AS assignedSubtasksJson
       ${sqlScope.replace('FROM dbo.TM_general_task_assignments rel','FROM dbo.TM_general_task_assignments rel\n      JOIN dbo.users creatorPortal ON creatorPortal.USER_ID=rel.owner_user_id')}
       ORDER BY ${orderBy} ${direction},task.id DESC OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;`);
@@ -249,6 +279,10 @@ export async function listGeneralAssignments(actorUserId: number, page: number, 
     priority:row.priority,dueDate:row.dueDate?.toISOString().slice(0,10)??null,
     creatorUserId:row.creatorUserId,creatorName:row.creatorName,isMainAssignee:Boolean(row.isMainAssignee),
     subtaskTotal:Number(row.subtaskTotal),subtaskCompleted:Number(row.subtaskCompleted),
+    teamTask:Boolean(row.teamTask),teamMemberCount:Number(row.teamMemberCount),
+    mainAssigneeCount:Number(row.mainAssigneeCount),mainCompletedCount:Number(row.mainCompletedCount),
+    teamRoster:row.teamRosterJson ? JSON.parse(row.teamRosterJson) : [],
+    tags:row.taskTagsJson ? JSON.parse(row.taskTagsJson) : [],
     assignedSubtasks: (row.assignedSubtasksJson?JSON.parse(row.assignedSubtasksJson) as Array<{
       id:number;title:string;dueDate:string|null;isCompleted:boolean;workNotes:string|null
     }>:[]),
@@ -261,12 +295,15 @@ export async function listGeneralEligibleUsers(actorUserId:number,search:string,
   const result=await pool.request().input('actor',sql.Int,actorUserId)
     .input('search',sql.NVarChar(120),search ? `%${search}%` : null)
     .input('offset',sql.Int,(page-1)*pageSize).input('limit',sql.Int,pageSize)
-    .query<{userId:number;userCode:string;userName:string}>(`
+    .query<{userId:number;userCode:string;userName:string;email:string|null}>(`
     SELECT portal.USER_ID AS userId,portal.USER_CODE AS userCode,
-      COALESCE(portal.USER_NAME,portal.USER_CODE) AS userName
+      COALESCE(portal.USER_NAME,portal.USER_CODE) AS userName,
+      portal.email AS email
     FROM dbo.users portal JOIN dbo.TM_user_access access ON access.portal_user_id=portal.USER_ID
     WHERE access.is_active=1 AND portal.IS_ACTIVE=1
-      AND (@search IS NULL OR portal.USER_NAME LIKE @search OR portal.USER_CODE LIKE @search)
+      AND (@search IS NULL OR LOWER(portal.USER_NAME) LIKE LOWER(@search)
+        OR LOWER(portal.USER_CODE) LIKE LOWER(@search)
+        OR LOWER(portal.email) LIKE LOWER(@search))
     ORDER BY portal.USER_NAME,portal.USER_ID OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;`);
   return {items:result.recordset,page,pageSize};
 }
@@ -275,11 +312,14 @@ export async function listGeneralEligibleUsers(actorUserId:number,search:string,
 export async function findEligibleGeneralTaskUser(userId: number) {
   const pool = await getDatabasePool();
   const result = await pool.request().input('userId', sql.Int, userId)
-    .query<{userId:number;userCode:string;userName:string}>(`
+    .query<{userId:number;userCode:string;userName:string;email:string|null}>(`
     SELECT TOP (1) portal.USER_ID AS userId,portal.USER_CODE AS userCode,
-      COALESCE(portal.USER_NAME,portal.USER_CODE) AS userName
+      COALESCE(portal.USER_NAME,portal.USER_CODE) AS userName,
+      portal.email AS email
     FROM dbo.users portal
     JOIN dbo.TM_user_access access ON access.portal_user_id=portal.USER_ID
     WHERE portal.USER_ID=@userId AND portal.IS_ACTIVE=1 AND access.is_active=1;`);
   return result.recordset[0] ?? null;
 }
+
+

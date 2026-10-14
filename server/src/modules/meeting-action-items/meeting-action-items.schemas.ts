@@ -17,6 +17,8 @@ export const createMeetingActionItemBodySchema = z
     startDate: optionalDate,
     dueDate: optionalDate,
     assigneeUserId: z.coerce.number().int().positive(),
+    assigneeUserIds: z.array(z.number().int().positive()).min(1).max(30).optional(),
+    tagIds:z.array(z.number().int().positive()).max(8).optional(),
     agendaItemId: z.coerce.number().int().positive().nullable().optional(),
   })
   .superRefine((value, context) => {
@@ -41,6 +43,9 @@ export const assignedActionItemsQuerySchema = z.object({
   meetingId: z.coerce.number().int().positive().optional(),
   status: z.enum(TASK_STATUSES).optional(),
   priority: z.enum(TASK_PRIORITIES).optional(),
+  taskType: z.enum(["ALL", "TEAM", "SINGLE", "PERSONAL"]).default("ALL"),
+  tagIds:z.string().regex(/^\d+(,\d+)*$/).max(240).optional(),
+  tagMatch:z.enum(["ANY","ALL","UNTAGGED"]).default("ANY"),
   due: z.enum(["ALL", "OVERDUE", "TODAY", "UPCOMING", "NO_DATE"]).default("ALL"),
   sortBy: z.enum(["assignedAt", "dueDate", "priority", "title", "status", "meeting"]).default("assignedAt"),
   sortDirection: z.enum(["asc", "desc"]).default("desc"),
@@ -51,3 +56,5 @@ export type MeetingActionItemParams = z.infer<typeof meetingActionItemParamsSche
 export type CreateMeetingActionItemBody = z.infer<typeof createMeetingActionItemBodySchema>;
 export type ReassignMeetingActionItemBody = z.infer<typeof reassignMeetingActionItemBodySchema>;
 export type AssignedActionItemsQuery = z.infer<typeof assignedActionItemsQuerySchema>;
+
+

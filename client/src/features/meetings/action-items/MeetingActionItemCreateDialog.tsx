@@ -1,4 +1,4 @@
-import { Plus, UserRound } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
@@ -10,6 +10,8 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { TaskPriorityIndicator } from '@/features/tasks/components/TaskSelectIndicators'
+import { TagPicker } from '@/features/tasks/tags/TagPicker'
+import { TaskAssigneeMultiPicker } from '@/features/tasks/assignment/TaskAssigneeMultiPicker'
 import type { MeetingAgendaItem } from '@/features/meetings/types/meeting.types'
 
 import type { MeetingActionItemAssigneeOption } from './meeting-action-items.types'
@@ -38,9 +40,10 @@ export function MeetingActionItemCreateDialog({
 }: Props) {
   const { t } = useTranslation()
   const createMutation = useCreateMeetingActionItem(meetingId)
+  const [tags,setTags]=useState<number[]>([])
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [assignee, setAssignee] = useState('')
+  const [selectedAssignees, setSelectedAssignees] = useState<number[]>([])
   const [priority, setPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH'>('MEDIUM')
   const [dueDate, setDueDate] = useState('')
   const [agenda, setAgenda] = useState('NONE')
@@ -49,16 +52,13 @@ export function MeetingActionItemCreateDialog({
     () => assignees.filter((item) => item.eligible),
     [assignees],
   )
-  const selectedAssignee = useMemo(
-    () => assignees.find((item) => String(item.userId) === assignee) ?? null,
-    [assignee, assignees],
-  )
   const hasNoEligibleAssignees = !assigneesLoading && eligibleAssignees.length === 0
 
   function resetForm() {
+    setTags([])
     setTitle('')
     setDescription('')
-    setAssignee('')
+    setSelectedAssignees([])
     setPriority('MEDIUM')
     setDueDate('')
     setAgenda('NONE')
@@ -69,7 +69,7 @@ export function MeetingActionItemCreateDialog({
     const initialAssignee = initialAssigneeUserId === null
       ? null
       : assignees.find((item) => item.userId === initialAssigneeUserId && item.eligible) ?? null
-    setAssignee(initialAssignee ? String(initialAssignee.userId) : '')
+    setSelectedAssignees(initialAssignee ? [initialAssignee.userId] : [])
     setAgenda(initialAgendaItemId === null ? 'NONE' : String(initialAgendaItemId))
   }, [assignees, initialAgendaItemId, initialAssigneeUserId, open])
 
@@ -80,14 +80,16 @@ export function MeetingActionItemCreateDialog({
   }
 
   function submitCreate() {
-    if (!title.trim() || !assignee) return
+    if (!title.trim() || !selectedAssignees.length) return
     createMutation.mutate(
       {
         title: title.trim(),
         description: description.trim() || null,
         priority,
+        tagIds:tags,
         dueDate: dueDate || null,
-        assigneeUserId: Number(assignee),
+        assigneeUserId: selectedAssignees[0]!,
+        assigneeUserIds: selectedAssignees,
         agendaItemId: agenda === 'NONE' ? null : Number(agenda),
       },
       {
@@ -140,51 +142,13 @@ export function MeetingActionItemCreateDialog({
               {t('meetings.followUp.assignTo')}
               <span className="text-destructive ms-1" aria-hidden="true">*</span>
             </label>
-            <Select value={assignee} onValueChange={setAssignee}>
-              <SelectTrigger className="h-12">
-                <SelectValue placeholder={t('meetings.followUp.assignTo')}>
-                  {selectedAssignee ? (
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span className="bg-primary/10 text-primary grid size-7 shrink-0 place-items-center rounded-full">
-                        <UserRound aria-hidden="true" className="size-3.5" />
-                      </span>
-                      <span className="truncate">{selectedAssignee.userName}</span>
-                    </span>
-                  ) : null}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {assigneesLoading ? (
-                  <SelectItem value="__LOADING__" disabled>{t('common.loading')}</SelectItem>
-                ) : assignees.length ? (
-                  assignees.map((option) => (
-                    <SelectItem
-                      key={option.userId}
-                      value={String(option.userId)}
-                      textValue={option.userName}
-                      disabled={!option.eligible}
-                    >
-                      <span className="flex min-w-0 items-center gap-2.5">
-                        <span className="bg-primary/10 text-primary grid size-7 shrink-0 place-items-center rounded-full">
-                          <UserRound aria-hidden="true" className="size-3.5" />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block truncate">{option.userName}</span>
-                          <span className="text-muted-foreground block truncate text-xs">
-                            {option.userCode}
-                            {!option.eligible ? ` · ${t('meetings.followUp.noTaskHubAccess')}` : ''}
-                          </span>
-                        </span>
-                      </span>
-                    </SelectItem>
-                  ))
-                ) : (
-                  <SelectItem value="__EMPTY__" disabled>
-                    {t('meetings.followUp.noEligibleAssignees')}
-                  </SelectItem>
-                )}
-              </SelectContent>
-            </Select>
+            <TaskAssigneeMultiPicker
+              value={selectedAssignees}
+              onChange={setSelectedAssignees}
+              meetingId={meetingId}
+              knownUsers={eligibleAssignees}
+              disabled={createMutation.isPending}
+            />
             {hasNoEligibleAssignees ? (
               <p className="border-warning/25 bg-warning/10 text-warning-foreground rounded-lg border px-3 py-2 text-xs leading-5">
                 {t('meetings.followUp.noEligibleAssigneesDescription')}
@@ -266,6 +230,10 @@ export function MeetingActionItemCreateDialog({
             />
           </div>
 
+      <div className="space-y-2">
+        <label className="text-sm font-medium">{t('tags.title')}</label>
+        <TagPicker value={tags} onChange={setTags} disabled={createMutation.isPending}/>
+      </div>
           <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
             <Button variant="outline" disabled={createMutation.isPending} onClick={() => changeOpen(false)}>
               {t('common.cancel')}
@@ -282,3 +250,5 @@ export function MeetingActionItemCreateDialog({
     </Dialog>
   )
 }
+
+

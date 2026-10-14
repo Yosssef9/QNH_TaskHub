@@ -38,7 +38,9 @@ export interface CreateMeetingActionItemInput {
   startDate?: string | null | undefined;
   dueDate?: string | null | undefined;
   assigneeUserId: number;
+  assigneeUserIds?: number[];
   agendaItemId?: number | null | undefined;
+  tagIds?: number[] | undefined;
 }
 
 export interface ReassignMeetingActionItemInput {
@@ -61,6 +63,14 @@ export interface MeetingActionItemListItem {
   isOverdue: boolean;
   subtaskTotal: number;
   subtaskCompleted: number;
+  isCollaborative?: boolean;
+  assigneeCount?: number;
+  teamTask?: boolean;
+  teamMemberCount?: number;
+  mainAssigneeCount?: number;
+  mainCompletedCount?: number;
+  teamRoster?: Array<{userId:number;userName:string;userCode:string;email:string|null;mainAssignee:boolean}>;
+  tags?: Array<{id:number;name:string;scope:string;iconKind:string;iconKey:string|null;color:string}>;
   assigneeUserId: number;
   assigneeName: string;
   assignedByUserId: number;
@@ -75,6 +85,7 @@ export interface MeetingActionItemAssigneeOption {
   userId: number;
   userCode: string;
   userName: string;
+  email: string | null;
   eligible: boolean;
 }
 
@@ -101,6 +112,8 @@ export interface AssignedMeetingActionItemQuery {
   status?: TaskStatus | undefined;
   priority?: TaskPriority | undefined;
   due: AssignedActionItemDueFilter;
+  taskType?: "ALL" | "TEAM" | "SINGLE" | "PERSONAL";
+  tagIds?: string; tagMatch?: "ANY" | "ALL" | "UNTAGGED";
   sortBy: AssignedActionItemSortField;
   sortDirection: "asc" | "desc";
   groupBy: AssignedActionItemGroupBy;
@@ -130,5 +143,7 @@ export interface AssignedMeetingActionItemListData {
   summary: AssignedMeetingActionItemSummary;
   meetings: AssignedMeetingOption[];
 }
+
+
 
 

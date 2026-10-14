@@ -19,11 +19,17 @@ export const createSubtaskBodySchema = z.object({
   title: z.string().trim().min(1).max(1000),
   dueDate: dateOnlySchema.optional(),
   assigneeUserId: z.number().int().positive().nullable().optional(),
+  description: z.string().trim().max(4000).nullable().optional(),
+  priority: z.enum(["LOW", "MEDIUM", "HIGH"]).optional(),
+  assignmentMode: z.enum(["INHERIT", "CUSTOM"]).optional(),
+  assigneeUserIds: z.array(z.number().int().positive()).max(30).optional(),
 });
 export const updateSubtaskBodySchema = z
   .object({
     title: z.string().trim().min(1).max(1000).optional(),
     dueDate: dateOnlySchema.optional(),
+    description: z.string().trim().max(4000).nullable().optional(),
+    priority: z.enum(["LOW", "MEDIUM", "HIGH"]).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, "A subtask change is required.");
 export const completeSubtaskBodySchema = z.object({ isCompleted: z.boolean() });
@@ -38,4 +44,5 @@ export type CreateSubtaskBody = z.infer<typeof createSubtaskBodySchema>;
 export type UpdateSubtaskBody = z.infer<typeof updateSubtaskBodySchema>;
 export type CompleteSubtaskBody = z.infer<typeof completeSubtaskBodySchema>;
 export type ReorderSubtasksBody = z.infer<typeof reorderSubtasksBodySchema>;
+
 

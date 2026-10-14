@@ -5,6 +5,7 @@ import {
   Clock3,
   Pencil,
   Plus,
+  Share2,
   RotateCcw,
   Trash2,
   XCircle,
@@ -61,12 +62,19 @@ import type {
   TaskPriority,
   TaskSortField,
   TaskStatus,
+  TaskTypeFilter,
 } from '../types/task.types'
 import { TaskEditorDialog } from './TaskEditorDialog'
 import { TaskDetailsDrawer } from './TaskDetailsDrawer'
 import { TaskCollectionToolbar } from './TaskCollectionToolbar'
 import { TaskListSummary } from './TaskListSummary'
 import { TaskStatusIndicator } from './TaskStatusIndicator'
+import { TaskTags } from '../tags/TaskTags'
+import { TaskCardLayout } from './TaskCardLayout'
+import { ShareTaskDialog } from '@/features/task-shares/ShareTaskDialog'
+import { TaskTagFilter } from '../tags/TaskTagFilter'
+import { TaskTypeFilterSelect } from './TaskTypeFilterSelect'
+import { TaskTeamIndicator } from './TaskTeamIndicator'
 import { TaskDueIndicator, TaskPriorityIndicator } from './TaskSelectIndicators'
 
 type Props =
@@ -156,6 +164,9 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<TaskStatus | undefined>()
   const [priority, setPriority] = useState<TaskPriority | undefined>()
+  const [tagIds,setTagIds]=useState<number[]>([])
+  const [tagMatch,setTagMatch]=useState<'ANY'|'ALL'|'UNTAGGED'>('ANY')
+  const [taskType, setTaskType] = useState<TaskTypeFilter>('ALL')
   const [selectedCycleId, setSelectedCycleId] = useState<number | undefined>(cycle?.id)
   const [selectedKpiId, setSelectedKpiId] = useState<number | undefined>()
   const [due, setDue] = useState<TaskDueFilter>('ALL')
@@ -170,6 +181,7 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
   const [cancelling, setCancelling] = useState<PersonalTask | null>(null)
   const [reason, setReason] = useState('')
   const [detailsTaskId, setDetailsTaskId] = useState<number | null>(null)
+  const [shareTaskId,setShareTaskId]=useState<number|null>(null)
   const focusedSubtaskId = (() => {
     const rawSubtaskId = searchParams.get('subtaskId')
     if (!rawSubtaskId) return null
@@ -209,6 +221,7 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
     ...(status ? { status } : {}),
     ...(priority ? { priority } : {}),
     due,
+    ...(!isKpiMode ? { taskType,tagIds:tagIds.join(',')||undefined,tagMatch } : {}),
     sortBy,
     sortDirection,
     page,
@@ -241,6 +254,8 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
   const structuredFilterCount =
     Number(Boolean(status)) +
     Number(Boolean(priority)) +
+    Number(!isKpiMode && taskType !== 'ALL') +
+    Number(!isKpiMode && (tagIds.length>0 || tagMatch==='UNTAGGED')) +
     Number(due !== 'ALL') +
     Number(Boolean(cycles && selectedCycleId)) +
     Number(Boolean(isKpiAggregate && selectedKpiId))
@@ -249,6 +264,9 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
     setPage(1)
     setStatus(undefined)
     setPriority(undefined)
+    setTaskType('ALL')
+    setTagIds([])
+    setTagMatch('ANY')
     setDue('ALL')
     if (cycles) setSelectedCycleId(undefined)
     if (isKpiAggregate) setSelectedKpiId(undefined)
@@ -287,6 +305,19 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
             filter: `${t('tasks.allStatuses')}: ${t(`tasks.statuses.${status}`)}`,
           }),
         }]
+      : []),
+    ...(!isKpiMode && taskType !== 'ALL'
+      ? [{
+          key: 'taskType',
+          label: `${t('tasks.taskTypeFilter.label')}: ${t(`tasks.taskTypeFilter.${taskType}`)}`,
+          onRemove: () => resetPageAnd(() => setTaskType('ALL')),
+          removeLabel: t('tasks.toolbar.removeFilter', { filter: t(`tasks.taskTypeFilter.${taskType}`) }),
+        }]
+      : []),
+    ...(!isKpiMode && (tagIds.length>0 || tagMatch==='UNTAGGED')
+      ? [{key:'tags',label:`${t('tags.filter')}: ${tagMatch==='UNTAGGED'?t('tags.untagged'):`${tagIds.length} (${tagMatch})`}`,
+          onRemove:()=>resetPageAnd(()=>{setTagIds([]);setTagMatch('ANY')}),
+          removeLabel:t('tasks.toolbar.removeFilter',{filter:t('tags.filter')})}]
       : []),
     ...(priority
       ? [{
@@ -374,29 +405,11 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
         </div>
       ) : null}
 
-      <div className="space-y-1.5">
-        <label className="text-muted-foreground text-xs font-medium">{t('tasks.allStatuses')}</label>
-        <Select
-          value={status ?? 'ALL'}
-          onValueChange={(value) =>
-            resetPageAnd(() => setStatus(value === 'ALL' ? undefined : (value as TaskStatus)))
-          }
-        >
-          <SelectTrigger className="h-10 min-w-0">
-            <SelectValue>
-              {status ? <TaskStatusIndicator status={status} pill /> : <span>{t('tasks.toolbar.all')}</span>}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">{t('tasks.toolbar.all')}</SelectItem>
-            {TASK_STATUSES.map((value) => (
-              <SelectItem value={value} key={value}>
-                <TaskStatusIndicator status={value} />
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {!isKpiMode ? <div className="min-w-0 space-y-1.5">
+        <label className="block text-muted-foreground text-xs font-medium">{t('tasks.taskTypeFilter.label')}</label>
+        <TaskTypeFilterSelect value={taskType} onChange={value => resetPageAnd(() => setTaskType(value))} />
+      </div> : null}
+
 
       <div className="space-y-1.5">
         <label className="text-muted-foreground text-xs font-medium">{t('tasks.priority')}</label>
@@ -421,7 +434,36 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
           </SelectContent>
         </Select>
       </div>
+      <div className="space-y-1.5">
+        <label className="text-muted-foreground text-xs font-medium">{t('tasks.allStatuses')}</label>
+        <Select
+          value={status ?? 'ALL'}
+          onValueChange={(value) =>
+            resetPageAnd(() => setStatus(value === 'ALL' ? undefined : (value as TaskStatus)))
+          }
+        >
+          <SelectTrigger className="h-10 min-w-0">
+            <SelectValue>
+              {status ? <TaskStatusIndicator status={status} pill /> : <span>{t('tasks.toolbar.all')}</span>}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">{t('tasks.toolbar.all')}</SelectItem>
+            {TASK_STATUSES.map((value) => (
+              <SelectItem value={value} key={value}>
+                <TaskStatusIndicator status={value} />
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
+
+      {!isKpiMode ? <div className="min-w-0 space-y-1.5">
+        <label className="block text-muted-foreground text-xs font-medium">{t('tags.filter')}</label>
+        <TaskTagFilter value={tagIds} onChange={ids => resetPageAnd(() => setTagIds(ids))}
+          match={tagMatch} onMatchChange={value => resetPageAnd(() => setTagMatch(value))} />
+      </div> : null}
       <div className="space-y-1.5 sm:col-span-2">
         <label className="text-muted-foreground text-xs font-medium">{t('tasks.dueDate')}</label>
         <Select
@@ -627,7 +669,7 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
             icon={Circle}
             title={t(isKpiMode ? 'kpiTasks.emptyTitle' : 'tasks.emptyTitle')}
             description={t(
-              search || status || priority || due !== 'ALL' || selectedCycleId || selectedKpiId
+              search || status || priority || (!isKpiMode && taskType !== 'ALL') || due !== 'ALL' || selectedCycleId || selectedKpiId
                 ? isKpiMode
                   ? 'kpiTasks.emptyFilteredDescription'
                   : 'tasks.emptyFilteredDescription'
@@ -677,13 +719,18 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
                                 }
                               }}
                               className={cn(
-                                'group focus-visible:ring-ring relative flex cursor-pointer flex-col gap-4 rounded-xl border border-s-[3px] border-s-transparent p-4 shadow-sm transition-[border-color,background-color,box-shadow] duration-300 ease-out focus-visible:ring-2 focus-visible:outline-none sm:flex-row sm:items-center sm:p-5',
+                                'group focus-visible:ring-ring relative cursor-pointer rounded-xl border border-s-[3px] border-s-transparent p-4 shadow-sm transition-[border-color,background-color,box-shadow] duration-300 ease-out focus-visible:ring-2 focus-visible:outline-none sm:p-5',
                                 task.status === 'DONE'
                                   ? 'border-success/25 border-s-success/65 bg-success/[0.035] hover:border-success/40 hover:border-s-success/80 hover:bg-success/[0.055] hover:shadow-md'
-                                  : 'bg-card hover:border-primary/25 hover:shadow-md',
+                                  : task.teamTask
+                                    ? 'border-primary/25 border-s-primary/70 bg-primary/[0.025] hover:border-primary/40 hover:shadow-md'
+                                    : task.teamRoster?.length
+                                      ? 'border-s-muted-foreground/35 bg-card hover:border-primary/25 hover:shadow-md'
+                                      : 'bg-card hover:border-primary/25 hover:shadow-md',
                               )}
                             >
-                              <Tooltip>
+                              <TaskCardLayout
+                                completion={<Tooltip>
                                 <TooltipTrigger asChild>
                                   <button
                                     type="button"
@@ -696,12 +743,13 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
                                           : 'text-muted-foreground hover:bg-success/10 hover:text-success',
                                     )}
                                     disabled={
-                                      task.isReadOnly ||
+                                      task.isReadOnly || task.collaborationEnabled ||
                                       (task.meetingActionItem !== null &&
                                         task.status !== 'DONE' &&
                                         task.status !== 'CANCELLED')
                                     }
                                     aria-label={
+                                      task.collaborationEnabled ? t('tasks.teamCards.completeInside') :
                                       task.meetingActionItem !== null &&
                                       task.status !== 'DONE' &&
                                       task.status !== 'CANCELLED'
@@ -751,7 +799,8 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
                                   </button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  {task.meetingActionItem !== null &&
+                                  {task.collaborationEnabled ? t('tasks.teamCards.completeInside') :
+                                  task.meetingActionItem !== null &&
                                   task.status !== 'DONE' &&
                                   task.status !== 'CANCELLED'
                                     ? t('tasks.actionItem.assigneeCompletes')
@@ -759,18 +808,35 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
                                       ? t('tasks.reopenTask', { title: task.title })
                                       : t('tasks.completeTask', { title: task.title })}
                                 </TooltipContent>
-                              </Tooltip>
-                              <div className="min-w-0 flex-1">
-                                <p
-                                  className={cn(
-                                    'text-start text-base font-semibold transition-colors duration-200',
-                                    task.status === 'DONE' && 'text-foreground/85',
-                                  )}
-                                >
-                                  {task.title}
-                                </p>
-
-                                <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+                              </Tooltip>}
+                                title={<p className={cn('break-words text-start text-base font-semibold transition-colors duration-200', task.status === 'DONE' && 'text-foreground/85')}>
+  {task.title}
+</p>}
+                                tags={task.kpiInstanceId === null && task.tags?.length ? <TaskTags tags={task.tags} /> : null}
+                                details={<>{task.kpiInstanceId === null ? <TaskTeamIndicator
+                                  className="" summary={task}
+                                  subtaskTotal={task.subtaskTotal} subtaskCompleted={task.subtaskCompleted}
+                                /> : null}
+{task.subtaskTotal > 0 && !task.teamTask ? (
+                                  <div className="max-w-sm">
+                                    <div className="text-muted-foreground mb-1.5 flex items-center justify-between gap-3 text-xs">
+                                      <span>{t('tasks.subtaskProgress')}</span>
+                                      <span className="font-medium tabular-nums">
+                                        {task.subtaskCompleted}/{task.subtaskTotal} ·{' '}
+                                        {Math.round((task.subtaskCompleted / task.subtaskTotal) * 100)}%
+                                      </span>
+                                    </div>
+                                    <div className="bg-muted h-1.5 overflow-hidden rounded-full">
+                                      <div
+                                        className="bg-success h-full rounded-full transition-[width] duration-300"
+                                        style={{
+                                          width: `${Math.round((task.subtaskCompleted / task.subtaskTotal) * 100)}%`,
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                ) : null}</>}
+                                metadata={<div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
                                   {task.kpiInstanceId && instancesById.has(task.kpiInstanceId) ? (
                                     <KpiTaskPill
                                       kpi={instancesById.get(task.kpiInstanceId)!}
@@ -823,29 +889,9 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
                                     <TaskDate task={task} />
                                   </div>
                                 </div>
-
-                                {task.subtaskTotal > 0 ? (
-                                  <div className="mt-4 max-w-md">
-                                    <div className="text-muted-foreground mb-1.5 flex items-center justify-between gap-3 text-xs">
-                                      <span>{t('tasks.subtaskProgress')}</span>
-                                      <span className="font-medium tabular-nums">
-                                        {task.subtaskCompleted}/{task.subtaskTotal} ·{' '}
-                                        {Math.round((task.subtaskCompleted / task.subtaskTotal) * 100)}%
-                                      </span>
-                                    </div>
-                                    <div className="bg-muted h-1.5 overflow-hidden rounded-full">
-                                      <div
-                                        className="bg-success h-full rounded-full transition-[width] duration-300"
-                                        style={{
-                                          width: `${Math.round((task.subtaskCompleted / task.subtaskTotal) * 100)}%`,
-                                        }}
-                                      />
-                                    </div>
-                                  </div>
-                                ) : null}
-                              </div>
-                              {!task.isReadOnly ? (
-                                <div className="flex items-center gap-1 self-end opacity-75 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 sm:self-center">
+}
+                                actions={!task.isReadOnly ? (
+                                <div className="flex items-center gap-1 opacity-75 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
                                   {task.status === 'TODO' && (
                                   <TaskActionButton
                                     label={t('tasks.start')}
@@ -883,6 +929,12 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
                                     <XCircle className="size-4" />
                                   </TaskActionButton>
                                 )}
+                                {!isKpiMode && <TaskActionButton
+                                  label={t('taskSharing.share')}
+                                  className="text-primary hover:bg-primary/10 hover:text-primary"
+                                  onClick={event=>{event.stopPropagation();setShareTaskId(task.id)}}>
+                                  <Share2 className="size-4"/>
+                                </TaskActionButton>}
                                 <TaskActionButton
                                   label={t('tasks.editTask', { title: task.title })}
                                   className="text-primary hover:bg-primary/10 hover:text-primary"
@@ -906,6 +958,7 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
                                   </TaskActionButton>
                                 </div>
                               ) : null}
+                              />
                             </motion.li>
                               </Fragment>
                             ))}
@@ -953,6 +1006,7 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
           />
         )
       ) : null}
+      {shareTaskId!==null?<ShareTaskDialog taskId={shareTaskId} open onOpenChange={open=>{if(!open)setShareTaskId(null)}}/>:null}
       <TaskDetailsDrawer
         taskId={detailsTaskId}
         focusSubtaskId={focusedSubtaskId}
@@ -1001,5 +1055,6 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
     </div>
   )
 }
+
 
 

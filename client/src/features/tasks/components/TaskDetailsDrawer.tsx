@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { move as moveSortable } from '@dnd-kit/helpers'
 import {
   Briefcase,
@@ -10,6 +11,7 @@ import {
   Paperclip,
   Pencil,
   Plus,
+  Share2,
   UserRound,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
@@ -37,12 +39,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { toApiClientError } from '@/lib/api-error'
 import { useWorkCycle } from '@/features/work-cycles/hooks/use-work-cycles'
 import { parseDateOnly } from '@/lib/date-only'
-import { APP_TIME_ZONE, formatDateTime } from '@/lib/date-time'
-import { useTimeFormatPreference } from '@/features/preferences/hooks/use-time-format'
+import { APP_TIME_ZONE } from '@/lib/date-time'
 import { cn } from '@/lib/cn'
 
 import { downloadAttachment } from '../api/tasks.api'
 import { TaskAssigneePicker } from '../assignment/TaskAssigneePicker'
+import { CollaborativeAssignmentsPanel } from '../assignment/CollaborativeAssignmentsPanel'
 import { useAssignMainTask, useAssignSubtask, useSaveWorkNotes, useSaveCompletionSummary, useEligibleTaskUser } from '../assignment/use-general-assignment'
 import {
   useCompleteSubtask,
@@ -60,6 +62,12 @@ import { SubtaskEditorDialog } from './SubtaskEditorDialog'
 import { TaskAttachmentList } from './TaskAttachmentList'
 import { TaskDueIndicator, TaskPriorityIndicator } from './TaskSelectIndicators'
 import { TaskStatusIndicator } from './TaskStatusIndicator'
+import { TaskTags } from '../tags/TaskTags'
+import { TagPicker } from '../tags/TagPicker'
+import { setTaskTags } from '../tags/tags.api'
+import { TaskTeamIndicator } from './TaskTeamIndicator'
+import { TaskActivityTimeline } from './TaskActivityTimeline'
+import { ShareTaskDialog } from '@/features/task-shares/ShareTaskDialog'
 
 // Match the existing server-side tasks.policy transition graph. Backend is authoritative.
 const permittedTransitions: Record<TaskStatus, readonly TaskStatus[]> = {
@@ -129,6 +137,7 @@ function SortableSubtaskRow({
   canComplete,
   canEditNotes,
   canManage,
+  canEditMetadata,
   canAssign,
   meetingId,
   assigneePending,
@@ -154,6 +163,7 @@ function SortableSubtaskRow({
   canComplete: boolean
   canEditNotes: boolean
   canManage: boolean
+  canEditMetadata: boolean
   canAssign: boolean
   meetingId: number | null
   assigneePending: boolean
@@ -247,6 +257,7 @@ function SortableSubtaskRow({
                   {dueDate}
                 </span>
               ) : null}
+              <TaskPriorityIndicator priority={item.priority} />
               {attachments.length > 0 ? (
                 <span className="inline-flex items-center gap-1">
                   <Paperclip className="size-3.5" />
@@ -254,9 +265,10 @@ function SortableSubtaskRow({
                 </span>
               ) : null}
             </div>
+            {item.description && <p className="text-muted-foreground mt-2 whitespace-pre-wrap break-words text-sm">{item.description}</p>}
           </div>
 
-          {canManage || canUpload ? (
+          {canEditMetadata || canManage || canUpload ? (
             <div className="flex items-center gap-1 self-end opacity-75 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 sm:self-center">
               {canUpload ? <Tooltip>
                 <TooltipTrigger asChild>
@@ -289,8 +301,7 @@ function SortableSubtaskRow({
                 <TooltipContent>{t('tasks.details.attachToSubtask')}</TooltipContent>
               </Tooltip> : null}
 
-              {canManage ? <>
-              <Tooltip>
+              {canEditMetadata ? <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
@@ -303,9 +314,9 @@ function SortableSubtaskRow({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>{t('tasks.details.editSubtask')}</TooltipContent>
-              </Tooltip>
+              </Tooltip> : null}
 
-              <Tooltip>
+              {canManage ? <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
@@ -318,8 +329,7 @@ function SortableSubtaskRow({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>{t('tasks.details.deleteSubtask')}</TooltipContent>
-              </Tooltip>
-              </> : null}
+              </Tooltip> : null}
             </div>
           ) : null}
         </div>
@@ -356,8 +366,13 @@ function SortableSubtaskRow({
 }
 
 export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange }: Props) {
+  const [shareOpen,setShareOpen]=useState(false)
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
+  const tagQueryClient=useQueryClient()
+  const [tagEditorOpen,setTagEditorOpen]=useState(false)
+  const [tagDraft,setTagDraft]=useState<number[]>([])
+  const [savingTags,setSavingTags]=useState(false)
   const currentUser = useCurrentUser()
   const actorId = currentUser.data?.user.userId ?? null
   const assignMain = useAssignMainTask()
@@ -366,7 +381,6 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
   const saveSummary = useSaveCompletionSummary()
   const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
-  const timeFormat = useTimeFormatPreference()
   const [subtaskEditorOpen, setSubtaskEditorOpen] = useState(false)
   const [subtaskEditorSession, setSubtaskEditorSession] = useState(0)
   const [editingSubtask, setEditingSubtask] = useState<Subtask | null>(null)
@@ -405,25 +419,28 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
   }, [focusSubtaskId, query.data])
 
   const capabilities = query.data?.capabilities
-  const isMeetingViewer = capabilities?.role === 'VIEWER'
+  const collaborationActive = Boolean(query.data?.collaborationActive)
+  const isMeetingViewer = capabilities?.role === 'VIEWER' && !capabilities.canEditDetails
   // isReadOnly on shared task projections protects metadata edits; use specific
   // server capabilities for executor operations instead of disabling all controls.
   const readOnly = isMeetingViewer || Boolean(query.data?.task.kpiInstanceId && query.data.task.isReadOnly)
   const isGeneralTask = Boolean(query.data && !query.data.actionItem && query.data.task.kpiInstanceId === null)
-  const supportsSubtaskAssignment = Boolean(query.data && (isGeneralTask || query.data.actionItem))
+  const supportsSubtaskAssignment = !collaborationActive && Boolean(query.data && (isGeneralTask || query.data.actionItem))
   const isOwner = capabilities?.role === 'OWNER'
   const mainAssigneeId = query.data?.generalAssignment?.assigneeUserId ?? null
   const ownerId = query.data?.generalAssignment?.ownerUserId ?? query.data?.actionItem?.organizerUserId ?? actorId
   const effectiveMainAssignee = query.data?.actionItem?.assigneeUserId ?? mainAssigneeId ?? ownerId
   const mainAssigneeLookup = useEligibleTaskUser(mainAssigneeId)
-  const canEditSummary = !readOnly && Boolean(
+  const canEditSummary = !collaborationActive && !readOnly && Boolean(
     query.data?.actionItem ? actorId === query.data.actionItem.assigneeUserId :
       query.data?.generalAssignment ? actorId === effectiveMainAssignee : capabilities?.role === 'OWNER'
   )
   const canManageSubtasks = !readOnly && (capabilities?.canManageSubtasks ?? true)
-  const canCompleteSubtasks = !readOnly && (capabilities?.canCompleteSubtasks ?? true)
-  const canUploadAttachments = !readOnly && (capabilities?.canUploadAttachments ?? true)
+  const canCreateSubtasks = canManageSubtasks && !query.data?.sharedPermission
+  const canCompleteSubtasks = !collaborationActive && !readOnly && (capabilities?.canCompleteSubtasks ?? true)
+  const canUploadAttachments = (!collaborationActive || isOwner || query.data?.sharedPermission==='EDIT') && !readOnly && (capabilities?.canUploadAttachments ?? true)
   const canDeleteAttachment = (item: TaskAttachment) => {
+    if (collaborationActive && !isOwner) return false
     if (readOnly || !capabilities) return !readOnly
     if (capabilities.canDeleteAnyAttachment) return true
     return capabilities.role === 'ASSIGNEE' && item.uploadedByUserId === actorId
@@ -531,7 +548,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
           ) : (
             query.data && (
               <div className="mx-auto min-h-full w-full max-w-7xl px-4 py-5 sm:px-7 sm:py-7 lg:px-10 lg:py-8">
-                <header className="bg-background/90 border-border/80 sticky top-0 z-10 mb-5 rounded-2xl border p-5 shadow-sm backdrop-blur-md sm:p-6">
+                <header className={cn('bg-background/90 border-border/80 sticky top-0 z-10 mb-5 rounded-2xl border shadow-sm backdrop-blur-md', collaborationActive ? 'p-4 sm:p-5' : 'p-5 sm:p-6')}>
                   <div className="pe-10">
                     <div className="flex flex-wrap items-center gap-2 text-xs">
                       <span
@@ -552,6 +569,12 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                         <Flag className="size-3.5" />
                         {t(`tasks.priorities.${query.data.task.priority}`)}
                       </span>
+                      {collaborationActive && query.data.task.dueDate ? (
+                        <span className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-medium">
+                          <CalendarDays className="size-3.5" />
+                          {formatDate(query.data.task.dueDate, i18n.language)}
+                        </span>
+                      ) : null}
                       {query.data.task.kpiName ? (
                         <span className="bg-primary/8 text-primary inline-flex max-w-full items-center gap-1 rounded-full px-2.5 py-1 font-medium">
                           <Gauge className="size-3.5 shrink-0" />
@@ -560,12 +583,23 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                       ) : null}
                     </div>
 
-                    <DialogTitle className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">
+                    <DialogTitle className={cn('mt-3 font-bold tracking-tight', collaborationActive ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-3xl')}>
                       {query.data.task.title}
                     </DialogTitle>
-                    <DialogDescription className="text-muted-foreground mt-2 max-w-4xl text-sm leading-6">
-                      {query.data.task.description || t('tasks.details.noDescription')}
+                    <DialogDescription className={cn('text-muted-foreground mt-2 max-w-4xl text-sm leading-6', collaborationActive && 'sr-only')}>
+                      {collaborationActive ? t('tasks.workspace.description') : query.data.task.description || t('tasks.details.noDescription')}
                     </DialogDescription>
+                    {query.data.task.kpiInstanceId === null ? <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <TaskTags tags={query.data.task.tags}/>
+                      {capabilities?.role==='OWNER'?<Button type="button" size="sm" variant="outline" onClick={()=>setShareOpen(true)}>
+                        <Share2 className="size-4"/>{t('taskSharing.share')}
+                      </Button>:null}
+                      {capabilities?.canEditDetails ? <Button variant="outline" size="sm" type="button"
+                        onClick={()=>{setTagDraft(query.data?.task.tags?.map(x=>x.id)??[]);setTagEditorOpen(true)}}>{t('tags.editTaskTags')}</Button>:null}
+                    </div>:null}
+                    {query.data.task.kpiInstanceId === null && (query.data.task.teamRoster?.length || query.data.task.teamTask) ? (
+                      <TaskTeamIndicator summary={query.data.task} compact className="mt-3" />
+                    ) : null}
                   </div>
                 </header>
 
@@ -585,7 +619,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                 ) : null}
 
                 {query.data.actionItem ? (
-                  <div className="border-primary/20 bg-primary/5 mb-5 rounded-xl border p-4 text-sm">
+                  <div className={cn('border-primary/20 bg-primary/5 mb-5 rounded-xl border text-sm', collaborationActive ? 'px-4 py-3' : 'p-4')}>
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <p className="font-semibold">{t('tasks.actionItem.badge')}</p>
@@ -600,20 +634,91 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                           <CalendarDays className="size-4 shrink-0" />
                           <span>{query.data.actionItem.meetingTitle}</span>
                         </button>
-                        <p className="text-muted-foreground mt-1">
+                        {!collaborationActive && <p className="text-muted-foreground mt-1">
                           {capabilities?.role === 'ASSIGNEE'
                             ? t('tasks.actionItem.assignedBy', { name: query.data.actionItem.organizerName })
                             : t('tasks.actionItem.assignedTo', { name: query.data.actionItem.assigneeName })}
-                        </p>
+                        </p>}
                       </div>
 
                     </div>
                   </div>
                 ) : null}
 
-                <div className="grid gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(19rem,0.75fr)]">
+                {query.data.task.kpiInstanceId === null &&
+                  (isOwner || (collaborationActive && capabilities?.role === 'ASSIGNEE')) ? (
+                  <CollaborativeAssignmentsPanel
+                    key={query.data.task.id}
+                    taskId={query.data.task.id}
+                    actorId={actorId}
+                    ownerId={ownerId}
+                    meetingId={query.data.actionItem?.meetingId ?? null}
+                    children={query.data.subtasks.map(item => ({
+                      id: item.id, title: item.title, description: item.description,
+                      priority: item.priority, dueDate: item.dueDate, isCompleted: item.isCompleted,
+                    }))}
+                    enabled={collaborationActive}
+                    description={query.data.task.description}
+                    focusSubtaskId={focusSubtaskId}
+                    canManageSubtasks={canManageSubtasks}
+                    onAddSubtask={() => {
+                      setEditingSubtask(null)
+                      setSubtaskEditorSession(current => current + 1)
+                      setSubtaskEditorOpen(true)
+                    }}
+                    onEditSubtask={childId => {
+                      const child = query.data.subtasks.find(item => item.id === childId)
+                      if (!child) return
+                      setEditingSubtask(child)
+                      setSubtaskEditorSession(current => current + 1)
+                      setSubtaskEditorOpen(true)
+                    }}
+                    onDeleteSubtask={childId => deleteMutation.mutate(childId, {
+                      onError: () => toast.error(t('tasks.details.errors.subtask')),
+                    })}
+                    reorderPending={reorderMutation.isPending}
+                    onReorderSubtasks={subtaskIds => reorderMutation.mutate({taskId:query.data.task.id,subtaskIds}, {
+                      onError: () => toast.error(t('tasks.details.errors.reorder')),
+                    })}
+                    subtaskContent={childId => {
+                      const attachments = subtaskAttachments.get(childId) ?? []
+                      if (!attachments.length) return null
+                      return <div className="space-y-2 border-t pt-3">
+                        <p className="text-sm font-semibold">{t('tasks.details.subtaskFiles')}</p>
+                        <TaskAttachmentList compact attachments={attachments} readOnly={false}
+                          canDelete={canDeleteAttachment} onOpen={setPreviewAttachment}
+                          onDownload={item => void download(item)} onDelete={removeAttachment} />
+                      </div>
+                    }}
+                    activityContent={<TaskActivityTimeline activity={query.data.activity} subtasks={query.data.subtasks} />}
+                    overviewContent={<Card>
+                      <CardHeader className="flex-row items-center justify-between gap-3 pb-3">
+                        <CardTitle>{t('tasks.details.taskFiles')}</CardTitle>
+                        <input ref={taskFileRef} type="file" className="hidden"
+                          accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+                          onChange={event => {
+                            const file = event.target.files?.[0]
+                            if (file) upload(file)
+                            event.target.value = ''
+                          }} />
+                        {isOwner && <Button size="sm" variant="outline" disabled={!canUploadAttachments}
+                          onClick={() => taskFileRef.current?.click()}>
+                          <Paperclip className="size-4" />{t('tasks.details.addFile')}
+                        </Button>}
+                      </CardHeader>
+                      <CardContent>
+                        <TaskAttachmentList attachments={taskAttachments}
+                          emptyLabel={t('tasks.details.noTaskFiles')} readOnly={false}
+                          canDelete={canDeleteAttachment} onOpen={setPreviewAttachment}
+                          onDownload={item => void download(item)} onDelete={removeAttachment} />
+                      </CardContent>
+                    </Card>}
+                  />
+                ) : null}
+
+                {(!collaborationActive || (!isOwner && capabilities?.role !== 'ASSIGNEE')) && <div className="grid gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(19rem,0.75fr)]">
                   <main className="min-w-0 space-y-5">
-                    {(canEditSummary || query.data.task.completionSummary) ? <Card>
+                    {!collaborationActive && (canEditSummary || query.data.task.completionSummary) ? <Card>
                       <CardHeader className="pb-3"><CardTitle>{t('tasks.assignment.completionSummary')}</CardTitle></CardHeader>
                       <CardContent>
                         <EditableWorkText key={`summary-${query.data.task.id}`} initial={query.data.task.completionSummary ?? null}
@@ -635,7 +740,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                         </div>
                         <Button
                           size="sm"
-                          disabled={!canManageSubtasks}
+                          disabled={!canCreateSubtasks}
                           onClick={() => {
                             setEditingSubtask(null)
                             setSubtaskEditorSession((current) => current + 1)
@@ -718,12 +823,13 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                                     item={item}
                                     index={index}
                                     attachments={subtaskAttachments.get(item.id) ?? []}
-                                    dragDisabled={!canManageSubtasks || reorderMutation.isPending}
-                                    canComplete={canCompleteSubtasks && (
+                                    dragDisabled={!canCreateSubtasks || reorderMutation.isPending}
+                                    canComplete={!collaborationActive && canCompleteSubtasks && (
                                       actorId === (item.assigneeUserId ?? effectiveMainAssignee))}
-                                    canEditNotes={canCompleteSubtasks && (
+                                    canEditNotes={!collaborationActive && canCompleteSubtasks && (
                                       actorId === (item.assigneeUserId ?? effectiveMainAssignee))}
-                                    canManage={canManageSubtasks}
+                                    canManage={canCreateSubtasks}
+                                    canEditMetadata={canManageSubtasks}
                                     canAssign={supportsSubtaskAssignment && isOwner && canManageSubtasks}
                                     meetingId={query.data.actionItem?.meetingId ?? null}
                                     assigneePending={assignChild.isPending}
@@ -736,7 +842,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                                       onSuccess: () => toast.success(t('tasks.assignment.notesSaved')),
                                       onError: () => toast.error(t('tasks.assignment.saveFailed')),
                                     })}
-                                    canUpload={canUploadAttachments}
+                                    canUpload={canUploadAttachments && !collaborationActive}
                                     canDeleteAttachment={canDeleteAttachment}
                                     justMoved={recentlyMovedSubtaskId === item.id}
                                     focused={focusSubtaskId === item.id}
@@ -826,7 +932,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                         <InfoRow
                           icon={Circle}
                           label={t('tasks.sortFields.status')}
-                          value={(!readOnly && (capabilities?.canCompleteTask || capabilities?.canChangeNonCompletionStatus)) ? (
+                          value={(!collaborationActive && !readOnly && (capabilities?.canCompleteTask || capabilities?.canChangeNonCompletionStatus)) ? (
                             <Select value={query.data.task.status} onValueChange={value => changeDrawerStatus(value as TaskStatus)}
                               disabled={statusMutation.isPending}>
                               <SelectTrigger aria-label={t('tasks.assignment.changeStatus')} className="h-9 w-full">
@@ -843,7 +949,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                             </Select>
                           ) : <TaskStatusIndicator status={query.data.task.status} pill />}
                         />
-                        {isGeneralTask ? <InfoRow icon={UserRound} label={t('tasks.assignment.assignTo')} value={
+                        {isGeneralTask && !collaborationActive ? <InfoRow icon={UserRound} label={t('tasks.assignment.assignTo')} value={
                           isOwner && !readOnly ? <TaskAssigneePicker value={mainAssigneeId} disabled={assignMain.isPending}
                             onChange={value => assignMain.mutate({taskId:query.data.task.id, assigneeUserId:value}, {
                               onSuccess: () => toast.success(t('tasks.assignment.assignmentSaved')),
@@ -901,53 +1007,9 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                       </CardContent>
                     </Card>
 
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <CardTitle>{t('tasks.details.activity')}</CardTitle>
-                          <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums">
-                            {query.data.activity.length}
-                          </span>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        {query.data.activity.length ? (
-                          <ol className="max-h-[28rem] space-y-0 overflow-y-auto pe-1">
-                            <AnimatePresence initial={false}>
-                              {query.data.activity.map((item) => (
-                                <motion.li
-                                  key={item.id}
-                                  initial={taskHubFadeMotion.initial}
-                                  animate={taskHubFadeMotion.animate}
-                                  exit={taskHubFadeMotion.exit}
-                                  transition={taskHubFadeMotion.transition}
-                                  className="border-border relative border-s py-3 ps-5 text-sm last:pb-0"
-                                >
-                                  <span className="bg-primary ring-background absolute -start-[4.5px] top-[1.15rem] size-2 rounded-full ring-4" />
-                                  <p className="font-medium">
-                                    {t(`tasks.details.activities.${item.activityType}`, {
-                                      defaultValue: item.activityType,
-                                    })}
-                                  </p>
-                                  <p className="text-muted-foreground mt-1 text-xs">
-                                    {t('tasks.actionItem.performedBy', { name: item.actorName })}
-                                  </p>
-                                  <time className="text-muted-foreground mt-0.5 block text-xs">
-                                    {formatDateTime(item.createdAtUtc, i18n.language, timeFormat)}
-                                  </time>
-                                </motion.li>
-                              ))}
-                            </AnimatePresence>
-                          </ol>
-                        ) : (
-                          <p className="text-muted-foreground py-4 text-center text-sm">
-                            {t('tasks.details.noActivity')}
-                          </p>
-                        )}
-                      </CardContent>
-                    </Card>
+                    <TaskActivityTimeline activity={query.data.activity} subtasks={query.data.subtasks} />
                   </aside>
-                </div>
+                </div>}
               </div>
             )
           )}
@@ -980,13 +1042,40 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
         </DialogContent>
       </Dialog>
 
-      {taskId && canManageSubtasks ? (
+      <Dialog open={tagEditorOpen} onOpenChange={open=>!savingTags&&setTagEditorOpen(open)}>
+        <DialogContent variant="modal">
+          <DialogTitle>{t('tags.editTaskTags')}</DialogTitle>
+          <DialogDescription>{t('tags.chooseDescription')}</DialogDescription>
+          <div className="mt-4 space-y-4">
+            <TagPicker value={tagDraft} onChange={setTagDraft} disabled={savingTags}/>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={()=>setTagEditorOpen(false)} disabled={savingTags}>{t('common.cancel')}</Button>
+              <Button disabled={savingTags || !taskId} onClick={async()=>{
+                if(!taskId)return
+                setSavingTags(true)
+                try {await setTaskTags(taskId,tagDraft);await tagQueryClient.invalidateQueries({queryKey:['tasks']});
+                  await tagQueryClient.invalidateQueries({queryKey:['assigned-action-items']});
+                  await tagQueryClient.invalidateQueries({queryKey:['general-assignments']});
+                  await tagQueryClient.invalidateQueries({queryKey:['meetings','action-items']});
+                  setTagEditorOpen(false);toast.success(t('tags.saved'))}
+                catch {toast.error(t('tags.saveFailed'))}
+                finally {setSavingTags(false)}
+              }}>{t('common.save')}</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {taskId && shareOpen ? <ShareTaskDialog taskId={taskId} open onOpenChange={setShareOpen}/> : null}
+      {taskId && canCreateSubtasks ? (
         <SubtaskEditorDialog
           key={subtaskEditorSession}
           open={subtaskEditorOpen}
           onOpenChange={setSubtaskEditorOpen}
           taskId={taskId}
           subtask={editingSubtask}
+          parentPriority={query.data?.task.priority ?? 'MEDIUM'}
+          collaborationActive={collaborationActive}
           dueDateRequired={subtaskDueDateRequired}
           generalAssignmentEnabled={supportsSubtaskAssignment}
           meetingId={query.data?.actionItem?.meetingId ?? null}
@@ -1017,6 +1106,8 @@ function InfoRow({
     </div>
   )
 }
+
+
 
 
 

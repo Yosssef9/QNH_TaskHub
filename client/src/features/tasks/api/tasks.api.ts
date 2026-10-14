@@ -147,10 +147,16 @@ export async function createSubtask(input: {
   title: string
   dueDate?: string | null
   assigneeUserId?: number | null
+  description?: string | null
+  priority?: 'LOW' | 'MEDIUM' | 'HIGH'
+  assignmentMode?: 'INHERIT' | 'CUSTOM'
+  assigneeUserIds?: number[]
 }): Promise<Subtask> {
   const response = await apiClient.post<ApiSuccessResponse<{ subtask: Subtask }>>(
     `/tasks/${input.taskId}/subtasks`,
-    { title: input.title, dueDate: input.dueDate ?? null, ...(input.assigneeUserId != null ? {assigneeUserId: input.assigneeUserId} : {}) },
+    { title: input.title, dueDate: input.dueDate ?? null, description: input.description ?? null,
+      priority: input.priority, assignmentMode: input.assignmentMode, assigneeUserIds: input.assigneeUserIds,
+      ...(input.assigneeUserId != null ? {assigneeUserId: input.assigneeUserId} : {}) },
   )
   return response.data.data.subtask
 }
@@ -159,6 +165,8 @@ export async function updateSubtask(input: {
   subtaskId: number
   title?: string
   dueDate?: string | null
+  description?: string | null
+  priority?: 'LOW' | 'MEDIUM' | 'HIGH'
 }): Promise<Subtask> {
   const { subtaskId, ...values } = input
   const response = await apiClient.patch<ApiSuccessResponse<{ subtask: Subtask }>>(
@@ -233,4 +241,5 @@ export async function getAttachmentPreview(
 export async function deleteAttachment(attachmentId: string): Promise<void> {
   await apiClient.delete(`/attachments/${attachmentId}`)
 }
+
 

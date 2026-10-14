@@ -49,6 +49,9 @@ export const taskListQuerySchema = z.object({
   search: z.string().trim().max(100).optional(),
   status: z.enum(TASK_STATUSES).optional(),
   priority: z.enum(TASK_PRIORITIES).optional(),
+  taskType: z.enum(["ALL", "TEAM", "SINGLE", "PERSONAL"]).default("ALL"),
+  tagIds: z.string().regex(/^\d+(,\d+)*$/).max(240).optional(),
+  tagMatch: z.enum(["ANY","ALL","UNTAGGED"]).default("ANY"),
   due: z.enum(TASK_DUE_FILTERS).default("ALL"),
   sortBy: z.enum(TASK_SORT_FIELDS).default("createdAt"),
   sortDirection: z.enum(SORT_DIRECTIONS).default("desc"),
@@ -64,6 +67,8 @@ export const createTaskBodySchema = z
     startDate: dateOnlySchema.nullable().optional(),
     dueDate: dateOnlySchema.nullable().optional(),
     assigneeUserId: z.number().int().positive().nullable().optional(),
+    assigneeUserIds: z.array(z.number().int().positive()).min(1).max(30).optional(),
+    tagIds:z.array(z.number().int().positive()).max(8).optional(),
   })
   .superRefine(validateDateRange);
 
@@ -75,6 +80,7 @@ export const updateTaskBodySchema = z
     startDate: dateOnlySchema.nullable().optional(),
     dueDate: dateOnlySchema.nullable().optional(),
     listId: z.number().int().positive().optional(),
+    tagIds:z.array(z.number().int().positive()).max(8).optional(),
     referenceDate: dateOnlySchema.nullable().optional(),
   })
   .refine((input) => Object.keys(input).length > 0, { message: "A task change is required." })
@@ -108,4 +114,6 @@ export type TaskListQueryInput = z.infer<typeof taskListQuerySchema>;
 export type CreateTaskBody = z.infer<typeof createTaskBodySchema>;
 export type UpdateTaskBody = z.infer<typeof updateTaskBodySchema>;
 export type ChangeTaskStatusBody = z.infer<typeof changeTaskStatusBodySchema>;
+
+
 

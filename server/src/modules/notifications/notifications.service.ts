@@ -36,6 +36,10 @@ export function notificationHref(record: NotificationRecord): string {
   const meetingId = optionalId(record.meetingId);
   const meetingSeriesId = optionalId(record.meetingSeriesId);
 
+  if (record.notificationType === 'TASK_SHARED' || record.notificationType === 'TASK_SHARE_UPDATED') {
+    return taskId === null ? '/shared-tasks' : `/shared-tasks?taskId=${taskId}`;
+  }
+  if (record.notificationType === 'TASK_SHARE_REVOKED') return '/shared-tasks';
   if (record.notificationType === "GENERAL_TASK_ASSIGNED" ||
       record.notificationType === "GENERAL_SUBTASK_ASSIGNED") {
     return taskId === null ? "/assigned-to-me" : `/assigned-to-me?taskId=${taskId}`;
@@ -227,6 +231,7 @@ export const notificationsService = {
     return notificationsRepository.markAllRead(owner, kpiWorkCyclesAccess);
   },
 };
+
 
 
 

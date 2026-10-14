@@ -28,6 +28,8 @@ describe("task details contracts", () => {
       id: 2,
       taskId: 1,
       title: "Prepare document",
+      description: null,
+      priority: "MEDIUM",
       isCompleted: false,
       dueDate: new Date("2026-08-25T00:00:00Z"),
       displayOrder: 1,
@@ -54,3 +56,4 @@ describe("task details contracts", () => {
     expect(attachmentIdParamsSchema.safeParse({ attachmentId: "not-a-guid" }).success).toBe(false);
   });
 });
+

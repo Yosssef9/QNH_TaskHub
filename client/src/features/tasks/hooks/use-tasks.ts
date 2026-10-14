@@ -82,6 +82,7 @@ function useTaskMutation<TVariables>(mutationFn: (variables: TVariables) => Prom
         queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
         queryClient.invalidateQueries({ queryKey: ['assigned-action-items'] }),
         queryClient.invalidateQueries({ queryKey: ['general-assignments'] }),
+        queryClient.invalidateQueries({ queryKey: ['collaboration'] }),
         queryClient.invalidateQueries({ queryKey: ['notifications'] }),
         queryClient.invalidateQueries({ queryKey: ['meetings', 'action-items'] }),
         queryClient.invalidateQueries({ queryKey: ['meetings', 'follow-up'] }),
@@ -179,6 +180,7 @@ export function useUploadAttachment() {
 export function useDeleteAttachment() {
   return useTaskMutation(deleteAttachment)
 }
+
 
 
 

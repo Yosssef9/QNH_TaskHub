@@ -8,6 +8,7 @@ import { tasksRepository } from "../tasks/tasks.repository.js";
 import { assertTaskWritable } from "../tasks/tasks.policy.js";
 import { generalTaskAssignmentsRepository as repo } from "./general-task-assignments.repository.js";
 import { notifyGeneralTask, notifyRemovedAssignment } from "./general-task-assignments.email-events.js";
+import { collaborationRepository } from "../collaboration/collaboration.repository.js";
 
 const missing = () => new AppError({statusCode:404,code:"TASK_NOT_FOUND",message:"Task not found."});
 const denied = () => new AppError({statusCode:403,code:"TASK_ASSIGNMENT_FORBIDDEN",message:"Only the creator may manage assignments."});
@@ -23,6 +24,8 @@ export const generalTaskAssignmentsService = {
     await withTransaction(async transaction => {
       const access = await resolveTaskAccess(actorUserId, taskId, false, transaction);
       if (!access || access.ownerUserId !== actorUserId || access.context) throw denied();
+      if (await collaborationRepository.active(taskId,transaction)) throw new AppError({statusCode:409,
+        code:'COLLABORATION_USE_TEAM',message:'Manage the collaborative team instead.'});
       const task = await tasksRepository.findOwnedForUpdate(transaction, actorUserId, taskId);
       if (!task) throw missing();
       assertTaskWritable(task);
@@ -49,6 +52,8 @@ export const generalTaskAssignmentsService = {
     await withTransaction(async transaction => {
       const access = await resolveTaskAccess(actorUserId, link.taskId, false, transaction);
       if (!access || access.ownerUserId !== actorUserId) throw denied();
+      if (await collaborationRepository.active(link.taskId,transaction)) throw new AppError({statusCode:409,
+        code:'COLLABORATION_USE_TEAM',message:'Manage the collaborative subtask team instead.'});
       const task = await tasksRepository.findOwnedForUpdate(transaction, actorUserId, link.taskId);
       if (!task) throw missing();
       assertTaskWritable(task);
@@ -68,7 +73,7 @@ export const generalTaskAssignmentsService = {
       if (!access.context) await repo.ensureRelation(transaction, link.taskId, actorUserId, actorUserId, null);
       await repo.setSubtaskAssignee(transaction, actorUserId, subtaskId, assigneeUserId);
       await tasksRepository.addActivity(transaction, actorUserId, link.taskId,
-        "GENERAL_SUBTASK_ASSIGNED", {subtaskId, assigneeUserId}, actorUserId);
+        "GENERAL_SUBTASK_ASSIGNED", {subtaskId, subtaskTitle:subtask.title, assigneeUserId}, actorUserId);
       const next = await repo.effectiveSubtaskAssignee(actorUserId, subtaskId, transaction);
       if (next !== former) {
         await notifyRemovedAssignment(transaction, actorUserId, former, link.taskId, subtaskId);
@@ -87,6 +92,8 @@ export const generalTaskAssignmentsService = {
     await withTransaction(async transaction => {
       const access = await resolveTaskAccess(actorUserId, link.taskId, false, transaction);
       if (!access) throw missing();
+      if (access.collaborationActive) throw new AppError({statusCode:409,
+        code:'COLLABORATION_PRIVATE_NOTES',message:'Save notes to your individual assignment.'});
       const task = await tasksRepository.findOwnedForUpdate(transaction, access.ownerUserId, link.taskId);
       if (!task) throw missing();
       assertTaskWritable(task);
@@ -97,7 +104,7 @@ export const generalTaskAssignmentsService = {
       if (!(await taskDetailsRepository.findSubtask(access.ownerUserId, subtaskId, transaction))) throw missing();
       await repo.saveWorkNotes(transaction, access.ownerUserId, subtaskId, workNotes);
       await tasksRepository.addActivity(transaction, access.ownerUserId, link.taskId,
-        "SUBTASK_WORK_NOTES_UPDATED", {subtaskId}, actorUserId);
+        "SUBTASK_WORK_NOTES_UPDATED", {subtaskId, subtaskTitle:(await taskDetailsRepository.findSubtask(access.ownerUserId,subtaskId,transaction))?.title??null}, actorUserId);
     });
     return {taskId:link.taskId,subtaskId};
   },
@@ -106,6 +113,8 @@ export const generalTaskAssignmentsService = {
     await withTransaction(async transaction => {
       const access = await resolveTaskAccess(actorUserId, taskId, false, transaction);
       if (!access) throw missing();
+      if (access.collaborationActive) throw new AppError({statusCode:409,
+        code:'COLLABORATION_PRIVATE_NOTES',message:'Use individual assignment notes.'});
       const task = await tasksRepository.findOwnedForUpdate(transaction, access.ownerUserId, taskId);
       if (!task) throw missing();
       assertTaskWritable(task);
@@ -120,3 +129,4 @@ export const generalTaskAssignmentsService = {
     return {taskId};
   },
 };
+

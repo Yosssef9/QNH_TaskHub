@@ -1,6 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect, useState } from 'react'
-import { TaskAssigneePicker } from '../assignment/TaskAssigneePicker'
+import { TagPicker } from '../tags/TagPicker'
+import { TaskAssigneeMultiPicker } from '../assignment/TaskAssigneeMultiPicker'
 import { Loader2, Plus, Save } from 'lucide-react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import toast from 'react-hot-toast'
@@ -88,8 +89,10 @@ export function TaskEditorDialog({
   onSaved,
 }: Props) {
   const { t } = useTranslation()
-  const [assigneeUserId, setAssigneeUserId] = useState<number | null>(null)
-  useEffect(() => { if (!open) setAssigneeUserId(null) }, [open])
+  const [tagIds,setTagIds]=useState<number[]>(task?.tags?.map(x=>x.id)??[])
+  const [assigneeUserIds, setAssigneeUserIds] = useState<number[]>([])
+  useEffect(() => { if (!open) setAssigneeUserIds([]) }, [open])
+  useEffect(() => { if (open) setTagIds(task?.tags?.map(tag=>tag.id)??[]) }, [open,task?.id])
   const createMutation = useCreateTask()
   const createKpiMutation = useCreateKpiTask()
   const createGlobalKpiMutation = useCreateGlobalKpiTask()
@@ -248,7 +251,8 @@ export function TaskEditorDialog({
       taskValues = {
         ...baseValues,
         dueDate: values.dueDate ?? null,
-        ...(!task && assigneeUserId !== null ? {assigneeUserId} : {}),
+        tagIds,
+        ...(!task && assigneeUserIds.length ? {assigneeUserIds} : {}),
         ...(task && values.listId ? { listId: values.listId } : {}),
       }
     }
@@ -426,10 +430,14 @@ export function TaskEditorDialog({
             {!isKpiTask && !task ? (
               <div className="space-y-1.5 sm:col-span-2">
                 <label className="text-sm font-medium">{t('tasks.assignment.assignTo')}</label>
-                <TaskAssigneePicker value={assigneeUserId} onChange={setAssigneeUserId} disabled={pending} />
+                <TaskAssigneeMultiPicker value={assigneeUserIds} onChange={setAssigneeUserIds} disabled={pending} />
                 <p className="text-muted-foreground text-xs">{t('tasks.assignment.optionalHint')}</p>
               </div>
             ) : null}
+            {!isKpiTask ? <div className="space-y-1.5 sm:col-span-2">
+              <label className="text-sm font-medium">{t('tags.title')}</label>
+              <TagPicker value={tagIds} onChange={setTagIds} disabled={pending}/>
+            </div>:null}
             <Controller
               name="priority"
               control={control}
@@ -594,5 +602,7 @@ export function TaskEditorDialog({
     </Dialog>
   )
 }
+
+
 
 

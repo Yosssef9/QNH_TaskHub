@@ -1,8 +1,9 @@
+import type { TaskTag } from '../tags/tags.api'
 import { apiClient } from '@/lib/api-client'
 import type { ApiSuccessResponse } from '@/types/api.types'
-import type { TaskPriority, TaskStatus, TaskDueFilter } from '../types/task.types'
+import type { TaskPriority, TaskStatus, TaskDueFilter, TaskTypeFilter } from '../types/task.types'
 
-export interface EligibleTaskUser { userId: number; userCode: string; userName: string }
+export interface EligibleTaskUser { userId: number; userCode: string; userName: string; email: string | null }
 export interface EligibleTaskUsersResponse { items: EligibleTaskUser[]; page: number; pageSize: number }
 export interface GeneralAssignedSubtask {
   id: number; title: string; dueDate: string | null; isCompleted: boolean; workNotes: string | null
@@ -11,10 +12,13 @@ export interface GeneralAssignedTask {
   taskId: number; title: string; description: string | null; status: TaskStatus; priority: TaskPriority
   dueDate: string | null; creatorUserId: number; creatorName: string; isMainAssignee: boolean
   subtaskTotal: number; subtaskCompleted: number; assignedSubtasks: GeneralAssignedSubtask[]
+  teamTask?: boolean;teamMemberCount?: number;mainAssigneeCount?: number;mainCompletedCount?: number
+  tags?: TaskTag[]
+  teamRoster?: Array<{userId:number;userName:string;userCode:string;email:string|null;mainAssignee:boolean}>
 }
 export interface GeneralAssignedQuery {
   page: number; pageSize: number; search?: string; status?: TaskStatus; priority?: TaskPriority
-  due?: TaskDueFilter; sortBy?: 'assignedAt' | 'dueDate' | 'priority' | 'title' | 'status'
+  due?: TaskDueFilter; taskType?: TaskTypeFilter; tagIds?: string; tagMatch?: "ANY" | "ALL" | "UNTAGGED"; sortBy?: 'assignedAt' | 'dueDate' | 'priority' | 'title' | 'status'
   sortDirection?: 'asc' | 'desc'
 }
 export interface GeneralAssignedResponse { items: GeneralAssignedTask[]; page: number; pageSize: number; total: number }
@@ -46,3 +50,5 @@ export async function getEligibleTaskUser(userId: number) {
   const result = await apiClient.get<ApiSuccessResponse<EligibleTaskUser>>(`/general-assignments/eligible-users/${userId}`)
   return result.data.data
 }
+
+

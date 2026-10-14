@@ -1,3 +1,4 @@
+import { taskTagsSelectSql } from "../tags/task-tags.sql.js";
 import { getDatabasePool, sql } from "../../database/sql.js";
 import type {
   CalendarSearchQuery,
@@ -48,7 +49,16 @@ export const calendarRepository = {
           cycle.closed_at_utc AS cycleClosedAtUtc,
           instance.id AS kpiInstanceId,
           instance.kpi_id AS kpiTemplateId,
-          instance.name_snapshot AS kpiName
+          instance.name_snapshot AS kpiName,
+          CAST(CASE WHEN task.list_id IS NOT NULL AND
+            (SELECT COUNT(DISTINCT a.assignee_user_id)
+             FROM dbo.TM_collaboration_assignments a
+             WHERE a.task_id=task.id AND a.is_active=1) > 1
+            THEN 1 ELSE 0 END AS bit) AS teamTask,
+          (SELECT COUNT(DISTINCT a.assignee_user_id)
+           FROM dbo.TM_collaboration_assignments a
+           WHERE a.task_id=task.id AND a.is_active=1) AS teamMemberCount,
+          ${taskTagsSelectSql}
         FROM dbo.TM_tasks AS task
         LEFT JOIN dbo.TM_lists AS list
           ON list.id = task.list_id
@@ -140,6 +150,15 @@ export const calendarRepository = {
           instance.id AS kpiInstanceId,
           instance.kpi_id AS kpiTemplateId,
           instance.name_snapshot AS kpiName,
+          CAST(CASE WHEN task.list_id IS NOT NULL AND
+            (SELECT COUNT(DISTINCT a.assignee_user_id)
+             FROM dbo.TM_collaboration_assignments a
+             WHERE a.task_id=task.id AND a.is_active=1) > 1
+            THEN 1 ELSE 0 END AS bit) AS teamTask,
+          (SELECT COUNT(DISTINCT a.assignee_user_id)
+           FROM dbo.TM_collaboration_assignments a
+           WHERE a.task_id=task.id AND a.is_active=1) AS teamMemberCount,
+          ${taskTagsSelectSql},
           COUNT(*) OVER() AS totalCount
         FROM dbo.TM_tasks AS task
         LEFT JOIN dbo.TM_lists AS list
@@ -198,3 +217,4 @@ export const calendarRepository = {
     return result.recordset;
   },
 };
+

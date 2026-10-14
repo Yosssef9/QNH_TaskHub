@@ -1,3 +1,4 @@
+import type { TaskTag } from '@/features/tasks/tags/tags.api'
 import type { TaskPriority, TaskStatus } from '@/features/tasks/types/task.types'
 
 export const CALENDAR_SCOPES = ['PERSONAL', 'KPI'] as const
@@ -32,6 +33,9 @@ export interface CalendarTask {
   kpiTemplateId: number | null
   kpiName: string | null
   isReadOnly: boolean
+  teamTask?: boolean
+  tags?: TaskTag[]
+  teamMemberCount?: number
 }
 
 export interface CalendarTaskFilters {
@@ -72,3 +76,4 @@ export interface CalendarSearchTarget {
   calendarDate: string
   requestId: number
 }
+

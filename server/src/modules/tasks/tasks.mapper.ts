@@ -56,6 +56,15 @@ export function mapTask(record: TaskRecord): PersonalTask {
     isOverdue: record.isOverdue,
     subtaskTotal: Number(record.subtaskTotal),
     subtaskCompleted: Number(record.subtaskCompleted),
+    ...(record.teamRosterJson !== undefined ? {
+      collaborationEnabled: Boolean(record.collaborationEnabled),
+      teamTask: Boolean(record.teamTask),
+      teamMemberCount: Number(record.teamMemberCount ?? 0),
+      mainAssigneeCount: Number(record.mainAssigneeCount ?? 0),
+      mainCompletedCount: Number(record.mainCompletedCount ?? 0),
+      teamRoster: record.teamRosterJson ? JSON.parse(record.teamRosterJson) : [],
+    } : {}),
+    tags: record.taskTagsJson ? JSON.parse(record.taskTagsJson) : [],
     meetingActionItem:
       record.actionMeetingId === null ||
       record.actionMeetingTitle === null ||
@@ -81,5 +90,6 @@ export function mapTask(record: TaskRecord): PersonalTask {
           },
   };
 }
+
 
 

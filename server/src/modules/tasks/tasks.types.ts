@@ -48,6 +48,13 @@ export interface TaskRecord {
   isOverdue: boolean;
   subtaskTotal: number;
   subtaskCompleted: number;
+  collaborationEnabled?: boolean;
+  teamTask?: boolean;
+  teamMemberCount?: number | string;
+  mainAssigneeCount?: number | string;
+  mainCompletedCount?: number | string;
+  teamRosterJson?: string | null;
+  taskTagsJson?: string | null;
   actionMeetingId: number | string | null;
   actionMeetingTitle: string | null;
   actionAssigneeUserId: number | null;
@@ -87,6 +94,13 @@ export interface PersonalTask {
   isOverdue: boolean;
   subtaskTotal: number;
   subtaskCompleted: number;
+  collaborationEnabled?: boolean;
+  teamTask?: boolean;
+  teamMemberCount?: number;
+  mainAssigneeCount?: number;
+  mainCompletedCount?: number;
+  teamRoster?: Array<{userId:number;userName:string;userCode:string;email:string|null;mainAssignee:boolean}>;
+  tags?: Array<{id:number;name:string;scope:string;iconKind:string;iconKey:string|null;color:string}>;
   meetingActionItem: MeetingActionItemTaskContext | null;
 }
 
@@ -94,6 +108,9 @@ export interface TaskListQuery {
   search?: string | undefined;
   status?: TaskStatus | undefined;
   priority?: TaskPriority | undefined;
+  taskType?: "ALL" | "TEAM" | "SINGLE" | "PERSONAL" | undefined;
+  tagIds?: string | undefined;
+  tagMatch?: "ANY" | "ALL" | "UNTAGGED" | undefined;
   due: TaskDueFilter;
   sortBy: TaskSortField;
   sortDirection: SortDirection;
@@ -137,6 +154,7 @@ export interface CreateTaskInput {
   startDate?: string | null | undefined;
   dueDate?: string | null | undefined;
   assigneeUserId?: number | null | undefined;
+  tagIds?: number[] | undefined;
 }
 
 export interface UpdateTaskInput {
@@ -146,6 +164,7 @@ export interface UpdateTaskInput {
   startDate?: string | null | undefined;
   dueDate?: string | null | undefined;
   listId?: number | undefined;
+  tagIds?: number[] | undefined;
   referenceDate?: string | null | undefined;
 }
 
@@ -153,4 +172,5 @@ export interface ChangeTaskStatusInput {
   status: TaskStatus;
   cancellationReason?: string | undefined;
 }
+
 

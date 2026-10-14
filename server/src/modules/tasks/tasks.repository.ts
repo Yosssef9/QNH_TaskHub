@@ -1,6 +1,8 @@
 import { getDatabasePool, sql } from "../../database/sql.js";
 import type { DatabaseTransaction } from "../../database/types.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
+import { taskTagsSelectSql,taskTagsFilterSql } from "../tags/task-tags.sql.js";
+import { collaborationCardSummarySql, taskTypeConditionSql } from "../collaboration/collaboration-card-summary.sql.js";
 import type {
   CreateTaskInput,
   TaskListQuery,
@@ -74,7 +76,10 @@ function addListFilters(
     .input("today", sql.Date, today)
     .input("search", sql.NVarChar(100), query.search ? `%${query.search}%` : null)
     .input("status", sql.VarChar(20), query.status ?? null)
-    .input("priority", sql.VarChar(10), query.priority ?? null);
+    .input("priority", sql.VarChar(10), query.priority ?? null)
+    .input("taskType", sql.VarChar(12), query.taskType ?? "ALL")
+    .input("tagIds", sql.VarChar(240), query.tagIds || null)
+    .input("tagMatch", sql.VarChar(12), query.tagMatch ?? "ANY");
 }
 
 function filterSql(query: TaskListQuery): string {
@@ -89,7 +94,8 @@ function filterSql(query: TaskListQuery): string {
     AND task.kpi_instance_id IS NULL AND task.deleted_at_utc IS NULL
     AND (@search IS NULL OR task.title LIKE @search)
     AND (@status IS NULL OR task.status = @status)
-    AND (@priority IS NULL OR task.priority = @priority) ${due}`;
+    AND (@priority IS NULL OR task.priority = @priority) AND ${taskTypeConditionSql}
+    AND ${taskTagsFilterSql} ${due}`;
 }
 
 const sortColumns = {
@@ -110,7 +116,7 @@ export const tasksRepository = {
       .input("pageSize", sql.Int, query.pageSize);
     const order = `${sortColumns[query.sortBy]} ${query.sortDirection === "asc" ? "ASC" : "DESC"}, task.id DESC`;
     const result = await request.query<TaskRecord>(`
-      SELECT ${taskSelect} FROM dbo.TM_tasks AS task ${taskContextJoins}
+      SELECT ${taskSelect}, ${collaborationCardSummarySql}, ${taskTagsSelectSql} FROM dbo.TM_tasks AS task ${taskContextJoins}
       ${subtaskSummarySql}
       WHERE ${filterSql(query)} ORDER BY ${order}
       OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;`);
@@ -192,7 +198,7 @@ export const tasksRepository = {
       .input("ownerUserId", sql.Int, ownerUserId)
       .input("taskId", sql.BigInt, taskId)
       .input("today", sql.Date, today).query<TaskRecord>(`
-        SELECT TOP (1) ${taskSelect} FROM dbo.TM_tasks AS task ${taskContextJoins}
+        SELECT TOP (1) ${taskSelect}, ${collaborationCardSummarySql}, ${taskTagsSelectSql} FROM dbo.TM_tasks AS task ${taskContextJoins}
         ${subtaskSummarySql}
         WHERE task.id = @taskId AND task.owner_user_id = @ownerUserId
           ${includeDeleted ? "" : "AND task.deleted_at_utc IS NULL"};`);
@@ -345,4 +351,5 @@ export const tasksRepository = {
         VALUES (@taskId, @ownerUserId, @actorUserId, @type, @data);`);
   },
 };
+
 

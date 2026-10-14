@@ -1,4 +1,5 @@
-import type { TaskPriority, TaskStatus } from '@/features/tasks/types/task.types'
+import type { TaskTag } from '@/features/tasks/tags/tags.api'
+import type { TaskPriority, TaskStatus, TaskTypeFilter } from '@/features/tasks/types/task.types'
 
 export interface MeetingActionItem {
   taskId: number
@@ -15,6 +16,14 @@ export interface MeetingActionItem {
   isOverdue: boolean
   subtaskTotal: number
   subtaskCompleted: number
+  isCollaborative?: boolean
+  assigneeCount?: number
+  teamTask?: boolean
+  teamMemberCount?: number
+  mainAssigneeCount?: number
+  mainCompletedCount?: number
+  tags?: TaskTag[]
+  teamRoster?: Array<{userId:number;userName:string;userCode:string;email:string|null;mainAssignee:boolean}>
   assigneeUserId: number
   assigneeName: string
   assignedByUserId: number
@@ -29,6 +38,7 @@ export interface MeetingActionItemAssigneeOption {
   userId: number
   userCode: string
   userName: string
+  email: string | null
   eligible: boolean
 }
 
@@ -39,6 +49,8 @@ export interface CreateMeetingActionItemInput {
   startDate?: string | null
   dueDate?: string | null
   assigneeUserId: number
+  assigneeUserIds?: number[]
+  tagIds?: number[]
   agendaItemId?: number | null
 }
 
@@ -59,6 +71,9 @@ export interface AssignedMeetingActionItemsQuery {
   status?: TaskStatus
   priority?: TaskPriority
   due?: AssignedActionItemDueFilter
+  taskType?: TaskTypeFilter
+  tagIds?: string
+  tagMatch?: "ANY" | "ALL" | "UNTAGGED"
   sortBy?: AssignedActionItemSortField
   sortDirection?: 'asc' | 'desc'
   groupBy?: AssignedActionItemGroupBy
@@ -93,3 +108,5 @@ export interface MeetingActionItemListData {
   items: MeetingActionItem[]
   canCreate: boolean
 }
+
+

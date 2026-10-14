@@ -1,4 +1,4 @@
-import { ChevronDown, ClipboardCheck, FolderOpen, Loader2, Plus, RefreshCw, Settings2 } from 'lucide-react'
+import { ChevronDown, ClipboardCheck, Share2, FolderOpen, Loader2, Plus, RefreshCw, Settings2 } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { lazy, Suspense, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -105,6 +105,12 @@ export function ListsSidebarSection({
                   <ClipboardCheck className="size-4 shrink-0" />
                   <span className="flex-1 truncate">{t('tasks.assignedToMe.title')}</span>
                 </NavLink>
+                <NavLink to="/shared-tasks" onClick={onNavigate} className={({isActive})=>cn(
+                    'flex h-9 items-center gap-2 rounded-lg px-2 text-sm',
+                    isActive?'bg-sidebar-accent text-sidebar-accent-foreground':'text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground',
+                  )}>
+                  <Share2 className="size-4 shrink-0"/><span className="flex-1 truncate">{t('taskSharing.title')}</span>
+                </NavLink>
                 <AnimatePresence initial={false} mode="popLayout">
                   {(query.data ?? []).map((list) => {
                     const Icon = listIcons[list.iconKey]
@@ -178,4 +184,5 @@ export function ListsSidebarSection({
     </>
   )
 }
+
 

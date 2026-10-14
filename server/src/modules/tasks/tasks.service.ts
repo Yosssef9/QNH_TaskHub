@@ -1,3 +1,4 @@
+import { tagsService } from "../tags/tags.service.js";
 import { withTransaction } from "../../database/transaction.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
@@ -7,6 +8,8 @@ import { meetingSchedulingRepository } from "../meetings/meeting-scheduling.repo
 import { notificationsRepository } from "../notifications/notifications.repository.js";
 import { notifyGeneralTask } from "../general-task-assignments/general-task-assignments.email-events.js";
 import { generalTaskAssignmentsRepository } from "../general-task-assignments/general-task-assignments.repository.js";
+import { collaborationRepository } from "../collaboration/collaboration.repository.js";
+import { initializeCollaborativeTask } from "../collaboration/collaboration.service.js";
 import { workCyclesService } from "../work-cycles/work-cycles.service.js";
 import { mapTask } from "./tasks.mapper.js";
 import { assertTaskStatusTransition, assertTaskWritable } from "./tasks.policy.js";
@@ -99,7 +102,7 @@ export const tasksService = {
     const task = await loadTask(access.ownerUserId, taskId);
     return {
       ...task,
-      ...((access.generalAssignment || access.context) && access.ownerUserId !== actorUserId ? {listId:null} : {}),
+      ...((access.generalAssignment || access.context || access.sharedPermission) && access.ownerUserId !== actorUserId ? {listId:null} : {}),
       isReadOnly: task.isReadOnly || !access.capabilities.canEditDetails,
     };
   },
@@ -119,7 +122,11 @@ export const tasksService = {
         });
       }
 
-      if (input.assigneeUserId != null) {
+      if (input.assigneeUserIds?.length) {
+        if (input.assigneeUserId != null) throw new AppError({statusCode:400,
+          code:'COLLABORATION_ASSIGNMENT_CONFLICT',message:'Specify either assigneeUserIds or assigneeUserId.'});
+        await initializeCollaborativeTask(transaction,ownerUserId,createdId,input.assigneeUserIds);
+      } else if (input.assigneeUserId != null) {
         if (!(await generalTaskAssignmentsRepository.isEligibleUser(input.assigneeUserId, transaction))) {
           throw new AppError({statusCode:400,code:"TASK_ASSIGNEE_INVALID",message:"Select an active TaskHub user."});
         }
@@ -130,6 +137,8 @@ export const tasksService = {
           subjectTitle: input.title, contextTitle: "Task assigned to you",
         });
       }
+      if (input.tagIds) await tagsService.replaceTaskTags(transaction,ownerUserId,createdId,input.tagIds);
+      if (input.tagIds?.length) await tasksRepository.addActivity(transaction,ownerUserId,createdId,'TAGS_CHANGED',{tagIds:input.tagIds},ownerUserId);
       await tasksRepository.addActivity(transaction, ownerUserId, createdId, "CREATED", {
         listId,
         title: input.title,
@@ -163,6 +172,9 @@ export const tasksService = {
       if (!current) throw notFound();
       assertTaskWritable(current);
 
+      if (access.sharedPermission && (input.listId !== undefined || input.referenceDate !== undefined)) {
+        throw forbidden('TASK_SHARE_SCOPE_FORBIDDEN','Shared editors cannot move tasks or change KPI metadata.');
+      }
       if (current.kpiInstanceId !== null && input.listId !== undefined) {
         throw new AppError({
           statusCode: 409,
@@ -232,6 +244,10 @@ export const tasksService = {
         referenceDate,
       });
 
+      if (input.tagIds !== undefined) {
+        await tagsService.replaceTaskTags(transaction, actorUserId, taskId, input.tagIds);
+        await tasksRepository.addActivity(transaction,ownerUserId,taskId,"TAGS_CHANGED",{tagIds:input.tagIds},actorUserId);
+      }
       await tasksRepository.addActivity(
         transaction,
         ownerUserId,
@@ -240,7 +256,16 @@ export const tasksService = {
         { fromListId: current.listId, toListId: destinationListId },
         actorUserId,
       );
-      if ((access.generalAssignment || access.context) && dueDate !== toDateOnly(current.dueDate)) {
+      if (access.collaborationActive && dueDate !== toDateOnly(current.dueDate)) {
+        const collaborators = (await collaborationRepository.activeAssignments(taskId,transaction))
+          .filter(member=>member.subtaskId===null).map(member=>member.assigneeUserId);
+        await notifyGeneralTask(transaction,collaborators,actorUserId,{
+          type:'GENERAL_TASK_DUE_CHANGED',taskId,listId:access.context ? null : destinationListId,
+          subjectTitle:input.title??current.title,contextTitle:access.context?.meetingTitle??'Task deadline updated',
+          eventDate:dueDate,
+        });
+      }
+      if (!access.collaborationActive && (access.generalAssignment || access.context) && dueDate !== toDateOnly(current.dueDate)) {
         await notifyGeneralTask(transaction, [access.context?.assigneeUserId ?? access.generalAssignment?.assigneeUserId], actorUserId, {
           type: "GENERAL_TASK_DUE_CHANGED", taskId, listId: access.context ? null : destinationListId,
           subjectTitle: input.title ?? current.title, contextTitle: access.context?.meetingTitle ?? "Task deadline updated",
@@ -264,6 +289,12 @@ export const tasksService = {
       const access = await resolveTaskAccess(actorUserId, taskId, false, transaction);
       if (!access) throw notFound();
       ownerUserId = access.ownerUserId;
+      if (access.collaborationActive && input.status !== 'CANCELLED' &&
+          !(input.status==='TODO' && access.capabilities.role==='OWNER' &&
+            (await tasksRepository.findOwnedForUpdate(transaction,ownerUserId,taskId))?.status==='CANCELLED')) {
+        throw new AppError({statusCode:409,code:'COLLABORATION_STATUS_AUTOMATIC',
+          message:'Collaborative Task completion and reopening are calculated automatically.'});
+      }
 
       if (access.generalAssignment && access.capabilities.role === "OWNER" &&
           access.generalAssignment.assigneeUserId !== null &&
@@ -346,7 +377,12 @@ export const tasksService = {
         actorUserId,
       );
 
-      if (access.generalAssignment &&
+      if (access.collaborationActive && currentStatus === 'CANCELLED' && input.status === 'TODO') {
+        await collaborationRepository.syncChildStatus(taskId,transaction,actorUserId);
+        await collaborationRepository.syncParentStatus(taskId,transaction,actorUserId);
+      }
+
+      if (!access.collaborationActive && access.generalAssignment &&
           (input.status === "DONE" || (currentStatus === "DONE" &&
             (input.status === "TODO" || input.status === "IN_PROGRESS")))) {
         await notifyGeneralTask(transaction,
@@ -356,7 +392,7 @@ export const tasksService = {
             contextTitle: input.status === "DONE" ? "Main task completed" : "Main task reopened",
           });
       }
-      if (access.context && currentStatus === "DONE" && (input.status === "TODO" || input.status === "IN_PROGRESS")) {
+      if (!access.collaborationActive && access.context && currentStatus === "DONE" && (input.status === "TODO" || input.status === "IN_PROGRESS")) {
         await notifyGeneralTask(transaction, [access.context.assigneeUserId], actorUserId, {
           type: "GENERAL_TASK_REOPENED", taskId, listId: null, taskOwnerUserId: ownerUserId,
           subjectTitle: current.title, contextTitle: access.context.meetingTitle,
@@ -490,6 +526,8 @@ export const tasksService = {
     return loadTask(ownerUserId, taskId);
   },
 };
+
+
 
 
 

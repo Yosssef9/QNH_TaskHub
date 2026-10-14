@@ -78,6 +78,9 @@ export function renderEmailTemplate(
     case "MEETING_ACTION_ITEM_ASSIGNED":
     case "MEETING_ACTION_ITEM_COMPLETED":
       return renderMeetingActionItemEmail(templateKey, payload, language, context);
+    case "TASK_SHARED":
+    case "TASK_SHARE_UPDATED":
+    case "TASK_SHARE_REVOKED":
     case "GENERAL_TASK_ASSIGNED":
     case "GENERAL_SUBTASK_ASSIGNED":
     case "GENERAL_ASSIGNMENT_REMOVED":
@@ -88,6 +91,7 @@ export function renderEmailTemplate(
       return renderGeneralTaskEmail(templateKey, payload, language, context);
   }
 }
+
 
 
 

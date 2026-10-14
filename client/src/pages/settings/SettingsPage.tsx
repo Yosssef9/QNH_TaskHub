@@ -1,4 +1,4 @@
-import { Clock3, FileText, Mail } from 'lucide-react'
+import { Clock3, FileText, Mail, Tags } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -8,13 +8,14 @@ import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { hasAccessPermission } from '@/features/auth/access-permissions'
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
+import { TagsSettingsPanel } from '@/features/tasks/tags/TagsSettingsPanel'
 import { ContractSettingsPanel } from '@/features/contracts/components/ContractSettingsPanel'
 import { EmailSettingsPanel } from '@/features/email-settings/components/EmailSettingsPanel'
 import { useEmailSettings } from '@/features/email-settings/hooks/use-email-settings'
 import { TimeFormatSettingsPanel } from '@/features/preferences/components/TimeFormatSettingsPanel'
 import { cn } from '@/lib/cn'
 
-type SettingsTab = 'general' | 'email' | 'contracts'
+type SettingsTab = 'general' | 'email' | 'contracts' | 'tags'
 
 export function SettingsPage() {
   const { t } = useTranslation()
@@ -41,6 +42,8 @@ export function SettingsPage() {
         <main className="min-w-0">
           {activeTab === 'general' ? (
             <TimeFormatSettingsPanel />
+          ) : activeTab === 'tags' ? (
+            <TagsSettingsPanel />
           ) : emailDependentTab && emailQuery.isPending ? (
             <LoadingState />
           ) : emailDependentTab && emailQuery.isError ? (
@@ -60,7 +63,7 @@ export function SettingsPage() {
           <div className="bg-card sticky top-20 z-20 rounded-xl border p-2 shadow-sm supports-[backdrop-filter]:bg-card/95 supports-[backdrop-filter]:backdrop-blur">
             <nav
               aria-label={t('settings.navigationLabel')}
-              className="grid gap-1 sm:grid-cols-3 xl:grid-cols-1"
+              className="grid gap-1 sm:grid-cols-4 xl:grid-cols-1"
             >
               <SettingsTabButton
                 active={activeTab === 'general'}
@@ -76,6 +79,9 @@ export function SettingsPage() {
                 description={t('settings.emailSectionDescription')}
                 onClick={() => setActiveTab('email')}
               />
+              <SettingsTabButton active={activeTab === 'tags'} icon={Tags}
+                title={t('tags.management')} description={t('tags.settingsDescription')}
+                onClick={()=>setActiveTab('tags')}/>
               {canAccessContracts ? (
                 <SettingsTabButton
                   active={activeTab === 'contracts'}
@@ -143,4 +149,5 @@ function SettingsTabButton({
     </button>
   )
 }
+
 

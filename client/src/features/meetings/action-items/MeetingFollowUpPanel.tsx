@@ -49,6 +49,7 @@ import {
 import type { MeetingDetail } from '@/features/meetings/types/meeting.types'
 import { TaskCollectionToolbar } from '@/features/tasks/components/TaskCollectionToolbar'
 import { TaskDetailsDrawer } from '@/features/tasks/components/TaskDetailsDrawer'
+import { TaskAssigneePicker } from '@/features/tasks/assignment/TaskAssigneePicker'
 import {
   TaskDueIndicator,
   TaskPriorityIndicator,
@@ -190,7 +191,9 @@ function ActionItemPreviewRow({
         {showAssignee ? (
           <span className="inline-flex items-center gap-1.5">
             <UserRound aria-hidden="true" className="size-3.5" />
-            {item.assigneeName}
+            {item.isCollaborative
+              ? `${item.assigneeCount ?? 0} ${t('tasks.collaboration.assigneesShort')}`
+              : item.assigneeName}
           </span>
         ) : null}
         <span className={cn('inline-flex items-center gap-1.5', item.isOverdue && 'text-destructive font-medium')}>
@@ -294,10 +297,6 @@ export function MeetingFollowUpPanel({
     onLaunchRequestHandled?.()
   }, [launchRequest, onLaunchRequestHandled])
 
-  const selectedReassignAssignee = useMemo(
-    () => assignees.data?.find((item) => String(item.userId) === reassignAssignee) ?? null,
-    [assignees.data, reassignAssignee],
-  )
   const reassignMutation = useReassignMeetingActionItem(meeting.id, reassignItem?.taskId ?? 0)
 
   const allItems = actionItems.data?.items ?? []
@@ -1102,8 +1101,8 @@ export function MeetingFollowUpPanel({
                               <MeetingActionTaskCard
                                 item={item}
                                 onOpen={() => setTaskId(item.taskId)}
-                                canChangeStatus={currentUserId === item.assigneeUserId}
-                                {...(isOrganizer && currentUserId !== item.assigneeUserId
+                                canChangeStatus={!item.isCollaborative && currentUserId === item.assigneeUserId}
+                                {...(!item.isCollaborative && isOrganizer && currentUserId !== item.assigneeUserId
                                   ? {
                                       completionBlockedMessage: t(
                                         'meetings.followUp.onlyAssigneeCanComplete',
@@ -1129,14 +1128,14 @@ export function MeetingFollowUpPanel({
                                         </Button>
                                       </PopoverTrigger>
                                       <PopoverContent align="end" className="w-48 p-1">
-                                        <button
+{!item.isCollaborative ? (                                        <button
                                           type="button"
                                           className="hover:bg-muted focus-visible:bg-muted flex w-full items-center gap-2 rounded-md px-3 py-2 text-start text-sm outline-none"
                                           onClick={() => openReassign(item)}
                                         >
                                           <UserRound className="size-4" />
                                           {t('meetings.followUp.reassign')}
-                                        </button>
+                                        </button>) : null}
                                         <button
                                           type="button"
                                           className="hover:bg-muted focus-visible:bg-muted flex w-full items-center gap-2 rounded-md px-3 py-2 text-start text-sm outline-none"
@@ -1231,55 +1230,13 @@ export function MeetingFollowUpPanel({
           <div className="mt-6 space-y-4">
             <div className="space-y-1.5">
               <label className="text-sm font-medium">{t('meetings.followUp.assignTo')}</label>
-              <Select value={reassignAssignee} onValueChange={setReassignAssignee}>
-                <SelectTrigger className="h-12">
-                  <SelectValue placeholder={t('meetings.followUp.assignTo')}>
-                    {selectedReassignAssignee ? (
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="bg-primary/10 text-primary grid size-7 shrink-0 place-items-center rounded-full">
-                          <UserRound aria-hidden="true" className="size-3.5" />
-                        </span>
-                        <span className="truncate">{selectedReassignAssignee.userName}</span>
-                      </span>
-                    ) : null}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {assignees.isPending ? (
-                    <SelectItem value="__LOADING__" disabled>
-                      {t('common.loading')}
-                    </SelectItem>
-                  ) : assignees.data?.length ? (
-                    assignees.data.map((option) => (
-                      <SelectItem
-                        key={option.userId}
-                        value={String(option.userId)}
-                        textValue={option.userName}
-                        disabled={!option.eligible}
-                      >
-                        <span className="flex min-w-0 items-center gap-2.5">
-                          <span className="bg-primary/10 text-primary grid size-7 shrink-0 place-items-center rounded-full">
-                            <UserRound aria-hidden="true" className="size-3.5" />
-                          </span>
-                          <span className="min-w-0">
-                            <span className="block truncate">{option.userName}</span>
-                            <span className="text-muted-foreground block truncate text-xs">
-                              {option.userCode}
-                              {!option.eligible
-                                ? ` · ${t('meetings.followUp.noTaskHubAccess')}`
-                                : ''}
-                            </span>
-                          </span>
-                        </span>
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="__EMPTY__" disabled>
-                      {t('meetings.followUp.noEligibleAssignees')}
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
+              <TaskAssigneePicker
+                value={reassignAssignee ? Number(reassignAssignee) : null}
+                onChange={(userId) => setReassignAssignee(userId === null ? '' : String(userId))}
+                meetingId={meeting.id}
+                allowClear={false}
+                disabled={reassignMutation.isPending}
+              />
               {!assignees.isPending && (assignees.data?.filter((item) => item.eligible).length ?? 0) === 0 ? (
                 <p className="border-warning/25 bg-warning/10 text-warning-foreground rounded-lg border px-3 py-2 text-xs leading-5">
                   {t('meetings.followUp.noEligibleAssigneesDescription')}
@@ -1309,6 +1266,7 @@ export function MeetingFollowUpPanel({
     </div>
   )
 }
+
 
 
 

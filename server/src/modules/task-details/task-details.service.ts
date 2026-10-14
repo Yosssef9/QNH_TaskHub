@@ -10,6 +10,8 @@ import { meetingActionItemsRepository } from "../meeting-action-items/meeting-ac
 import { generalTaskAssignmentsRepository } from "../general-task-assignments/general-task-assignments.repository.js";
 import { reconcileParentCompletion } from "../general-task-assignments/general-task-assignments.completion.js";
 import { notifyGeneralTask } from "../general-task-assignments/general-task-assignments.email-events.js";
+import { collaborationRepository } from "../collaboration/collaboration.repository.js";
+import { canViewCollaborativeActivity } from "./task-activity-visibility.js";
 import { mapTask } from "../tasks/tasks.mapper.js";
 import { assertTaskWritable } from "../tasks/tasks.policy.js";
 import { tasksRepository } from "../tasks/tasks.repository.js";
@@ -17,6 +19,8 @@ import { readAttachment, removeStoredAttachment, storeAttachment } from "./attac
 import { mapActivity, mapAttachment, mapSubtask } from "./task-details.mapper.js";
 import { taskDetailsRepository } from "./task-details.repository.js";
 import type { TaskDetails } from "./task-details.types.js";
+import type { CreateSubtaskBody, UpdateSubtaskBody } from "./task-details.schemas.js";
+import { normalizeCollaborators } from "../collaboration/collaboration.policy.js";
 
 const notFound = () =>
   new AppError({ statusCode: 404, code: "TASK_NOT_FOUND", message: "Task not found." });
@@ -77,11 +81,21 @@ export const taskDetailsService = {
       taskDetailsRepository.listActivity(resolved.ownerUserId, taskId),
     ]);
     const completed = subtasks.filter((item) => item.isCompleted).length;
+    const externalShare = Boolean(resolved.sharedPermission && actorUserId !== resolved.ownerUserId);
     const isRestricted = (!!resolved.generalAssignment || !!resolved.context) && actorUserId !== resolved.ownerUserId;
-    const ownIds = isRestricted ? new Set(await generalTaskAssignmentsRepository.visibleSubtaskIds(taskId, actorUserId)) : null;
+    const ownIds = isRestricted && !externalShare ? new Set(resolved.collaborationActive
+      ? await collaborationRepository.visibleChildIds(taskId,actorUserId)
+      : await generalTaskAssignmentsRepository.visibleSubtaskIds(taskId, actorUserId)) : null;
     const visibleSubtasks = ownIds ? subtasks.filter(item => ownIds.has(Number(item.id))) : subtasks;
-    const visibleAttachments = ownIds ? attachments.filter(item => item.subtaskId === null || ownIds.has(Number(item.subtaskId))) : attachments;
-    const visibleActivity = ownIds ? activity.filter(item => {
+    const visibleAttachments = externalShare
+      ? attachments.filter(item=>item.subtaskId===null) : ownIds ? attachments.filter(item => item.subtaskId === null ||
+      (!resolved.collaborationActive && ownIds.has(Number(item.subtaskId)))) : attachments;
+    const visibleActivity = externalShare
+      ? activity.filter(item=>['CREATED','STATUS_CHANGED','COLLAB_PARENT_STATUS_CHANGED','SUBTASK_CREATED',
+          'SUBTASK_UPDATED','SUBTASK_DELETED'].includes(item.activityType))
+      : resolved.collaborationActive && isRestricted
+      ? activity.filter(item => canViewCollaborativeActivity(item,actorUserId,ownIds ?? new Set<number>()))
+      : ownIds ? activity.filter(item => {
       // List/detail/change history about sibling subtasks is never returned to another executor.
       if (item.activityType === "SUBTASKS_REORDERED") return false;
       if (item.activityType === "GENERAL_SUBTASK_ASSIGNED" || item.activityType === "MEETING_ACTION_ITEM_REASSIGNED") return false;
@@ -103,13 +117,20 @@ export const taskDetailsService = {
     return {
       task: {
         ...mappedTask,
-        ...(isRestricted ? {listId:null} : {}),
+        ...(isRestricted || externalShare ? {listId:null} : {}),
         isReadOnly: mappedTask.isReadOnly || !resolved.capabilities.canEditDetails,
+        ...(resolved.collaborationActive && isRestricted || externalShare ? {completionSummary:null} : {}),
+        // Authorized Meeting viewers may read parent context, not the team roster.
+        ...(resolved.capabilities.role === 'VIEWER' ? {teamRoster: []} : {}),
       },
+      collaborationActive: resolved.collaborationActive ?? false,
+      ...(resolved.sharedPermission?{sharedPermission:resolved.sharedPermission}:{}),
       actionItem: resolved.context,
       generalAssignment: resolved.generalAssignment ?? null,
       capabilities: resolved.capabilities,
-      subtasks: visibleSubtasks.map(mapSubtask),
+      subtasks: visibleSubtasks.map(subtask => ({...mapSubtask(subtask),
+        ...(externalShare ? { assigneeUserId: null } : {}),
+        ...(resolved.collaborationActive && isRestricted || externalShare ? {workNotes:null} : {})})),
       attachments: visibleAttachments.map(mapAttachment),
       activity: visibleActivity.map(mapActivity),
       progress: {
@@ -123,13 +144,13 @@ export const taskDetailsService = {
   async createSubtask(
     actorUserId: number,
     taskId: number,
-    input: { title: string; dueDate?: string | null | undefined; assigneeUserId?: number | null | undefined },
+    input: CreateSubtaskBody,
   ) {
     let ownerUserId = actorUserId;
     const id = await withTransaction(async (transaction) => {
       const access = await resolveTaskAccess(actorUserId, taskId, false, transaction);
       if (!access) throw notFound();
-      if (!access.capabilities.canManageSubtasks) {
+      if (access.sharedPermission || !access.capabilities.canManageSubtasks) {
         throw new AppError({
           statusCode: 403,
           code: "SUBTASK_MANAGEMENT_FORBIDDEN",
@@ -143,39 +164,92 @@ export const taskDetailsService = {
 
       const dueDate = input.dueDate ?? null;
       await assertSubtaskDueDateAllowed(ownerUserId, task, dueDate);
+      const description = input.description?.trim() || null;
+      const priority = input.priority ?? mapTask(task).priority;
+      const mode = input.assignmentMode ?? 'INHERIT';
+      const selected = normalizeCollaborators(input.assigneeUserIds ?? []);
+      if (access.collaborationActive) {
+        if (input.assigneeUserId != null) throw new AppError({statusCode:400,
+          code:'COLLABORATION_USE_TEAM',message:'Use the team picker for collaborative subtasks.'});
+        if (mode === 'CUSTOM' && (selected.length < 1 || selected.length > 30))
+          throw new AppError({statusCode:400,code:'COLLABORATION_TEAM_SIZE',
+            message:'Select between 1 and 30 subtask assignees.'});
+        if (mode === 'INHERIT' && selected.length) throw new AppError({statusCode:400,
+          code:'COLLABORATION_INHERIT_USERS',message:'Inherited subtasks cannot specify a custom team.'});
+        if (mode === 'INHERIT' && !(await collaborationRepository.activeAssignments(taskId,transaction))
+            .some(member => member.subtaskId === null))
+          throw new AppError({statusCode:400,code:'COLLABORATION_MAIN_TEAM_EMPTY',
+            message:'The main task has no assigned team. Choose specific users for this subtask.'});
+        if (mode === 'CUSTOM') for (const userId of selected) {
+          if (!(await collaborationRepository.activeUser(userId,transaction)) ||
+              (access.context && !(await collaborationRepository.meetingEligible(userId,
+                access.context.meetingId,access.context.organizerUserId,transaction))))
+            throw new AppError({statusCode:400,code:'COLLABORATION_ASSIGNEE_INVALID',
+              message:'Select eligible active TaskHub users for this subtask.'});
+        }
+      } else {
+        if (selected.length > 1) throw new AppError({statusCode:409,
+          code:'COLLABORATION_MAIN_TEAM_REQUIRED',
+          message:'Enable collaborative assignments on the main task before choosing multiple subtask assignees.'});
+        if (mode === 'INHERIT' && selected.length) throw new AppError({statusCode:400,
+          code:'COLLABORATION_INHERIT_USERS',message:'Inherited subtasks cannot specify a custom team.'});
+        if (mode === 'CUSTOM' && selected.length === 0) throw new AppError({statusCode:400,
+          code:'SUBTASK_ASSIGNEE_REQUIRED',message:'Select at least one assignee for a custom team.'});
+      }
+      const legacyAssignee = !access.collaborationActive
+        ? (mode === 'CUSTOM' ? (selected[0] ?? null) : (input.assigneeUserId ?? null))
+        : null;
+      if (legacyAssignee !== null && (task.kpiInstanceId !== null ||
+          !(access.context
+            ? await meetingActionItemsRepository.eligibleAssignee(transaction,
+                access.context.meetingId,access.context.organizerUserId,legacyAssignee)
+            : await generalTaskAssignmentsRepository.isEligibleUser(legacyAssignee,transaction))))
+        throw new AppError({statusCode:400,code:'SUBTASK_ASSIGNEE_INVALID',
+          message:'Individual subtask assignment requires an active eligible user.'});
+
       const created = await taskDetailsRepository.createSubtask(
-        transaction, ownerUserId, taskId, input.title, dueDate,
+        transaction, ownerUserId, taskId, input.title, dueDate, description, priority,
       );
-      if (!created) {
-        throw new AppError({
-          statusCode: 500,
-          code: "SUBTASK_CREATE_FAILED",
-          message: "Subtask could not be created.",
+      if (!created) throw new AppError({statusCode:500,code:'SUBTASK_CREATE_FAILED',
+        message:'Subtask could not be created.'});
+
+      if (legacyAssignee !== null) {
+        if (!access.context) await generalTaskAssignmentsRepository.ensureRelation(
+          transaction,taskId,ownerUserId,actorUserId,null);
+        await generalTaskAssignmentsRepository.setSubtaskAssignee(
+          transaction,ownerUserId,created,legacyAssignee);
+        await notifyGeneralTask(transaction,[legacyAssignee],actorUserId,{
+          type:'GENERAL_SUBTASK_ASSIGNED',taskId,subtaskId:created,
+          listId:access.context?null:task.listId,subjectTitle:task.title,
+          contextTitle:access.context?.meetingTitle??'Subtask assigned to you',
         });
       }
-      if (input.assigneeUserId !== undefined && input.assigneeUserId !== null) {
-        if (task.kpiInstanceId !== null ||
-            !(access.context
-              ? await meetingActionItemsRepository.eligibleAssignee(transaction, access.context.meetingId,
-                  access.context.organizerUserId, input.assigneeUserId)
-              : await generalTaskAssignmentsRepository.isEligibleUser(input.assigneeUserId, transaction))) {
-          throw new AppError({statusCode:400,code:"SUBTASK_ASSIGNEE_INVALID",
-            message:"Individual subtask assignment requires an active normal task user."});
+      if (access.collaborationActive) {
+        await collaborationRepository.ensureChildModes(taskId,actorUserId,transaction);
+        if (mode === 'CUSTOM') {
+          await collaborationRepository.setChildMode(taskId,created,actorUserId,'CUSTOM',transaction);
+          await tasksRepository.addActivity(transaction,ownerUserId,taskId,'COLLAB_TEAM_MODE_CHANGED',
+            {subtaskId:created,subtaskTitle:input.title,from:'INHERIT',to:'CUSTOM'},actorUserId);
         }
-        if (!access.context) {
-          await generalTaskAssignmentsRepository.ensureRelation(transaction, taskId, ownerUserId, actorUserId, null);
+        const current = await collaborationRepository.activeAssignments(taskId,transaction);
+        const assignees = mode === 'CUSTOM' ? selected
+          : current.filter(item=>item.subtaskId===null).map(item=>item.assigneeUserId);
+        for (const userId of assignees) {
+          await collaborationRepository.addAssignment(taskId,created,userId,
+            mode === 'CUSTOM' ? 'EXPLICIT' : 'INHERITED',actorUserId,transaction);
+          await notifyGeneralTask(transaction,[userId],actorUserId,{
+            type:'GENERAL_SUBTASK_ASSIGNED',taskId,subtaskId:created,
+            listId:access.context?null:task.listId,subjectTitle:task.title,
+            contextTitle:access.context?.meetingTitle??'Subtask assigned to you',
+          });
         }
-        await generalTaskAssignmentsRepository.setSubtaskAssignee(transaction, ownerUserId, created, input.assigneeUserId);
-        await notifyGeneralTask(transaction, [input.assigneeUserId], actorUserId, {
-          type: "GENERAL_SUBTASK_ASSIGNED", taskId, subtaskId: created,
-          listId: access.context ? null : task.listId, subjectTitle: task.title,
-          contextTitle: access.context?.meetingTitle ?? "Subtask assigned to you",
-        });
-      }
-      await reconcileParentCompletion(transaction, task, ownerUserId, taskId, actorUserId);
+        await collaborationRepository.syncChildStatus(taskId,transaction,actorUserId);
+        await collaborationRepository.syncParentStatus(taskId,transaction,actorUserId);
+      } else await reconcileParentCompletion(transaction, task, ownerUserId, taskId, actorUserId);
       await tasksRepository.addActivity(
         transaction, ownerUserId, taskId, "SUBTASK_CREATED",
-        { subtaskId: created, title: input.title }, actorUserId,
+        { subtaskId: created, subtaskTitle: input.title, title: input.title,
+          priority, hasDescription: Boolean(description), assignmentMode: access.collaborationActive ? mode : null }, actorUserId,
       );
       return created;
     });
@@ -187,7 +261,7 @@ export const taskDetailsService = {
   async updateSubtask(
     actorUserId: number,
     subtaskId: number,
-    input: { title?: string | undefined; dueDate?: string | null | undefined },
+    input: UpdateSubtaskBody,
   ) {
     const link = await taskDetailsRepository.findSubtaskAccess(subtaskId);
     if (!link) throw subtaskNotFound();
@@ -195,7 +269,8 @@ export const taskDetailsService = {
     const taskId = await withTransaction(async (transaction) => {
       const access = await resolveTaskAccess(actorUserId, link.taskId, false, transaction);
       if (!access) throw subtaskNotFound();
-      if (!access.capabilities.canManageSubtasks) {
+      if (!access.capabilities.canManageSubtasks ||
+          (access.sharedPermission && ('assigneeUserId' in input || 'assigneeUserIds' in input || 'assignmentMode' in input))) {
         throw new AppError({
           statusCode: 403,
           code: "SUBTASK_MANAGEMENT_FORBIDDEN",
@@ -215,14 +290,28 @@ export const taskDetailsService = {
         ? input.dueDate
         : (current.dueDate?.toISOString().slice(0, 10) ?? null);
       await assertSubtaskDueDateAllowed(ownerUserId, task, dueDate);
+      const description = input.description !== undefined ? input.description?.trim() || null : current.description;
+      const priority = input.priority ?? current.priority;
       await taskDetailsRepository.updateSubtask(
         transaction, ownerUserId, subtaskId, input.title ?? current.title, dueDate,
+        description, priority,
       );
       await tasksRepository.addActivity(
         transaction, ownerUserId, Number(current.taskId), "SUBTASK_UPDATED",
-        { subtaskId }, actorUserId,
+        { subtaskId, subtaskTitle: current.title, oldTitle: current.title, newTitle: input.title ?? current.title, oldDueDate: current.dueDate?.toISOString().slice(0,10) ?? null, newDueDate: dueDate,
+          oldPriority: current.priority, newPriority: priority,
+          descriptionChanged: description !== current.description }, actorUserId,
       );
-      if ((access.generalAssignment || access.context) && dueDate !== (current.dueDate?.toISOString().slice(0, 10) ?? null)) {
+      if (access.collaborationActive && dueDate !== (current.dueDate?.toISOString().slice(0, 10) ?? null)) {
+        const collaborators = (await collaborationRepository.activeAssignments(Number(current.taskId),transaction))
+          .filter(member=>member.subtaskId===subtaskId).map(member=>member.assigneeUserId);
+        await notifyGeneralTask(transaction,collaborators,actorUserId,{
+          type:'GENERAL_SUBTASK_DUE_CHANGED',taskId:Number(current.taskId),
+          listId:access.context ? null : task.listId,subtaskId,eventDate:dueDate,
+          subjectTitle:task.title,contextTitle:'Subtask deadline updated',
+        });
+      }
+      if (!access.collaborationActive && (access.generalAssignment || access.context) && dueDate !== (current.dueDate?.toISOString().slice(0, 10) ?? null)) {
         const recipient = await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
           ownerUserId, subtaskId, transaction);
         await notifyGeneralTask(transaction, [recipient], actorUserId, {
@@ -249,6 +338,8 @@ export const taskDetailsService = {
         false,
         transaction,
       );
+      if (resolved?.collaborationActive) throw new AppError({statusCode:409,
+        code:'COLLABORATION_INDIVIDUAL_COMPLETION',message:'Complete your individual assignment instead.'});
       if (!resolved || !resolved.capabilities.canCompleteSubtasks) {
         throw new AppError({
           statusCode: 403,
@@ -289,7 +380,7 @@ export const taskDetailsService = {
           resolved.ownerUserId,
           Number(current.taskId),
           isCompleted ? "SUBTASK_COMPLETED" : "SUBTASK_REOPENED",
-          { subtaskId },
+          { subtaskId, subtaskTitle: current.title },
           actorUserId,
         );
         await reconcileParentCompletion(transaction, task, resolved.ownerUserId,
@@ -317,7 +408,7 @@ export const taskDetailsService = {
     return withTransaction(async (transaction) => {
       const access = await resolveTaskAccess(actorUserId, link.taskId, false, transaction);
       if (!access) throw subtaskNotFound();
-      if (!access.capabilities.canManageSubtasks) {
+      if (access.sharedPermission || !access.capabilities.canManageSubtasks) {
         throw new AppError({
           statusCode: 403,
           code: "SUBTASK_MANAGEMENT_FORBIDDEN",
@@ -334,10 +425,15 @@ export const taskDetailsService = {
       if (!task) throw notFound();
       assertTaskWritable(task);
       await taskDetailsRepository.deleteSubtask(transaction, access.ownerUserId, subtaskId);
-      await reconcileParentCompletion(transaction, task, access.ownerUserId, Number(current.taskId), actorUserId);
+      if (access.collaborationActive) {
+        const members=await collaborationRepository.activeAssignments(Number(current.taskId),transaction);
+        for (const member of members.filter(item=>item.subtaskId===subtaskId))
+          await collaborationRepository.revokeAssignment(member.id,actorUserId,transaction);
+        await collaborationRepository.syncParentStatus(Number(current.taskId),transaction,actorUserId);
+      } else await reconcileParentCompletion(transaction, task, access.ownerUserId, Number(current.taskId), actorUserId);
       await tasksRepository.addActivity(
         transaction, access.ownerUserId, Number(current.taskId), "SUBTASK_DELETED",
-        { subtaskId, title: current.title }, actorUserId,
+        { subtaskId, subtaskTitle: current.title, title: current.title }, actorUserId,
       );
       return Number(current.taskId);
     });
@@ -347,7 +443,7 @@ export const taskDetailsService = {
     await withTransaction(async (transaction) => {
       const access = await resolveTaskAccess(actorUserId, taskId, false, transaction);
       if (!access) throw notFound();
-      if (!access.capabilities.canManageSubtasks) {
+      if (access.sharedPermission || !access.capabilities.canManageSubtasks) {
         throw new AppError({
           statusCode: 403,
           code: "SUBTASK_MANAGEMENT_FORBIDDEN",
@@ -399,6 +495,17 @@ export const taskDetailsService = {
     }
     if (!taskId) throw notFound();
     const preflight = await resolveTaskAccess(actorUserId, taskId);
+    if (preflight?.collaborationActive && actorUserId !== preflight.ownerUserId &&
+        !(preflight.sharedPermission==='EDIT' && parent.subtaskId==null)) throw new AppError({
+      statusCode:409,code:'COLLABORATION_INDIVIDUAL_FILES',message:'Upload to your individual assignment instead.'});
+    // Explicit sharing grants access to shared parent files, never to private child evidence.
+    if (preflight?.sharedPermission && parent.subtaskId != null &&
+        (preflight.collaborationActive ||
+          (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
+            preflight.ownerUserId,parent.subtaskId)) !== actorUserId)) {
+      throw new AppError({statusCode:403,code:'PRIVATE_SUBTASK_UPLOAD_FORBIDDEN',
+        message:'Shared access does not permit uploading to another person’s private subtask.'});
+    }
     if (!preflight || !preflight.capabilities.canUploadAttachments) {
       throw new AppError({
         statusCode: 403,
@@ -406,7 +513,7 @@ export const taskDetailsService = {
         message: "You cannot upload files to this Task.",
       });
     }
-    if ((preflight.generalAssignment || preflight.context) && actorUserId !== preflight.ownerUserId) {
+    if ((preflight.generalAssignment || preflight.context) && !preflight.sharedPermission && actorUserId !== preflight.ownerUserId) {
       const permitted = parent.subtaskId
         ? (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(preflight.ownerUserId, parent.subtaskId)) === actorUserId
         : (preflight.context?.assigneeUserId ?? preflight.generalAssignment?.assigneeUserId) === actorUserId;
@@ -424,6 +531,13 @@ export const taskDetailsService = {
     try {
       const record = await withTransaction(async (transaction) => {
         const resolved = await resolveTaskAccess(actorUserId, taskId!, false, transaction);
+        if (resolved?.sharedPermission && parent.subtaskId != null &&
+            (resolved.collaborationActive ||
+              (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
+                resolved.ownerUserId,parent.subtaskId,transaction)) !== actorUserId)) {
+          throw new AppError({statusCode:403,code:'PRIVATE_SUBTASK_UPLOAD_FORBIDDEN',
+            message:'Shared access does not permit uploading to another person’s private subtask.'});
+        }
         if (!resolved || !resolved.capabilities.canUploadAttachments) {
           throw new AppError({
             statusCode: 403,
@@ -431,7 +545,7 @@ export const taskDetailsService = {
             message: "You cannot upload files to this Task.",
           });
         }
-        if ((resolved.generalAssignment || resolved.context) && actorUserId !== resolved.ownerUserId) {
+        if ((resolved.generalAssignment || resolved.context) && !resolved.sharedPermission && actorUserId !== resolved.ownerUserId) {
           const permitted = parent.subtaskId
             ? (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
                 resolved.ownerUserId, parent.subtaskId, transaction)) === actorUserId
@@ -474,6 +588,8 @@ export const taskDetailsService = {
             attachmentId: created.id,
             fileName: originalFileName,
             subtaskId: parent.subtaskId ?? null,
+            subtaskTitle: parent.subtaskId === null ? null :
+              (await taskDetailsRepository.findSubtask(resolved.ownerUserId,parent.subtaskId,transaction))?.title ?? null,
           },
           actorUserId,
         );
@@ -488,11 +604,14 @@ export const taskDetailsService = {
     if (!accessRow) throw attachmentNotFound();
     const resolved = await resolveTaskAccess(actorUserId, accessRow.taskId);
     if (!resolved) throw attachmentNotFound();
+    if (resolved.sharedPermission && accessRow.subtaskId !== null) throw attachmentNotFound();
     if ((resolved.generalAssignment || resolved.context) && actorUserId !== resolved.ownerUserId &&
       accessRow.subtaskId !== null &&
       (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(resolved.ownerUserId, accessRow.subtaskId)) !== actorUserId) {
       throw attachmentNotFound();
     }
+    if (resolved.collaborationActive && actorUserId !== resolved.ownerUserId && accessRow.subtaskId!==null)
+      throw attachmentNotFound();
     const attachment = await taskDetailsRepository.findAttachment(resolved.ownerUserId, id);
     if (!attachment) throw attachmentNotFound();
     return { attachment, buffer: await readAttachment(attachment.storageKey) };
@@ -510,6 +629,7 @@ export const taskDetailsService = {
               resolved.ownerUserId, accessRow.subtaskId)) !== actorUserId)) {
       throw attachmentNotFound();
     }
+    if (resolved.collaborationActive && actorUserId!==resolved.ownerUserId) throw attachmentNotFound();
     const mayDelete = mayDeleteAttachment(resolved, actorUserId, accessRow.uploadedByUserId);
     if (!mayDelete) throw new AppError({ statusCode: 403, code: "ATTACHMENT_DELETE_FORBIDDEN", message: "Only the Task owner or the current assignee who uploaded the file may delete it." });
     const record = await withTransaction(async (transaction) => {
@@ -562,7 +682,9 @@ export const taskDetailsService = {
         accessRow.taskId,
         "ATTACHMENT_REMOVED",
         { attachmentId: id, fileName: attachment.originalFileName,
-          subtaskId: attachment.subtaskId },
+          subtaskId: attachment.subtaskId,
+          subtaskTitle: attachment.subtaskId === null ? null :
+            (await taskDetailsRepository.findSubtask(currentAccess.ownerUserId,attachment.subtaskId,transaction))?.title ?? null },
         actorUserId,
       );
       return attachment;
@@ -570,6 +692,8 @@ export const taskDetailsService = {
     await removeStoredAttachment(record.storageKey);
   },
 };
+
+
 
 
 

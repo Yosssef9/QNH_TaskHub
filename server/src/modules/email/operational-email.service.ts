@@ -1,3 +1,4 @@
+import { taskSharesRepository } from '../task-shares/task-shares.repository.js';
 import { logger } from "../../config/logger.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
 import { hasKpiWorkCyclesAccess } from "../access-permissions/access-permissions.policy.js";
@@ -77,6 +78,9 @@ function asEmailPreferenceEvent(type: NotificationType): EmailPreferenceEvent | 
     case "MEETING_ACTION_ITEM_ASSIGNED":
     case "MEETING_ACTION_ITEM_COMPLETED":
       return type;
+    case "TASK_SHARED":
+    case "TASK_SHARE_UPDATED":
+    case "TASK_SHARE_REVOKED":
     case "GENERAL_TASK_ASSIGNED":
     case "GENERAL_SUBTASK_ASSIGNED":
     case "GENERAL_ASSIGNMENT_REMOVED":
@@ -347,6 +351,22 @@ async function buildPayload(
         ? payload
         : null;
     }
+    case "TASK_SHARED":
+    case "TASK_SHARE_UPDATED":
+    case "TASK_SHARE_REVOKED": {
+      const taskId=id(candidate.taskId);
+      if (taskId===null) return null;
+      const grant=await taskSharesRepository.grant(taskId,candidate.ownerUserId);
+      if(candidate.notificationType==='TASK_SHARE_REVOKED') {
+        if(grant) return null;
+        return {notice:'Task share removed'};
+      }
+      if(!grant) return null;
+      // Suppress obsolete share notifications after a later permission update.
+      const recorded = new Date(candidate.createdAtUtc).getTime();
+      if(Number.isFinite(recorded) && recorded < grant.updatedAtUtc.getTime()-1000) return null;
+      return {taskTitle:candidate.subjectTitle,href:notificationHref(candidate)};
+    }
     case "GENERAL_TASK_ASSIGNED":
     case "GENERAL_SUBTASK_ASSIGNED":
     case "GENERAL_ASSIGNMENT_REMOVED":
@@ -568,6 +588,7 @@ export const operationalEmailService = {
     return processed;
   },
 };
+
 
 
 

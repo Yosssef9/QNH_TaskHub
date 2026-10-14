@@ -1,3 +1,4 @@
+import { tagsService } from "../tags/tags.service.js";
 import { withTransaction } from "../../database/transaction.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
@@ -7,6 +8,8 @@ import { meetingWorkspaceRepository } from "../meetings/meeting-workspace.reposi
 import { requireMeetingContentAccess } from "../meetings/meeting-content-access.js";
 import { notificationsRepository } from "../notifications/notifications.repository.js";
 import { tasksRepository } from "../tasks/tasks.repository.js";
+import { collaborationRepository } from "../collaboration/collaboration.repository.js";
+import { initializeCollaborativeTask } from "../collaboration/collaboration.service.js";
 import { meetingActionItemsRepository } from "./meeting-action-items.repository.js";
 import type {
   AssignedMeetingActionItemListData,
@@ -66,7 +69,13 @@ export const meetingActionItemsService = {
       meetingActionItemsRepository.listForMeeting(meetingId),
       canCreateNow(actorUserId, context),
     ]);
-    return { items, canCreate };
+    // Meeting attendees who are not assigned to this Action Item may see its
+    // shared parent context, not a detailed collaborator directory.
+    const scopedItems = items.map(item => item.organizerUserId === actorUserId ||
+      item.teamRoster?.some(member => member.userId === actorUserId)
+      ? item
+      : {...item, teamRoster: []});
+    return { items: scopedItems, canCreate };
   },
 
   async assigneeOptions(actorUserId: number, access: TaskHubAccess, meetingId: number) {
@@ -172,6 +181,8 @@ export const meetingActionItemsService = {
         });
       }
 
+      if (input.tagIds) await tagsService.replaceTaskTags(transaction,actorUserId,created,input.tagIds);
+      if (input.tagIds?.length) await tasksRepository.addActivity(transaction,actorUserId,created,'TAGS_CHANGED',{tagIds:input.tagIds},actorUserId);
       const relationRowVersion = await meetingActionItemsRepository.createRelationship(
         transaction,
         {
@@ -202,9 +213,17 @@ export const meetingActionItemsService = {
           assigneeUserId: input.assigneeUserId, agendaItemId: input.agendaItemId ?? null,
         });
 
+      if (input.assigneeUserIds?.length) {
+        if (!input.assigneeUserIds.includes(input.assigneeUserId)) throw new AppError({
+          statusCode:400,code:'COLLABORATION_MEETING_ASSIGNEE_INVALID',
+          message:'The initial assignee must be one of the selected assignees.',
+        });
+        await initializeCollaborativeTask(transaction,actorUserId,created,input.assigneeUserIds);
+      }
+
       const sourceMeetingTitle =
         (await meetingActionItemsRepository.meetingTitle(meetingId, transaction)) ?? "Meeting";
-      await notificationsRepository.ensureMeetingActionItemNotification(
+      if (!input.assigneeUserIds?.length) await notificationsRepository.ensureMeetingActionItemNotification(
         input.assigneeUserId,
         {
           type: "MEETING_ACTION_ITEM_ASSIGNED",
@@ -248,6 +267,8 @@ export const meetingActionItemsService = {
         throw actionItemNotFound();
       }
 
+      if (await collaborationRepository.active(taskId,transaction)) throw new AppError({statusCode:409,
+        code:'COLLABORATION_USE_TEAM',message:'Manage the collaborative team instead.'});
       if (relation.assigneeUserId === input.assigneeUserId) return;
 
       if (
@@ -365,6 +386,8 @@ export const meetingActionItemsService = {
     return { ...result, page: query.page, pageSize: query.pageSize };
   },
 };
+
+
 
 
 

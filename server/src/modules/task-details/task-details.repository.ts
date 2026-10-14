@@ -12,7 +12,7 @@ export const taskDetailsRepository = {
     const result = await request
       .input("ownerUserId", sql.Int, ownerUserId)
       .input("taskId", sql.BigInt, taskId)
-      .query<SubtaskRecord>(`SELECT id, task_id AS taskId, title, work_notes AS workNotes, assignee_user_id AS assigneeUserId, is_completed AS isCompleted,
+      .query<SubtaskRecord>(`SELECT id, task_id AS taskId, title, description, priority, work_notes AS workNotes, assignee_user_id AS assigneeUserId, is_completed AS isCompleted,
         due_date AS dueDate, display_order AS displayOrder, created_at_utc AS createdAtUtc,
         updated_at_utc AS updatedAtUtc, completed_at_utc AS completedAtUtc
         FROM dbo.TM_subtasks WHERE owner_user_id=@ownerUserId AND task_id=@taskId
@@ -49,7 +49,7 @@ export const taskDetailsRepository = {
       .input("ownerUserId", sql.Int, ownerUserId)
       .input("taskId", sql.BigInt, taskId)
       .query<ActivityRecord>(`SELECT activity.id, activity.actor_user_id AS actorUserId,
-        COALESCE(portal.USER_NAME,portal.USER_CODE) AS actorName, activity.activity_type AS activityType,
+        COALESCE(portal.USER_NAME,portal.USER_CODE) AS actorName, portal.USER_CODE AS actorUserCode, portal.email AS actorEmail, activity.activity_type AS activityType,
         activity.event_data_json AS eventDataJson, activity.created_at_utc AS createdAtUtc
         FROM dbo.TM_task_activity AS activity
         INNER JOIN dbo.users AS portal ON portal.USER_ID=activity.actor_user_id
@@ -64,6 +64,7 @@ export const taskDetailsRepository = {
       .input("ownerUserId", sql.Int, ownerUserId)
       .input("subtaskId", sql.BigInt, subtaskId)
       .query<SubtaskRecord>(`SELECT TOP(1) subtask.id, subtask.task_id AS taskId, subtask.title,
+        subtask.description, subtask.priority,
         subtask.work_notes AS workNotes, subtask.assignee_user_id AS assigneeUserId,
         subtask.is_completed AS isCompleted, subtask.due_date AS dueDate,
         subtask.display_order AS displayOrder, subtask.created_at_utc AS createdAtUtc,
@@ -105,6 +106,8 @@ export const taskDetailsRepository = {
     taskId: number,
     title: string,
     dueDate: string | null,
+    description: string | null,
+    priority: "LOW" | "MEDIUM" | "HIGH",
   ) {
     const result = await transaction
       .request()
@@ -112,8 +115,10 @@ export const taskDetailsRepository = {
       .input("taskId", sql.BigInt, taskId)
       .input("title", sql.NVarChar(1000), title)
       .input("dueDate", sql.Date, dueDate)
-      .query<IdRecord>(`INSERT dbo.TM_subtasks(task_id,owner_user_id,title,due_date,display_order)
-        OUTPUT inserted.id SELECT @taskId,@ownerUserId,@title,@dueDate,ISNULL(MAX(display_order),0)+1
+      .input("description", sql.NVarChar(4000), description)
+      .input("priority", sql.VarChar(10), priority)
+      .query<IdRecord>(`INSERT dbo.TM_subtasks(task_id,owner_user_id,title,due_date,description,priority,display_order)
+        OUTPUT inserted.id SELECT @taskId,@ownerUserId,@title,@dueDate,@description,@priority,ISNULL(MAX(display_order),0)+1
         FROM dbo.TM_subtasks WHERE owner_user_id=@ownerUserId AND task_id=@taskId AND deleted_at_utc IS NULL;`);
     return result.recordset[0]?.id ?? null;
   },
@@ -124,14 +129,18 @@ export const taskDetailsRepository = {
     subtaskId: number,
     title: string,
     dueDate: string | null,
+    description: string | null,
+    priority: "LOW" | "MEDIUM" | "HIGH",
   ) {
     await transaction
       .request()
       .input("ownerUserId", sql.Int, ownerUserId)
       .input("subtaskId", sql.BigInt, subtaskId)
       .input("title", sql.NVarChar(1000), title)
-      .input("dueDate", sql.Date, dueDate).query(`UPDATE dbo.TM_subtasks
-        SET title=@title,due_date=@dueDate,updated_at_utc=SYSUTCDATETIME()
+      .input("dueDate", sql.Date, dueDate)
+      .input("description", sql.NVarChar(4000), description)
+      .input("priority", sql.VarChar(10), priority).query(`UPDATE dbo.TM_subtasks
+        SET title=@title,due_date=@dueDate,description=@description,priority=@priority,updated_at_utc=SYSUTCDATETIME()
         WHERE id=@subtaskId AND owner_user_id=@ownerUserId AND deleted_at_utc IS NULL;`);
   },
 
@@ -246,5 +255,7 @@ export const taskDetailsRepository = {
         WHERE id=@id AND owner_user_id=@ownerUserId AND deleted_at_utc IS NULL;`);
   },
 };
+
+
 
 

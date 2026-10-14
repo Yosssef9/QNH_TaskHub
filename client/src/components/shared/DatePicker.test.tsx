@@ -20,6 +20,16 @@ describe('DatePicker', () => {
     await i18n.changeLanguage('ar')
   })
 
+
+  it('renders a separately aligned label above the date field when requested', async () => {
+    await i18n.changeLanguage('en')
+    renderDatePicker({ label: 'Due date', labelPlacement: 'above', onChange: vi.fn() })
+    const label = screen.getByText('Due date')
+    expect(label.tagName).toBe('LABEL')
+    expect(label).toHaveAttribute('for')
+    expect(label).toHaveClass('mb-1.5')
+  })
+
   it('clears an optional English date', async () => {
     await i18n.changeLanguage('en')
     const onChange = vi.fn()
@@ -34,3 +44,4 @@ describe('DatePicker', () => {
     expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument()
   })
 })
+

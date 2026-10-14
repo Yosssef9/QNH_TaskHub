@@ -54,9 +54,12 @@ export function mapActivity(record: ActivityRecord): TaskActivity {
     id: parsePositiveIntegerId(record.id, "activity id"),
     actorUserId: Number(record.actorUserId),
     actorName: record.actorName,
+    actorUserCode: record.actorUserCode,
+    actorEmail: record.actorEmail,
     activityType: record.activityType,
     eventData,
     createdAtUtc: record.createdAtUtc.toISOString(),
   };
 }
+
 

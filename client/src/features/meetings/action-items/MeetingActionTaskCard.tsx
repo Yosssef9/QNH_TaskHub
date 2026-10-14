@@ -6,6 +6,9 @@ import { useTranslation } from 'react-i18next'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { TaskPriorityIndicator } from '@/features/tasks/components/TaskSelectIndicators'
 import { TaskStatusIndicator } from '@/features/tasks/components/TaskStatusIndicator'
+import { TaskTags } from '@/features/tasks/tags/TaskTags'
+import { TaskTeamIndicator } from '@/features/tasks/components/TaskTeamIndicator'
+import { TaskCardLayout } from '@/features/tasks/components/TaskCardLayout'
 import type { TaskStatus } from '@/features/tasks/types/task.types'
 import { parseDateOnly } from '@/lib/date-only'
 import { cn } from '@/lib/cn'
@@ -81,15 +84,20 @@ export function MeetingActionTaskCard({
         }
       }}
       className={cn(
-        'group focus-visible:ring-ring relative flex cursor-pointer flex-col gap-4 rounded-xl border border-s-[3px] border-s-transparent p-4 shadow-sm transition-[border-color,background-color,box-shadow] duration-300 ease-out focus-visible:ring-2 focus-visible:outline-none sm:flex-row sm:items-start sm:p-5',
+        'group focus-visible:ring-ring relative cursor-pointer rounded-xl border border-s-[3px] border-s-transparent p-4 shadow-sm transition-[border-color,background-color,box-shadow] duration-300 ease-out focus-visible:ring-2 focus-visible:outline-none sm:p-5',
         item.status === 'DONE'
           ? 'border-success/25 border-s-success/65 bg-success/[0.035] hover:border-success/40 hover:border-s-success/80 hover:bg-success/[0.055] hover:shadow-md'
           : item.isOverdue
             ? 'border-destructive/20 border-s-destructive/55 bg-card hover:border-destructive/35 hover:shadow-md'
-            : 'bg-card hover:border-primary/25 hover:shadow-md',
+            : item.teamTask
+              ? 'border-primary/25 border-s-primary/70 bg-primary/[0.025] hover:border-primary/40 hover:shadow-md'
+              : item.teamRoster?.length
+                ? 'border-s-muted-foreground/35 bg-card hover:border-primary/25 hover:shadow-md'
+                : 'bg-card hover:border-primary/25 hover:shadow-md',
       )}
     >
-      <Tooltip>
+      <TaskCardLayout
+        completion={<Tooltip>
         <TooltipTrigger asChild>
           <button
             type="button"
@@ -136,19 +144,74 @@ export function MeetingActionTaskCard({
               })
             : completionBlockedMessage ?? t(`tasks.statuses.${item.status}`)}
         </TooltipContent>
-      </Tooltip>
+      </Tooltip>}
+        title={<p className={cn('break-words text-start text-base font-semibold', item.status === 'DONE' && 'text-foreground/85')}>{item.title}</p>}
+        tags={item.tags?.length ? <TaskTags tags={item.tags} /> : null}
+        details={<>
+{(item.teamRoster?.length || item.teamTask) ? <TaskTeamIndicator
+          summary={item} subtaskTotal={item.subtaskTotal} subtaskCompleted={item.subtaskCompleted}
+          className=""
+        /> : null}
+<div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+          {showMeeting ? (
+            <button
+              type="button"
+              className="text-primary hover:text-primary/80 focus-visible:ring-ring inline-flex min-w-0 items-center gap-1.5 rounded-md font-medium focus-visible:ring-2 focus-visible:outline-none"
+              onClick={(event) => {
+                event.stopPropagation()
+                onOpenMeeting?.()
+              }}
+            >
+              <CalendarDays aria-hidden="true" className="size-4 shrink-0" />
+              <span className="truncate">{item.meetingTitle}</span>
+            </button>
+          ) : null}
 
-      <div className="min-w-0 flex-1">
-        <p
-          className={cn(
-            'text-start text-base font-semibold',
-            item.status === 'DONE' && 'text-foreground/85',
-          )}
-        >
-          {item.title}
-        </p>
+          {showAssignee && !item.teamRoster?.length ? (
+            <span className="text-muted-foreground inline-flex items-center gap-1.5">
+              <UserRound aria-hidden="true" className="size-4 shrink-0" />
+              {item.isCollaborative
+                ? `${item.assigneeCount ?? 0} ${t('tasks.collaboration.assigneesShort')}`
+                : t('meetings.followUp.assignedTo', { name: item.assigneeName })}
+            </span>
+          ) : null}
 
-        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+          {showAssignedBy ? (
+            <span className="text-muted-foreground inline-flex items-center gap-1.5">
+              <UserRound aria-hidden="true" className="size-4 shrink-0" />
+              {t('tasks.assignedToMe.assignedBy', { name: item.assignedByName })}
+            </span>
+          ) : null}
+        </div>
+
+        {item.agendaTitle ? (
+          <div className="text-muted-foreground inline-flex max-w-full items-center gap-1.5 rounded-md bg-muted/45 px-2 py-1 text-xs">
+            <ListChecks aria-hidden="true" className="size-3.5 shrink-0" />
+            <span className="shrink-0">{t('meetings.followUp.agenda')}:</span>
+            <span className="truncate">{item.agendaTitle}</span>
+          </div>
+        ) : null}
+{item.subtaskTotal > 0 && !item.teamTask ? (
+          <div className="max-w-sm">
+            <div className="text-muted-foreground mb-1.5 flex items-center justify-between gap-3 text-xs">
+              <span>{t('tasks.subtaskProgress')}</span>
+              <span className="font-medium tabular-nums">
+                {item.subtaskCompleted}/{item.subtaskTotal} ·{' '}
+                {Math.round((item.subtaskCompleted / item.subtaskTotal) * 100)}%
+              </span>
+            </div>
+            <div className="bg-muted h-1.5 overflow-hidden rounded-full">
+              <div
+                className="bg-success h-full rounded-full transition-[width] duration-300"
+                style={{
+                  width: `${Math.round((item.subtaskCompleted / item.subtaskTotal) * 100)}%`,
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
+        </>}
+        metadata={<div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
           <button
             type="button"
             disabled={statusDisabled}
@@ -178,76 +241,11 @@ export function MeetingActionTaskCard({
             <CalendarDays aria-hidden="true" className="size-3.5 shrink-0" />
             <TaskDate item={item} />
           </span>
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-          {showMeeting ? (
-            <button
-              type="button"
-              className="text-primary hover:text-primary/80 focus-visible:ring-ring inline-flex min-w-0 items-center gap-1.5 rounded-md font-medium focus-visible:ring-2 focus-visible:outline-none"
-              onClick={(event) => {
-                event.stopPropagation()
-                onOpenMeeting?.()
-              }}
-            >
-              <CalendarDays aria-hidden="true" className="size-4 shrink-0" />
-              <span className="truncate">{item.meetingTitle}</span>
-            </button>
-          ) : null}
-
-          {showAssignee ? (
-            <span className="text-muted-foreground inline-flex items-center gap-1.5">
-              <UserRound aria-hidden="true" className="size-4 shrink-0" />
-              {t('meetings.followUp.assignedTo', { name: item.assigneeName })}
-            </span>
-          ) : null}
-
-          {showAssignedBy ? (
-            <span className="text-muted-foreground inline-flex items-center gap-1.5">
-              <UserRound aria-hidden="true" className="size-4 shrink-0" />
-              {t('tasks.assignedToMe.assignedBy', { name: item.assignedByName })}
-            </span>
-          ) : null}
-        </div>
-
-        {item.agendaTitle ? (
-          <div className="text-muted-foreground mt-2 inline-flex max-w-full items-center gap-1.5 rounded-md bg-muted/45 px-2 py-1 text-xs">
-            <ListChecks aria-hidden="true" className="size-3.5 shrink-0" />
-            <span className="shrink-0">{t('meetings.followUp.agenda')}:</span>
-            <span className="truncate">{item.agendaTitle}</span>
-          </div>
-        ) : null}
-
-        {item.subtaskTotal > 0 ? (
-          <div className="mt-4 max-w-md">
-            <div className="text-muted-foreground mb-1.5 flex items-center justify-between gap-3 text-xs">
-              <span>{t('tasks.subtaskProgress')}</span>
-              <span className="font-medium tabular-nums">
-                {item.subtaskCompleted}/{item.subtaskTotal} ·{' '}
-                {Math.round((item.subtaskCompleted / item.subtaskTotal) * 100)}%
-              </span>
-            </div>
-            <div className="bg-muted h-1.5 overflow-hidden rounded-full">
-              <div
-                className="bg-success h-full rounded-full transition-[width] duration-300"
-                style={{
-                  width: `${Math.round((item.subtaskCompleted / item.subtaskTotal) * 100)}%`,
-                }}
-              />
-            </div>
-          </div>
-        ) : null}
-      </div>
-
-      {actionMenu ? (
-        <div
-          className="shrink-0 self-end sm:self-start"
-          onClick={(event) => event.stopPropagation()}
-          onKeyDown={(event) => event.stopPropagation()}
-        >
-          {actionMenu}
-        </div>
-      ) : null}
+        </div>}
+        actions={actionMenu ?? null}
+      />
     </div>
   )
 }
+
+

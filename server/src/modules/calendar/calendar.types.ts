@@ -47,6 +47,9 @@ export interface CalendarTaskRecord {
   kpiInstanceId: number | string | null;
   kpiTemplateId: number | string | null;
   kpiName: string | null;
+  teamTask?: boolean;
+  teamMemberCount?: number | string;
+  taskTagsJson?: string | null;
 }
 
 export interface CalendarSearchTaskRecord extends CalendarTaskRecord {
@@ -71,6 +74,9 @@ export interface CalendarTask {
   kpiTemplateId: number | null;
   kpiName: string | null;
   isReadOnly: boolean;
+  teamTask?: boolean;
+  teamMemberCount?: number;
+  tags?: Array<{id:number;name:string;scope:string;iconKind:string;iconKey:string|null;color:string}>;
 }
 
 export interface CalendarTasksData {
@@ -81,3 +87,4 @@ export interface CalendarSearchData {
   items: CalendarTask[];
   total: number;
 }
+

@@ -27,6 +27,7 @@ import { suppliersRouter } from "./modules/suppliers/suppliers.routes.js";
 import { notificationsRouter } from "./modules/notifications/notifications.routes.js";
 import { meetingActionItemsRouter } from "./modules/meeting-action-items/meeting-action-items.routes.js";
 import { generalTaskAssignmentsRouter } from "./modules/general-task-assignments/general-task-assignments.routes.js";
+import { collaborationRouter } from "./modules/collaboration/collaboration.routes.js";
 import {
   meetingRoomsAdminRouter,
   meetingsRouter,
@@ -36,6 +37,8 @@ import {
   subtasksRouter,
   taskDetailsRouter,
 } from "./modules/task-details/task-details.routes.js";
+import { taskSharesRouter } from "./modules/task-shares/task-shares.routes.js";
+import { tagsRouter, taskTagsRouter } from "./modules/tags/tags.routes.js";
 import { listTasksRouter, tasksRouter } from "./modules/tasks/tasks.routes.js";
 import type { ApiSuccessResponse } from "./shared/types/result.js";
 
@@ -80,13 +83,16 @@ export function createApp(): express.Express {
   app.use("/api/meetings", meetingsRouter);
   app.use("/api/action-items", meetingActionItemsRouter);
   app.use("/api/general-assignments", generalTaskAssignmentsRouter);
+  app.use("/api/collaboration", collaborationRouter);
   app.use("/api/email-settings", emailSettingsRouter);
   app.use("/api/lists", listTasksRouter, listsRouter);
   app.use("/api/kpis", kpisRouter);
   app.use("/api/kpi-tasks", kpiTasksRouter);
   app.use("/api/kpi-instances", kpiInstancesRouter);
   app.use("/api/work-cycles", workCyclesRouter);
-  app.use("/api/tasks", taskDetailsRouter, tasksRouter);
+  app.use("/api/tags", tagsRouter);
+  app.use("/api/task-shares", taskSharesRouter);
+  app.use("/api/tasks", taskTagsRouter, taskDetailsRouter, tasksRouter);
   app.use("/api/subtasks", subtasksRouter);
   app.use("/api/attachments", attachmentsRouter);
   app.use("/api/admin/access", accessRouter);
@@ -101,6 +107,8 @@ export function createApp(): express.Express {
 }
 
 export const app = createApp();
+
+
 
 
 

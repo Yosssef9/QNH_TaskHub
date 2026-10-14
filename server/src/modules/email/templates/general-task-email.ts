@@ -13,6 +13,9 @@ const schema = z.object({
 });
 
 const WORDING: Record<string, { en: [string, string]; ar: [string, string] }> = {
+  TASK_SHARED: {en:['Task shared with you','A task has been shared with you.'],ar:['تمت مشاركة مهمة معك','تمت مشاركة مهمة جديدة معك.']},
+  TASK_SHARE_UPDATED: {en:['Task access updated','Your access to a shared task has changed.'],ar:['تحديث صلاحية المهمة','تم تغيير صلاحياتك للمهمة المشتركة.']},
+  TASK_SHARE_REVOKED: {en:['Task access removed','Access to a previously shared task has been removed.'],ar:['إلغاء مشاركة المهمة','تم إلغاء صلاحية الوصول إلى مهمة مشتركة.']},
   GENERAL_TASK_ASSIGNED: {
     en: ["New task assigned", "A new main task was assigned to you."],
     ar: ["تم إسناد مهمة جديدة", "تم إسناد مهمة رئيسية جديدة إليك."],
@@ -54,7 +57,7 @@ export function renderGeneralTaskEmail(
   const [heading, intro] = language === "ar" ? wording.ar : wording.en;
   const ar = language === "ar";
   const data = schema.parse(payload);
-  const removed = templateKey === "GENERAL_ASSIGNMENT_REMOVED";
+  const removed = templateKey === "GENERAL_ASSIGNMENT_REMOVED" || templateKey === "TASK_SHARE_REVOKED";
   const title = removed ? heading : data.taskTitle ?? heading;
   const rows = removed ? [] : [
     ...(data.subtaskTitle ? [{ label: ar ? "المهمة الفرعية" : "Your subtask", value: data.subtaskTitle }] : []),
@@ -77,3 +80,4 @@ export function renderGeneralTaskEmail(
     (href ? `\n\n${href}` : "");
   return { subject, preheader: intro, html, text };
 }
+

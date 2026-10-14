@@ -55,5 +55,9 @@ export function mapCalendarTask(record: CalendarTaskRecord): CalendarTask {
     kpiTemplateId: optionalId(record.kpiTemplateId, "calendar KPI template id"),
     kpiName: record.kpiName,
     isReadOnly: record.cycleClosedAtUtc !== null,
+    teamTask: Boolean(record.teamTask),
+    teamMemberCount: Number(record.teamMemberCount ?? 0),
+    tags:record.taskTagsJson ? JSON.parse(record.taskTagsJson) : [],
   };
 }
+

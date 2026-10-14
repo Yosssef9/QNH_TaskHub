@@ -8,6 +8,8 @@ describe("task-details mapper", () => {
       id: "11",
       taskId: "20",
       title: "Prepare report",
+      description: null,
+      priority: "MEDIUM",
       isCompleted: false,
       dueDate: null,
       displayOrder: 1,
@@ -20,3 +22,4 @@ describe("task-details mapper", () => {
     expect(mapped.taskId).toBe(20);
   });
 });
+

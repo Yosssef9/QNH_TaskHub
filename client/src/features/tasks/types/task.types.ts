@@ -1,3 +1,5 @@
+import type { TaskTag } from '../tags/tags.api'
+
 export const TASK_STATUSES = ['TODO', 'IN_PROGRESS', 'DONE', 'CANCELLED'] as const
 export const TASK_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH'] as const
 export const TASK_DUE_FILTERS = ['ALL', 'OVERDUE', 'TODAY', 'UPCOMING', 'NO_DATE'] as const
@@ -5,6 +7,7 @@ export const TASK_DUE_FILTERS = ['ALL', 'OVERDUE', 'TODAY', 'UPCOMING', 'NO_DATE
 export type TaskStatus = (typeof TASK_STATUSES)[number]
 export type TaskPriority = (typeof TASK_PRIORITIES)[number]
 export type TaskDueFilter = (typeof TASK_DUE_FILTERS)[number]
+export type TaskTypeFilter = "ALL" | "TEAM" | "SINGLE" | "PERSONAL"
 export type TaskSortField = 'createdAt' | 'dueDate' | 'priority' | 'title' | 'status'
 
 export interface MeetingActionItemTaskContext {
@@ -47,6 +50,13 @@ export interface PersonalTask {
   isOverdue: boolean
   subtaskTotal: number
   subtaskCompleted: number
+  collaborationEnabled?: boolean
+  teamTask?: boolean
+  teamMemberCount?: number
+  mainAssigneeCount?: number
+  mainCompletedCount?: number
+  tags?: TaskTag[]
+  teamRoster?: Array<{userId:number;userName:string;userCode:string;email:string|null;mainAssignee:boolean}>
   meetingActionItem: MeetingActionItemTaskContext | null
 }
 
@@ -55,6 +65,9 @@ export interface TaskListFilters {
   status?: TaskStatus
   priority?: TaskPriority
   due: TaskDueFilter
+  taskType?: TaskTypeFilter
+  tagIds?: string
+  tagMatch?: "ANY" | "ALL" | "UNTAGGED"
   sortBy: TaskSortField
   sortDirection: 'asc' | 'desc'
   page: number
@@ -90,12 +103,16 @@ export interface SaveTaskInput {
   listId?: number
   referenceDate?: string | null
   assigneeUserId?: number | null
+  assigneeUserIds?: number[]
+  tagIds?: number[]
 }
 
 export interface Subtask {
   id: number
   taskId: number
   title: string
+  description: string | null
+  priority: TaskPriority
   assigneeUserId?: number | null
   workNotes?: string | null
   isCompleted: boolean
@@ -123,6 +140,8 @@ export interface TaskActivity {
   id: number
   actorUserId: number
   actorName: string
+  actorUserCode?: string | null
+  actorEmail?: string | null
   activityType: string
   eventData: Record<string, unknown> | null
   createdAtUtc: string
@@ -168,6 +187,8 @@ export interface GeneralAssignmentContext {
 }
 
 export interface TaskDetails {
+  collaborationActive?: boolean
+  sharedPermission?: "VIEW" | "EDIT"
   task: PersonalTask
   actionItem: TaskActionItemContext | null
   generalAssignment?: GeneralAssignmentContext | null
@@ -177,6 +198,8 @@ export interface TaskDetails {
   activity: TaskActivity[]
   progress: { completed: number; total: number; percentage: number }
 }
+
+
 
 
 

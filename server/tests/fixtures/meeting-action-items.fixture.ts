@@ -88,7 +88,7 @@ export function taskRecord(overrides: Partial<TaskRecord> = {}): TaskRecord {
 
 export function subtaskRecord(): SubtaskRecord {
   return {
-    id: SUBTASK, taskId: TASK, title: "Shared subtask", isCompleted: false,
+    id: SUBTASK, taskId: TASK, title: "Shared subtask", description: null, priority: "MEDIUM", isCompleted: false,
     dueDate: null, displayOrder: 0, createdAtUtc: new Date("2026-09-01T10:00:00Z"),
     updatedAtUtc: null, completedAtUtc: null,
   };
@@ -104,3 +104,4 @@ export function attachmentRecord(overrides: Partial<AttachmentRecord> = {}): Att
     ...overrides,
   };
 }
+

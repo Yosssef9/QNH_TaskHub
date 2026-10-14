@@ -48,6 +48,9 @@ function asTemplateKey(value: string): EmailTemplateKey {
     case "MEETING_SERIES_SCHEDULED":
     case "MEETING_ACTION_ITEM_ASSIGNED":
     case "MEETING_ACTION_ITEM_COMPLETED":
+    case "TASK_SHARED":
+    case "TASK_SHARE_UPDATED":
+    case "TASK_SHARE_REVOKED":
     case "GENERAL_TASK_ASSIGNED":
     case "GENERAL_SUBTASK_ASSIGNED":
     case "GENERAL_ASSIGNMENT_REMOVED":
@@ -246,6 +249,7 @@ export function startEmailWorker(): EmailWorkerHandle {
     },
   };
 }
+
 
 
 

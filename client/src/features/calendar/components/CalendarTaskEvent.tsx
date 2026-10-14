@@ -1,8 +1,9 @@
-import { AlertTriangle, BriefcaseBusiness, CalendarDays, Gauge, ListTodo } from 'lucide-react'
+import { AlertTriangle, BriefcaseBusiness, CalendarDays, Gauge, ListTodo, UsersRound } from 'lucide-react'
 import { useMemo } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 
+import { TaskTags } from '@/features/tasks/tags/TaskTags'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   TaskDueIndicator,
@@ -88,6 +89,10 @@ function CalendarTaskTooltip({ task }: { task: CalendarTask }) {
         <div className="flex flex-wrap items-center gap-1.5">
           <TaskStatusIndicator status={task.status} pill />
           <TaskPriorityIndicator priority={task.priority} pill />
+          {task.teamTask ? <span className="text-primary inline-flex items-center gap-1 text-xs font-semibold">
+            <UsersRound className="size-3.5" aria-hidden="true" />{t('tasks.teamCards.teamLabel', {count:task.teamMemberCount ?? 0})}
+          </span> : null}
+          {task.tags?.length?<TaskTags tags={task.tags} compact className="max-w-full"/>:null}
           {task.isOverdue ? (
             <TaskDueIndicator due="OVERDUE" label={t('tasks.overdue')} pill />
           ) : null}
@@ -181,6 +186,9 @@ export function CalendarTaskEvent({
               >
                 {task.title}
               </span>
+              {task.teamTask ? <span className="text-primary inline-flex shrink-0 items-center gap-0.5 text-[10px] font-semibold">
+                <UsersRound aria-hidden="true" className="size-3" />{task.teamMemberCount}
+              </span> : null}
               <span
                 aria-hidden="true"
                 className={cn('size-1.5 shrink-0 rounded-full', priority.dot)}
@@ -207,6 +215,9 @@ export function CalendarTaskEvent({
           <span className="text-foreground min-w-0 flex-1 truncate text-sm font-medium">
             {task.title}
           </span>
+          {task.teamTask ? <span className="text-primary inline-flex shrink-0 items-center gap-0.5 text-xs font-semibold">
+            <UsersRound aria-hidden="true" className="size-3.5" />{task.teamMemberCount}
+          </span> : null}
           <span
             aria-hidden="true"
             className={cn('size-2 shrink-0 rounded-full', priority.dot)}
@@ -218,3 +229,4 @@ export function CalendarTaskEvent({
     </div>
   )
 }
+

@@ -8,6 +8,9 @@ import { meetingWorkspaceRepository } from "../meetings/meeting-workspace.reposi
 import { tasksRepository } from "../tasks/tasks.repository.js";
 import { generalTaskAssignmentsRepository } from "../general-task-assignments/general-task-assignments.repository.js";
 import type { GeneralAssignmentContext } from "../general-task-assignments/general-task-assignments.repository.js";
+import { shareCapabilities } from '../task-shares/task-shares.policy.js';
+import { taskSharesRepository } from "../task-shares/task-shares.repository.js";
+import { collaborationRepository } from "../collaboration/collaboration.repository.js";
 import { meetingActionItemsRepository } from "./meeting-action-items.repository.js";
 import type {
   MeetingActionItemCapabilities,
@@ -19,6 +22,8 @@ export interface ResolvedTaskAccess {
   context: MeetingActionItemContext | null;
   capabilities: MeetingActionItemCapabilities;
   generalAssignment?: GeneralAssignmentContext | null;
+  sharedPermission?: "VIEW" | "EDIT";
+  collaborationActive?: boolean;
 }
 
 const normalOwnerCapabilities: MeetingActionItemCapabilities = {
@@ -76,6 +81,39 @@ export async function resolveTaskAccess(
   transaction?: DatabaseTransaction,
 ): Promise<ResolvedTaskAccess | null> {
   const relation = await meetingActionItemsRepository.findContext(taskId, transaction, includeDeleted);
+  const share = includeDeleted ? null : await taskSharesRepository.grant(taskId,actorUserId,transaction);
+  const shareAccess = share ? {
+    ownerUserId:share.ownerUserId,context:relation,sharedPermission:share.permission,
+    collaborationActive:false, // overwritten below when necessary
+    capabilities:shareCapabilities(share.permission),
+  } : null;
+  const collaborationActive = !includeDeleted && await collaborationRepository.active(taskId,transaction);
+  if (collaborationActive) {
+    const collaborative = await collaborationRepository.task(taskId,transaction);
+    if (!collaborative) return null;
+    if (actorUserId === collaborative.ownerUserId) return {
+      ownerUserId: collaborative.ownerUserId,
+      context: relation,
+      generalAssignment: relation ? null : await generalTaskAssignmentsRepository.findContext(taskId,transaction),
+      collaborationActive: true,
+      capabilities: {...actionOwnerCapabilities,canCompleteTask:false,canCompleteSubtasks:false},
+    };
+    if (await collaborationRepository.isAssigned(taskId,actorUserId,transaction)) return {
+      ownerUserId: collaborative.ownerUserId,
+      context: relation,
+      generalAssignment: relation ? null : await generalTaskAssignmentsRepository.findContext(taskId,transaction),
+      collaborationActive: true,
+      ...(shareAccess ? { sharedPermission: shareAccess.sharedPermission } : {}),
+      capabilities: {...actionAssigneeCapabilities,canCompleteTask:false,
+        canCompleteSubtasks:false,canChangeNonCompletionStatus:false,
+        canUploadAttachments:share?.permission==='EDIT',
+        ...(share?.permission==='EDIT'?{canEditDetails:true,canManageSubtasks:true}:{})},
+    };
+    if (shareAccess) return {...shareAccess,collaborationActive:true};
+    if (!relation) return null;
+    // Meeting viewers retain authorized parent context, but legacy main-assignee
+    // identity must not restore execution rights after collaborative removal.
+  }
 
   if (relation) {
     if (actorUserId === relation.ownerUserId) {
@@ -86,6 +124,7 @@ export async function resolveTaskAccess(
       };
     }
 
+    if (shareAccess) return shareAccess;
     // Deleted tasks stay owner-only. Meeting visibility does not grant restore access.
     if (includeDeleted) return null;
 
@@ -116,12 +155,13 @@ export async function resolveTaskAccess(
       return null;
     }
 
-    const isMainAssignee = actorUserId === relation.assigneeUserId;
-    const hasOwnSubtask = !isMainAssignee &&
+    const isMainAssignee = !collaborationActive && actorUserId === relation.assigneeUserId;
+    const hasOwnSubtask = !collaborationActive && !isMainAssignee &&
       (await generalTaskAssignmentsRepository.visibleSubtaskIds(taskId, actorUserId, transaction)).length > 0;
     return {
       ownerUserId: relation.ownerUserId,
       context: relation,
+      collaborationActive,
       capabilities: isMainAssignee ? actionAssigneeCapabilities : hasOwnSubtask
         ? { ...actionAssigneeCapabilities, canCompleteTask: false, canChangeNonCompletionStatus: false }
         : actionViewerCapabilities,
@@ -142,19 +182,24 @@ export async function resolveTaskAccess(
         },
       };
     }
+    if (shareAccess) return shareAccess;
     if (includeDeleted || !(await generalTaskAssignmentsRepository.hasAccessToTask(taskId, actorUserId, transaction))) {
       return null;
     }
     const isMainAssignee = general.assigneeUserId === actorUserId;
     return {
       ownerUserId: general.ownerUserId, context: null, generalAssignment: general,
+      ...(shareAccess ? { sharedPermission: shareAccess.sharedPermission } : {}),
       capabilities: {
         ...actionAssigneeCapabilities,
         canCompleteTask: isMainAssignee,
         canChangeNonCompletionStatus: isMainAssignee,
+        ...(share?.permission==='EDIT'?{canEditDetails:true,canManageSubtasks:true}:{})
       },
     };
   }
+
+  if (shareAccess) return shareAccess;
 
   const owned = transaction
     ? await tasksRepository.findOwnedForUpdate(transaction, actorUserId, taskId, includeDeleted)
@@ -178,6 +223,8 @@ export async function resolveTaskAccess(
     capabilities: normalOwnerCapabilities,
   };
 }
+
+
 
 
 

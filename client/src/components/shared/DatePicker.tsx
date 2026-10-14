@@ -1,6 +1,6 @@
 import { DesktopDatePicker } from '@mui/x-date-pickers/DesktopDatePicker'
 import dayjs from 'dayjs'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useDialogFloatingContainer } from '@/components/ui/dialog'
@@ -11,6 +11,8 @@ export interface DatePickerProps {
   onChange: (value: string) => void
 
   label?: string
+  /** Keep the existing floating label by default; use 'above' for aligned form rows. */
+  labelPlacement?: 'floating' | 'above'
   description?: string | undefined
   error?: string | undefined
 
@@ -27,6 +29,7 @@ export function DatePicker({
   value,
   onChange,
   label,
+  labelPlacement = 'floating',
   description,
   error,
   required = false,
@@ -37,6 +40,8 @@ export function DatePicker({
 }: DatePickerProps) {
   const { i18n } = useTranslation()
   const [open, setOpen] = useState(false)
+  const externalLabelId = useId()
+  const labelAbove = labelPlacement === 'above' && Boolean(label)
   const dialogFloatingContainer = useDialogFloatingContainer()
 
   const direction = i18n.dir()
@@ -47,8 +52,13 @@ export function DatePicker({
 
   return (
     <div className={cn('min-w-0', className)} dir={direction}>
+      {labelAbove ? (
+        <label htmlFor={externalLabelId} className="mb-1.5 block text-sm font-medium">
+          {label}{required ? ' *' : null}
+        </label>
+      ) : null}
       <DesktopDatePicker
-        label={label}
+        label={labelAbove ? undefined : label}
         value={pickerValue}
         open={open}
         onOpen={() => setOpen(true)}
@@ -90,6 +100,7 @@ export function DatePicker({
           textField: {
             fullWidth: true,
             size: 'small',
+            ...(labelAbove ? { id: externalLabelId, inputProps: { 'aria-label': label } } : {}),
             required,
 
             error: Boolean(error),
@@ -258,4 +269,5 @@ export function DatePicker({
     </div>
   )
 }
+
 
