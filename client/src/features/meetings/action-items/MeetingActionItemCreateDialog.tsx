@@ -239,7 +239,7 @@ export function MeetingActionItemCreateDialog({
               {t('common.cancel')}
             </Button>
             <Button
-              disabled={createMutation.isPending || !title.trim() || !assignee || eligibleAssignees.length === 0}
+              disabled={createMutation.isPending || !title.trim() || selectedAssignees.length === 0 || eligibleAssignees.length === 0}
               onClick={submitCreate}
             >
               {t('meetings.followUp.createAction')}
@@ -250,5 +250,6 @@ export function MeetingActionItemCreateDialog({
     </Dialog>
   )
 }
+
 
 

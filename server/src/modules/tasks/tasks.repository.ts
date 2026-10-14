@@ -277,7 +277,8 @@ export const tasksRepository = {
     transaction: DatabaseTransaction,
     ownerUserId: number,
     taskId: number,
-    input: Required<Omit<UpdateTaskInput, "listId">> & { listId: number | null },
+    // Tags are persisted separately by tagsService; this SQL update handles task columns only.
+    input: Required<Omit<UpdateTaskInput, "listId" | "tagIds">> & { listId: number | null },
   ) {
     await transaction
       .request()
@@ -351,5 +352,6 @@ export const tasksRepository = {
         VALUES (@taskId, @ownerUserId, @actorUserId, @type, @data);`);
   },
 };
+
 
 

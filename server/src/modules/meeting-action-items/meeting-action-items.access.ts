@@ -189,7 +189,6 @@ export async function resolveTaskAccess(
     const isMainAssignee = general.assigneeUserId === actorUserId;
     return {
       ownerUserId: general.ownerUserId, context: null, generalAssignment: general,
-      ...(shareAccess ? { sharedPermission: shareAccess.sharedPermission } : {}),
       capabilities: {
         ...actionAssigneeCapabilities,
         canCompleteTask: isMainAssignee,
@@ -223,6 +222,7 @@ export async function resolveTaskAccess(
     capabilities: normalOwnerCapabilities,
   };
 }
+
 
 
 

@@ -588,7 +588,7 @@ export const taskDetailsService = {
             attachmentId: created.id,
             fileName: originalFileName,
             subtaskId: parent.subtaskId ?? null,
-            subtaskTitle: parent.subtaskId === null ? null :
+            subtaskTitle: parent.subtaskId == null ? null :
               (await taskDetailsRepository.findSubtask(resolved.ownerUserId,parent.subtaskId,transaction))?.title ?? null,
           },
           actorUserId,
@@ -684,7 +684,7 @@ export const taskDetailsService = {
         { attachmentId: id, fileName: attachment.originalFileName,
           subtaskId: attachment.subtaskId,
           subtaskTitle: attachment.subtaskId === null ? null :
-            (await taskDetailsRepository.findSubtask(currentAccess.ownerUserId,attachment.subtaskId,transaction))?.title ?? null },
+            (await taskDetailsRepository.findSubtask(currentAccess.ownerUserId,Number(attachment.subtaskId),transaction))?.title ?? null },
         actorUserId,
       );
       return attachment;
@@ -692,6 +692,7 @@ export const taskDetailsService = {
     await removeStoredAttachment(record.storageKey);
   },
 };
+
 
 
 

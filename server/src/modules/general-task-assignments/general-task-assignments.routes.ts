@@ -69,7 +69,7 @@ generalTaskAssignmentsRouter.get("/assigned",validateRequest({query:assignedSear
     ...(query.status !== undefined ? {status:query.status} : {}),
     ...(query.priority !== undefined ? {priority:query.priority} : {}),
     due:query.due,sortBy:query.sortBy,sortDirection:query.sortDirection,taskType:query.taskType,
-    tagIds:query.tagIds,tagMatch:query.tagMatch,
+    ...(query.tagIds !== undefined ? {tagIds:query.tagIds} : {}),tagMatch:query.tagMatch,
   })});
 });
 
@@ -80,4 +80,5 @@ generalTaskAssignmentsRouter.get('/eligible-users/:userId',
     if(!user) throw new AppError({statusCode:404,code:'TASK_ASSIGNEE_INVALID',message:'Assignee not found.'});
     res.json({success:true,data:user});
   });
+
 

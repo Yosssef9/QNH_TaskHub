@@ -221,7 +221,11 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
     ...(status ? { status } : {}),
     ...(priority ? { priority } : {}),
     due,
-    ...(!isKpiMode ? { taskType,tagIds:tagIds.join(',')||undefined,tagMatch } : {}),
+    ...(!isKpiMode ? {
+      taskType,
+      ...(tagIds.length ? { tagIds: tagIds.join(',') } : {}),
+      tagMatch,
+    } : {}),
     sortBy,
     sortDirection,
     page,
@@ -1055,6 +1059,7 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
     </div>
   )
 }
+
 
 
 

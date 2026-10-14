@@ -153,7 +153,7 @@ export function AssignedToMePage() {
     ...(status ? { status } : {}),
     ...(priority ? { priority } : {}),
     due,
-    taskType,tagIds:tagIds.join(',')||undefined,tagMatch,
+    taskType,...(tagIds.length ? {tagIds:tagIds.join(',')} : {}),tagMatch,
     sortBy,
     sortDirection,
     groupBy,
@@ -161,7 +161,7 @@ export function AssignedToMePage() {
   const generalQuery = useGeneralAssignedTasks({
     page: generalPage, pageSize, search,
     ...(status ? {status} : {}), ...(priority ? {priority} : {}),
-    due, taskType,tagIds:tagIds.join(',')||undefined,tagMatch, sortBy: sortBy === 'meeting' ? 'assignedAt' : sortBy,
+    due, taskType,...(tagIds.length ? {tagIds:tagIds.join(',')} : {}),tagMatch, sortBy: sortBy === 'meeting' ? 'assignedAt' : sortBy,
     sortDirection,
   }, source !== 'MEETING')
   const statusMutation = useChangeTaskStatus()
@@ -712,5 +712,6 @@ export function AssignedToMePage() {
     </div>
   )
 }
+
 
 

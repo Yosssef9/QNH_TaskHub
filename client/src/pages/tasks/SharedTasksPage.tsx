@@ -228,9 +228,12 @@ export function SharedTasksPage() {
           <Button variant="outline" onClick={() => void query.refetch()}>{t('common.retry')}</Button></div>
         : groups.length === 0 ? <p className="text-muted-foreground rounded-xl border p-8 text-center">{t('taskSharing.empty')}</p>
         : <div className="space-y-4">
-          {groups.map(tasks => <section key={groupKey(tasks[0], groupBy)} className="space-y-3">
+          {groups.map(tasks => {
+            const firstTask = tasks[0]
+            if (!firstTask) return null
+            return <section key={groupKey(firstTask, groupBy)} className="space-y-3">
             {groupBy !== 'NONE' ? <div className="text-muted-foreground flex items-center gap-3 pt-2 text-xs font-semibold uppercase tracking-wide">
-              <span className="truncate">{groupLabel(tasks[0])}</span><span className="bg-border h-px flex-1"/>
+              <span className="truncate">{groupLabel(firstTask)}</span><span className="bg-border h-px flex-1"/>
             </div> : null}
             {tasks.map(task => <article key={task.taskId} role="button" tabIndex={0}
               onClick={() => setDetailsId(task.taskId)}
@@ -259,7 +262,8 @@ export function SharedTasksPage() {
                     <Pencil className="size-4"/>{t('taskSharing.edit')}</Button> : undefined}
               />
             </article>)}
-          </section>)}
+          </section>
+          })}
         </div>}
       <TablePagination page={page} totalPages={Math.ceil(total / pageSize)} pageSize={pageSize}
         startRow={total ? (page - 1) * pageSize + 1 : 0} endRow={Math.min(total, page * pageSize)}

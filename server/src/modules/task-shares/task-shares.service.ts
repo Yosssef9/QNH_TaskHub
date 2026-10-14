@@ -195,7 +195,7 @@ export const taskSharesService={
  },
  async revoke(actor:number,taskId:number,user:number) {
   await withTransaction(async tx=>{
-   const task=await assertOwner(tx,actor,taskId);
+   await assertOwner(tx,actor,taskId);
    const result=await tx.request().input('actor',sql.Int,actor).input('task',sql.BigInt,taskId).input('user',sql.Int,user)
     .query(`UPDATE dbo.TM_task_shares SET revoked_at_utc=SYSUTCDATETIME(),revoked_by_user_id=@actor,updated_at_utc=SYSUTCDATETIME()
     WHERE task_id=@task AND recipient_user_id=@user AND revoked_at_utc IS NULL`);

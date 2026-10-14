@@ -60,13 +60,17 @@ export const listMeetingActionItemAssignees: RequestHandler = async (req, res) =
 export const createMeetingActionItem: RequestHandler = async (req, res) => {
   const { meetingId } = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
   const input = getValidatedRequestPart<CreateMeetingActionItemBody>(req, "body");
+  const { assigneeUserIds, ...taskInput } = input;
   res.status(201).json({
     success: true,
     data: await meetingActionItemsService.create(
       actor(req),
       currentAccess(req),
       meetingId,
-      input,
+      {
+        ...taskInput,
+        ...(assigneeUserIds !== undefined ? { assigneeUserIds } : {}),
+      },
     ),
   });
 };
@@ -88,8 +92,13 @@ export const reassignMeetingActionItem: RequestHandler = async (req, res) => {
 
 export const listAssignedMeetingActionItems: RequestHandler = async (req, res) => {
   const query = getValidatedRequestPart<AssignedActionItemsQuery>(req, "query");
+  const { tagIds, ...filters } = query;
   res.status(200).json({
     success: true,
-    data: await meetingActionItemsService.assigned(actor(req), query),
+    data: await meetingActionItemsService.assigned(actor(req), {
+      ...filters,
+      ...(tagIds !== undefined ? { tagIds } : {}),
+    }),
   });
 };
+

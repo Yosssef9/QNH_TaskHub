@@ -34,7 +34,12 @@ export const taskSharesRouter:ExpressRouter=Router();
 taskSharesRouter.use(verifyPortalJwt,resolveTaskHubAccess);
 taskSharesRouter.get('/',validateRequest({query:listQuery}),async(req,res)=>{
  const input=getValidatedRequestPart<z.infer<typeof listQuery>>(req,'query');
- res.json({success:true,data:await taskSharesService.list(actor(req),input)});
+ const {personId,tagIds,...filters}=input;
+ res.json({success:true,data:await taskSharesService.list(actor(req),{
+  ...filters,
+  ...(personId !== undefined ? {personId} : {}),
+  ...(tagIds !== undefined ? {tagIds} : {}),
+ })});
 });
 taskSharesRouter.get('/people',validateRequest({query:peopleQuery}),async(req,res)=>{
  const {tab}=getValidatedRequestPart<z.infer<typeof peopleQuery>>(req,'query');

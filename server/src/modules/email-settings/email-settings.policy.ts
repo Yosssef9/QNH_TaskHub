@@ -26,6 +26,9 @@ export const EMAIL_EVENT_DEFAULTS: Readonly<Record<EmailPreferenceEvent, boolean
 
   MEETING_ACTION_ITEM_ASSIGNED: true,
   MEETING_ACTION_ITEM_COMPLETED: true,
+  TASK_SHARED: true,
+  TASK_SHARE_UPDATED: true,
+  TASK_SHARE_REVOKED: true,
   MEETING_REPORT_AVAILABLE: true,
   GENERAL_TASK_ASSIGNED: true,
   GENERAL_SUBTASK_ASSIGNED: true,
@@ -36,5 +39,6 @@ export const EMAIL_EVENT_DEFAULTS: Readonly<Record<EmailPreferenceEvent, boolean
   GENERAL_TASK_REOPENED: true,
 
 };
+
 
 

@@ -154,6 +154,7 @@ export interface CreateTaskInput {
   startDate?: string | null | undefined;
   dueDate?: string | null | undefined;
   assigneeUserId?: number | null | undefined;
+  assigneeUserIds?: number[] | undefined;
   tagIds?: number[] | undefined;
 }
 
@@ -172,5 +173,6 @@ export interface ChangeTaskStatusInput {
   status: TaskStatus;
   cancellationReason?: string | undefined;
 }
+
 
 

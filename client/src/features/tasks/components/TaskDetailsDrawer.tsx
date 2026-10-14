@@ -590,7 +590,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                       {collaborationActive ? t('tasks.workspace.description') : query.data.task.description || t('tasks.details.noDescription')}
                     </DialogDescription>
                     {query.data.task.kpiInstanceId === null ? <div className="mt-3 flex flex-wrap items-center gap-3">
-                      <TaskTags tags={query.data.task.tags}/>
+                      <TaskTags tags={query.data.task.tags ?? []}/>
                       {capabilities?.role==='OWNER'?<Button type="button" size="sm" variant="outline" onClick={()=>setShareOpen(true)}>
                         <Share2 className="size-4"/>{t('taskSharing.share')}
                       </Button>:null}
@@ -1043,7 +1043,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
       </Dialog>
 
       <Dialog open={tagEditorOpen} onOpenChange={open=>!savingTags&&setTagEditorOpen(open)}>
-        <DialogContent variant="modal">
+        <DialogContent variant="modal" closeLabel={t('common.close')}>
           <DialogTitle>{t('tags.editTaskTags')}</DialogTitle>
           <DialogDescription>{t('tags.chooseDescription')}</DialogDescription>
           <div className="mt-4 space-y-4">
@@ -1106,6 +1106,7 @@ function InfoRow({
     </div>
   )
 }
+
 
 
 
