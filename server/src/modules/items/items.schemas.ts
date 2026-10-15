@@ -21,6 +21,7 @@ const periodSchema = z.enum(["1M", "3M", "6M", "1Y", "ALL"]);
 
 const itemFilters = {
   search: z.string().trim().max(120).optional(),
+  itemCodePrefix: z.string().regex(/^[0-9]{2,20}$/).optional(),
   source: z.enum(["ORACLE", "MANUAL"]).optional(),
   category: z.string().trim().max(150).optional(),
   statusCode: z.coerce.number().int().optional(),

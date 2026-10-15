@@ -110,6 +110,7 @@ export interface ItemInput {
 
 export interface ItemListQuery {
   search?: string | undefined;
+  itemCodePrefix?: string | undefined;
   page: number;
   pageSize: number;
   source?: ItemSource | undefined;

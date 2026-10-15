@@ -122,6 +122,7 @@ export interface PriceQuoteAnalytics {
 
 export interface PriceQuoteSummaryInput {
   itemIds: number[];
+  itemCodePrefix?: string | undefined;
   supplierIds: number[];
   period: ProcurementPricePeriod;
 }

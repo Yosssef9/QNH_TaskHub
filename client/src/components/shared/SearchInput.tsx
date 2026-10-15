@@ -9,6 +9,7 @@ import { cn } from '@/lib/cn'
 export interface SearchInputProps {
   value: string
   onChange: (value: string) => void
+  onPendingChange?: (pending: boolean) => void
   placeholder?: string
   ariaLabel?: string
   debounceMs?: number
@@ -20,6 +21,7 @@ export interface SearchInputProps {
 export function SearchInput({
   value,
   onChange,
+  onPendingChange,
   placeholder = 'Search…',
   ariaLabel = 'Search',
   debounceMs = 300,
@@ -46,10 +48,12 @@ export function SearchInput({
 
   function updateValue(nextValue: string) {
     setLocalValue(nextValue)
+    onPendingChange?.(nextValue !== value)
   }
 
   function clearSearch() {
     setLocalValue('')
+    onPendingChange?.(false)
     onChange('')
   }
 

@@ -59,6 +59,7 @@ export const priceQuoteAnalyticsQuerySchema = z.object({
 }).refine((value) => value.itemId !== undefined || value.supplierId !== undefined, "Item or Supplier scope is required.");
 
 export const priceQuoteSummaryBodySchema = z.object({
+  itemCodePrefix: z.string().regex(/^[0-9]{2,20}$/).optional(),
   itemIds: z.array(nonZeroId).max(1000).default([]),
   supplierIds: z.array(nonZeroId).max(500).default([]),
   period: period.default("1Y"),

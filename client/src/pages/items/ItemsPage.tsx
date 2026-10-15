@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Building2, ChartColumnIncreasing, Columns3, FileUp, List, Minus, PackageSearch, Plus, SearchX } from 'lucide-react'
+import { ArrowDown, ArrowUp, Building2, ChartColumnIncreasing, Columns3, FileUp, List, Loader2, Minus, PackageSearch, Plus, SearchX } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
@@ -19,6 +19,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { hasAccessPermission } from '@/features/auth/access-permissions'
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { ItemEditorDialog } from '@/features/items/components/ItemEditorDialog'
+import { ItemCodeGroupPicker } from '@/features/items/components/ItemCodeGroupPicker'
+import { useItemCodeGroups } from '@/features/items/hooks/use-item-code-groups'
 import { ProcurementImportDialog } from '@/features/procurement-imports/components/ProcurementImportDialog'
 import { ItemPriceFilters } from '@/features/items/components/ItemPriceFilters'
 import { AnnualPriceComparisonTable } from '@/features/items/components/AnnualPriceComparisonTable'
@@ -50,6 +52,10 @@ export function ItemsPage() {
   const [urlParams, setUrlParams] = useSearchParams()
   const initialView = Number(urlParams.get('view'))
   const [search, setSearch] = useState('')
+  const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null)
+  const [groupPrefsLoadedUserId, setGroupPrefsLoadedUserId] = useState<number | null>(null)
+  const itemCodeGroups = useItemCodeGroups()
+  const [searchTyping, setSearchTyping] = useState(false)
   const [source, setSource] = useState<ItemSource | 'ALL'>('ALL')
   const [status, setStatus] = useState<'ALL' | '1' | '0'>('ALL')
   const [period, setPeriod] = useState<ProcurementPricePeriod>('1Y')
@@ -70,6 +76,41 @@ export function ItemsPage() {
   const savedViews = useProcurementSavedViews()
   const updateSavedView = useUpdateProcurementSavedView()
   const activeViewDetail = useProcurementSavedView(activeViewId)
+  const userId = currentUser.data?.user.userId ?? null
+  // Each user chooses a group independently; group definitions themselves are shared.
+  useEffect(() => {
+    if (userId === null) return
+    let restored: number | null = null
+    try {
+      const value = window.localStorage.getItem(`taskhub.procurement.item-code-group.${userId}`)
+      const parsed = Number(value)
+      restored = value && Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
+    } catch { /* Storage is optional. */ }
+    setSelectedGroupId(restored)
+    setGroupPrefsLoadedUserId(userId)
+  }, [userId])
+
+  const selectedGroup = itemCodeGroups.data?.find(group => group.id === selectedGroupId) ?? null
+  useEffect(() => {
+    if (groupPrefsLoadedUserId !== userId || !itemCodeGroups.isSuccess || selectedGroupId === null || selectedGroup) return
+    // A different user may have deleted this shared group.
+    setSelectedGroupId(null)
+    try { window.localStorage.removeItem(`taskhub.procurement.item-code-group.${userId}`) } catch { /* optional */ }
+  }, [groupPrefsLoadedUserId, itemCodeGroups.isSuccess, selectedGroup, selectedGroupId, userId])
+
+  function selectGroup(id: number | null) {
+    setSelectedGroupId(id)
+    setPage(1)
+    if (userId !== null) {
+      try {
+        const key = `taskhub.procurement.item-code-group.${userId}`
+        if (id === null) window.localStorage.removeItem(key)
+        else window.localStorage.setItem(key, String(id))
+      } catch { /* optional */ }
+    }
+  }
+  const groupsReady = itemCodeGroups.isSuccess && groupPrefsLoadedUserId === userId
+    && (selectedGroupId === null || selectedGroup !== null)
   const initializedDefault = useRef(false)
   const sort = useSortState<ItemSortBy>('name', 'asc')
 
@@ -82,6 +123,7 @@ export function ItemsPage() {
     setViewSortOverride(null)
     setPage(1)
     setSearch('')
+    setSearchTyping(false)
     setUrlParams({ view: String(defaultView.id) }, { replace: true })
   }, [activeViewId, savedViews.data, setUrlParams])
 
@@ -127,16 +169,18 @@ export function ItemsPage() {
 
   const queryFilters = useMemo(() => ({
     search,
+    ...(selectedGroup ? { itemCodePrefix: selectedGroup.prefix } : {}),
     ...(activeView?.config.itemIds.length ? { itemIds: activeView.config.itemIds } : {}),
     ...(activeView ? (activeView.config.source ? { source: activeView.config.source } : {}) : source === 'ALL' ? {} : { source }),
     ...(activeView?.config.category ? { category: activeView.config.category } : {}),
     ...(activeView ? (activeView.config.statusCode !== null ? { statusCode: activeView.config.statusCode } : {}) : status === 'ALL' ? {} : { statusCode: Number(status) }),
     period,
     ...(supplierIds.length ? { supplierIds } : {}),
-  }), [activeView, period, search, source, status, supplierIds])
+  }), [activeView, period, search, selectedGroup, source, status, supplierIds])
 
   const itemMasterFilters = useMemo(() => ({
     search: queryFilters.search,
+    ...(queryFilters.itemCodePrefix ? { itemCodePrefix: queryFilters.itemCodePrefix } : {}),
     ...(queryFilters.itemIds?.length ? { itemIds: queryFilters.itemIds } : {}),
     ...(queryFilters.source ? { source: queryFilters.source } : {}),
     ...(queryFilters.category ? { category: queryFilters.category } : {}),
@@ -148,6 +192,7 @@ export function ItemsPage() {
     !initializedDefault.current &&
     Boolean(savedViews.data?.some((view) => view.isDefault))
   const savedViewContextReady =
+    groupsReady &&
     !savedViews.isPending &&
     !pendingDefaultViewSelection &&
     (activeViewId === null || !activeViewDetail.isPending)
@@ -221,12 +266,36 @@ export function ItemsPage() {
   const overview = useItemsOverview(queryFilters, secondaryAnalyticsEnabled)
   const quoteSummary = usePriceQuoteSummary({
     itemIds: activeView?.config.itemIds ?? [],
+    ...(selectedGroup ? { itemCodePrefix: selectedGroup.prefix } : {}),
     supplierIds,
     period,
   }, secondaryAnalyticsEnabled && canAccessPriceQuotes)
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / pageSize))
   const startRow = data?.total ? (page - 1) * pageSize + 1 : 0
   const endRow = Math.min(page * pageSize, data?.total ?? 0)
+
+  // TanStack Query retains the last page while fetching a new search, view, or sort.
+  // Keep those results visible, but distinguish them from the selection now loading.
+  const loadingView = !savedViewContextReady
+  const viewLoadError = activeViewId !== null && activeViewDetail.isError
+  const fetchingPrimary = displayMode === 'annual'
+    ? annualPrices.isFetching || annualPrices.isPending
+    : items.isFetching || items.isPending
+  const fetchingPriceDetails = displayMode === 'summary' && !usesAnalyticsSort
+    ? priceSummaries.isFetching
+    : displayMode === 'supplierComparison' && Boolean(activeView)
+      ? supplierMatrix.isFetching
+      : false
+  const resultsRefreshing = searchTyping || loadingView || fetchingPrimary || fetchingPriceDetails
+  const canShowPreviousResults = savedViewContextReady && !viewLoadError && (
+    displayMode === 'annual'
+      ? Boolean(annualPrices.data) && !annualPrices.isPending && !annualPrices.isError
+      : Boolean(data) && !items.isPending && !items.isError
+  )
+  const showResultsOverlay = resultsRefreshing && canShowPreviousResults
+  const overviewRefreshing = displayMode !== 'annual' && (
+    resultsRefreshing || overview.isFetching || (canAccessPriceQuotes && quoteSummary.isFetching)
+  )
 
   function changeAnnualSort(column: 'currentPrice' | 'totalSavings') {
     setAnnualSort(previous => ({
@@ -259,6 +328,7 @@ export function ItemsPage() {
     setViewSortOverride(null)
     setPage(1)
     setSearch('')
+    setSearchTyping(false)
     if (id === null) {
       setPeriod('1Y')
       setSource('ALL')
@@ -342,12 +412,31 @@ export function ItemsPage() {
 
     <Card className="p-4"><ProcurementSavedViewsBar activeId={activeViewId} onActiveChange={changeView} /></Card>
 
+    {itemCodeGroups.isError ? (
+      <Card className="flex items-center justify-between gap-3 p-4">
+        <span className="text-destructive text-sm">{t('itemCodeGroups.loadError')}</span>
+        <Button variant="outline" size="sm" onClick={() => void itemCodeGroups.refetch()}>{t('common.retry')}</Button>
+      </Card>
+    ) : itemCodeGroups.isSuccess ? (
+      <ItemCodeGroupPicker groups={itemCodeGroups.data} selectedId={selectedGroupId} onSelect={selectGroup} />
+    ) : <Card className="p-4"><Loader2 className="text-primary size-5 animate-spin" /></Card>}
+
+
     {displayMode !== 'annual' && overview.data ? (
-      <ItemsOverviewCards
-        overview={overview.data}
-        quoteSummary={quoteSummary.data}
-        showQuoteSummary={canAccessPriceQuotes}
-      />
+      <div className="relative" aria-busy={overviewRefreshing}>
+        <div className={overviewRefreshing ? 'opacity-55 transition-opacity' : 'transition-opacity'}>
+          <ItemsOverviewCards
+            overview={overview.data}
+            quoteSummary={quoteSummary.data}
+            showQuoteSummary={canAccessPriceQuotes}
+          />
+        </div>
+        {overviewRefreshing ? (
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center rounded-xl bg-background/25 pt-4">
+            <Loader2 className="text-primary size-5 animate-spin" />
+          </div>
+        ) : null}
+      </div>
     ) : null}
 
     <ItemPriceFilters
@@ -365,7 +454,10 @@ export function ItemsPage() {
     <Card className="overflow-hidden">
       <div className="flex flex-col gap-3 border-b p-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
-          <SearchInput value={search} onChange={(value) => { setSearch(value); setPage(1) }} className="w-full xl:max-w-md" placeholder={t('items.searchPlaceholder')} ariaLabel={t('items.searchLabel')} />
+          <SearchInput key={activeViewId ?? 'all'} value={search}
+            onPendingChange={setSearchTyping}
+            onChange={(value) => { setSearch(value); setSearchTyping(false); setPage(1) }}
+            className="w-full xl:max-w-md" placeholder={t('items.searchPlaceholder')} ariaLabel={t('items.searchLabel')} />
           <div className="flex shrink-0 flex-wrap rounded-lg border bg-muted/20 p-1">
             <Button type="button" size="sm" variant={displayMode === 'summary' ? 'default' : 'ghost'} onClick={() => changeDisplayMode('summary')}><List className="size-4" />{t('items.matrix.summaryMode')}</Button>
             {activeView ? <Button type="button" size="sm" variant={displayMode === 'supplierComparison' ? 'default' : 'ghost'} disabled={supplierIds.length === 0} onClick={() => changeDisplayMode('supplierComparison')}><Columns3 className="size-4" />{t('items.matrix.comparisonMode')}</Button> : null}
@@ -378,10 +470,31 @@ export function ItemsPage() {
         </div>
       </div>
 
+      {resultsRefreshing ? (
+        <div role="status" aria-live="polite" className="flex items-center gap-2 border-b bg-primary/[0.055] px-4 py-2 text-xs font-medium text-primary">
+          <Loader2 aria-hidden="true" className="size-4 shrink-0 animate-spin" />
+          {t('items.analytics.updatingResults')}
+        </div>
+      ) : null}
+
+      <div className="relative" aria-busy={resultsRefreshing}>
+        {showResultsOverlay ? (
+          <div aria-hidden="true" className="pointer-events-auto absolute inset-0 z-50 flex items-start justify-center bg-background/50 pt-8">
+            <div className="sticky top-4 flex items-center gap-2 rounded-lg border bg-card px-4 py-3 text-sm font-medium shadow-md">
+              <Loader2 className="size-5 animate-spin text-primary" />
+              {t('items.analytics.updatingResults')}
+            </div>
+          </div>
+        ) : null}
+        <div inert={showResultsOverlay} className={showResultsOverlay ? 'opacity-55 transition-opacity' : 'transition-opacity'}>
       {visiblePricesLoading ? <div className="text-muted-foreground flex items-center gap-2 border-b bg-muted/20 px-4 py-2 text-xs"><span className="bg-primary size-1.5 animate-pulse rounded-full" />{t('items.analytics.visiblePricesLoading')}</div> : null}
       {visiblePricesUnavailable ? <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/25 px-4 py-2 text-xs"><span className="text-muted-foreground">{t('items.analytics.visiblePricesUnavailable')}</span><Button type="button" size="sm" variant="ghost" onClick={() => void priceSummaries.refetch()}>{t('common.retry')}</Button></div> : null}
 
-      {displayMode === 'annual' ? (
+      {viewLoadError ? (
+        <ErrorState className="rounded-none border-0" onRetry={() => void activeViewDetail.refetch()} />
+      ) : loadingView ? (
+        <LoadingState className="rounded-none border-0" />
+      ) : displayMode === 'annual' ? (
         annualPrices.isPending ? <LoadingState className="rounded-none border-0" /> : annualPrices.isError || !annualPrices.data ? <ErrorState className="rounded-none border-0" onRetry={() => void annualPrices.refetch()} /> :
         <AnnualPriceComparisonTable
           data={annualPrices.data} endingYear={endingYear}
@@ -714,6 +827,8 @@ export function ItemsPage() {
         </>}
         <TablePagination page={page} totalPages={totalPages} pageSize={pageSize} startRow={startRow} endRow={endRow} totalRows={data.total} onPageChange={setPage} onPageSizeChange={(value) => { setPageSize(value); setPage(1) }} />
       </>}
+        </div>
+      </div>
     </Card>
     <ItemEditorDialog open={createOpen} onOpenChange={setCreateOpen} />
     {canAccessPriceQuotes ? (

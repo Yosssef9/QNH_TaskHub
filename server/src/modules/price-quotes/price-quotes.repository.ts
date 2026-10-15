@@ -585,6 +585,7 @@ export async function getSummary(ownerUserId: number, input: PriceQuoteSummaryIn
     .input("ownerUserId", sql.Int, ownerUserId)
     .input("period", sql.VarChar(3), input.period)
     .input("itemIdsJson", sql.NVarChar(sql.MAX), input.itemIds.length ? JSON.stringify(input.itemIds) : null)
+    .input("itemCodePrefix", sql.NVarChar(20), input.itemCodePrefix ?? null)
     .input("supplierIdsJson", sql.NVarChar(sql.MAX), input.supplierIds.length ? JSON.stringify(input.supplierIds) : null);
 
   const result = await request.query<QuoteSummaryRecord>(`
@@ -598,6 +599,11 @@ export async function getSummary(ownerUserId: number, input: PriceQuoteSummaryIn
           @itemIdsJson IS NULL
           OR quote_row.item_id IN (SELECT id FROM OPENJSON(@itemIdsJson) WITH (id BIGINT '$'))
         )
+        AND (@itemCodePrefix IS NULL OR EXISTS (
+          SELECT 1 FROM ${itemsTable} AS group_item
+          WHERE TRY_CONVERT(BIGINT, group_item.ITEM_NO) = quote_row.item_id
+            AND CONVERT(NVARCHAR(100), group_item.ITEM_CODE) LIKE @itemCodePrefix + N'%'
+        ))
         AND (
           @supplierIdsJson IS NULL
           OR quote_row.supplier_id IN (SELECT id FROM OPENJSON(@supplierIdsJson) WITH (id BIGINT '$'))
@@ -706,4 +712,3 @@ export const priceQuotesRepository = {
   getSummary,
   getQuoteContextTransactions,
 };
-

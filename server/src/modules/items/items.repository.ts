@@ -265,6 +265,7 @@ export function bindListFilters(
 ): void {
   request
     .input("search", sql.NVarChar(120), query.search?.trim() || null)
+    .input("itemCodePrefix", sql.NVarChar(20), query.itemCodePrefix ?? null)
     .input("source", sql.VarChar(10), query.source ?? null)
     .input("category", sql.NVarChar(150), query.category?.trim() || null)
     .input("statusCode", sql.Int, query.statusCode ?? null)
@@ -311,6 +312,7 @@ export function whereSql(): string {
       OR CONVERT(NVARCHAR(500), item.ITEM_PARENT_NAME) LIKE N'%' + @search + N'%'
       OR CONVERT(NVARCHAR(250), item.CATEGORY_NAME) LIKE N'%' + @search + N'%'
     )
+    AND (@itemCodePrefix IS NULL OR CONVERT(NVARCHAR(100), item.ITEM_CODE) LIKE @itemCodePrefix + N'%')
     AND (@source IS NULL OR @source = ${sourceSql()})
     AND (@category IS NULL OR CONVERT(NVARCHAR(250), item.CATEGORY_NAME) = @category)
     AND (@statusCode IS NULL OR TRY_CONVERT(INT, item.ITEM_STATUS) = @statusCode)

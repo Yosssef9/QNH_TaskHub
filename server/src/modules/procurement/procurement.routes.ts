@@ -9,6 +9,7 @@ import { resolveTaskHubAccess } from "../../middleware/resolveTaskHubAccess.midd
 import { verifyPortalJwt } from "../../middleware/verifyPortalJwt.middleware.js";
 import { procurementImportsRouter } from "../procurement-imports/procurement-imports.routes.js";
 import { procurementSavedViewsRouter } from "../procurement-saved-views/procurement-saved-views.routes.js";
+import { procurementItemCodeGroupsRouter } from "../procurement-item-code-groups/procurement-item-code-groups.routes.js";
 import {
   getProcurementSyncStatus,
   syncProcurement,
@@ -26,6 +27,11 @@ procurementRouter.use(
   requireProcurementEntityAccess("ITEMS"),
   requireProcurementEntityAccess("PRICE_QUOTES"),
   procurementImportsRouter,
+);
+procurementRouter.use(
+  "/item-code-groups",
+  requireProcurementEntityAccess("ITEMS"),
+  procurementItemCodeGroupsRouter,
 );
 procurementRouter.use(
   "/saved-views",
