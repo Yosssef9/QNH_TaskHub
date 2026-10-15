@@ -14,7 +14,7 @@ export type ItemSortBy =
   | 'suppliers'
   | 'lastPurchase'
 export type SortDirection = 'asc' | 'desc'
-export type AnnualPriceSortBy = 'performance' | 'name' | 'currentPrice' | 'currentSupplier' | 'previousChange'
+export type AnnualPriceSortBy = 'performance' | 'name' | 'currentPrice' | 'totalSavings' | 'currentSupplier' | 'previousChange'
 export interface AnnualPriceQuery extends Omit<ItemListQuery, 'period' | 'sortBy'> {
   endingYear: number
   sortBy: AnnualPriceSortBy
@@ -28,6 +28,13 @@ export interface AnnualLowestPurchase {
   transactionDate: string | null
   invoiceNo: string | null
 }
+export interface AnnualSavingsYear {
+  year: number
+  benchmarkPrice: number | null
+  quantity: number | null
+  actualSpending: number | null
+  savings: number | null
+}
 export interface AnnualPriceItem {
   itemId: number
   itemCode: string
@@ -38,6 +45,8 @@ export interface AnnualPriceItem {
   prices: [AnnualLowestPurchase, AnnualLowestPurchase, AnnualLowestPurchase]
   previousChangePercent: number | null
   latestChangePercent: number | null
+  savingsByYear: [AnnualSavingsYear, AnnualSavingsYear, AnnualSavingsYear]
+  totalSavings: number | null
 }
 export interface AnnualPriceList {
   items: AnnualPriceItem[]
@@ -45,6 +54,10 @@ export interface AnnualPriceList {
   page: number
   pageSize: number
   total: number
+  totalEstimatedSavings: number
+  savingsIncludedItems: number
+  savingsExcludedItems: number
+  savingsPartialItems: number
 }
 export type ProcurementActivityType = 'CREATED' | 'UPDATED' | 'DEACTIVATED' | 'REACTIVATED'
 

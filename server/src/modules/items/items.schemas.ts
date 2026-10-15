@@ -60,7 +60,7 @@ export const annualPriceQuerySchema = z.object(itemFilters).omit({ period: true 
   endingYear: z.coerce.number().int().refine(year => year === 2026 || year === 2027, "Ending year must be 2026 or 2027.").default(2026),
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
-  sortBy: z.enum(["performance", "name", "currentPrice", "currentSupplier", "previousChange"]).default("performance"),
+  sortBy: z.enum(["performance", "name", "currentPrice", "totalSavings", "currentSupplier", "previousChange"]).default("performance"),
   sortDirection: z.enum(["asc", "desc"]).default("asc"),
 });
 

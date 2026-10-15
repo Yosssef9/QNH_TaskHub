@@ -12,7 +12,7 @@ function dateOrNull(value: Date | null): string | null {
   return value ? value.toISOString().slice(0, 10) : null;
 }
 
-function mapAnnualRecord(row: AnnualPriceRecord, endingYear: number): AnnualPriceItem {
+export function mapAnnualRecord(row: AnnualPriceRecord, endingYear: number): AnnualPriceItem {
   function yearPrice(index: 0 | 1 | 2): AnnualLowestPurchase {
     const cost = numberOrNull(row[`year${index}Cost`]);
     return {
@@ -35,6 +35,14 @@ function mapAnnualRecord(row: AnnualPriceRecord, endingYear: number): AnnualPric
     prices: [yearPrice(0), yearPrice(1), yearPrice(2)],
     previousChangePercent: numberOrNull(row.previousChangePercent),
     latestChangePercent: numberOrNull(row.latestChangePercent),
+    savingsByYear: ([0, 1, 2] as const).map(index => ({
+      year: endingYear - 2 + index,
+      benchmarkPrice: numberOrNull(row[`year${index}Benchmark`]),
+      quantity: numberOrNull(row[`year${index}Quantity`]),
+      actualSpending: numberOrNull(row[`year${index}ActualCost`]),
+      savings: numberOrNull(row[`year${index}Savings`]),
+    })) as AnnualPriceItem["savingsByYear"],
+    totalSavings: numberOrNull(row.totalSavings),
   };
 }
 
@@ -51,5 +59,9 @@ export async function listAnnualPrices(query: AnnualPriceQuery): Promise<AnnualP
     page: query.page,
     pageSize: query.pageSize,
     total: result.total,
+    totalEstimatedSavings: result.totalSavings,
+    savingsIncludedItems: result.included,
+    savingsExcludedItems: result.excluded,
+    savingsPartialItems: result.partial,
   };
 }

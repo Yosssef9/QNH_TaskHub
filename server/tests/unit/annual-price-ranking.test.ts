@@ -14,6 +14,15 @@ describe("annual procurement comparison ordering", () => {
     );
   });
 
+  it("sorts highest net savings first, including partial totals, with N/A at the end", () => {
+    expect(annualPriceOrder({ sortBy: "totalSavings", sortDirection: "desc" })).toBe(
+      "CASE WHEN totalSavings IS NULL THEN 1 ELSE 0 END ASC, totalSavings DESC, itemName ASC, itemId ASC",
+    );
+    expect(annualPriceOrder({ sortBy: "totalSavings", sortDirection: "asc" })).toContain(
+      "CASE WHEN totalSavings IS NULL THEN 1 ELSE 0 END ASC, totalSavings ASC",
+    );
+  });
+
   it("sorts prices with missing values last and a deterministic item tie-breaker", () => {
     expect(annualPriceOrder({ sortBy: "currentPrice", sortDirection: "asc" })).toBe(
       "CASE WHEN year2Cost IS NULL THEN 1 ELSE 0 END ASC, year2Cost ASC, itemName ASC, itemId ASC",

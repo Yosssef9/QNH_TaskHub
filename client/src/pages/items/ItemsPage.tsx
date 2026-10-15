@@ -26,7 +26,7 @@ import { formatDateOnly, formatPercent, formatUnitCost } from '@/features/items/
 import { ItemsOverviewCards } from '@/features/items/components/ItemsOverviewCards'
 import { SavedViewSupplierComparisonTable } from '@/features/items/components/SavedViewSupplierComparisonTable'
 import { useAnnualPrices, useItemPriceSummaries, useItemSupplierMatrix, useItems, useItemsOverview } from '@/features/items/hooks/use-items'
-import type { ItemSortBy, ItemSource, ItemSupplierMatrixMetric, ItemSupplierMatrixPriceSource, ProcurementPricePeriod } from '@/features/items/types/item.types'
+import type { AnnualPriceSortBy, ItemSortBy, ItemSource, ItemSupplierMatrixMetric, ItemSupplierMatrixPriceSource, ProcurementPricePeriod } from '@/features/items/types/item.types'
 import { ProcurementSavedViewsBar } from '@/features/procurement-saved-views/components/ProcurementSavedViewsBar'
 import { useProcurementSavedView, useProcurementSavedViews, useUpdateProcurementSavedView } from '@/features/procurement-saved-views/hooks/use-procurement-saved-views'
 import { usePriceQuoteSummary } from '@/features/price-quotes/hooks/use-price-quotes'
@@ -62,6 +62,7 @@ export function ItemsPage() {
   const [activeViewId, setActiveViewId] = useState<number | null>(Number.isSafeInteger(initialView) && initialView > 0 ? initialView : null)
   const [displayMode, setDisplayMode] = useState<SavedViewDisplayMode>('summary')
   const [endingYear, setEndingYear] = useState(2026)
+  const [annualSort, setAnnualSort] = useState<{ by: AnnualPriceSortBy; direction: 'asc' | 'desc' }>({ by: 'performance', direction: 'asc' })
   const [matrixSupplierIds, setMatrixSupplierIds] = useState<number[]>([])
   const [matrixPriceSourceOverride, setMatrixPriceSourceOverride] = useState<ItemSupplierMatrixPriceSource | null>(null)
   const [matrixMetricOverride, setMatrixMetricOverride] = useState<ItemSupplierMatrixMetric | null>(null)
@@ -203,8 +204,8 @@ export function ItemsPage() {
     endingYear,
     page,
     pageSize,
-    sortBy: 'performance',
-    sortDirection: 'asc',
+    sortBy: annualSort.by,
+    sortDirection: annualSort.direction,
   }, savedViewContextReady && displayMode === 'annual')
   const visiblePricesLoading =
     displayMode === 'summary'
@@ -226,6 +227,21 @@ export function ItemsPage() {
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / pageSize))
   const startRow = data?.total ? (page - 1) * pageSize + 1 : 0
   const endRow = Math.min(page * pageSize, data?.total ?? 0)
+
+  function changeAnnualSort(column: 'currentPrice' | 'totalSavings') {
+    setAnnualSort(previous => ({
+      by: column,
+      direction: previous.by === column
+        ? (previous.direction === 'asc' ? 'desc' : 'asc')
+        : (column === 'totalSavings' ? 'desc' : 'asc'),
+    }))
+    setPage(1)
+  }
+
+  function resetAnnualSort() {
+    setAnnualSort({ by: 'performance', direction: 'asc' })
+    setPage(1)
+  }
 
   function changeDisplayMode(mode: SavedViewDisplayMode) {
     setPage(1)
@@ -369,6 +385,8 @@ export function ItemsPage() {
         annualPrices.isPending ? <LoadingState className="rounded-none border-0" /> : annualPrices.isError || !annualPrices.data ? <ErrorState className="rounded-none border-0" onRetry={() => void annualPrices.refetch()} /> :
         <AnnualPriceComparisonTable
           data={annualPrices.data} endingYear={endingYear}
+          sortBy={annualSort.by} sortDirection={annualSort.direction}
+          onSort={changeAnnualSort} onResetSort={resetAnnualSort}
           onEndingYearChange={year => { setEndingYear(year); setPage(1) }}
           page={page} pageSize={pageSize} onPageChange={setPage}
           onPageSizeChange={value => { setPageSize(value); setPage(1) }}
