@@ -15,6 +15,43 @@ export type ItemSortBy =
   | "suppliers"
   | "lastPurchase";
 export type SortDirection = "asc" | "desc";
+export type AnnualPriceSortBy = "performance" | "name" | "currentPrice" | "currentSupplier" | "previousChange";
+
+export interface AnnualPriceQuery extends Omit<ItemListQuery, "period" | "sortBy"> {
+  endingYear: number;
+  sortBy: AnnualPriceSortBy;
+}
+
+export interface AnnualLowestPurchase {
+  year: number;
+  unitCost: number | null;
+  supplierId: number | null;
+  supplierCode: string | null;
+  supplierName: string | null;
+  transactionDate: string | null;
+  invoiceNo: string | null;
+}
+
+export interface AnnualPriceItem {
+  itemId: number;
+  itemCode: string;
+  itemName: string;
+  categoryName: string | null;
+  unitName: string | null;
+  currencyCode: string | null;
+  prices: [AnnualLowestPurchase, AnnualLowestPurchase, AnnualLowestPurchase];
+  previousChangePercent: number | null;
+  latestChangePercent: number | null;
+}
+
+export interface AnnualPriceList {
+  items: AnnualPriceItem[];
+  endingYear: number;
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
 export type ProcurementActivityType = "CREATED" | "UPDATED" | "DEACTIVATED" | "REACTIVATED";
 
 export interface Item {
@@ -209,4 +246,5 @@ export interface ItemActivity {
   actorName: string;
   createdAtUtc: string;
 }
+
 

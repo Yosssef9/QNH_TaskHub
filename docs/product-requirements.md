@@ -236,6 +236,14 @@ Phase 3 adds the read-only actual purchase Transaction and price analytics engin
 - Supplier comparison identifies the current lowest/highest Supplier by each Supplier's latest `UNIT_COST` within the selected compatible scope.
 - Phase 3 adds API/data hooks only for these analytics. The polished Item cards, charts, comparison tables, and Saved View analytics presentation are Phase 4.
 
+A further read-only annual view extends the Items page without replacing the existing Summary and Supplier Comparison modes:
+
+- "3-Year Price Comparison" shows calendar years `endingYear-2` through `endingYear` (current year marked YTD), the lowest positive actual `UNIT_COST` and its Supplier for each year, plus each year's percentage difference from the immediately preceding displayed year.
+- Its default global/server-side ordering ranks the largest latest-year price decreases first, then unchanged, then increasing prices (smallest increase first), and missing comparisons last; users can also sort by name, current-year price/Supplier, or previous change. Pagination happens **after** ranking.
+- The Supplier filter and Saved View item/category/source/status/search restrictions apply before the annual ranking. The annual view replaces rolling-period buttons with an ending-year selector while active and preserves the other display modes.
+- Each Item uses one common currency/UOM scope chosen by the latest qualifying transaction within the displayed three years; incompatible transactions do not get compared, absent years show an explicit missing-purchase state, and a zero or absent prior-year cost never produces a percentage.
+- All calculations are read-only from imported actual purchase transactions; the annual comparison is not a claim about yearly average prices or quotations, and does not affect current TaskHub purchase-data imports or existing price analytics.
+
 Phase 4 adds the Item price-intelligence and Saved Views analytics UX:
 
 - The Items landing page is deliberately compact: one row per Item with Latest Actual, Lowest, Highest, Latest Change, Supplier Count, and Last Purchase. It must not become a giant Item × Supplier matrix.
@@ -547,3 +555,4 @@ User-authored email templates are not planned. Users customize delivery preferen
 ## General Task Assignment — Phase 1 backend foundation (migration 048)
 
 This explicitly approved exception permits one optional main assignee for a normal Task and one optional assignee per subtask; a child with no explicit assignee inherits main-assignee responsibility (or creator responsibility when none). The creator retains task and all-child visibility. A named executor sees the parent context, aggregate progress and **only** their own assigned children, attachments and child-specific audit entries. Main-task Completion Summary and per-subtask Work Notes are optional. All non-deleted children completed automatically completes the parent for normal/Meeting tasks, but KPI calculations stay unchanged; manual parent completion is blocked while children remain unfinished. Existing Meeting Action Items keep their Meeting-specific access model. UI and unified source filtering arrive in Phase 2. See `docs/GLOBAL_TASK_ASSIGNMENT_PHASE1.md`.
+

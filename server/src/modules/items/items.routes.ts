@@ -10,6 +10,7 @@ import { verifyPortalJwt } from "../../middleware/verifyPortalJwt.middleware.js"
 import {
   createItem,
   getItem,
+  getAnnualPrices,
   getItemAnalytics,
   getItemPriceHistory,
   getItemPriceSummaries,
@@ -24,6 +25,7 @@ import {
 } from "./items.controller.js";
 import {
   createItemBodySchema,
+  annualPriceQuerySchema,
   itemIdParamsSchema,
   itemListQuerySchema,
   itemOptionsQuerySchema,
@@ -49,6 +51,7 @@ itemsRouter.get(
 );
 itemsRouter.use(requireProcurementEntityAccess("ITEMS"));
 itemsRouter.get("/", validateRequest({ query: itemListQuerySchema }), listItems);
+itemsRouter.get("/annual-prices", validateRequest({ query: annualPriceQuerySchema }), getAnnualPrices);
 itemsRouter.get("/price-summaries", validateRequest({ query: itemPriceSummariesQuerySchema }), getItemPriceSummaries);
 itemsRouter.get("/supplier-matrix", validateRequest({ query: itemSupplierMatrixQuerySchema }), getItemSupplierMatrix);
 itemsRouter.get("/overview", validateRequest({ query: itemOverviewQuerySchema }), getItemsOverview);
@@ -76,4 +79,5 @@ itemsRouter.get(
 itemsRouter.get("/:itemId/activity", validateRequest({ params: itemIdParamsSchema }), listItemActivity);
 itemsRouter.get("/:itemId", validateRequest({ params: itemIdParamsSchema }), getItem);
 itemsRouter.patch("/:itemId", validateRequest({ params: itemIdParamsSchema, body: updateItemBodySchema }), updateItem);
+
 

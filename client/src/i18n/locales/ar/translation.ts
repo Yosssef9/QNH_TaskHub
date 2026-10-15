@@ -999,6 +999,28 @@ export const arTranslation = {
       noTransactionsTitle: 'لا توجد حركات فعلية',
       noTransactionsDescription: 'لا توجد حركات شراء للقراءة فقط تطابق النطاق المحدد.',
     },
+    annual: {
+      mode: 'مقارنة الأسعار خلال 3 سنوات',
+      title: 'أقل أسعار الشراء السنوية',
+      description: 'أقل تكلفة وحدة فعلية موجبة واسم المورد لكل سنة ميلادية. أكبر انخفاض أولاً والحالات غير القابلة للمقارنة أخيراً.',
+      endingYear: 'سنة النهاية',
+      sortBy: 'الترتيب حسب',
+      sort: { performance: 'أفضل انخفاض في السعر', name: 'اسم الصنف', currentPrice: 'سعر آخر سنة', currentSupplier: 'مورد آخر سنة', previousChange: 'التغير في السنة السابقة' },
+      ascending: 'ترتيب تصاعدي',
+      descending: 'ترتيب تنازلي',
+      ytd: 'حتى تاريخه',
+      currentYearYtd: 'السنة الحالية حتى تاريخ اليوم.',
+      lowestAndSupplier: 'أقل سعر / المورد',
+      priceTrend: 'اتجاه السعر',
+      trendSupplier: 'المورد',
+      trendDate: 'تاريخ الشراء',
+      changeFrom: 'مقارنة مع {{year}}',
+      noPurchase: 'لا يوجد شراء قابل للمقارنة',
+      notComparable: 'لا توجد مقارنة',
+      invoice: 'الفاتورة',
+      openHistory: 'فتح سجل شراء الصنف',
+      scopeNote: 'المشتريات الفعلية فقط · وحدة وعملة متوافقتان عبر السنوات · لا نسبة عند نقص البيانات',
+    },
     matrix: {
       summaryMode: 'الملخص',
       comparisonMode: 'مقارنة الموردين',
@@ -4006,6 +4028,7 @@ export const arTranslation = {
     backHome: 'العودة إلى الرئيسية',
   },
 } as const
+
 
 
 

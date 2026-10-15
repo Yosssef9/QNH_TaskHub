@@ -56,6 +56,14 @@ export const itemListQuerySchema = z.object({
   sortDirection: z.enum(["asc", "desc"]).default("asc"),
 });
 
+export const annualPriceQuerySchema = z.object(itemFilters).omit({ period: true }).extend({
+  endingYear: z.coerce.number().int().refine(year => year === 2026 || year === 2027, "Ending year must be 2026 or 2027.").default(2026),
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  sortBy: z.enum(["performance", "name", "currentPrice", "currentSupplier", "previousChange"]).default("performance"),
+  sortDirection: z.enum(["asc", "desc"]).default("asc"),
+});
+
 export const itemOptionsQuerySchema = z.object({
   search: z.string().trim().max(120).optional(),
   source: z.enum(["ORACLE", "MANUAL"]).optional(),
@@ -96,10 +104,12 @@ export const updateItemBodySchema = z.object(itemFields);
 
 export type ItemIdParams = z.infer<typeof itemIdParamsSchema>;
 export type ItemListQueryInput = z.infer<typeof itemListQuerySchema>;
+export type AnnualPriceQueryInput = z.infer<typeof annualPriceQuerySchema>;
 export type ItemOptionsQueryInput = z.infer<typeof itemOptionsQuerySchema>;
 export type ItemPriceSummariesQueryInput = z.infer<typeof itemPriceSummariesQuerySchema>;
 export type ItemSupplierMatrixQueryInput = z.infer<typeof itemSupplierMatrixQuerySchema>;
 export type ItemOverviewQueryInput = z.infer<typeof itemOverviewQuerySchema>;
 export type CreateItemBody = z.infer<typeof createItemBodySchema>;
 export type UpdateItemBody = z.infer<typeof updateItemBodySchema>;
+
 

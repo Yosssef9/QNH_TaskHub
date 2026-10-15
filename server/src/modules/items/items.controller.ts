@@ -5,6 +5,7 @@ import { getValidatedRequestPart } from "../../shared/http/validated-request.js"
 import type { ApiSuccessResponse } from "../../shared/types/result.js";
 import type {
   CreateItemBody,
+  AnnualPriceQueryInput,
   ItemIdParams,
   ItemListQueryInput,
   ItemOptionsQueryInput,
@@ -26,7 +27,9 @@ import type {
   ItemTransactionList,
 } from "../procurement-transactions/procurement-transactions.types.js";
 import { itemsService } from "./items.service.js";
+import { listAnnualPrices } from "./items.annual-prices.service.js";
 import type {
+  AnnualPriceList,
   Item,
   ItemActivity,
   ItemList,
@@ -46,6 +49,13 @@ export const listItems: RequestHandler = async (req, res) => {
   const query = getValidatedRequestPart<ItemListQueryInput>(req, "query");
   const data = await itemsService.listItems(query);
   const body: ApiSuccessResponse<ItemList> = { success: true, data };
+  res.status(200).json(body);
+};
+
+export const getAnnualPrices: RequestHandler = async (req, res) => {
+  const query = getValidatedRequestPart<AnnualPriceQueryInput>(req, "query");
+  const data = await listAnnualPrices(query);
+  const body: ApiSuccessResponse<AnnualPriceList> = { success: true, data };
   res.status(200).json(body);
 };
 
@@ -137,4 +147,5 @@ export const listItemSupplierComparison: RequestHandler = async (req, res) => {
   const body: ApiSuccessResponse<ItemSupplierPriceList> = { success: true, data };
   res.status(200).json(body);
 };
+
 

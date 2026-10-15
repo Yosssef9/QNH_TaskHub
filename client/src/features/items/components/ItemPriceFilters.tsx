@@ -12,6 +12,7 @@ const PERIODS: ProcurementPricePeriod[] = ['1M', '3M', '6M', '1Y', 'ALL']
 
 export function ItemPriceFilters({
   period,
+  hidePeriod = false,
   supplierIds,
   selectedSuppliers = [],
   savedViewName,
@@ -22,6 +23,7 @@ export function ItemPriceFilters({
   resetDisabled = false,
 }: {
   period: ProcurementPricePeriod
+  hidePeriod?: boolean
   supplierIds: number[]
   selectedSuppliers?: SearchableSelectOption[]
   savedViewName?: string | null
@@ -80,13 +82,13 @@ export function ItemPriceFilters({
             <p className="text-sm font-semibold">{t('items.analytics.analysisScope')}</p>
             {savedViewName ? <span className="bg-primary/10 text-primary rounded-full px-2.5 py-1 text-xs font-medium">{t('items.analytics.savedViewContext', { name: savedViewName })}</span> : null}
           </div>
-          <div className="flex flex-wrap gap-2" role="group" aria-label={t('items.analytics.historyPeriod')}>
+          {!hidePeriod ? <div className="flex flex-wrap gap-2" role="group" aria-label={t('items.analytics.historyPeriod')}>
             {PERIODS.map((value) => (
               <Button key={value} type="button" size="sm" variant={period === value ? 'default' : 'outline'} onClick={() => onPeriodChange(value)}>
                 {t(`savedViews.periods.${value}`)}
               </Button>
             ))}
-          </div>
+          </div> : null}
         </div>
         <div className="grid w-full gap-2 sm:grid-cols-[minmax(16rem,30rem)_auto] xl:w-auto">
           <SearchableMultiSelect
@@ -121,3 +123,4 @@ export function ItemPriceFilters({
     </Card>
   )
 }
+

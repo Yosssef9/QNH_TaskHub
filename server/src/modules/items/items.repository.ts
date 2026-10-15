@@ -129,7 +129,7 @@ function sourceSql(alias = "item"): string {
   return `CASE WHEN CONVERT(BIGINT, ${alias}.ITEM_NO) < 0 OR CONVERT(NVARCHAR(100), ${alias}.ITEM_CODE) LIKE N'USR-ITEM-%' THEN 'MANUAL' ELSE 'ORACLE' END`;
 }
 
-function itemSelectSql(alias = "item"): string {
+export function itemSelectSql(alias = "item"): string {
   return `
     CONVERT(BIGINT, ${alias}.ITEM_NO) AS id,
     CONVERT(NVARCHAR(100), ${alias}.ITEM_CODE) AS code,
@@ -259,7 +259,7 @@ const analyticsSorts = new Set<ItemListQuery["sortBy"]>([
   "lastPurchase",
 ]);
 
-function bindListFilters(
+export function bindListFilters(
   request: import("mssql").Request,
   query: ItemListQuery | ItemOverviewQuery,
 ): void {
@@ -302,7 +302,7 @@ function bindSupplierMatrixFilters(
     .input("period", sql.VarChar(3), query.period);
 }
 
-function whereSql(): string {
+export function whereSql(): string {
   return `
     WHERE (
       @search IS NULL
@@ -1159,5 +1159,6 @@ export const itemsRepository = {
   addActivity,
   listActivity,
 };
+
 
 

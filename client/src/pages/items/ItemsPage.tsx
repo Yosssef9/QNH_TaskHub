@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Building2, Columns3, FileUp, List, Minus, PackageSearch, Plus, SearchX } from 'lucide-react'
+import { ArrowDown, ArrowUp, Building2, ChartColumnIncreasing, Columns3, FileUp, List, Minus, PackageSearch, Plus, SearchX } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
@@ -21,10 +21,11 @@ import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { ItemEditorDialog } from '@/features/items/components/ItemEditorDialog'
 import { ProcurementImportDialog } from '@/features/procurement-imports/components/ProcurementImportDialog'
 import { ItemPriceFilters } from '@/features/items/components/ItemPriceFilters'
+import { AnnualPriceComparisonTable } from '@/features/items/components/AnnualPriceComparisonTable'
 import { formatDateOnly, formatPercent, formatUnitCost } from '@/features/items/components/item-price-format'
 import { ItemsOverviewCards } from '@/features/items/components/ItemsOverviewCards'
 import { SavedViewSupplierComparisonTable } from '@/features/items/components/SavedViewSupplierComparisonTable'
-import { useItemPriceSummaries, useItemSupplierMatrix, useItems, useItemsOverview } from '@/features/items/hooks/use-items'
+import { useAnnualPrices, useItemPriceSummaries, useItemSupplierMatrix, useItems, useItemsOverview } from '@/features/items/hooks/use-items'
 import type { ItemSortBy, ItemSource, ItemSupplierMatrixMetric, ItemSupplierMatrixPriceSource, ProcurementPricePeriod } from '@/features/items/types/item.types'
 import { ProcurementSavedViewsBar } from '@/features/procurement-saved-views/components/ProcurementSavedViewsBar'
 import { useProcurementSavedView, useProcurementSavedViews, useUpdateProcurementSavedView } from '@/features/procurement-saved-views/hooks/use-procurement-saved-views'
@@ -34,7 +35,7 @@ import { useSortState } from '@/hooks/use-sort-state'
 const ANALYTICS_SORTS = new Set<ItemSortBy>(['latest', 'lowest', 'highest', 'change', 'suppliers', 'lastPurchase'])
 const MAX_MATRIX_SUPPLIERS = 5
 
-type SavedViewDisplayMode = 'summary' | 'supplierComparison'
+type SavedViewDisplayMode = 'summary' | 'supplierComparison' | 'annual'
 
 function savedViewDisplayModeKey(viewId: number): string {
   return `taskhub.procurement.saved-view.${viewId}.display-mode`
@@ -60,6 +61,7 @@ export function ItemsPage() {
   const [importOpen, setImportOpen] = useState(false)
   const [activeViewId, setActiveViewId] = useState<number | null>(Number.isSafeInteger(initialView) && initialView > 0 ? initialView : null)
   const [displayMode, setDisplayMode] = useState<SavedViewDisplayMode>('summary')
+  const [endingYear, setEndingYear] = useState(2026)
   const [matrixSupplierIds, setMatrixSupplierIds] = useState<number[]>([])
   const [matrixPriceSourceOverride, setMatrixPriceSourceOverride] = useState<ItemSupplierMatrixPriceSource | null>(null)
   const [matrixMetricOverride, setMatrixMetricOverride] = useState<ItemSupplierMatrixMetric | null>(null)
@@ -91,7 +93,7 @@ export function ItemsPage() {
     }
     try {
       const stored = window.localStorage.getItem(savedViewDisplayModeKey(activeViewId))
-      setDisplayMode(stored === 'supplierComparison' ? 'supplierComparison' : 'summary')
+      setDisplayMode(stored === 'supplierComparison' || stored === 'annual' ? stored : 'summary')
     } catch {
       setDisplayMode('summary')
     }
@@ -158,7 +160,7 @@ export function ItemsPage() {
       sortBy,
       sortDirection,
     },
-    savedViewContextReady,
+    savedViewContextReady && displayMode !== 'annual',
   )
   const visibleItemIds = useMemo(() => items.data?.items.map((item) => item.id) ?? [], [items.data])
   const priceSummaries = useItemPriceSummaries(
@@ -195,6 +197,15 @@ export function ItemsPage() {
       items: items.data.items.map((item) => ({ ...item, price: priceByItemId.get(item.id) ?? null })),
     }
   }, [items.data, priceByItemId, usesAnalyticsSort])
+  const annualPrices = useAnnualPrices({
+    ...itemMasterFilters,
+    ...(supplierIds.length ? { supplierIds } : {}),
+    endingYear,
+    page,
+    pageSize,
+    sortBy: 'performance',
+    sortDirection: 'asc',
+  }, savedViewContextReady && displayMode === 'annual')
   const visiblePricesLoading =
     displayMode === 'summary'
     && !usesAnalyticsSort
@@ -205,7 +216,7 @@ export function ItemsPage() {
     ? matrixSupplierIds.length === 0 || supplierMatrix.isSuccess || supplierMatrix.isError
     : usesAnalyticsSort || visibleItemIds.length === 0 || priceSummaries.isSuccess || priceSummaries.isError
   const secondaryAnalyticsEnabled =
-    savedViewContextReady && items.isSuccess && !items.isFetching && primaryPriceIntelligenceSettled
+    displayMode !== 'annual' && savedViewContextReady && items.isSuccess && !items.isFetching && primaryPriceIntelligenceSettled
   const overview = useItemsOverview(queryFilters, secondaryAnalyticsEnabled)
   const quoteSummary = usePriceQuoteSummary({
     itemIds: activeView?.config.itemIds ?? [],
@@ -217,8 +228,9 @@ export function ItemsPage() {
   const endRow = Math.min(page * pageSize, data?.total ?? 0)
 
   function changeDisplayMode(mode: SavedViewDisplayMode) {
-    if (!activeViewId) return
+    setPage(1)
     setDisplayMode(mode)
+    if (!activeViewId) return
     try {
       window.localStorage.setItem(savedViewDisplayModeKey(activeViewId), mode)
     } catch {
@@ -314,7 +326,7 @@ export function ItemsPage() {
 
     <Card className="p-4"><ProcurementSavedViewsBar activeId={activeViewId} onActiveChange={changeView} /></Card>
 
-    {overview.data ? (
+    {displayMode !== 'annual' && overview.data ? (
       <ItemsOverviewCards
         overview={overview.data}
         quoteSummary={quoteSummary.data}
@@ -324,6 +336,7 @@ export function ItemsPage() {
 
     <ItemPriceFilters
       period={period}
+      hidePeriod={displayMode === 'annual'}
       supplierIds={supplierIds}
       selectedSuppliers={selectedSuppliers}
       savedViewName={activeView?.name ?? null}
@@ -337,10 +350,11 @@ export function ItemsPage() {
       <div className="flex flex-col gap-3 border-b p-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
           <SearchInput value={search} onChange={(value) => { setSearch(value); setPage(1) }} className="w-full xl:max-w-md" placeholder={t('items.searchPlaceholder')} ariaLabel={t('items.searchLabel')} />
-          {activeView ? <div className="flex shrink-0 rounded-lg border bg-muted/20 p-1">
+          <div className="flex shrink-0 flex-wrap rounded-lg border bg-muted/20 p-1">
             <Button type="button" size="sm" variant={displayMode === 'summary' ? 'default' : 'ghost'} onClick={() => changeDisplayMode('summary')}><List className="size-4" />{t('items.matrix.summaryMode')}</Button>
-            <Button type="button" size="sm" variant={displayMode === 'supplierComparison' ? 'default' : 'ghost'} disabled={supplierIds.length === 0} onClick={() => changeDisplayMode('supplierComparison')}><Columns3 className="size-4" />{t('items.matrix.comparisonMode')}</Button>
-          </div> : null}
+            {activeView ? <Button type="button" size="sm" variant={displayMode === 'supplierComparison' ? 'default' : 'ghost'} disabled={supplierIds.length === 0} onClick={() => changeDisplayMode('supplierComparison')}><Columns3 className="size-4" />{t('items.matrix.comparisonMode')}</Button> : null}
+            <Button type="button" size="sm" variant={displayMode === 'annual' ? 'default' : 'ghost'} onClick={() => changeDisplayMode('annual')}><ChartColumnIncreasing className="size-4" />{t('items.annual.mode')}</Button>
+          </div>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Select disabled={Boolean(activeView)} value={source} onValueChange={(value) => { setSource(value as ItemSource | 'ALL'); setPage(1) }}><SelectTrigger className="w-full sm:w-48" aria-label={t('items.source')}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">{t('items.sourceAll')}</SelectItem><SelectItem value="ORACLE">{t('items.sourceOracle')}</SelectItem><SelectItem value="MANUAL">{t('items.sourceManual')}</SelectItem></SelectContent></Select>
@@ -351,7 +365,16 @@ export function ItemsPage() {
       {visiblePricesLoading ? <div className="text-muted-foreground flex items-center gap-2 border-b bg-muted/20 px-4 py-2 text-xs"><span className="bg-primary size-1.5 animate-pulse rounded-full" />{t('items.analytics.visiblePricesLoading')}</div> : null}
       {visiblePricesUnavailable ? <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/25 px-4 py-2 text-xs"><span className="text-muted-foreground">{t('items.analytics.visiblePricesUnavailable')}</span><Button type="button" size="sm" variant="ghost" onClick={() => void priceSummaries.refetch()}>{t('common.retry')}</Button></div> : null}
 
-      {items.isPending ? <LoadingState className="rounded-none border-0" /> : items.isError || !data ? <ErrorState className="rounded-none border-0" onRetry={() => void items.refetch()} /> : data.items.length === 0 ? <EmptyState className="rounded-none border-0" icon={SearchX} title={t('items.emptyTitle')} description={t('items.emptyDescription')} /> : <>
+      {displayMode === 'annual' ? (
+        annualPrices.isPending ? <LoadingState className="rounded-none border-0" /> : annualPrices.isError || !annualPrices.data ? <ErrorState className="rounded-none border-0" onRetry={() => void annualPrices.refetch()} /> :
+        <AnnualPriceComparisonTable
+          data={annualPrices.data} endingYear={endingYear}
+          onEndingYearChange={year => { setEndingYear(year); setPage(1) }}
+          page={page} pageSize={pageSize} onPageChange={setPage}
+          onPageSizeChange={value => { setPageSize(value); setPage(1) }}
+          canOpenSuppliers={canAccessSuppliers} activeViewId={activeViewId}
+        />
+      ) : items.isPending ? <LoadingState className="rounded-none border-0" /> : items.isError || !data ? <ErrorState className="rounded-none border-0" onRetry={() => void items.refetch()} /> : data.items.length === 0 ? <EmptyState className="rounded-none border-0" icon={SearchX} title={t('items.emptyTitle')} description={t('items.emptyDescription')} /> : <>
         {displayMode === 'supplierComparison' && activeView ? (
           <SavedViewSupplierComparisonTable
             savedViewId={activeView.id}
@@ -734,4 +757,5 @@ function PriceChangePill({
     </span>
   )
 }
+
 

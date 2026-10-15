@@ -1020,6 +1020,28 @@ export const enTranslation = {
       noTransactionsTitle: 'No actual transactions',
       noTransactionsDescription: 'No read-only purchase transactions match the selected scope.',
     },
+    annual: {
+      mode: '3-Year Price Comparison',
+      title: 'Annual Lowest Purchase Prices',
+      description: 'The lowest actual positive unit cost and Supplier in each calendar year. Largest decrease first; missing comparisons last.',
+      endingYear: 'Ending year',
+      sortBy: 'Sort by',
+      sort: { performance: 'Best price improvement', name: 'Item name', currentPrice: 'Latest year price', currentSupplier: 'Latest year supplier', previousChange: 'Previous year change' },
+      ascending: 'Sort ascending',
+      descending: 'Sort descending',
+      ytd: 'YTD',
+      currentYearYtd: 'Current year is year-to-date.',
+      lowestAndSupplier: 'Lowest Price / Supplier',
+      priceTrend: 'Price Trend',
+      trendSupplier: 'Supplier',
+      trendDate: 'Purchase date',
+      changeFrom: 'vs {{year}}',
+      noPurchase: 'No comparable purchase',
+      notComparable: 'No comparison',
+      invoice: 'Invoice',
+      openHistory: 'Open item purchase history',
+      scopeNote: 'Actual purchases only · same unit and currency across years · blank comparisons when missing',
+    },
     matrix: {
       summaryMode: 'Summary',
       comparisonMode: 'Supplier Comparison',
@@ -4080,6 +4102,7 @@ export const enTranslation = {
     backHome: 'Back to home',
   },
 } as const
+
 
 
 

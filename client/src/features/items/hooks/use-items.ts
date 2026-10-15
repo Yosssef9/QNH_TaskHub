@@ -1,6 +1,7 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createItem,
+  getAnnualPrices,
   getItem,
   getItemActivity,
   getItemAnalytics,
@@ -15,6 +16,7 @@ import {
   updateItem,
 } from '../api/items.api'
 import type {
+  AnnualPriceQuery,
   Item,
   ItemInput,
   ItemListQuery,
@@ -36,6 +38,16 @@ export function useItems(query: ItemListQuery, enabled = true) {
   return useQuery({
     queryKey: [...itemListsQueryKey, query],
     queryFn: () => getItems(query),
+    enabled,
+    placeholderData: keepPreviousData,
+    retry: false,
+  })
+}
+
+export function useAnnualPrices(query: AnnualPriceQuery, enabled = true) {
+  return useQuery({
+    queryKey: [...itemsQueryKey, 'annual-prices', query],
+    queryFn: () => getAnnualPrices(query),
     enabled,
     placeholderData: keepPreviousData,
     retry: false,
@@ -194,4 +206,5 @@ export function itemInputFromItem(item: Item): ItemInput {
     isAsset: item.isAsset,
   }
 }
+
 

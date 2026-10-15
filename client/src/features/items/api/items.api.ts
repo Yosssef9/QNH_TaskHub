@@ -1,6 +1,8 @@
 import { apiClient } from '@/lib/api-client'
 import type { ApiSuccessResponse } from '@/types/api.types'
 import type {
+  AnnualPriceList,
+  AnnualPriceQuery,
   Item,
   ItemActivity,
   ItemInput,
@@ -24,7 +26,7 @@ import type {
   ItemsOverview,
 } from '../types/item.types'
 
-function itemListParams(query: ItemListQuery | ItemOverviewQuery) {
+function itemListParams<T extends { itemIds?: number[] | undefined; supplierIds?: number[] | undefined }>(query: T) {
   const { itemIds, supplierIds, ...filters } = query
   return {
     ...filters,
@@ -40,6 +42,13 @@ export async function getItems(query: ItemListQuery): Promise<ItemList> {
   return response.data.data
 }
 
+
+export async function getAnnualPrices(query: AnnualPriceQuery): Promise<AnnualPriceList> {
+  const response = await apiClient.get<ApiSuccessResponse<AnnualPriceList>>('/items/annual-prices', {
+    params: itemListParams(query),
+  })
+  return response.data.data
+}
 
 export async function getItemOptions(query: ItemOptionQuery): Promise<ItemOptionList> {
   const response = await apiClient.get<ApiSuccessResponse<ItemOptionList>>('/items/options', { params: query })
@@ -128,5 +137,6 @@ export async function getItemSupplierComparison(itemId: number, query: ItemSuppl
   })
   return response.data.data
 }
+
 
 
