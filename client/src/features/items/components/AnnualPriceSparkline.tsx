@@ -146,7 +146,7 @@ export function AnnualPriceSparkline({
               <p>{t('items.annual.trendSupplier')}: {purchase.supplierName || '—'}</p>
               <p>{t('items.annual.trendDate')}: {formatDateOnly(purchase.transactionDate, i18n.language)}</p>
               {index > 0 && previousYear !== undefined ? (
-                <p>{t('items.annual.changeFrom', { year: previousYear })}: {comparison === null ? t('items.annual.notComparable') : formatPercent(comparison, i18n.language)}</p>
+                <p>{t('items.annual.changeFrom', { year: previousYear })}: {comparison == null ? t('items.annual.notComparable') : formatPercent(comparison, i18n.language)}</p>
               ) : null}
             </TooltipContent>
           </Tooltip>
