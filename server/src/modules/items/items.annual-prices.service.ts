@@ -42,6 +42,7 @@ export function mapAnnualRecord(row: AnnualPriceRecord, endingYear: number): Ann
       actualSpending: numberOrNull(row[`year${index}ActualCost`]),
       savings: numberOrNull(row[`year${index}Savings`]),
     })) as AnnualPriceItem["savingsByYear"],
+    purchaseYearCount: Number(row.purchaseYearCount),
     totalSavings: numberOrNull(row.totalSavings),
   };
 }

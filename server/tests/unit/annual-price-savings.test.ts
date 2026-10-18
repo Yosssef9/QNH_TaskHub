@@ -18,6 +18,7 @@ const sample: AnnualPriceRecord = {
   year0Quantity: 60, year1Quantity: 50, year2Quantity: 80,
   year0ActualCost: 7200, year1ActualCost: 5200, year2ActualCost: 7300,
   year0Savings: '600.0000', year1Savings: '800.0000', year2Savings: '700.0000',
+  purchaseYearCount: 3,
   totalSavings: '2100.0000', summarySavings: '2100.0000', summaryIncluded: 1, summaryExcluded: 0, summaryPartial: 0,
 };
 
@@ -57,4 +58,37 @@ describe('annual price savings API mapping', () => {
     expect(result.savingsByYear[2].savings).toBe(-450);
     expect(result.totalSavings).toBe(-300);
   });
+
+  it('excludes a single 2024 purchase year even with a valid 2023 benchmark', () => {
+    const result = mapAnnualRecord({
+      ...sample,
+      year1Cost: null, year2Cost: null,
+      year1Quantity: null, year2Quantity: null,
+      year1ActualCost: null, year2ActualCost: null,
+      year1Savings: null, year2Savings: null,
+      purchaseYearCount: 1,
+      totalSavings: null, summarySavings: '0',
+      summaryIncluded: 0, summaryExcluded: 1, summaryPartial: 0,
+    }, 2026);
+    expect(result.purchaseYearCount).toBe(1);
+    expect(result.prices.map(year => year.unitCost)).toEqual([120, null, null]);
+    // The legitimate 2024 vs 2023 calculation remains inspectable in details.
+    expect(result.savingsByYear[0].savings).toBe(600);
+    expect(result.totalSavings).toBeNull();
+  });
+
+  it('allows an incomplete total when purchases exist in two selected years', () => {
+    const result = mapAnnualRecord({
+      ...sample,
+      year0Benchmark: null, year0Savings: null,
+      year2Cost: null, year2Quantity: null, year2ActualCost: null,
+      year2Savings: null,
+      purchaseYearCount: 2,
+      totalSavings: '800', summaryPartial: 1,
+    }, 2026);
+    expect(result.purchaseYearCount).toBe(2);
+    expect(result.savingsByYear.map(year => year.savings)).toEqual([null, 800, null]);
+    expect(result.totalSavings).toBe(800);
+  });
+
 });

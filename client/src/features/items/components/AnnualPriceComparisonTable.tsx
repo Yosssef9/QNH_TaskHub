@@ -59,7 +59,8 @@ function SavingsAmount({ item }: { item: AnnualPriceItem }) {
   const { i18n, t } = useTranslation()
   const amount = item.totalSavings
   const comparableYears = comparableYearCount(item)
-  const isPartial = comparableYears > 0 && comparableYears < 3
+  const isPartial = amount !== null && comparableYears < 3
+  const hasOnlyOnePurchaseYear = item.purchaseYearCount === 1
   const color = amount === null ? 'text-muted-foreground' : amount > 0 ? 'text-success' : amount < 0 ? 'text-destructive' : 'text-muted-foreground'
 
   return (
@@ -76,7 +77,7 @@ function SavingsAmount({ item }: { item: AnnualPriceItem }) {
           <p className="text-sm font-semibold">{item.itemName}</p>
           <p className="text-muted-foreground mt-1 text-xs">{t('items.annual.breakdownTitle')}</p>
           <p className="text-muted-foreground mt-1 text-xs font-medium">
-            {amount === null ? t('items.annual.incomplete') : isPartial
+            {amount === null ? (hasOnlyOnePurchaseYear ? t('items.annual.oneYearExcluded') : t('items.annual.incomplete')) : isPartial
               ? t('items.annual.partialYears', { count: comparableYears })
               : t('items.annual.completeYears')}
           </p>
@@ -104,7 +105,11 @@ function SavingsAmount({ item }: { item: AnnualPriceItem }) {
           <span dir="ltr" className={color}>{amount === null ? t('items.annual.incomplete') : sarAmount(amount, i18n.language, true)}</span>
         </div>
         <p className="text-muted-foreground text-[11px]">{t('items.annual.savingsDefinition')}</p>
-        {isPartial || amount === null ? <p className="text-muted-foreground text-[11px]">{t('items.annual.incompleteReason')}</p> : null}
+        {hasOnlyOnePurchaseYear ? (
+          <p className="text-muted-foreground text-[11px]">{t('items.annual.oneYearExplanation')}</p>
+        ) : isPartial || amount === null ? (
+          <p className="text-muted-foreground text-[11px]">{t('items.annual.incompleteReason')}</p>
+        ) : null}
       </PopoverContent>
     </Popover>
   )
@@ -219,6 +224,9 @@ export function AnnualPriceComparisonTable({ data, endingYear, onEndingYearChang
             <td className="border-e border-b px-3 py-3 text-center align-middle">
               <div className="flex flex-col items-center gap-1">
                 <SavingsAmount item={item} />
+                {item.purchaseYearCount === 1 ? (
+                  <span className="text-muted-foreground text-[11px]">{t('items.annual.oneYearExcluded')}</span>
+                ) : null}
                 {item.totalSavings !== null && comparableYearCount(item) < 3 ? (
                   <span className="text-muted-foreground text-[11px]">{t('items.annual.partialYears', { count: comparableYearCount(item) })}</span>
                 ) : null}
@@ -243,6 +251,9 @@ export function AnnualPriceComparisonTable({ data, endingYear, onEndingYearChang
           <p className="text-muted-foreground text-xs font-semibold">{t('items.annual.totalSavings')}</p>
           <div className="flex flex-col items-end gap-1">
             <SavingsAmount item={item} />
+            {item.purchaseYearCount === 1 ? (
+              <span className="text-muted-foreground text-[11px]">{t('items.annual.oneYearExcluded')}</span>
+            ) : null}
             {item.totalSavings !== null && comparableYearCount(item) < 3 ? (
               <span className="text-muted-foreground text-[11px]">{t('items.annual.partialYears', { count: comparableYearCount(item) })}</span>
             ) : null}

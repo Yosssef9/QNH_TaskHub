@@ -50,6 +50,7 @@ export interface AnnualPriceItem {
   previousChangePercent: number | null;
   latestChangePercent: number | null;
   savingsByYear: [AnnualSavingsYear, AnnualSavingsYear, AnnualSavingsYear];
+  purchaseYearCount: number;
   totalSavings: number | null;
 }
 

@@ -42,6 +42,7 @@ export interface AnnualPriceRecord {
   year0Savings: number | string | null;
   year1Savings: number | string | null;
   year2Savings: number | string | null;
+  purchaseYearCount: number | string;
   totalSavings: number | string | null;
   summarySavings: number | string | null;
   summaryIncluded: number | string;
@@ -189,6 +190,11 @@ export async function queryAnnualPrices(query: AnnualPriceQuery): Promise<{ reco
         f0.actualSpending AS year0ActualCost, f1.actualSpending AS year1ActualCost, f2.actualSpending AS year2ActualCost,
         -- Each year stands alone: a missing benchmark in another year must
         -- not invalidate a comparable purchase year.
+        -- Count purchase years INSIDE the selected three-year window.
+        -- A previous-year benchmark outside that window never counts as a purchase year.
+        (CASE WHEN f0.transactionCount > 0 AND f0.invalidQuantityCount = 0 AND f0.purchasedQuantity > 0 THEN 1 ELSE 0 END
+         + CASE WHEN f1.transactionCount > 0 AND f1.invalidQuantityCount = 0 AND f1.purchasedQuantity > 0 THEN 1 ELSE 0 END
+         + CASE WHEN f2.transactionCount > 0 AND f2.invalidQuantityCount = 0 AND f2.purchasedQuantity > 0 THEN 1 ELSE 0 END) AS purchaseYearCount,
         CASE WHEN s.currencyCode = N'SAR' AND NULLIF(s.unitName, N'') IS NOT NULL
             AND b0.unitCost > 0
             AND f0.transactionCount > 0 AND f0.invalidQuantityCount = 0
@@ -219,9 +225,11 @@ export async function queryAnnualPrices(query: AnnualPriceQuery): Promise<{ reco
         (CASE WHEN year0Savings IS NOT NULL THEN 1 ELSE 0 END
          + CASE WHEN year1Savings IS NOT NULL THEN 1 ELSE 0 END
          + CASE WHEN year2Savings IS NOT NULL THEN 1 ELSE 0 END) AS comparableYearCount,
-        -- Partial totals are valid estimates for AVAILABLE comparable years only.
-        -- Never turn an item with zero comparable years into a false 0-SAR saving.
-        CASE WHEN year0Savings IS NOT NULL OR year1Savings IS NOT NULL OR year2Savings IS NOT NULL
+        -- Exclude single-purchase-year items from the financial KPI, even if an
+        -- earlier benchmark outside the window makes that single year's math possible.
+        -- Keep yearly details for audit/inspection, but not in the item's total.
+        CASE WHEN purchaseYearCount >= 2
+          AND (year0Savings IS NOT NULL OR year1Savings IS NOT NULL OR year2Savings IS NOT NULL)
           THEN CONVERT(DECIMAL(28,4),
                COALESCE(year0Savings, 0) + COALESCE(year1Savings, 0) + COALESCE(year2Savings, 0))
           ELSE NULL END AS totalSavings
@@ -230,9 +238,9 @@ export async function queryAnnualPrices(query: AnnualPriceQuery): Promise<{ reco
     summarized AS (
       SELECT *,
         SUM(COALESCE(totalSavings, CONVERT(DECIMAL(28,4), 0))) OVER () AS summarySavings,
-        SUM(CASE WHEN comparableYearCount > 0 THEN 1 ELSE 0 END) OVER () AS summaryIncluded,
-        SUM(CASE WHEN comparableYearCount = 0 THEN 1 ELSE 0 END) OVER () AS summaryExcluded,
-        SUM(CASE WHEN comparableYearCount BETWEEN 1 AND 2 THEN 1 ELSE 0 END) OVER () AS summaryPartial
+        SUM(CASE WHEN totalSavings IS NOT NULL THEN 1 ELSE 0 END) OVER () AS summaryIncluded,
+        SUM(CASE WHEN totalSavings IS NULL THEN 1 ELSE 0 END) OVER () AS summaryExcluded,
+        SUM(CASE WHEN totalSavings IS NOT NULL AND comparableYearCount BETWEEN 1 AND 2 THEN 1 ELSE 0 END) OVER () AS summaryPartial
       FROM annual_rows
     )
     SELECT * FROM summarized
