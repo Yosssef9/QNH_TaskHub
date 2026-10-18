@@ -44,8 +44,12 @@ export async function getItems(query: ItemListQuery): Promise<ItemList> {
 
 
 export async function getAnnualPrices(query: AnnualPriceQuery): Promise<AnnualPriceList> {
+  const { savingsYears, ...filters } = query
   const response = await apiClient.get<ApiSuccessResponse<AnnualPriceList>>('/items/annual-prices', {
-    params: itemListParams(query),
+    params: {
+      ...itemListParams(filters),
+      ...(savingsYears?.length ? { savingsYears: savingsYears.join(',') } : {}),
+    },
   })
   return response.data.data
 }

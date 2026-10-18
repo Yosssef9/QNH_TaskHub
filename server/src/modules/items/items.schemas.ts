@@ -59,10 +59,16 @@ export const itemListQuerySchema = z.object({
 
 export const annualPriceQuerySchema = z.object(itemFilters).omit({ period: true }).extend({
   endingYear: z.coerce.number().int().refine(year => year === 2026 || year === 2027, "Ending year must be 2026 or 2027.").default(2026),
+  savingsYears: z.preprocess(parseIds, z.array(z.coerce.number().int()).min(1).max(3)
+    .refine(years => new Set(years).size === years.length, "Comparison years must be unique.").optional()),
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
   sortBy: z.enum(["performance", "name", "currentPrice", "totalSavings", "currentSupplier", "previousChange"]).default("performance"),
   sortDirection: z.enum(["asc", "desc"]).default("asc"),
+}).superRefine((value, context) => {
+  if (value.savingsYears?.some(year => year < value.endingYear - 2 || year > value.endingYear)) {
+    context.addIssue({ code: "custom", path: ["savingsYears"], message: "Select years within the three-year comparison window." });
+  }
 });
 
 export const itemOptionsQuerySchema = z.object({

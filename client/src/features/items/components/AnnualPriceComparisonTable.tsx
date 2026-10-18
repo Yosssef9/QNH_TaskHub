@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, ArrowUpDown, ChartColumnIncreasing, Minus, TrendingDown, TrendingUp, Wallet, PackageCheck, Info, RotateCcw } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Check, ChevronDown, ChartColumnIncreasing, Minus, TrendingDown, TrendingUp, Wallet, PackageCheck, Info, RotateCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { TableEntityLink } from '@/components/shared/TableEntityLink'
@@ -51,15 +51,15 @@ function sarAmount(value: number, locale: string, signed = false): string {
   return `${signed && normalized > 0 ? '+' : ''}${formatted} SAR`
 }
 
-function comparableYearCount(item: AnnualPriceItem): number {
-  return item.savingsByYear.filter(year => year.savings !== null).length
+function comparableYearCount(item: AnnualPriceItem, selectedSavingsYears: readonly number[]): number {
+  return item.savingsByYear.filter(year => selectedSavingsYears.includes(year.year) && year.savings !== null).length
 }
 
-function SavingsAmount({ item }: { item: AnnualPriceItem }) {
+function SavingsAmount({ item, selectedSavingsYears }: { item: AnnualPriceItem; selectedSavingsYears: readonly number[] }) {
   const { i18n, t } = useTranslation()
   const amount = item.totalSavings
-  const comparableYears = comparableYearCount(item)
-  const isPartial = amount !== null && comparableYears < 3
+  const comparableYears = comparableYearCount(item, selectedSavingsYears)
+  const isPartial = amount !== null && comparableYears < selectedSavingsYears.length
   const hasOnlyOnePurchaseYear = item.purchaseYearCount === 1
   const color = amount === null ? 'text-muted-foreground' : amount > 0 ? 'text-success' : amount < 0 ? 'text-destructive' : 'text-muted-foreground'
 
@@ -78,15 +78,17 @@ function SavingsAmount({ item }: { item: AnnualPriceItem }) {
           <p className="text-muted-foreground mt-1 text-xs">{t('items.annual.breakdownTitle')}</p>
           <p className="text-muted-foreground mt-1 text-xs font-medium">
             {amount === null ? (hasOnlyOnePurchaseYear ? t('items.annual.oneYearExcluded') : t('items.annual.incomplete')) : isPartial
-              ? t('items.annual.partialYears', { count: comparableYears })
-              : t('items.annual.completeYears')}
+              ? t('items.annual.partialYears', { count: comparableYears, total: selectedSavingsYears.length })
+              : t('items.annual.completeYears', { total: selectedSavingsYears.length })}
           </p>
         </div>
         <div className="max-h-[55vh] space-y-2 overflow-y-auto">
           {item.savingsByYear.map(year => (
-            <div key={year.year} className="rounded-lg border bg-muted/15 p-3">
+            <div key={year.year} className={`rounded-lg border p-3 ${selectedSavingsYears.includes(year.year) ? 'bg-muted/15' : 'bg-muted/5 opacity-60'}`}>
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold tabular-nums">{year.year} {t('items.annual.changeFrom', { year: year.year - 1 })}</p>
+                <p className="text-xs font-semibold tabular-nums">{year.year} {t('items.annual.changeFrom', { year: year.year - 1 })}
+                  {!selectedSavingsYears.includes(year.year) ? <span className="text-muted-foreground ms-2 font-normal">({t('items.annual.notSelected')})</span> : null}
+                </p>
                 <span dir="ltr" className={`text-xs font-bold tabular-nums ${year.savings === null ? 'text-muted-foreground' : year.savings > 0 ? 'text-success' : year.savings < 0 ? 'text-destructive' : ''}`}>
                   {year.savings === null ? t('items.annual.incomplete') : sarAmount(year.savings, i18n.language, true)}
                 </span>
@@ -115,10 +117,12 @@ function SavingsAmount({ item }: { item: AnnualPriceItem }) {
   )
 }
 
-export function AnnualPriceComparisonTable({ data, endingYear, onEndingYearChange, sortBy, sortDirection, onSort, onResetSort, page, pageSize, onPageChange, onPageSizeChange, canOpenSuppliers, activeViewId }: {
+export function AnnualPriceComparisonTable({ data, endingYear, onEndingYearChange, selectedSavingsYears, onSelectedSavingsYearsChange, sortBy, sortDirection, onSort, onResetSort, page, pageSize, onPageChange, onPageSizeChange, canOpenSuppliers, activeViewId }: {
   data: AnnualPriceList
   endingYear: number
   onEndingYearChange: (year: number) => void
+  selectedSavingsYears: number[]
+  onSelectedSavingsYearsChange: (years: number[]) => void
   sortBy: AnnualPriceSortBy
   sortDirection: SortDirection
   onSort: (column: 'currentPrice' | 'totalSavings') => void
@@ -150,6 +154,41 @@ export function AnnualPriceComparisonTable({ data, endingYear, onEndingYearChang
           </Button>
         ) : null}
         <div className="space-y-1">
+          <p className="text-muted-foreground text-[11px] font-medium">{t('items.annual.savingsPeriod')}</p>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button type="button" variant="outline" className="h-10 min-w-[12rem] justify-between gap-2" aria-label={t('items.annual.savingsPeriod')}>
+                <span>{t('items.annual.comparisonsSelected', { count: selectedSavingsYears.length, total: 3 })}</span>
+                <ChevronDown aria-hidden="true" className="size-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-[min(19rem,calc(100vw-2rem))] space-y-3 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold">{t('items.annual.savingsPeriod')}</p>
+                <Button type="button" variant="ghost" size="sm" disabled={selectedSavingsYears.length === 3}
+                  onClick={() => onSelectedSavingsYearsChange([...years])}>
+                  {t('items.annual.selectAll')}
+                </Button>
+              </div>
+              {years.map(year => {
+                const checked = selectedSavingsYears.includes(year)
+                const disabled = checked && selectedSavingsYears.length === 1
+                return <label key={year} className={`flex items-center gap-3 rounded-md px-2 py-2 text-sm hover:bg-muted/60 ${disabled ? 'opacity-65' : 'cursor-pointer'}`}>
+                  <input type="checkbox" className="size-4 accent-primary" checked={checked} disabled={disabled}
+                    onChange={event => onSelectedSavingsYearsChange(
+                      event.target.checked
+                        ? years.filter(value => selectedSavingsYears.includes(value) || value === year)
+                        : selectedSavingsYears.filter(value => value !== year)
+                    )} />
+                  <span dir="ltr" className="tabular-nums">{year - 1} → {year}</span>
+                  {checked ? <Check aria-hidden="true" className="ms-auto size-3.5 text-primary" /> : null}
+                </label>
+              })}
+              <p className="text-muted-foreground text-xs">{t('items.annual.atLeastOneComparison')}</p>
+            </PopoverContent>
+          </Popover>
+        </div>
+        <div className="space-y-1">
           <label htmlFor="annual-ending-year" className="text-muted-foreground text-[11px] font-medium">{t('items.annual.endingYear')}</label>
           <Select value={String(endingYear)} onValueChange={value => onEndingYearChange(Number(value))}>
             <SelectTrigger id="annual-ending-year" aria-label={t('items.annual.endingYear')} className="w-28"><SelectValue /></SelectTrigger>
@@ -164,7 +203,7 @@ export function AnnualPriceComparisonTable({ data, endingYear, onEndingYearChang
         <div dir="ltr" className={`mt-2 text-start text-2xl font-bold tabular-nums ${data.savingsIncludedItems === 0 ? 'text-muted-foreground' : data.totalEstimatedSavings > 0 ? 'text-success' : data.totalEstimatedSavings < 0 ? 'text-destructive' : ''}`}>
           {data.savingsIncludedItems === 0 ? '—' : sarAmount(data.totalEstimatedSavings, i18n.language, true)}
         </div>
-        <p className="text-muted-foreground mt-1 text-xs">{years[0]}–{years[2]} · {t('items.annual.allMatchingItems')}</p>
+        <p className="text-muted-foreground mt-1 text-xs">{years[0]}–{years[2]} · {t('items.annual.allMatchingItems')} · {t('items.annual.comparisonsSelected', { count: selectedSavingsYears.length, total: 3 })}</p>
         {data.savingsPartialItems > 0 ? (
           <p className="text-muted-foreground mt-1 text-xs">{t('items.annual.partialItems', { count: data.savingsPartialItems })}</p>
         ) : null}
@@ -223,12 +262,12 @@ export function AnnualPriceComparisonTable({ data, endingYear, onEndingYearChang
             </td>)}
             <td className="border-e border-b px-3 py-3 text-center align-middle">
               <div className="flex flex-col items-center gap-1">
-                <SavingsAmount item={item} />
+                <SavingsAmount item={item} selectedSavingsYears={selectedSavingsYears} />
                 {item.purchaseYearCount === 1 ? (
                   <span className="text-muted-foreground text-[11px]">{t('items.annual.oneYearExcluded')}</span>
                 ) : null}
-                {item.totalSavings !== null && comparableYearCount(item) < 3 ? (
-                  <span className="text-muted-foreground text-[11px]">{t('items.annual.partialYears', { count: comparableYearCount(item) })}</span>
+                {item.totalSavings !== null && comparableYearCount(item, selectedSavingsYears) < selectedSavingsYears.length ? (
+                  <span className="text-muted-foreground text-[11px]">{t('items.annual.partialYears', { count: comparableYearCount(item, selectedSavingsYears), total: selectedSavingsYears.length })}</span>
                 ) : null}
               </div>
             </td>
@@ -250,12 +289,12 @@ export function AnnualPriceComparisonTable({ data, endingYear, onEndingYearChang
         <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
           <p className="text-muted-foreground text-xs font-semibold">{t('items.annual.totalSavings')}</p>
           <div className="flex flex-col items-end gap-1">
-            <SavingsAmount item={item} />
+            <SavingsAmount item={item} selectedSavingsYears={selectedSavingsYears} />
             {item.purchaseYearCount === 1 ? (
               <span className="text-muted-foreground text-[11px]">{t('items.annual.oneYearExcluded')}</span>
             ) : null}
-            {item.totalSavings !== null && comparableYearCount(item) < 3 ? (
-              <span className="text-muted-foreground text-[11px]">{t('items.annual.partialYears', { count: comparableYearCount(item) })}</span>
+            {item.totalSavings !== null && comparableYearCount(item, selectedSavingsYears) < selectedSavingsYears.length ? (
+              <span className="text-muted-foreground text-[11px]">{t('items.annual.partialYears', { count: comparableYearCount(item, selectedSavingsYears), total: selectedSavingsYears.length })}</span>
             ) : null}
           </div>
         </div>

@@ -17,6 +17,8 @@ export type SortDirection = 'asc' | 'desc'
 export type AnnualPriceSortBy = 'performance' | 'name' | 'currentPrice' | 'totalSavings' | 'currentSupplier' | 'previousChange'
 export interface AnnualPriceQuery extends Omit<ItemListQuery, 'period' | 'sortBy'> {
   endingYear: number
+  /** Selected current purchase years for the savings calculation. */
+  savingsYears?: number[]
   sortBy: AnnualPriceSortBy
 }
 export interface AnnualLowestPurchase {

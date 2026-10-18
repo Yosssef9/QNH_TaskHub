@@ -68,6 +68,8 @@ export function ItemsPage() {
   const [activeViewId, setActiveViewId] = useState<number | null>(Number.isSafeInteger(initialView) && initialView > 0 ? initialView : null)
   const [displayMode, setDisplayMode] = useState<SavedViewDisplayMode>('summary')
   const [endingYear, setEndingYear] = useState(2026)
+  // Selected indices (oldest, middle, newest) shift with the Ending Year.
+  const [savingsYearOffsets, setSavingsYearOffsets] = useState<number[]>([0, 1, 2])
   const [annualSort, setAnnualSort] = useState<{ by: AnnualPriceSortBy; direction: 'asc' | 'desc' }>({ by: 'performance', direction: 'asc' })
   const [matrixSupplierIds, setMatrixSupplierIds] = useState<number[]>([])
   const [matrixPriceSourceOverride, setMatrixPriceSourceOverride] = useState<ItemSupplierMatrixPriceSource | null>(null)
@@ -247,6 +249,7 @@ export function ItemsPage() {
     ...itemMasterFilters,
     ...(supplierIds.length ? { supplierIds } : {}),
     endingYear,
+    savingsYears: savingsYearOffsets.map(offset => endingYear - 2 + offset),
     page,
     pageSize,
     sortBy: annualSort.by,
@@ -501,6 +504,11 @@ export function ItemsPage() {
           sortBy={annualSort.by} sortDirection={annualSort.direction}
           onSort={changeAnnualSort} onResetSort={resetAnnualSort}
           onEndingYearChange={year => { setEndingYear(year); setPage(1) }}
+          selectedSavingsYears={savingsYearOffsets.map(offset => endingYear - 2 + offset)}
+          onSelectedSavingsYearsChange={years => {
+            setSavingsYearOffsets(years.map(year => year - (endingYear - 2)))
+            setPage(1)
+          }}
           page={page} pageSize={pageSize} onPageChange={setPage}
           onPageSizeChange={value => { setPageSize(value); setPage(1) }}
           canOpenSuppliers={canAccessSuppliers} activeViewId={activeViewId}

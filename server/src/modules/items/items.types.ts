@@ -19,6 +19,8 @@ export type AnnualPriceSortBy = "performance" | "name" | "currentPrice" | "total
 
 export interface AnnualPriceQuery extends Omit<ItemListQuery, "period" | "sortBy"> {
   endingYear: number;
+  /** Purchase years whose savings comparisons contribute to totals. Unspecified means all three. */
+  savingsYears?: number[];
   sortBy: AnnualPriceSortBy;
 }
 

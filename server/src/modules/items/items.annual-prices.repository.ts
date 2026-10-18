@@ -66,15 +66,32 @@ export function annualPriceOrder(query: Pick<AnnualPriceQuery, "sortBy" | "sortD
   return `${order[query.sortBy]}, itemName ASC, itemId ASC`;
 }
 
+/** Resolve the selected comparison years against the current three-year window. */
+export function resolveAnnualSavingsSelection(query: Pick<AnnualPriceQuery, "endingYear" | "savingsYears">) {
+  const selectedYears = query.savingsYears ?? [query.endingYear - 2, query.endingYear - 1, query.endingYear];
+  return {
+    selectedYears,
+    year0: selectedYears.includes(query.endingYear - 2),
+    year1: selectedYears.includes(query.endingYear - 1),
+    year2: selectedYears.includes(query.endingYear),
+  };
+}
+
 /** Uses the same item/supplier filters as the existing Procurement Items SQL. */
 export async function queryAnnualPrices(query: AnnualPriceQuery): Promise<{ records: AnnualPriceRecord[]; total: number; totalSavings: number; included: number; excluded: number; partial: number }> {
   const pool = await getDatabasePool();
+  // No selection supplied means all comparisons (backward compatible with existing clients).
+  const selected = resolveAnnualSavingsSelection(query);
   const bind = (request: import("mssql").Request, page = query.page): import("mssql").Request => {
     bindListFilters(request, { ...query, period: "ALL", sortBy: "name" });
     request
       .input("year0", sql.Int, query.endingYear - 2)
       .input("year1", sql.Int, query.endingYear - 1)
       .input("year2", sql.Int, query.endingYear)
+      .input("includeYear0", sql.Bit, selected.year0)
+      .input("includeYear1", sql.Bit, selected.year1)
+      .input("includeYear2", sql.Bit, selected.year2)
+      .input("selectedYearCount", sql.Int, selected.selectedYears.length)
       .input("startDate", sql.Date, new Date(Date.UTC(query.endingYear - 2, 0, 1)))
       .input("benchmarkStartDate", sql.Date, new Date(Date.UTC(query.endingYear - 3, 0, 1)))
       .input("endDate", sql.Date, new Date(Date.UTC(query.endingYear + 1, 0, 1)))
@@ -222,16 +239,20 @@ export async function queryAnnualPrices(query: AnnualPriceQuery): Promise<{ reco
     ),
     annual_rows AS (
       SELECT *,
-        (CASE WHEN year0Savings IS NOT NULL THEN 1 ELSE 0 END
-         + CASE WHEN year1Savings IS NOT NULL THEN 1 ELSE 0 END
-         + CASE WHEN year2Savings IS NOT NULL THEN 1 ELSE 0 END) AS comparableYearCount,
+        (CASE WHEN @includeYear0 = 1 AND year0Savings IS NOT NULL THEN 1 ELSE 0 END
+         + CASE WHEN @includeYear1 = 1 AND year1Savings IS NOT NULL THEN 1 ELSE 0 END
+         + CASE WHEN @includeYear2 = 1 AND year2Savings IS NOT NULL THEN 1 ELSE 0 END) AS comparableYearCount,
         -- Exclude single-purchase-year items from the financial KPI, even if an
         -- earlier benchmark outside the window makes that single year's math possible.
         -- Keep yearly details for audit/inspection, but not in the item's total.
         CASE WHEN purchaseYearCount >= 2
-          AND (year0Savings IS NOT NULL OR year1Savings IS NOT NULL OR year2Savings IS NOT NULL)
+          AND ((@includeYear0 = 1 AND year0Savings IS NOT NULL)
+            OR (@includeYear1 = 1 AND year1Savings IS NOT NULL)
+            OR (@includeYear2 = 1 AND year2Savings IS NOT NULL))
           THEN CONVERT(DECIMAL(28,4),
-               COALESCE(year0Savings, 0) + COALESCE(year1Savings, 0) + COALESCE(year2Savings, 0))
+               CASE WHEN @includeYear0 = 1 THEN COALESCE(year0Savings, 0) ELSE 0 END
+             + CASE WHEN @includeYear1 = 1 THEN COALESCE(year1Savings, 0) ELSE 0 END
+             + CASE WHEN @includeYear2 = 1 THEN COALESCE(year2Savings, 0) ELSE 0 END)
           ELSE NULL END AS totalSavings
       FROM annual_values
     ),
@@ -240,7 +261,7 @@ export async function queryAnnualPrices(query: AnnualPriceQuery): Promise<{ reco
         SUM(COALESCE(totalSavings, CONVERT(DECIMAL(28,4), 0))) OVER () AS summarySavings,
         SUM(CASE WHEN totalSavings IS NOT NULL THEN 1 ELSE 0 END) OVER () AS summaryIncluded,
         SUM(CASE WHEN totalSavings IS NULL THEN 1 ELSE 0 END) OVER () AS summaryExcluded,
-        SUM(CASE WHEN totalSavings IS NOT NULL AND comparableYearCount BETWEEN 1 AND 2 THEN 1 ELSE 0 END) OVER () AS summaryPartial
+        SUM(CASE WHEN totalSavings IS NOT NULL AND comparableYearCount < @selectedYearCount THEN 1 ELSE 0 END) OVER () AS summaryPartial
       FROM annual_rows
     )
     SELECT * FROM summarized
