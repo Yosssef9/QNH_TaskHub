@@ -3776,6 +3776,7 @@ export const enTranslation = {
     errors: {
       titleRequired: 'Enter a task title.',
       dateRange: 'The due date cannot be before the start date.',
+      startDatePast: 'Start date cannot be earlier than today.',
       dueDateRequired: 'A due date is required for KPI tasks.',
       referenceDateRequired: 'Enter the reference date used by this KPI.',
       listRequired: 'Select the list this task belongs to.',
@@ -3786,6 +3787,7 @@ export const enTranslation = {
       delete: 'The task could not be deleted.',
       restore: 'The task could not be restored.',
     },
+    startDateTodayOrLater: 'Select today or a future start date.',
   },
   home: {
     eyebrow: 'Personal workspace',
@@ -4153,6 +4155,7 @@ export const enTranslation = {
     backHome: 'Back to home',
   },
 } as const
+
 
 
 

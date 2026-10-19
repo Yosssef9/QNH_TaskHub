@@ -35,6 +35,7 @@ import {
 import { TASK_PRIORITIES } from '../types/task.types'
 import type { PersonalTask, SaveTaskInput } from '../types/task.types'
 import { TaskPriorityIndicator } from './TaskSelectIndicators'
+import { getTodayInRiyadh, isInvalidNormalTaskStartDate } from './task-start-date'
 
 const schema = z
   .object({
@@ -175,6 +176,7 @@ export function TaskEditorDialog({
   const requiredDueDateMode = kpi?.taskPolicy.dueDateMode === 'REQUIRED'
   const isKpiTask = Boolean(fixedInstance || fixedCycle || cycles)
   const showDateFields = !isKpiTask || Boolean(kpi)
+  const enforceNormalStartDate = !isKpiTask && !task?.kpiInstanceId && !task?.meetingActionItem
   const dueDateErrorMessage =
     errors.dueDate?.message === 'DATE_RANGE' ? t('tasks.errors.dateRange') : errors.dueDate?.message
   const useStoredDeadline =
@@ -213,6 +215,16 @@ export function TaskEditorDialog({
 
     if (requiredDueDateMode && !values.dueDate) {
       setError('dueDate', { message: t('tasks.errors.dueDateRequired') })
+      return
+    }
+
+    // Also validate on submit in case the user left the dialog open across midnight.
+    if (enforceNormalStartDate && isInvalidNormalTaskStartDate(
+      values.startDate,
+      task?.startDate ?? null,
+      getTodayInRiyadh(),
+    )) {
+      setError('startDate', { message: t('tasks.errors.startDatePast') })
       return
     }
 
@@ -563,7 +575,21 @@ export function TaskEditorDialog({
                     <DatePicker
                       label={t('tasks.startDate')}
                       value={field.value ?? null}
-                      onChange={(value) => field.onChange(value || null)}
+                      minDate={enforceNormalStartDate && !task ? getTodayInRiyadh() : undefined}
+                      description={enforceNormalStartDate && !task ? t('tasks.startDateTodayOrLater') : undefined}
+                      error={errors.startDate?.message}
+                      onChange={(value) => {
+                        if (enforceNormalStartDate && isInvalidNormalTaskStartDate(
+                          value || null,
+                          task?.startDate ?? null,
+                          getTodayInRiyadh(),
+                        )) {
+                          setError('startDate', { message: t('tasks.errors.startDatePast') })
+                          return
+                        }
+                        clearErrors('startDate')
+                        field.onChange(value || null)
+                      }}
                     />
                   )}
                 />
@@ -602,6 +628,7 @@ export function TaskEditorDialog({
     </Dialog>
   )
 }
+
 
 
 

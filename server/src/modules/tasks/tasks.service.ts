@@ -14,6 +14,7 @@ import { workCyclesService } from "../work-cycles/work-cycles.service.js";
 import { mapTask } from "./tasks.mapper.js";
 import { assertTaskStatusTransition, assertTaskWritable } from "./tasks.policy.js";
 import { tasksRepository } from "./tasks.repository.js";
+import { assertNormalTaskStartDateAllowed } from "./tasks.start-date.policy.js";
 import type {
   ChangeTaskStatusInput,
   CreateTaskInput,
@@ -108,6 +109,8 @@ export const tasksService = {
   },
 
   async create(ownerUserId: number, listId: number, input: CreateTaskInput): Promise<PersonalTask> {
+    assertNormalTaskStartDateAllowed(input.startDate);
+
     const taskId = await withTransaction(async (transaction) => {
       if (!(await tasksRepository.ownedListExists(ownerUserId, listId, transaction))) {
         throw listNotFound();
@@ -231,6 +234,9 @@ export const tasksService = {
         startDate = input.startDate !== undefined ? input.startDate : toDateOnly(current.startDate);
         dueDate = input.dueDate !== undefined ? input.dueDate : toDateOnly(current.dueDate);
         referenceDate = null;
+        if (!access.context) {
+          assertNormalTaskStartDateAllowed(startDate, toDateOnly(current.startDate));
+        }
         assertDateRange(startDate, dueDate);
       }
 
@@ -526,6 +532,7 @@ export const tasksService = {
     return loadTask(ownerUserId, taskId);
   },
 };
+
 
 
 

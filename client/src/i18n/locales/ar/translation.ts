@@ -3717,6 +3717,7 @@ export const arTranslation = {
     errors: {
       titleRequired: 'اكتب عنواناً للمهمة.',
       dateRange: 'لا يمكن أن يسبق تاريخ الاستحقاق تاريخ البدء.',
+      startDatePast: 'لا يمكن تحديد تاريخ بدء يسبق تاريخ اليوم.',
       dueDateRequired: 'تاريخ الاستحقاق مطلوب لمهام المؤشر.',
       referenceDateRequired: 'أدخل التاريخ المرجعي المستخدم في هذا المؤشر.',
       listRequired: 'اختر القائمة التي تنتمي إليها هذه المهمة.',
@@ -3727,6 +3728,7 @@ export const arTranslation = {
       delete: 'تعذر حذف المهمة.',
       restore: 'تعذرت استعادة المهمة.',
     },
+    startDateTodayOrLater: 'اختر تاريخ اليوم أو تاريخاً لاحقاً للبدء.',
   },
   home: {
     eyebrow: 'مساحة العمل الشخصية',
@@ -4079,6 +4081,7 @@ export const arTranslation = {
     backHome: 'العودة إلى الرئيسية',
   },
 } as const
+
 
 
 
