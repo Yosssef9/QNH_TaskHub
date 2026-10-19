@@ -1,8 +1,8 @@
 import { AppError } from '../../shared/errors/app-error.js';
 
-export type GroupRelation = { id:number; parentGroupId:number|null };
+export type GroupRelation = { id:number|string; parentGroupId:number|string|null };
 
-export function assertNoGroupCycle(rows:Pick<GroupRelation,'id'|'parentGroupId'>[],groupId:number,nextParentId:number|null){
+export function assertNoGroupCycle(rows:ReadonlyArray<Pick<GroupRelation,'id'|'parentGroupId'>>,groupId:number,nextParentId:number|null){
   const parents=new Map(rows.map(row=>[Number(row.id),row.parentGroupId===null?null:Number(row.parentGroupId)]));
   if(!parents.has(groupId))throw new AppError({statusCode:404,code:'TASK_GROUP_NOT_FOUND',message:'Group not found.'});
   const visited=new Set<number>();

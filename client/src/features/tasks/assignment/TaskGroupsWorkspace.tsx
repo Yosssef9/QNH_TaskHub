@@ -25,7 +25,6 @@ import { TaskGroupSelect } from './TaskGroupSelect'
 import { buildGroupTree } from './task-groups.tree'
 import { activeGroupFilters, filteredGroupIds, filterKey } from './task-groups.filtered-view'
 import type { GroupTreeRow } from './task-groups.tree'
-import type { TaskGroup } from './task-groups.api'
 
 const BATCH_SIZE = 20
 

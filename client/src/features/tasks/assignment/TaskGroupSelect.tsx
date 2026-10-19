@@ -33,7 +33,7 @@ export function TaskGroupSelect({ groups, value, onChange, disabled, excludeIds 
       options={options}
       value={value ?? 0}
       onChange={next => onChange(next === null || next === 0 ? null : Number(next))}
-      disabled={disabled}
+      disabled={disabled ?? false}
       disableClear
       placeholder={t('taskGroups.select')}
       searchPlaceholder={t('taskGroups.search')}

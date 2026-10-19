@@ -13,6 +13,15 @@ describe('nested Task Group cycle protections',()=>{
     const rows=Array.from({length:800},(_,n)=>({id:n+1,parentGroupId:n===0?null:n}));
     expect(()=>assertNoGroupCycle(rows,800,null)).not.toThrow();
   });
+  it('accepts SQL BIGINT identifiers returned as numeric strings',()=>{
+    const rows = [
+      { id: '1', parentGroupId: null },
+      { id: '2', parentGroupId: '1' },
+      { id: '3', parentGroupId: '2' },
+    ];
+    expect(()=>assertNoGroupCycle(rows,3,null)).not.toThrow();
+    expect(()=>assertNoGroupCycle(rows,1,3)).toThrow();
+  });
   it('rejects reparenting a group to itself',()=>{
     expect(()=>assertNoGroupCycle(hierarchy,2,2)).toThrow();
   });
