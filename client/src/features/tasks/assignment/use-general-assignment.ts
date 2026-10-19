@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   getEligibleTaskUsers, getEligibleTaskUser, getAssignedGeneralTasks, assignMainTask, assignSubtask,
   saveWorkNotes, saveCompletionSummary,
@@ -9,6 +9,19 @@ export const generalAssignmentsRoot = ['general-assignments'] as const
 export function useEligibleTaskUsers(search: string, enabled = true, page = 1) {
   return useQuery({ queryKey: [...generalAssignmentsRoot, 'eligible', search, page],
     queryFn: () => getEligibleTaskUsers(search, page), enabled })
+}
+/** The assignee dropdown uses the same eligible-user endpoint with append-only paging. */
+export function useInfiniteEligibleTaskUsers(search: string, enabled = true) {
+  const normalizedSearch = search.trim()
+  return useInfiniteQuery({
+    queryKey: [...generalAssignmentsRoot, 'eligible-infinite', normalizedSearch],
+    queryFn: ({ pageParam }) => getEligibleTaskUsers(normalizedSearch, pageParam),
+    initialPageParam: 1,
+    // The endpoint doesn't return a total count; a short final page ends the list.
+    getNextPageParam: (lastPage) =>
+      lastPage.items.length === lastPage.pageSize ? lastPage.page + 1 : undefined,
+    enabled,
+  })
 }
 export function useEligibleTaskUser(userId: number | null) {
   return useQuery({queryKey:[...generalAssignmentsRoot,'eligible-id',userId],
@@ -34,3 +47,4 @@ export const useAssignMainTask = () => useAssignmentMutation(assignMainTask)
 export const useAssignSubtask = () => useAssignmentMutation(assignSubtask)
 export const useSaveWorkNotes = () => useAssignmentMutation(saveWorkNotes)
 export const useSaveCompletionSummary = () => useAssignmentMutation(saveCompletionSummary)
+

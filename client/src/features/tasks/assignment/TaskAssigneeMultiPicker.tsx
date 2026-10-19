@@ -1,5 +1,5 @@
-import { Check, ChevronsUpDown, Search, UsersRound } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { Check, ChevronsUpDown, Loader2, Search, UsersRound } from 'lucide-react'
+import { useMemo, useState, type UIEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
@@ -9,7 +9,7 @@ import { useMeetingActionItemAssignees } from '@/features/meetings/action-items/
 
 import type { EligibleTaskUser } from './general-assignment.api'
 import { matchesTaskAssigneeSearch } from './task-assignee-search'
-import { useEligibleTaskUsers } from './use-general-assignment'
+import { useInfiniteEligibleTaskUsers } from './use-general-assignment'
 
 interface Props {
   value: number[]
@@ -25,12 +25,22 @@ export function TaskAssigneeMultiPicker({ value, onChange, meetingId = null, kno
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
   const [remembered, setRemembered] = useState<EligibleTaskUser[]>([])
-  const general = useEligibleTaskUsers(search, open && meetingId === null, page)
+  const general = useInfiniteEligibleTaskUsers(search, open && meetingId === null)
   const meeting = useMeetingActionItemAssignees(meetingId, open && meetingId !== null)
-  const available: EligibleTaskUser[] = meetingId === null ? general.data?.items ?? [] :
+  const generalUsers = useMemo(() => general.data?.pages.flatMap(page => page.items) ?? [], [general.data])
+  const available: EligibleTaskUser[] = meetingId === null ? generalUsers :
     (meeting.data ?? []).filter(item => item.eligible && matchesTaskAssigneeSearch(item, search))
+  const isLoading = meetingId === null ? general.isPending : meeting.isPending
+  const isError = meetingId === null ? general.isError : meeting.isError
+  function handleScroll(event: UIEvent<HTMLDivElement>) {
+    if (meetingId !== null) return
+    const container = event.currentTarget
+    const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 64
+    if (nearBottom && general.hasNextPage && !general.isFetching) {
+      void general.fetchNextPage()
+    }
+  }
   const allUsers = useMemo(() => new Map([...knownUsers, ...remembered, ...available].map(user => [user.userId, user])),
     [knownUsers, remembered, available])
   function toggle(user: EligibleTaskUser) {
@@ -48,10 +58,12 @@ export function TaskAssigneeMultiPicker({ value, onChange, meetingId = null, kno
     </PopoverTrigger>
     <PopoverContent align="start" className="w-[min(29rem,calc(100vw-2rem))] space-y-2 p-2">
       <div className="relative"><Search className="text-muted-foreground absolute top-2.5 start-2.5 size-4" />
-        <Input autoFocus className="ps-8" value={search} onChange={event => {setSearch(event.target.value);setPage(1)}}
+        <Input autoFocus className="ps-8" value={search} onChange={event => setSearch(event.target.value)}
           placeholder={t('tasks.assignment.searchUsers')} aria-label={t('tasks.assignment.searchUsers')}/>
       </div>
-      <div className="max-h-64 space-y-1 overflow-y-auto" aria-label={t('tasks.collaboration.selectUsers')}>
+      <div key={search.trim()} className="max-h-64 space-y-1 overflow-y-auto" onScroll={handleScroll}
+        aria-busy={isLoading || (meetingId === null && general.isFetchingNextPage)}
+        aria-label={t('tasks.collaboration.selectUsers')}>
         {available.map(user => <button key={user.userId} type="button" aria-pressed={value.includes(user.userId)}
           className="hover:bg-muted flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-start"
           onClick={() => toggle(user)}>
@@ -60,15 +72,17 @@ export function TaskAssigneeMultiPicker({ value, onChange, meetingId = null, kno
             {user.email && <span dir="ltr" className="text-muted-foreground block truncate text-start text-xs">{user.email}</span>}
           </span>{value.includes(user.userId) && <Check className="size-4 shrink-0" />}
         </button>)}
-        {!available.length && <p className="text-muted-foreground p-2 text-xs">{t('tasks.assignment.noUsers')}</p>}
+        {isLoading && !available.length && <p className="text-muted-foreground p-2 text-xs">{t('common.loading')}</p>}
+        {!isLoading && !isError && !available.length && <p className="text-muted-foreground p-2 text-xs">{t('tasks.assignment.noUsers')}</p>}
+        {isError && <p className="text-destructive p-2 text-xs">{t('tasks.assignment.searchError')}</p>}
+        {meetingId === null && general.isFetchingNextPage &&
+          <div className="text-muted-foreground flex items-center justify-center gap-2 px-3 py-3 text-xs" role="status">
+            <Loader2 aria-hidden="true" className="size-4 animate-spin" /> {t('common.loading')}
+          </div>}
       </div>
-      {meetingId === null && <div className="flex justify-between border-t pt-2">
-        <Button size="sm" variant="outline" disabled={page===1} onClick={()=>setPage(p=>p-1)}>{t('pagination.previous')}</Button>
-        <span className="text-muted-foreground text-xs">{page}</span>
-        <Button size="sm" variant="outline" disabled={available.length<50 || general.isFetching} onClick={()=>setPage(p=>p+1)}>{t('pagination.next')}</Button>
-      </div>}
       <Button className="w-full" size="sm" onClick={()=>setOpen(false)}>{t('common.done',{defaultValue:'Done'})}</Button>
     </PopoverContent>
   </Popover>
 }
+
 
