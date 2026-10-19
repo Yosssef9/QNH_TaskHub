@@ -10,7 +10,7 @@ const en = {
   information: "Meeting information", participants: "Participants & attendance", agenda: "Agenda",
   decisions: "Decisions", notes: "Meeting Notes", actions: "Action Items", files: "Meeting files",
   revisions: "Schedule history", activity: "Meeting activity", related: "Related Meetings",
-  title: "Title", status: "Status", organizer: "Organizer", attendee: "Attendee", userCode: "User code",
+  title: "Title", status: "Status", historicalEntry: "Recorded Retrospectively", entryType: "Recording", organizer: "Organizer", attendee: "Attendee", userCode: "User code",
   name: "Participant", role: "Role", attendance: "Attendance", invited: "Participants", attended: "Attended",
   absent: "Absent", notMarked: "Not marked", markedBy: "Last marked by", markedAt: "Last marked at",
   start: "Start", end: "End", duration: "Duration", minutes: "min", room: "Room", location: "Location", meetingType: "Meeting type", roomMeeting: "Meeting Room", zoomMeeting: "Zoom Meeting", online: "Online",
@@ -75,7 +75,7 @@ const ar: Labels = {
   information: "معلومات الاجتماع", participants: "المشاركون والحضور", agenda: "جدول الأعمال",
   decisions: "القرارات", notes: "ملاحظات الاجتماع", actions: "الإجراءات والمهام", files: "ملفات الاجتماع",
   revisions: "سجل المواعيد", activity: "نشاط الاجتماع", related: "الاجتماعات المرتبطة",
-  title: "العنوان", status: "الحالة", organizer: "المنظم", attendee: "مشارك", userCode: "رمز المستخدم",
+  title: "العنوان", status: "الحالة", historicalEntry: "مُسجّل بأثر رجعي", entryType: "طريقة التسجيل", organizer: "المنظم", attendee: "مشارك", userCode: "رمز المستخدم",
   name: "المشارك", role: "الدور", attendance: "الحضور", invited: "المشاركون", attended: "حاضر",
   absent: "غائب", notMarked: "لم يُسجل", markedBy: "آخر تسجيل بواسطة", markedAt: "وقت آخر تسجيل",
   start: "البداية", end: "النهاية", duration: "المدة", minutes: "دقيقة", room: "القاعة", location: "الموقع", meetingType: "نوع الاجتماع", roomMeeting: "اجتماع حضوري", zoomMeeting: "اجتماع Zoom", online: "عبر الإنترنت",
@@ -130,6 +130,7 @@ const ar: Labels = {
 export function meetingReportLabels(language: MeetingReportLanguage): Labels {
   return language === "ar" ? ar : en;
 }
+
 
 
 

@@ -35,6 +35,7 @@ interface MeetingSummaryRecord {
   title: string;
   description: string | null;
   status: MeetingStatus;
+  isHistoricalEntry: boolean | number;
   organizerUserId: number | string;
   organizerUserCode: string;
   organizerUserName: string;
@@ -190,6 +191,7 @@ function mapMeetingSummary(record: MeetingSummaryRecord): MeetingSummary | null 
     title: record.title,
     description: record.description,
     status: record.status,
+    isHistoricalEntry: Boolean(record.isHistoricalEntry),
     organizer: {
       userId: Number(record.organizerUserId),
       userCode: record.organizerUserCode,
@@ -240,6 +242,7 @@ const meetingSummaryFields = `
   m.title,
   m.description,
   m.status,
+  m.is_historical_entry AS isHistoricalEntry,
   organizer.USER_ID AS organizerUserId,
   organizer.USER_CODE AS organizerUserCode,
   organizer.USER_NAME AS organizerUserName,
@@ -454,6 +457,7 @@ export const meetingWorkflowRepository = {
     transaction: DatabaseTransaction,
     organizerUserId: number,
     input: Pick<CreateMeetingInput, "title" | "description" | "followUpOfMeetingId">,
+    isHistoricalEntry = false,
   ): Promise<{ meetingId: number; rowVersion: string } | null> {
     const result = await transaction
       .request()
@@ -461,13 +465,15 @@ export const meetingWorkflowRepository = {
       .input("title", sql.NVarChar(250), input.title)
       .input("description", sql.NVarChar(sql.MAX), input.description ?? null)
       .input("followUpOfMeetingId", sql.BigInt, input.followUpOfMeetingId ?? null)
+      .input("isHistoricalEntry", sql.Bit, isHistoricalEntry)
       .query<MeetingIdentityRecord>(`
         INSERT INTO dbo.TM_meetings (
           organizer_user_id,
           title,
           description,
           status,
-          follow_up_of_meeting_id
+          follow_up_of_meeting_id,
+          is_historical_entry
         )
         OUTPUT inserted.id AS meetingId, inserted.row_version AS rowVersion
         VALUES (
@@ -475,7 +481,8 @@ export const meetingWorkflowRepository = {
           @title,
           @description,
           'PENDING_APPROVAL',
-          @followUpOfMeetingId
+          @followUpOfMeetingId,
+          @isHistoricalEntry
         );
       `);
 
@@ -1002,6 +1009,7 @@ export const meetingWorkflowRepository = {
     }));
   },
 };
+
 
 
 

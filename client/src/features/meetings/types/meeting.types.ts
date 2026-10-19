@@ -99,6 +99,7 @@ export interface MeetingSummary {
   title: string
   description: string | null
   status: MeetingStatus
+  isHistoricalEntry: boolean
   organizer: MeetingParticipant
   meetingMode: MeetingMode
   room: MeetingRoom | null
@@ -470,3 +471,4 @@ export interface UpdateMeetingTemplateInput extends SaveMeetingTemplateInput {
   templateId: number
   rowVersion: string
 }
+

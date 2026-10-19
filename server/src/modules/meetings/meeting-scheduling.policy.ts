@@ -28,13 +28,8 @@ function isQuarterHourBoundary(value: Date): boolean {
   );
 }
 
-export function assertSchedulableMeetingWindow(
-  startAtUtc: Date,
-  endAtUtc: Date,
-  nowUtc = new Date(),
-): void {
+export function assertValidMeetingScheduleWindow(startAtUtc: Date, endAtUtc: Date): void {
   assertScheduleWindow(startAtUtc, endAtUtc);
-
   if (!isQuarterHourBoundary(startAtUtc) || !isQuarterHourBoundary(endAtUtc)) {
     throw new AppError({
       statusCode: 400,
@@ -42,16 +37,15 @@ export function assertSchedulableMeetingWindow(
       message: "Meeting start and end times must use 15-minute increments.",
     });
   }
-
-  if (startAtUtc.getTime() <= nowUtc.getTime()) {
-    throw new AppError({
-      statusCode: 409,
-      code: "MEETING_SCHEDULE_IN_PAST",
-      message: "Meeting start time has already passed. Choose a future time.",
-    });
-  }
 }
 
+export function assertSchedulableMeetingWindow(startAtUtc: Date, endAtUtc: Date, nowUtc = new Date()): void {
+  assertValidMeetingScheduleWindow(startAtUtc, endAtUtc);
+  if (startAtUtc.getTime() <= nowUtc.getTime()) {
+    throw new AppError({ statusCode: 409, code: "MEETING_SCHEDULE_IN_PAST",
+      message: "Meeting start time has already passed. Choose a future time." });
+  }
+}
 
 export function assertMeetingHasNotStarted(startAtUtc: Date, nowUtc = new Date()): void {
   if (Number.isNaN(startAtUtc.getTime())) {
@@ -80,4 +74,5 @@ export function assertParticipantCount(participantCount: number): void {
     });
   }
 }
+
 

@@ -184,7 +184,7 @@ export const meetingNotificationsRepository = {
             AND prior.revision_number < revision.revision_number
           ORDER BY prior.revision_number DESC, prior.id DESC
         ) AS previousSchedule
-        WHERE meeting.id = @meetingId;
+        WHERE meeting.id = @meetingId AND meeting.is_historical_entry = 0;
       `);
     const row = result.recordset[0];
     return row ? mapSnapshot(row) : null;
@@ -420,7 +420,8 @@ export const meetingNotificationsRepository = {
       .input("eventDate", sql.Date, input.eventDate ?? null)
       .input("emailProcessed", sql.DateTime2, input.suppressEmail ? new Date() : null)
       .query(`
-        IF NOT EXISTS (
+        IF NOT EXISTS (SELECT 1 FROM dbo.TM_meetings WHERE id = @meetingId AND is_historical_entry = 1)
+        AND NOT EXISTS (
           SELECT 1
           FROM dbo.TM_notifications WITH (UPDLOCK, HOLDLOCK)
           WHERE owner_user_id = @owner AND dedupe_key = @dedupe
@@ -463,6 +464,7 @@ export const meetingNotificationsRepository = {
         AND reminder.read_at_utc IS NULL
         AND (
           COALESCE(settings.meeting_start_reminder_enabled, 1) = 0
+          OR meeting.is_historical_entry = 1
           OR meeting.status <> 'SCHEDULED'
           OR meeting.current_revision_id <> reminder.meeting_revision_id
           OR NOT EXISTS (
@@ -489,6 +491,7 @@ export const meetingNotificationsRepository = {
         LEFT JOIN dbo.TM_meeting_rooms AS room ON room.id = revision.room_id
         INNER JOIN dbo.TM_user_settings AS settings ON settings.portal_user_id = @owner
         WHERE meeting.status = 'SCHEDULED'
+          AND meeting.is_historical_entry = 0
           AND settings.meeting_start_reminder_enabled = 1
           AND revision.start_at_utc > SYSUTCDATETIME()
           AND revision.start_at_utc <= DATEADD(MINUTE, 15, SYSUTCDATETIME())
@@ -589,7 +592,7 @@ export const meetingNotificationsRepository = {
             AND prior.revision_number < revision.revision_number
           ORDER BY prior.revision_number DESC, prior.id DESC
         ) AS previousSchedule
-        WHERE meeting.id = @meetingId;
+        WHERE meeting.id = @meetingId AND meeting.is_historical_entry = 0;
       `);
     const row = result.recordset[0];
     if (!row) return null;
@@ -602,6 +605,7 @@ export const meetingNotificationsRepository = {
     };
   },
 };
+
 
 
 

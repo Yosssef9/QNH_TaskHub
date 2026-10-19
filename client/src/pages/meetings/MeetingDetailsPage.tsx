@@ -673,6 +673,11 @@ export function MeetingDetailsPage() {
             <h1 className="min-w-0 truncate text-3xl font-bold tracking-tight sm:text-4xl">
               {meeting.title}
             </h1>
+            {meeting.isHistoricalEntry ? (
+              <Badge variant="secondary" className="max-w-full shrink-0 whitespace-normal text-center">
+                {t('meetings.historical.badge')}
+              </Badge>
+            ) : null}
           </div>
 
           <p className="text-muted-foreground mt-2 max-w-3xl text-sm leading-6">
@@ -944,9 +949,9 @@ export function MeetingDetailsPage() {
                       </p>
                     </div>
                   </div>
-                  <Badge variant={meetingStatusVariant(meeting.status)}>
-                    {t(`meetings.status.${meeting.status}`)}
-                  </Badge>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={meetingStatusVariant(meeting.status)}>{t(`meetings.status.${meeting.status}`)}</Badge>
+                  </div>
                 </div>
 
                 <div className="bg-primary/[0.035] text-primary mt-5 rounded-xl border border-primary/10 px-4 py-2.5 text-center text-sm font-bold">
@@ -1587,6 +1592,7 @@ export function MeetingDetailsPage() {
     </div>
   )
 }
+
 
 
 

@@ -58,9 +58,10 @@ export function MeetingSummaryCard({
             )}
           </p>
         </div>
-        <Badge variant={statusVariant(meeting.status)}>
-          {t(`meetings.status.${meeting.status}`)}
-        </Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          {meeting.isHistoricalEntry ? <Badge variant="secondary">{t('meetings.historical.badge')}</Badge> : null}
+          <Badge variant={statusVariant(meeting.status)}>{t(`meetings.status.${meeting.status}`)}</Badge>
+        </div>
       </div>
 
       {meeting.description ? (
@@ -132,6 +133,7 @@ export function MeetingSummaryCard({
     </Card>
   )
 }
+
 
 
 

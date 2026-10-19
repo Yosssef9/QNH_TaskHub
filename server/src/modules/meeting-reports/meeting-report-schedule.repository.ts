@@ -6,6 +6,7 @@ import type { ReportMeetingStatus, ReportScheduleSnapshot } from "./meeting-repo
 interface ScheduleRecord {
   meetingId: number | string;
   meetingStatus: ReportMeetingStatus;
+  isHistoricalEntry: boolean | number;
   meetingRowVersion: unknown;
   approvedRevisionId: number | string | null;
   approvedStartAtUtc: Date | null;
@@ -37,6 +38,7 @@ export const meetingReportScheduleRepository = {
         )
         SELECT
           meeting.id AS meetingId, meeting.status AS meetingStatus,
+          meeting.is_historical_entry AS isHistoricalEntry,
           meeting.row_version AS meetingRowVersion,
           revision.id AS approvedRevisionId,
           revision.start_at_utc AS approvedStartAtUtc, revision.end_at_utc AS approvedEndAtUtc,
@@ -71,7 +73,7 @@ export const meetingReportScheduleRepository = {
     const meetingRowVersion = normalizeSqlRowVersion(first.meetingRowVersion);
     if (!meetingRowVersion) throw new Error("Meeting report schedule has no valid row version.");
     return {
-      meetingId: Number(first.meetingId), meetingStatus: first.meetingStatus, meetingRowVersion,
+      meetingId: Number(first.meetingId), meetingStatus: first.meetingStatus, isHistoricalEntry: Boolean(first.isHistoricalEntry), meetingRowVersion,
       approvedRevisionId: first.approvedRevisionId === null ? null : Number(first.approvedRevisionId),
       approvedStartAtUtc: first.approvedStartAtUtc?.toISOString() ?? null,
       approvedEndAtUtc: first.approvedEndAtUtc?.toISOString() ?? null,
@@ -86,4 +88,5 @@ export const meetingReportScheduleRepository = {
     };
   },
 };
+
 

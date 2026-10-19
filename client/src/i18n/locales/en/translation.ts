@@ -1818,6 +1818,7 @@ export const enTranslation = {
     },
   },
   meetings: {
+    historical: { zoomFutureRestricted: 'Future Zoom Meetings require Zoom Organizer permission. Coordinators may record a completed Zoom Meeting in the past.', saved: 'Meeting recorded retrospectively. Follow-up and PDF are available.', badge: 'Recorded Retrospectively', notice: 'This Meeting was recorded retrospectively: no invitations, notifications, or automatic report emails. Follow-up and PDF are available immediately.' },
     zoom: {
       roomType: 'Meeting Room',
       roomTypeHint: 'Uses a physical Meeting Room and follows the Coordinator approval workflow.',
@@ -1897,6 +1898,7 @@ export const enTranslation = {
           DISABLED: 'Automatic report emailing is paused by the administrator. Manual export is still available.',
           EMAIL_DISABLED: 'TaskHub email delivery is disabled. Reports will not be sent until email delivery is enabled.',
           MIGRATION_REQUIRED: 'Automatic reports are not ready: database migration 044 must be applied by the administrator.',
+          HISTORICAL_MEETING: 'Meeting recorded retrospectively: automatic report emails and notifications are disabled; manual PDF export is available.',
         },
         activation: 'Automatic reports cover Meetings ending on or after',
         lastScan: 'Last successful automatic-report scan',
@@ -3776,7 +3778,6 @@ export const enTranslation = {
     errors: {
       titleRequired: 'Enter a task title.',
       dateRange: 'The due date cannot be before the start date.',
-      startDatePast: 'Start date cannot be earlier than today.',
       dueDateRequired: 'A due date is required for KPI tasks.',
       referenceDateRequired: 'Enter the reference date used by this KPI.',
       listRequired: 'Select the list this task belongs to.',
@@ -3787,7 +3788,6 @@ export const enTranslation = {
       delete: 'The task could not be deleted.',
       restore: 'The task could not be restored.',
     },
-    startDateTodayOrLater: 'Select today or a future start date.',
   },
   home: {
     eyebrow: 'Personal workspace',

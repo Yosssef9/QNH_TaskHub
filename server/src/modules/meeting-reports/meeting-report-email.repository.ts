@@ -51,7 +51,7 @@ export const meetingReportEmailRepository = {
               FROM dbo.TM_meetings AS meeting
               INNER JOIN dbo.TM_meeting_revisions AS revision
                 ON revision.id = meeting.current_revision_id AND revision.meeting_id = meeting.id
-              WHERE meeting.status = 'SCHEDULED' AND revision.revision_status = 'APPROVED'
+              WHERE meeting.status = 'SCHEDULED' AND meeting.is_historical_entry = 0 AND revision.revision_status = 'APPROVED'
                 AND revision.start_at_utc < revision.end_at_utc
                 AND revision.end_at_utc >= @cutoff
                 AND revision.end_at_utc <= DATEADD(MINUTE, -@grace, @now)
@@ -104,11 +104,12 @@ export const meetingReportEmailRepository = {
     const pool = await getDatabasePool();
     const result = await pool.request().input("meetingId", sql.BigInt, meetingId).input("recipient", sql.Int, recipientUserId)
       .query<{
-        meetingId: number | string; status: string; revisionId: number | string | null;
+        meetingId: number | string; status: string; isHistoricalEntry: boolean | number; revisionId: number | string | null;
         startAtUtc: Date | null; endAtUtc: Date | null; observedAtUtc: Date; activatedAtUtc: Date;
         isRecipient: boolean; portalActive: boolean; portalUserCode: string | null; ownerUserId: number | null;
       }>(`
         SELECT meeting.id AS meetingId, meeting.status,
+          meeting.is_historical_entry AS isHistoricalEntry,
           revision.id AS revisionId, revision.start_at_utc AS startAtUtc, revision.end_at_utc AS endAtUtc,
           SYSUTCDATETIME() AS observedAtUtc, config.activated_at_utc AS activatedAtUtc,
           CAST(CASE WHEN meeting.organizer_user_id = @recipient OR EXISTS (
@@ -130,6 +131,7 @@ export const meetingReportEmailRepository = {
       ...row, meetingId: Number(row.meetingId), revisionId: row.revisionId === null ? null : Number(row.revisionId),
       startAtUtc: row.startAtUtc?.toISOString() ?? null, endAtUtc: row.endAtUtc?.toISOString() ?? null,
       observedAtUtc: row.observedAtUtc.toISOString(), activatedAtUtc: row.activatedAtUtc.toISOString(),
+      isHistoricalEntry: Boolean(row.isHistoricalEntry),
       isRecipient: Boolean(row.isRecipient), portalActive: Boolean(row.portalActive),
     } : null;
   },
@@ -171,3 +173,4 @@ export const meetingReportEmailRepository = {
     return Number(result.recordset[0]?.affected ?? 0) === 1;
   },
 };
+

@@ -13,7 +13,7 @@ export function sampleMeetingReport(language: MeetingReportLanguage = "en"): Mee
   const meeting = {
     id: 127, title: ar ? "المراجعة التشغيلية الشهرية" : "Monthly Operations Review",
     description: ar ? "مراجعة مؤشرات الأداء التشغيلي وتجربة المريض وخطة القوى العاملة. جميع البيانات في هذا النموذج افتراضية." : "Review operational performance, patient experience and the staffing plan. All information in this demonstration is fictional.",
-    status: "SCHEDULED" as const, organizer: people[0], meetingMode: "ROOM" as const, room, onlineJoinUrl: null,
+    status: "SCHEDULED" as const, isHistoricalEntry: false, organizer: people[0], meetingMode: "ROOM" as const, room, onlineJoinUrl: null,
     startAtUtc: "2026-09-27T06:00:00.000Z", endAtUtc: "2026-09-27T07:00:00.000Z",
     schedulingNotes: ar ? "يرجى إحضار ملخص الإدارة وتحديث الإجراءات المفتوحة." : "Bring the departmental summary and update open Action Items.",
     participantCount: 4, organizerAttending: true, attendees: [...people], hasPendingReschedule: false,
@@ -80,3 +80,4 @@ export function sampleMeetingReport(language: MeetingReportLanguage = "en"): Mee
     relatedMeetings: [{ id: 128, title: ar ? "متابعة الإجراءات التشغيلية" : "Operations Action Item Follow-up", status: "SCHEDULED", organizer: people[0], meetingMode: "ROOM", room, startAtUtc: "2026-10-04T06:00:00.000Z", endAtUtc: "2026-10-04T07:00:00.000Z", participantCount: 4, isCurrent: false }],
   };
 }
+

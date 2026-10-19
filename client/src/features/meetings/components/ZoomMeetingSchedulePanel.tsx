@@ -14,6 +14,7 @@ interface ZoomMeetingSchedulePanelProps {
   endTime: string
   onlineJoinUrl: string
   disabled?: boolean
+  allowPast?: boolean
   focused?: boolean
   errors?: {
     date?: string
@@ -34,6 +35,7 @@ export function ZoomMeetingSchedulePanel({
   endTime,
   onlineJoinUrl,
   disabled = false,
+  allowPast = false,
   focused = false,
   errors,
   onFocusToggle,
@@ -79,7 +81,7 @@ export function ZoomMeetingSchedulePanel({
           <DatePicker
             required
             value={date}
-            minDate={today}
+            minDate={allowPast ? undefined : today}
             label={t('meetings.fields.date')}
             disabled={disabled}
             onChange={(value) => {
@@ -129,3 +131,4 @@ export function ZoomMeetingSchedulePanel({
     </section>
   )
 }
+

@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
@@ -61,7 +62,7 @@ import type {
   MeetingTemplate,
 } from '../types/meeting.types'
 import { buildParticipantAvailabilityInput } from '../meeting-participant-availability'
-import { canOrganizeRoomMeetings, canOrganizeZoomMeetings } from '../meeting-access'
+import { canOrganizeRoomMeetings, canOrganizeZoomMeetings, canCoordinateMeetings } from '../meeting-access'
 import { isValidZoomJoinUrl } from '../meeting-online-location'
 import {
   MeetingAgendaEditor,
@@ -261,10 +262,13 @@ export function MeetingEditorDialog({
   const createDirect = useCreateDirectMeeting()
   const uploadAttachment = useUploadMeetingAttachment()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const attachmentInputRef = useRef<HTMLInputElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
   const canRoom = canOrganizeRoomMeetings(currentUser.data?.access)
-  const canZoom = canOrganizeZoomMeetings(currentUser.data?.access)
+  const canCoordinate = canCoordinateMeetings(currentUser.data?.access)
+  const allowHistoricalDates = mode === 'DIRECT' && canCoordinate
+  const canZoom = canOrganizeZoomMeetings(currentUser.data?.access) || allowHistoricalDates
 
   const initialDurationMinutes = initialValues?.durationMinutes ?? template?.durationMinutes ?? 60
   const scheduleStartsUnselected = initialValues?.scheduleStartsUnselected === true
@@ -391,6 +395,12 @@ export function MeetingEditorDialog({
         ? 'xl:grid-cols-[12rem_minmax(0,1fr)]'
         : 'xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.3fr)]'
 
+  const isHistoricalSelection = (() => {
+    if (!allowHistoricalDates || !timeSelected || !date) return false
+    try {
+      return Date.parse(riyadhLocalDateTimeToUtcIso(date, endTime)) <= Date.now()
+    } catch { return false }
+  })()
   const availabilityInput = meetingMode === 'ROOM' && timeSelected
     ? buildAvailabilityInput({
         roomId,
@@ -578,8 +588,11 @@ export function MeetingEditorDialog({
     } else {
       try {
         const selectedStartAtUtc = riyadhLocalDateTimeToUtcIso(date, startTime)
-        if (new Date(selectedStartAtUtc).getTime() <= Date.now()) {
+        if (new Date(selectedStartAtUtc).getTime() <= Date.now() && !isHistoricalSelection) {
           nextErrors.time = t('meetings.create.validation.timePassed')
+        }
+        if (meetingMode === 'ZOOM' && mode === 'DIRECT' && !canOrganizeZoomMeetings(currentUser.data?.access) && !isHistoricalSelection) {
+          nextErrors.time = t('meetings.historical.zoomFutureRestricted')
         }
       } catch {
         nextErrors.time = t('meetings.create.validation.timeRequired')
@@ -695,7 +708,7 @@ export function MeetingEditorDialog({
       }
 
       toast.success(
-        t(meetingMode === 'ZOOM' || mode === 'DIRECT' ? 'meetings.directScheduled' : 'meetings.requestSubmitted'),
+        t(meeting.isHistoricalEntry ? 'meetings.historical.saved' : meetingMode === 'ZOOM' || mode === 'DIRECT' ? 'meetings.directScheduled' : 'meetings.requestSubmitted'),
       )
       if (failedUploads > 0) {
         toast.error(
@@ -705,6 +718,7 @@ export function MeetingEditorDialog({
         )
       }
       onOpenChange(false)
+      if (meeting.isHistoricalEntry) navigate(`/meetings/${meeting.id}?tab=follow-up`)
     } catch (error) {
       const apiError = toApiClientError(error)
       const message = t(`meetings.errors.${apiError.code}`, {
@@ -737,7 +751,7 @@ export function MeetingEditorDialog({
     }
   }
 
-  const availabilityMessage = scheduleSelectionState?.isPast
+  const availabilityMessage = scheduleSelectionState?.isPast && !isHistoricalSelection
     ? t('meetings.create.selectedTimePassedHint')
     : availability.data
       ? availability.data.canSchedule
@@ -1190,6 +1204,7 @@ export function MeetingEditorDialog({
                   endTime={endTime}
                   onlineJoinUrl={onlineJoinUrl}
                   disabled={isSaving}
+                  allowPast={allowHistoricalDates}
                   focused={focusMode === 'SCHEDULE'}
                   errors={validationErrors}
                   onFocusToggle={() => setFocusMode((current) => (current === 'SCHEDULE' ? 'NONE' : 'SCHEDULE'))}
@@ -1217,6 +1232,7 @@ export function MeetingEditorDialog({
                 timeSelected={timeSelected}
                 disabled={isSaving}
                 allowBusySelection={mode === 'REQUEST'}
+                allowPast={allowHistoricalDates}
                 focused={focusMode === 'SCHEDULE'}
                 validationErrors={validationErrors}
                 focusField={scheduleFocusField}
@@ -1325,7 +1341,7 @@ export function MeetingEditorDialog({
                         aria-hidden="true"
                         className="text-muted-foreground mt-0.5 size-3.5 shrink-0 animate-spin"
                       />
-                    ) : scheduleSelectionState?.isPast ? (
+                    ) : scheduleSelectionState?.isPast && !isHistoricalSelection ? (
                       <AlertTriangle
                         aria-hidden="true"
                         className="text-warning mt-0.5 size-3.5 shrink-0"
@@ -1345,7 +1361,7 @@ export function MeetingEditorDialog({
                       <span
                         className={cn(
                           'font-medium',
-                          !scheduleSelectionState?.isPast && availability.data?.canSchedule
+                          (!scheduleSelectionState?.isPast || isHistoricalSelection) && availability.data?.canSchedule
                             ? 'text-success'
                             : 'text-foreground',
                         )}
@@ -1364,6 +1380,12 @@ export function MeetingEditorDialog({
                       ) : null}
                     </div>
                   </div>
+                ) : null}
+                {isHistoricalSelection ? (
+                  <p className="text-muted-foreground mt-1.5 text-xs">
+                    <span className="font-semibold">{t('meetings.historical.badge')}</span>
+                    {' — '}{t('meetings.historical.notice')}
+                  </p>
                 ) : null}
               </div>
 
@@ -1389,6 +1411,7 @@ export function MeetingEditorDialog({
     </Dialog>
   )
 }
+
 
 
 

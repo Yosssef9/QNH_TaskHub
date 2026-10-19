@@ -692,6 +692,7 @@ function MeetingListRow({
             <h3 className="group-hover:text-foreground group-focus-visible:text-foreground truncate text-sm font-bold transition-colors duration-150 motion-reduce:transition-none sm:text-base">
               {meeting.title}
             </h3>
+            {meeting.isHistoricalEntry ? <Badge variant="secondary" className="shrink-0 text-[10px]">{t('meetings.historical.badge')}</Badge> : null}
             {showReschedule ? (
               <Badge variant="warning" className="shrink-0 text-[10px]">
                 {t('meetings.myDashboard.rescheduleRequested')}
@@ -751,5 +752,6 @@ function MeetingListRow({
     </button>
   )
 }
+
 
 

@@ -145,7 +145,7 @@ export const outlookCalendarRepository = {
       DECLARE @revisionId BIGINT, @organizerUserId INT, @graphEventId NVARCHAR(1024), @operation VARCHAR(20), @syncStatus VARCHAR(30), @eventGeneration INT;
       SELECT @revisionId = m.current_revision_id, @organizerUserId = m.organizer_user_id
       FROM dbo.TM_meetings AS m WITH (UPDLOCK, HOLDLOCK)
-      WHERE m.id = @meetingId AND m.status = 'SCHEDULED' AND m.current_revision_id IS NOT NULL;
+      WHERE m.id = @meetingId AND m.status = 'SCHEDULED' AND m.is_historical_entry = 0 AND m.current_revision_id IS NOT NULL;
       IF @revisionId IS NULL BEGIN COMMIT; RETURN; END;
 
       IF NOT EXISTS (SELECT 1 FROM dbo.TM_meeting_outlook_sync WHERE meeting_id = @meetingId)
@@ -221,7 +221,7 @@ export const outlookCalendarRepository = {
       BEGIN TRANSACTION;
       DECLARE @eventId NVARCHAR(1024), @revisionId BIGINT, @meetingStatus VARCHAR(30), @operation VARCHAR(20), @organizerUserId INT;
       SELECT @revisionId = m.current_revision_id, @meetingStatus = m.status, @organizerUserId = m.organizer_user_id
-      FROM dbo.TM_meetings AS m WITH (UPDLOCK, HOLDLOCK) WHERE m.id = @meetingId;
+      FROM dbo.TM_meetings AS m WITH (UPDLOCK, HOLDLOCK) WHERE m.id = @meetingId AND m.is_historical_entry = 0;
       IF @revisionId IS NULL OR @meetingStatus NOT IN ('SCHEDULED', 'CANCELLED') BEGIN COMMIT; RETURN; END;
       IF NOT EXISTS (SELECT 1 FROM dbo.TM_meeting_outlook_sync WHERE meeting_id = @meetingId)
         INSERT dbo.TM_meeting_outlook_sync (meeting_id, organizer_user_id, desired_revision_id)
@@ -493,7 +493,7 @@ export const outlookCalendarRepository = {
       INNER JOIN dbo.users AS organizer ON organizer.USER_ID = m.organizer_user_id
       LEFT JOIN dbo.TM_meeting_revisions AS r ON r.id = m.current_revision_id AND r.meeting_id = m.id
       LEFT JOIN dbo.TM_meeting_rooms AS room ON room.id = r.room_id
-      WHERE m.id = @meetingId;
+      WHERE m.id = @meetingId AND m.is_historical_entry = 0;
     `);
     const row = result.recordset[0];
     if (!row || row.revisionId === null || row.meetingMode === null || row.startAtUtc === null || row.endAtUtc === null) return null;
@@ -593,3 +593,4 @@ export const outlookCalendarRepository = {
       `);
   },
 };
+

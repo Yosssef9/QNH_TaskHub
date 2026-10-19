@@ -18,6 +18,7 @@ export interface ReportRecipientEvidence {
 export interface ReportScheduleSnapshot {
   meetingId: number;
   meetingStatus: ReportMeetingStatus;
+  isHistoricalEntry?: boolean;
   meetingRowVersion: string;
   approvedRevisionId: number | null;
   approvedStartAtUtc: string | null;
@@ -44,7 +45,7 @@ export interface ReportDeliverySummary {
 
 export interface ReportAutomationRuntime {
   automaticDeliveryEnabled: boolean;
-  automaticDeliveryReason: "ENABLED" | "DISABLED" | "EMAIL_DISABLED" | "MIGRATION_REQUIRED";
+  automaticDeliveryReason: "ENABLED" | "DISABLED" | "EMAIL_DISABLED" | "MIGRATION_REQUIRED" | "HISTORICAL_MEETING";
   activatedAtUtc: string | null;
   lastAutomaticScanAtUtc: string | null;
 }
@@ -75,4 +76,5 @@ export interface MeetingReportScheduleSources {
   }>;
   snapshot(meetingId: number): Promise<ReportScheduleSnapshot | null>;
 }
+
 

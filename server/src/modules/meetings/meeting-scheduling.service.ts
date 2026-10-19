@@ -4,6 +4,7 @@ import { AppError } from "../../shared/errors/app-error.js";
 import {
   assertParticipantCount,
   assertSchedulableMeetingWindow,
+  assertValidMeetingScheduleWindow,
   assertScheduleWindow,
   hasRoomCapacity,
 } from "./meeting-scheduling.policy.js";
@@ -125,6 +126,7 @@ function sameConcurrencySnapshot(
 ): boolean {
   return (
     beforeLock.meetingRowVersion === afterLock.meetingRowVersion &&
+    beforeLock.isHistoricalEntry === afterLock.isHistoricalEntry &&
     beforeLock.revisionRowVersion === afterLock.revisionRowVersion &&
     beforeLock.meetingMode === afterLock.meetingMode &&
     beforeLock.roomId === afterLock.roomId &&
@@ -167,9 +169,9 @@ async function commitRevisionInTransaction(
   meetingId: number,
   revisionId: number,
   expectedRevisionRowVersion: string | undefined,
-  authority: "COORDINATOR" | "ZOOM_ORGANIZER",
+  authority: "COORDINATOR" | "ZOOM_ORGANIZER" | "HISTORICAL_COORDINATOR",
 ): Promise<ScheduledRevisionResult> {
-  if (authority === "COORDINATOR") await assertCoordinatorPermission(transaction, actorUserId);
+  if (authority !== "ZOOM_ORGANIZER") await assertCoordinatorPermission(transaction, actorUserId);
   else await assertZoomOrganizerPermission(transaction, actorUserId);
 
   const beforeLock = await meetingSchedulingRepository.findRevisionSchedule(
@@ -185,6 +187,9 @@ async function commitRevisionInTransaction(
     });
   }
   if (beforeLock.revisionStatus !== "PENDING") throw staleSchedule();
+  if (authority === "HISTORICAL_COORDINATOR") {
+    if (!beforeLock.isHistoricalEntry || beforeLock.revisionType !== "INITIAL") throw staleSchedule();
+  } else if (beforeLock.isHistoricalEntry) throw staleSchedule();
   if (expectedRevisionRowVersion !== undefined && beforeLock.revisionRowVersion !== expectedRevisionRowVersion) {
     throw staleSchedule();
   }
@@ -210,7 +215,10 @@ async function commitRevisionInTransaction(
   );
   if (!afterLock || !sameConcurrencySnapshot(beforeLock, afterLock)) throw staleSchedule();
 
-  assertSchedulableMeetingWindow(afterLock.startAtUtc, afterLock.endAtUtc);
+  if (authority === "HISTORICAL_COORDINATOR") {
+    assertValidMeetingScheduleWindow(afterLock.startAtUtc, afterLock.endAtUtc);
+    if (afterLock.endAtUtc.getTime() > Date.now()) throw staleSchedule();
+  } else assertSchedulableMeetingWindow(afterLock.startAtUtc, afterLock.endAtUtc);
 
   const participantCount = await meetingSchedulingRepository.countMeetingParticipants(transaction, meetingId);
   if (participantCount < 1) throw staleSchedule();
@@ -302,6 +310,18 @@ async function commitZoomRevisionInTransaction(
 ): Promise<ScheduledRevisionResult> {
   return commitRevisionInTransaction(
     transaction, actorUserId, meetingId, revisionId, expectedRevisionRowVersion, "ZOOM_ORGANIZER",
+  );
+}
+
+async function commitHistoricalRevisionInTransaction(
+  transaction: DatabaseTransaction,
+  actorUserId: number,
+  meetingId: number,
+  revisionId: number,
+  expectedRevisionRowVersion?: string,
+): Promise<ScheduledRevisionResult> {
+  return commitRevisionInTransaction(
+    transaction, actorUserId, meetingId, revisionId, expectedRevisionRowVersion, "HISTORICAL_COORDINATOR",
   );
 }
 
@@ -579,4 +599,14 @@ export const meetingSchedulingService = {
       expectedRevisionRowVersion,
     );
   },
+  async commitHistoricalRevisionInTransaction(
+    transaction: DatabaseTransaction,
+    actorUserId: number,
+    meetingId: number,
+    revisionId: number,
+    expectedRevisionRowVersion?: string,
+  ): Promise<ScheduledRevisionResult> {
+    return commitHistoricalRevisionInTransaction(transaction, actorUserId, meetingId, revisionId, expectedRevisionRowVersion);
+  },
 };
+

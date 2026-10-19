@@ -11,6 +11,7 @@ export interface MeetingReportEmailPayload {
 export interface ReportDeliveryContext {
   meetingId: number;
   status: string;
+  isHistoricalEntry?: boolean;
   revisionId: number | null;
   startAtUtc: string | null;
   endAtUtc: string | null;
@@ -50,6 +51,7 @@ export function parseMeetingReportEmailPayload(value: string): MeetingReportEmai
 /** Shared UTC policy. An unsent intent follows a new approved schedule under the SAME dedupe key. */
 export function reportEmailDisposition(payload: MeetingReportEmailPayload, current: ReportDeliveryContext | null): ReportEmailDisposition {
   if (!current || current.meetingId !== payload.meetingId) return { kind: "SKIP", reason: "MEETING_UNAVAILABLE" };
+  if (current.isHistoricalEntry) return { kind: "SKIP", reason: "HISTORICAL_MEETING_NO_EMAIL" };
   if (current.status !== "SCHEDULED") return { kind: "SKIP", reason: "MEETING_NOT_SCHEDULED" };
   if (!current.isRecipient || !current.portalActive || current.ownerUserId === null) return { kind: "SKIP", reason: "RECIPIENT_UNAVAILABLE" };
   const start = Date.parse(current.startAtUtc ?? "");
@@ -81,3 +83,4 @@ export function reportRecipientFingerprint(request: MeetingReportRequest): strin
     language: request.language, timeFormat: request.timeFormat, timeZone: request.timeZone,
   });
 }
+

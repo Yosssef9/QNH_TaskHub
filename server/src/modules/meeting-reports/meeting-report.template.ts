@@ -64,6 +64,7 @@ export function renderMeetingReportDocument(
     <dl class="info-grid">
       ${field(l.organizer, meeting.organizer.userName)}
       ${field(l.status, l.statuses[meeting.status])}
+      ${meeting.isHistoricalEntry ? field(l.entryType, l.historicalEntry) : ""}
       ${field(l.start, dateTime(meeting.startAtUtc))}${field(l.end, dateTime(meeting.endAtUtc))}
       ${field(l.duration, Number.isFinite(duration) && duration > 0 ? `${duration} ${l.minutes}` : l.notProvided)}
       ${field(l.organizerPlanned, meeting.organizerAttending ? l.yes : l.no)}
@@ -228,7 +229,7 @@ export function renderMeetingReportDocument(
     .sample { border:1px solid #e3bdc5; background:#fff4f6; color:#963746; padding:5px 9px; border-radius:5px; font-weight:700; font-size:8pt; }
     </style></head><body>
     <header class="topbar"><div class="brand">${logo}<div><div class="brand-name" dir="ltr">${e(l.brand)}</div><div class="document-kind">${e(l.report)}</div></div></div>${options.sample ? `<div class="sample">${e(l.sample)}</div>` : `<div class="small">${e(l.meeting)} <bdi dir="ltr">#${meeting.id}</bdi></div>`}</header>
-    <div class="hero"><div class="document-kind">${e(l.report)} · <bdi dir="ltr">#${meeting.id}</bdi></div><h1 dir="auto">${e(meeting.title)}</h1>${badge(l.stages[data.stage], statusKind(meeting.status))}</div>
+    <div class="hero"><div class="document-kind">${e(l.report)} · <bdi dir="ltr">#${meeting.id}</bdi></div><h1 dir="auto">${e(meeting.title)}</h1>${badge(l.stages[data.stage], statusKind(meeting.status))}${meeting.isHistoricalEntry ? ` ${badge(l.historicalEntry)}` : ""}</div>
     <p class="report-metadata">${data.generationMode === "AUTOMATIC" ? `${e(l.automaticGeneration)} · ${meta(l.preparedFor, data.generatedBy.userName)}` : meta(l.generatedBy, data.generatedBy.userName)} · ${meta(l.generatedAt, dateTime(data.generatedAtUtc))}<br>${meta(l.timeZone, data.timeZone)}</p>
     ${section("meeting-information", "01", l.information, information)}
     ${section("participants-attendance", "02", l.participants, participants, a.total <= 6 ? "keep-together" : "")}
@@ -250,6 +251,7 @@ export function renderMeetingReportDocument(
     footerTemplate: `<div dir="${direction}" style="font:9px Arial,Tahoma,sans-serif;color:#607087;width:100%;margin:0 15mm;border-top:1px solid #d8e1ed;padding-top:6px;display:flex;justify-content:space-between;"><span>QNH TaskHub · ${e(l.meeting)} #${meeting.id}</span><span>${e(l.page)} <span class="pageNumber"></span> ${e(l.of)} <span class="totalPages"></span></span></div>`,
   };
 }
+
 
 
 

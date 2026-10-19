@@ -25,6 +25,7 @@ import type {
 } from "./meeting-workflow.types.js";
 import { meetingScheduleVisibility } from "./meetings.policy.js";
 import { normalizeZoomJoinUrl } from "./meeting-online-location.js";
+import { classifyDirectMeetingWindow } from "./meeting-historical.policy.js";
 import type { MeetingMode } from "./meetings.types.js";
 
 type FollowUpSource = NonNullable<
@@ -33,6 +34,7 @@ type FollowUpSource = NonNullable<
 
 export interface PreparedMeetingCreation {
   input: CreateMeetingInput;
+  isHistoricalEntry: boolean;
   startAtUtc: Date;
   endAtUtc: Date;
   selectedAttendeeUserIds: number[];
@@ -206,11 +208,14 @@ export async function prepareMeetingCreationInTransaction(
   actorUserId: number,
   input: CreateMeetingInput,
   creationMode: "REQUEST" | "DIRECT",
+  allowHistorical = false,
 ): Promise<PreparedMeetingCreation> {
   const normalizedInput = normalizeLocationInput(input);
   const startAtUtc = new Date(normalizedInput.startAtUtc);
   const endAtUtc = new Date(normalizedInput.endAtUtc);
-  assertSchedulableMeetingWindow(startAtUtc, endAtUtc);
+  let isHistoricalEntry = false;
+  if (allowHistorical) isHistoricalEntry = classifyDirectMeetingWindow(startAtUtc, endAtUtc);
+  else assertSchedulableMeetingWindow(startAtUtc, endAtUtc);
   if (normalizedInput.meetingMode === "ROOM") {
     if (normalizedInput.roomId === null) throw new AppError({ statusCode: 400, code: "MEETING_ROOM_REQUIRED", message: "Choose a Meeting Room." });
     await assertActiveRequestedRoom(transaction, normalizedInput.roomId);
@@ -236,6 +241,7 @@ export async function prepareMeetingCreationInTransaction(
 
   return {
     input: normalizedInput,
+    isHistoricalEntry,
     startAtUtc,
     endAtUtc,
     selectedAttendeeUserIds,
@@ -262,7 +268,7 @@ export async function createPreparedMeetingInTransaction(
     followUpSource,
   } = prepared;
 
-  const meeting = await meetingWorkflowRepository.createMeeting(transaction, actorUserId, input);
+  const meeting = await meetingWorkflowRepository.createMeeting(transaction, actorUserId, input, prepared.isHistoricalEntry);
   if (!meeting) throw meetingCreateFailed();
 
   const revision = await meetingWorkflowRepository.createInitialRevision(
@@ -342,12 +348,14 @@ export async function createPendingMeetingInTransaction(
   input: CreateMeetingInput,
   activityType: "REQUESTED" | "DIRECT_CREATED",
   creationMode: "REQUEST" | "DIRECT",
+  allowHistorical = false,
 ): Promise<{ meetingId: number; revisionId: number; revisionRowVersion: string }> {
   const prepared = await prepareMeetingCreationInTransaction(
     transaction,
     actorUserId,
     input,
     creationMode,
+    allowHistorical,
   );
   return createPreparedMeetingInTransaction(
     transaction,
@@ -420,15 +428,19 @@ export const meetingWorkflowService = {
 
   async createDirect(actorUserId: number, input: CreateMeetingInput): Promise<MeetingSummary> {
     const created = await withTransaction(async (transaction) => {
-      if (input.meetingMode === "ROOM") {
-        await meetingSchedulingService.assertCoordinatorPermission(transaction, actorUserId);
-      } else {
+      await meetingSchedulingService.assertCoordinatorPermission(transaction, actorUserId);
+      const isHistoricalEntry = classifyDirectMeetingWindow(new Date(input.startAtUtc), new Date(input.endAtUtc));
+      if (input.meetingMode === "ZOOM" && !isHistoricalEntry) {
         await meetingSchedulingService.assertZoomOrganizerPermission(transaction, actorUserId);
       }
       const pending = await createPendingMeetingInTransaction(
-        transaction, actorUserId, input, "DIRECT_CREATED", "DIRECT",
+        transaction, actorUserId, input, "DIRECT_CREATED", "DIRECT", true,
       );
-      if (input.meetingMode === "ROOM") {
+      if (isHistoricalEntry) {
+        await meetingSchedulingService.commitHistoricalRevisionInTransaction(
+          transaction, actorUserId, pending.meetingId, pending.revisionId, pending.revisionRowVersion,
+        );
+      } else if (input.meetingMode === "ROOM") {
         await meetingSchedulingService.commitPendingRevisionInTransaction(
           transaction, actorUserId, pending.meetingId, pending.revisionId, pending.revisionRowVersion,
         );
@@ -437,11 +449,13 @@ export const meetingWorkflowService = {
           transaction, actorUserId, pending.meetingId, pending.revisionId, pending.revisionRowVersion,
         );
       }
-      return pending;
+      return { ...pending, isHistoricalEntry };
     });
 
-    await meetingNotificationsService.safeInitialScheduled(created.meetingId, created.revisionId, false);
-    await outlookCalendarService.safeMeetingScheduled(created.meetingId);
+    if (!created.isHistoricalEntry) {
+      await meetingNotificationsService.safeInitialScheduled(created.meetingId, created.revisionId, false);
+      await outlookCalendarService.safeMeetingScheduled(created.meetingId);
+    }
     return requireSummary(created.meetingId);
   },
 
@@ -802,6 +816,7 @@ export const meetingWorkflowService = {
     });
   },
 };
+
 
 
 

@@ -14,7 +14,7 @@ export interface MeetingReportSchedule {
   checkedAtUtc: string
   timeZone: string
   automaticDeliveryEnabled: boolean
-  automaticDeliveryReason?: 'ENABLED' | 'DISABLED' | 'EMAIL_DISABLED' | 'MIGRATION_REQUIRED'
+  automaticDeliveryReason?: 'ENABLED' | 'DISABLED' | 'EMAIL_DISABLED' | 'MIGRATION_REQUIRED' | 'HISTORICAL_MEETING'
   activatedAtUtc?: string | null
   lastAutomaticScanAtUtc?: string | null
   delivery: {
@@ -32,4 +32,5 @@ export interface MeetingReportSchedule {
     nextAttemptAtUtc: string | null
   }
 }
+
 

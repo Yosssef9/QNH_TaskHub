@@ -90,6 +90,7 @@ interface MeetingSchedulePickerProps {
   timeSelected?: boolean
   disabled?: boolean
   allowBusySelection?: boolean
+  allowPast?: boolean
   showDurationPicker?: boolean
   directTimeRangeSelection?: boolean
   supplementalBusyRanges?: readonly MeetingScheduleSupplementalBusyRange[]
@@ -501,6 +502,7 @@ export function MeetingSchedulePicker({
   timeSelected = true,
   disabled = false,
   allowBusySelection = false,
+  allowPast = false,
   showDurationPicker = true,
   directTimeRangeSelection = false,
   supplementalBusyRanges = [],
@@ -689,7 +691,7 @@ export function MeetingSchedulePicker({
   )
 
   function chooseTime(optionStart: number, optionEnd: number, isBusy: boolean): boolean {
-    if (!date || optionEnd > DAY_MINUTES || hasStartTimePassed(date, optionStart, Date.now())) return false
+    if (!date || optionEnd > DAY_MINUTES || (!allowPast && hasStartTimePassed(date, optionStart, Date.now()))) return false
 
     if (!roomId) {
       setRoomPromptedByTime(true)
@@ -757,7 +759,7 @@ export function MeetingSchedulePicker({
     selectedRoom !== null &&
     selectedRoomHasCapacity &&
     !selectedHasKnownConflict &&
-    !selectedStartIsPast &&
+    (allowPast || !selectedStartIsPast) &&
     selectedUsesValidIncrement &&
     !scheduleQuery.isFetching &&
     !scheduleQuery.isError
@@ -846,7 +848,7 @@ export function MeetingSchedulePicker({
               variant="outline"
               size="icon"
               aria-label={t('meetings.create.previousWeek')}
-              disabled={disabled || shiftDateOnly(displayDate, -7) < today}
+              disabled={disabled || (!allowPast && shiftDateOnly(displayDate, -7) < today)}
               onClick={() => {
                 onValidationClear?.('date')
                 onValidationClear?.('time')
@@ -881,7 +883,7 @@ export function MeetingSchedulePicker({
                 type="button"
                 ref={selected ? dateFocusRef : undefined}
                 aria-current={selected ? 'date' : undefined}
-                disabled={disabled || isPast}
+                disabled={disabled || (isPast && !allowPast)}
                 onClick={() => {
                   onValidationClear?.('date')
                   onValidationClear?.('time')
@@ -909,7 +911,7 @@ export function MeetingSchedulePicker({
           <DatePicker
             required
             value={date}
-            minDate={today}
+            minDate={allowPast ? undefined : today}
             label={t('meetings.create.jumpToDate')}
             disabled={disabled}
             onChange={(nextDate) => {
@@ -1295,11 +1297,11 @@ export function MeetingSchedulePicker({
             const slotDisabled = Boolean(
               disabled ||
                 !date ||
-                isPast ||
+                (isPast && !allowPast) ||
                 !canFitDuration ||
                 (roomId && isBusy && !allowBusySelection),
             )
-            const stateText = isPast
+            const stateText = isPast && !allowPast
               ? t('meetings.create.slotPassed')
               : !canFitDuration
                 ? t('meetings.create.timeDoesNotFit')
@@ -1323,7 +1325,7 @@ export function MeetingSchedulePicker({
                 onClick={() => chooseTime(option.start, option.end, isBusy)}
                 className={cn(
                   'focus-visible:ring-ring min-h-24 rounded-xl border p-3 text-start transition outline-none focus-visible:ring-2 disabled:cursor-not-allowed',
-                  isPast
+                  isPast && !allowPast
                     ? 'bg-muted/60 text-muted-foreground border-muted opacity-55'
                     : conflict
                       ? 'border-destructive bg-destructive/10 text-destructive'
@@ -1357,7 +1359,7 @@ export function MeetingSchedulePicker({
                   dir={rtl ? 'rtl' : 'ltr'}
                   className={cn(
                     'mt-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold',
-                    isPast
+                    isPast && !allowPast
                       ? 'bg-muted text-muted-foreground'
                       : selected && !conflict
                         ? 'bg-primary-foreground/15 text-primary-foreground'
@@ -1438,10 +1440,10 @@ export function MeetingSchedulePicker({
                         : false
                     const optionDisabled =
                       !date ||
-                      isPast ||
+                      (isPast && !allowPast) ||
                       !canFitDuration ||
                       Boolean(roomId && isBusy && !allowBusySelection)
-                    const stateText = isPast
+                    const stateText = isPast && !allowPast
                       ? t('meetings.create.slotPassed')
                       : !canFitDuration
                         ? t('meetings.create.timeDoesNotFit')
@@ -1555,7 +1557,7 @@ export function MeetingSchedulePicker({
             </div>
             {selectedStartIsPast ? (
               <p className="text-warning-foreground mt-1 text-xs">
-                {t('meetings.create.selectedTimePassedHint')}
+                {t(allowPast ? 'meetings.historical.notice' : 'meetings.create.selectedTimePassedHint')}
               </p>
             ) : selectedHasKnownConflict ? (
               <p className="text-warning-foreground mt-1 text-xs">
@@ -1568,6 +1570,7 @@ export function MeetingSchedulePicker({
     </section>
   )
 }
+
 
 
 

@@ -153,12 +153,13 @@ export function projectMeetingReportSchedule(
     hasPendingReschedule: snapshot.hasPendingReschedule,
     checkedAtUtc: new Date(now).toISOString(),
     timeZone: options.timeZone,
-    automaticDeliveryEnabled: options.automaticDeliveryEnabled,
-    automaticDeliveryReason:
-      options.automaticDeliveryReason ??
-      (options.automaticDeliveryEnabled ? "ENABLED" : "DISABLED"),
+    automaticDeliveryEnabled: !snapshot.isHistoricalEntry && options.automaticDeliveryEnabled,
+    automaticDeliveryReason: snapshot.isHistoricalEntry ? "HISTORICAL_MEETING" :
+      (options.automaticDeliveryReason ??
+      (options.automaticDeliveryEnabled ? "ENABLED" : "DISABLED")),
     activatedAtUtc: options.activatedAtUtc ?? null,
     lastAutomaticScanAtUtc: options.lastAutomaticScanAtUtc ?? null,
     delivery,
   };
 }
+

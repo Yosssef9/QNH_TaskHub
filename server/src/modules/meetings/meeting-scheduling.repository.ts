@@ -60,6 +60,7 @@ interface AppLockRecord {
 export interface RevisionScheduleRecord {
   meetingId: number;
   meetingStatus: "PENDING_APPROVAL" | "SCHEDULED" | "REJECTED" | "CANCELLED";
+  isHistoricalEntry: boolean;
   currentRevisionId: number | null;
   meetingRowVersion: string;
   revisionId: number;
@@ -76,6 +77,7 @@ export interface RevisionScheduleRecord {
 interface RawRevisionScheduleRecord {
   meetingId: number | string;
   meetingStatus: RevisionScheduleRecord["meetingStatus"];
+  isHistoricalEntry: boolean | number;
   currentRevisionId: number | string | null;
   meetingRowVersion: unknown;
   revisionId: number | string;
@@ -97,6 +99,7 @@ function mapRevisionScheduleRecord(record: RawRevisionScheduleRecord): RevisionS
   return {
     meetingId: Number(record.meetingId),
     meetingStatus: record.meetingStatus,
+    isHistoricalEntry: Boolean(record.isHistoricalEntry),
     currentRevisionId: record.currentRevisionId === null ? null : Number(record.currentRevisionId),
     meetingRowVersion,
     revisionId: Number(record.revisionId),
@@ -491,6 +494,7 @@ export const meetingSchedulingRepository = {
         SELECT TOP (1)
           m.id AS meetingId,
           m.status AS meetingStatus,
+          m.is_historical_entry AS isHistoricalEntry,
           m.current_revision_id AS currentRevisionId,
           m.row_version AS meetingRowVersion,
           r.id AS revisionId,
@@ -648,3 +652,4 @@ export const meetingSchedulingRepository = {
       `);
   },
 };
+

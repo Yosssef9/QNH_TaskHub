@@ -84,6 +84,27 @@ describe("Meeting report authorization and data", () => {
 });
 
 describe("Meeting report template and request validation", () => {
+  it.each([
+    ["ar", "مُسجّل بأثر رجعي"],
+    ["en", "Recorded Retrospectively"],
+  ] as const)("identifies retrospectively recorded Meetings in %s PDF", (language, label) => {
+    const report = sampleMeetingReport(language);
+    report.detail.meeting.isHistoricalEntry = true;
+    const { html } = renderMeetingReportDocument(report);
+    expect(html).toContain(label);
+    // Once in the title banner and once in the report information fields.
+    expect(html.split(label).length - 1).toBe(2);
+    expect(html).toContain('class="badge neutral"');
+  });
+
+  it("does not label ordinary Meetings as retrospective in PDF", () => {
+    const report = sampleMeetingReport("ar");
+    report.detail.meeting.isHistoricalEntry = false;
+    const { html } = renderMeetingReportDocument(report);
+    expect(html).not.toContain("مُسجّل بأثر رجعي");
+    expect(html).not.toContain("Recorded Retrospectively");
+  });
+
   it("keeps all numbered sections and escapes content rather than running stored HTML", () => {
     const report = sampleMeetingReport();
     report.detail.meeting.title = '<script>privateData()</script>';
@@ -136,3 +157,4 @@ describe("Meeting PDF capacity", () => {
     await expect(limiter.run(200, async () => "OK")).resolves.toBe("OK");
   });
 });
+
