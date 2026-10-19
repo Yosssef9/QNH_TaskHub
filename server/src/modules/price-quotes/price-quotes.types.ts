@@ -124,6 +124,7 @@ export interface PriceQuoteSummaryInput {
   itemIds: number[];
   itemCodePrefix?: string | undefined;
   supplierIds: number[];
+  supplierMode?: "include" | "exclude" | undefined;
   period: ProcurementPricePeriod;
 }
 

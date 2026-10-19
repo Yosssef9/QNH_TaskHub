@@ -1,6 +1,7 @@
 import type { DatabaseTransaction } from "../../database/types.js";
 import { getDatabasePool, sql } from "../../database/sql.js";
 import { PROCUREMENT_DB_OBJECTS } from "../procurement/procurement.config.js";
+import { resolveSupplierSelectionMode, supplierScopeSql } from "../procurement-transactions/supplier-scope.sql.js";
 import type {
   ItemInput,
   ItemListQuery,
@@ -272,6 +273,7 @@ export function bindListFilters(
     .input("itemIdsJson", sql.NVarChar(sql.MAX), query.itemIds?.length ? JSON.stringify(query.itemIds) : null)
     .input("period", sql.VarChar(3), query.period)
     .input("supplierIdsJson", sql.NVarChar(sql.MAX), query.supplierIds?.length ? JSON.stringify(query.supplierIds) : null)
+    .input("supplierMode", sql.VarChar(7), resolveSupplierSelectionMode(query.supplierMode, query.supplierIds))
     .input("currencyCode", sql.NVarChar(30), query.currencyCode?.trim() || null)
     .input("unitName", sql.NVarChar(100), query.unitName?.trim() || null);
 }
@@ -287,6 +289,7 @@ function bindPriceSummaryFilters(request: import("mssql").Request, query: ItemPr
     .input("itemIdsJson", sql.NVarChar(sql.MAX), JSON.stringify(query.itemIds))
     .input("period", sql.VarChar(3), query.period)
     .input("supplierIdsJson", sql.NVarChar(sql.MAX), query.supplierIds?.length ? JSON.stringify(query.supplierIds) : null)
+    .input("supplierMode", sql.VarChar(7), resolveSupplierSelectionMode(query.supplierMode, query.supplierIds))
     .input("currencyCode", sql.NVarChar(30), query.currencyCode?.trim() || null)
     .input("unitName", sql.NVarChar(100), query.unitName?.trim() || null);
 }
@@ -426,13 +429,7 @@ function priceAnalyticsCte(filteredItemsSql?: string): string {
           ELSE CONVERT(DATE, '19000101')
         END
       )
-      AND (
-        @supplierIdsJson IS NULL
-        OR supplierId IN (
-          SELECT ids.id
-          FROM OPENJSON(@supplierIdsJson) WITH (id BIGINT '$') AS ids
-        )
-      )
+      AND ${supplierScopeSql('supplierId')}
       AND (@currencyCode IS NULL OR ISNULL(currencyCode, N'') = ISNULL(@currencyCode, N''))
       AND (@unitName IS NULL OR ISNULL(unitName, N'') = ISNULL(@unitName, N''))
     ),
@@ -1161,6 +1158,3 @@ export const itemsRepository = {
   addActivity,
   listActivity,
 };
-
-
-

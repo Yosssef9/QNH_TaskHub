@@ -28,6 +28,7 @@ const itemFilters = {
   itemIds: z.preprocess(parseIds, uniqueIds(1000).optional()),
   period: periodSchema.default("ALL"),
   supplierIds: z.preprocess(parseIds, uniqueIds(500).optional()),
+  supplierMode: z.enum(["include", "exclude"]).optional(),
   currencyCode: z.string().trim().min(1).max(30).optional(),
   unitName: z.string().trim().min(1).max(100).optional(),
 } as const;
@@ -82,6 +83,7 @@ export const itemPriceSummariesQuerySchema = z.object({
   itemIds: z.preprocess(parseIds, uniqueIds(100).min(1, "At least one Item ID is required.")),
   period: periodSchema.default("1Y"),
   supplierIds: z.preprocess(parseIds, uniqueIds(500).optional()),
+  supplierMode: z.enum(["include", "exclude"]).optional(),
   currencyCode: z.string().trim().min(1).max(30).optional(),
   unitName: z.string().trim().min(1).max(100).optional(),
 });
@@ -118,5 +120,3 @@ export type ItemSupplierMatrixQueryInput = z.infer<typeof itemSupplierMatrixQuer
 export type ItemOverviewQueryInput = z.infer<typeof itemOverviewQuerySchema>;
 export type CreateItemBody = z.infer<typeof createItemBodySchema>;
 export type UpdateItemBody = z.infer<typeof updateItemBodySchema>;
-
-

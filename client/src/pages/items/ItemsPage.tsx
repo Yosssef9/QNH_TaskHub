@@ -60,6 +60,7 @@ export function ItemsPage() {
   const [status, setStatus] = useState<'ALL' | '1' | '0'>('ALL')
   const [period, setPeriod] = useState<ProcurementPricePeriod>('1Y')
   const [supplierIds, setSupplierIds] = useState<number[]>([])
+  const [supplierMode, setSupplierMode] = useState<'include' | 'exclude'>('exclude')
   const [selectedSuppliers, setSelectedSuppliers] = useState<SearchableSelectOption[]>([])
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(100)
@@ -150,6 +151,7 @@ export function ItemsPage() {
     setPeriod(view.config.period)
     setSource(view.config.source ?? 'ALL')
     setStatus(view.config.statusCode === null ? 'ALL' : String(view.config.statusCode) as '1' | '0')
+    setSupplierMode(view.config.supplierIds.length ? 'include' : 'exclude')
     setSupplierIds(view.config.supplierIds)
     setSelectedSuppliers(view.selectedSuppliers.map((supplier) => ({ value: supplier.id, label: supplier.name, description: supplier.code })))
   }, [activeViewDetail.data])
@@ -177,8 +179,9 @@ export function ItemsPage() {
     ...(activeView?.config.category ? { category: activeView.config.category } : {}),
     ...(activeView ? (activeView.config.statusCode !== null ? { statusCode: activeView.config.statusCode } : {}) : status === 'ALL' ? {} : { statusCode: Number(status) }),
     period,
+    supplierMode,
     ...(supplierIds.length ? { supplierIds } : {}),
-  }), [activeView, period, search, selectedGroup, source, status, supplierIds])
+  }), [activeView, period, search, selectedGroup, source, status, supplierIds, supplierMode])
 
   const itemMasterFilters = useMemo(() => ({
     search: queryFilters.search,
@@ -215,6 +218,7 @@ export function ItemsPage() {
     {
       itemIds: visibleItemIds,
       period,
+      supplierMode,
       ...(supplierIds.length ? { supplierIds } : {}),
     },
     savedViewContextReady
@@ -247,6 +251,7 @@ export function ItemsPage() {
   }, [items.data, priceByItemId, usesAnalyticsSort])
   const annualPrices = useAnnualPrices({
     ...itemMasterFilters,
+    supplierMode,
     ...(supplierIds.length ? { supplierIds } : {}),
     endingYear,
     savingsYears: savingsYearOffsets.map(offset => endingYear - 2 + offset),
@@ -271,6 +276,7 @@ export function ItemsPage() {
     itemIds: activeView?.config.itemIds ?? [],
     ...(selectedGroup ? { itemCodePrefix: selectedGroup.prefix } : {}),
     supplierIds,
+    supplierMode,
     period,
   }, secondaryAnalyticsEnabled && canAccessPriceQuotes)
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / pageSize))
@@ -337,6 +343,7 @@ export function ItemsPage() {
       setSource('ALL')
       setStatus('ALL')
       setSupplierIds([])
+      setSupplierMode('exclude')
       setSelectedSuppliers([])
       setUrlParams({}, { replace: true })
     } else {
@@ -382,10 +389,12 @@ export function ItemsPage() {
   function resetPriceScope() {
     if (activeViewDetail.data) {
       setPeriod(activeViewDetail.data.config.period)
+      setSupplierMode(activeViewDetail.data.config.supplierIds.length ? 'include' : 'exclude')
       setSupplierIds(activeViewDetail.data.config.supplierIds)
       setSelectedSuppliers(activeViewDetail.data.selectedSuppliers.map((supplier) => ({ value: supplier.id, label: supplier.name, description: supplier.code })))
     } else {
       setPeriod('1Y')
+      setSupplierMode('exclude')
       setSupplierIds([])
       setSelectedSuppliers([])
     }
@@ -446,6 +455,16 @@ export function ItemsPage() {
       period={period}
       hidePeriod={displayMode === 'annual'}
       supplierIds={supplierIds}
+      supplierMode={supplierMode}
+      onSupplierModeChange={(mode) => {
+        // Mode change clears the old selection to avoid silently treating included
+        // suppliers as excluded (or vice versa).
+        setSupplierMode(mode)
+        if (displayMode === 'supplierComparison' && mode === 'exclude') setDisplayMode('summary')
+        setSupplierIds([])
+        setSelectedSuppliers([])
+        setPage(1)
+      }}
       selectedSuppliers={selectedSuppliers}
       savedViewName={activeView?.name ?? null}
       onPeriodChange={(value) => { setPeriod(value); setPage(1) }}
@@ -463,7 +482,7 @@ export function ItemsPage() {
             className="w-full xl:max-w-md" placeholder={t('items.searchPlaceholder')} ariaLabel={t('items.searchLabel')} />
           <div className="flex shrink-0 flex-wrap rounded-lg border bg-muted/20 p-1">
             <Button type="button" size="sm" variant={displayMode === 'summary' ? 'default' : 'ghost'} onClick={() => changeDisplayMode('summary')}><List className="size-4" />{t('items.matrix.summaryMode')}</Button>
-            {activeView ? <Button type="button" size="sm" variant={displayMode === 'supplierComparison' ? 'default' : 'ghost'} disabled={supplierIds.length === 0} onClick={() => changeDisplayMode('supplierComparison')}><Columns3 className="size-4" />{t('items.matrix.comparisonMode')}</Button> : null}
+            {activeView ? <Button type="button" size="sm" variant={displayMode === 'supplierComparison' ? 'default' : 'ghost'} disabled={supplierMode !== 'include' || supplierIds.length === 0} onClick={() => changeDisplayMode('supplierComparison')}><Columns3 className="size-4" />{t('items.matrix.comparisonMode')}</Button> : null}
             <Button type="button" size="sm" variant={displayMode === 'annual' ? 'default' : 'ghost'} onClick={() => changeDisplayMode('annual')}><ChartColumnIncreasing className="size-4" />{t('items.annual.mode')}</Button>
           </div>
         </div>
@@ -514,7 +533,7 @@ export function ItemsPage() {
           canOpenSuppliers={canAccessSuppliers} activeViewId={activeViewId}
         />
       ) : items.isPending ? <LoadingState className="rounded-none border-0" /> : items.isError || !data ? <ErrorState className="rounded-none border-0" onRetry={() => void items.refetch()} /> : data.items.length === 0 ? <EmptyState className="rounded-none border-0" icon={SearchX} title={t('items.emptyTitle')} description={t('items.emptyDescription')} /> : <>
-        {displayMode === 'supplierComparison' && activeView ? (
+        {displayMode === 'supplierComparison' && activeView && supplierMode === 'include' ? (
           <SavedViewSupplierComparisonTable
             savedViewId={activeView.id}
             savedViewName={activeView.name}
@@ -898,5 +917,3 @@ function PriceChangePill({
     </span>
   )
 }
-
-

@@ -1,5 +1,6 @@
 import { getDatabasePool, sql } from "../../database/sql.js";
 import { PROCUREMENT_DB_OBJECTS } from "../procurement/procurement.config.js";
+import { supplierScopeSql } from "../procurement-transactions/supplier-scope.sql.js";
 import { bindListFilters, itemSelectSql, whereSql } from "./items.repository.js";
 import type { AnnualPriceQuery } from "./items.types.js";
 
@@ -147,9 +148,7 @@ export async function queryAnnualPrices(query: AnnualPriceQuery): Promise<{ reco
         AND UPPER(COALESCE(CONVERT(NVARCHAR(250), tx.STATUS_NAME_EN), N'')) NOT LIKE N'%CANCEL%'
         AND UPPER(COALESCE(CONVERT(NVARCHAR(250), tx.STATUS_NAME_EN), N'')) NOT LIKE N'%VOID%'
         AND UPPER(COALESCE(CONVERT(NVARCHAR(250), tx.STATUS_NAME_EN), N'')) NOT LIKE N'%REVERS%'
-        AND (@supplierIdsJson IS NULL OR tx.SUPPLIER_ID IN (
-          SELECT ids.id FROM OPENJSON(@supplierIdsJson) WITH (id BIGINT '$') ids
-        ))
+        AND ${supplierScopeSql('tx.SUPPLIER_ID')}
         AND (@currencyCode IS NULL OR ISNULL(LTRIM(RTRIM(CONVERT(NVARCHAR(30), tx.CURRENCY_CODE))), N'') = @currencyCode)
         AND (@unitName IS NULL OR ISNULL(LTRIM(RTRIM(CONVERT(NVARCHAR(100), tx.UNIT_NAME_EN))), N'') = @unitName)
     ),

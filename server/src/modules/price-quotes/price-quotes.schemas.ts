@@ -62,6 +62,7 @@ export const priceQuoteSummaryBodySchema = z.object({
   itemCodePrefix: z.string().regex(/^[0-9]{2,20}$/).optional(),
   itemIds: z.array(nonZeroId).max(1000).default([]),
   supplierIds: z.array(nonZeroId).max(500).default([]),
+  supplierMode: z.enum(["include", "exclude"]).optional(),
   period: period.default("1Y"),
 });
 

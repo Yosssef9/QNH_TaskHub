@@ -122,6 +122,7 @@ export interface ItemListQuery {
   itemIds?: number[] | undefined;
   period: ProcurementPricePeriod;
   supplierIds?: number[] | undefined;
+  supplierMode?: "include" | "exclude" | undefined;
   currencyCode?: string | undefined;
   unitName?: string | undefined;
   sortBy: ItemSortBy;
@@ -139,6 +140,7 @@ export interface ItemPriceSummaryQuery {
   itemIds: number[];
   period: ProcurementPricePeriod;
   supplierIds?: number[] | undefined;
+  supplierMode?: "include" | "exclude" | undefined;
   currencyCode?: string | undefined;
   unitName?: string | undefined;
 }
@@ -263,5 +265,3 @@ export interface ItemActivity {
   actorName: string;
   createdAtUtc: string;
 }
-
-
