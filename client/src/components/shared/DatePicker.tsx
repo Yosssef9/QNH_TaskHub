@@ -45,6 +45,7 @@ export function DatePicker({
   const dialogFloatingContainer = useDialogFloatingContainer()
 
   const direction = i18n.dir()
+  const isArabic = i18n.language.startsWith('ar')
 
   const pickerValue = value ? dayjs(value) : null
   const pickerMinDate = minDate ? dayjs(minDate) : undefined
@@ -76,7 +77,8 @@ export function DatePicker({
           onChange(newValue.format('YYYY-MM-DD'))
         }}
         disabled={disabled}
-        format="DD MMM YYYY"
+        // Avoid the long, reversed English-style MMMM placeholder in RTL fields.
+        format={isArabic ? 'DD/MM/YYYY' : 'DD MMM YYYY'}
         views={['year', 'month', 'day']}
         openTo="day"
         closeOnSelect
@@ -269,5 +271,6 @@ export function DatePicker({
     </div>
   )
 }
+
 
 

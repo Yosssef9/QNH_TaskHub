@@ -25,6 +25,27 @@ describe('application language', () => {
     expect(missingArabicKeys).toEqual([])
   })
 
+  it('provides every date, action and Meeting Template label in both languages', () => {
+    const required = [
+      'tasks.startDateTodayOrLater',
+      'tasks.errors.startDatePast',
+      'datePicker.dayPlaceholder',
+      'datePicker.monthPlaceholder',
+      'datePicker.yearPlaceholder',
+      'common.actions',
+      'common.done',
+      'common.remove',
+      'meetings.templates.roomTemplateHint',
+      'meetings.templates.zoomTemplateHint',
+      'meetings.templates.zoomTemplateTitle',
+      'meetings.templates.zoomTemplateLinkNotStored',
+    ]
+    for (const translations of [arTranslation, enTranslation]) {
+      const available = new Set(leafKeys(translations))
+      for (const key of required) expect(available.has(key), key).toBe(true)
+    }
+  })
+
   it('applies English LTR and Arabic RTL to the document', async () => {
     await act(() => setAppLanguage('en'))
     expect(document.documentElement).toHaveAttribute('lang', 'en')
@@ -36,3 +57,4 @@ describe('application language', () => {
     expect(document.documentElement).toHaveAttribute('dir', 'rtl')
   })
 })
+

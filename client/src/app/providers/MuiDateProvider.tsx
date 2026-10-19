@@ -54,6 +54,11 @@ export function MuiDateProvider({ children }: { children: ReactNode }) {
       year: t('datePicker.year'),
       month: t('datePicker.month'),
       day: t('datePicker.day'),
+
+      // MUI field placeholders are localized separately from calendar labels.
+      fieldDayPlaceholder: () => t('datePicker.dayPlaceholder'),
+      fieldMonthPlaceholder: () => t('datePicker.monthPlaceholder'),
+      fieldYearPlaceholder: () => t('datePicker.yearPlaceholder'),
     }),
     [t],
   )
@@ -72,3 +77,4 @@ export function MuiDateProvider({ children }: { children: ReactNode }) {
     </CacheProvider>
   )
 }
+
