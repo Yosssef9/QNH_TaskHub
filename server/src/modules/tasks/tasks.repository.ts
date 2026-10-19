@@ -20,7 +20,7 @@ interface IdRecord {
 }
 
 const taskSelect = `
-  task.id, task.list_id AS listId, task.kpi_instance_id AS kpiInstanceId,
+  task.id, task.list_id AS listId, task.group_id AS groupId, task.kpi_instance_id AS kpiInstanceId,
   instance.kpi_id AS kpiId, instance.cycle_id AS cycleId, cycle.title AS cycleTitle,
   instance.name_snapshot AS kpiName, instance.icon_key_snapshot AS kpiIconKey,
   instance.color_snapshot AS kpiColor, cycle.closed_at_utc AS cycleClosedAtUtc,
@@ -77,6 +77,7 @@ function addListFilters(
     .input("search", sql.NVarChar(100), query.search ? `%${query.search}%` : null)
     .input("status", sql.VarChar(20), query.status ?? null)
     .input("priority", sql.VarChar(10), query.priority ?? null)
+    .input("groupId", sql.BigInt, query.groupId === "UNGROUPED" ? null : query.groupId ?? null)
     .input("taskType", sql.VarChar(12), query.taskType ?? "ALL")
     .input("tagIds", sql.VarChar(240), query.tagIds || null)
     .input("tagMatch", sql.VarChar(12), query.tagMatch ?? "ANY");
@@ -90,9 +91,10 @@ function filterSql(query: TaskListQuery): string {
     UPCOMING: "AND task.due_date > @today",
     NO_DATE: "AND task.due_date IS NULL",
   }[query.due];
+  const groupCondition = query.groupId === "UNGROUPED" ? "AND task.group_id IS NULL" : query.groupId !== undefined ? "AND task.group_id=@groupId" : "";
   return `task.owner_user_id = @ownerUserId AND task.list_id = @listId
     AND task.kpi_instance_id IS NULL AND task.deleted_at_utc IS NULL
-    AND (@search IS NULL OR task.title LIKE @search)
+    ${groupCondition} AND (@search IS NULL OR task.title LIKE @search)
     AND (@status IS NULL OR task.status = @status)
     AND (@priority IS NULL OR task.priority = @priority) AND ${taskTypeConditionSql}
     AND ${taskTagsFilterSql} ${due}`;
@@ -263,10 +265,11 @@ export const tasksRepository = {
       .input("description", sql.NVarChar(sql.MAX), input.description ?? null)
       .input("priority", sql.VarChar(10), input.priority)
       .input("startDate", sql.Date, input.startDate ?? null)
-      .input("dueDate", sql.Date, input.dueDate ?? null).query<IdRecord>(`INSERT INTO dbo.TM_tasks
-        (owner_user_id, list_id, title, description, priority, start_date, due_date, display_order)
+      .input("dueDate", sql.Date, input.dueDate ?? null)
+      .input("groupId", sql.BigInt, input.groupId ?? null).query<IdRecord>(`INSERT INTO dbo.TM_tasks
+        (owner_user_id, list_id, group_id, title, description, priority, start_date, due_date, display_order)
         OUTPUT inserted.id
-        SELECT @ownerUserId, @listId, @title, @description, @priority, @startDate, @dueDate,
+        SELECT @ownerUserId, @listId, @groupId, @title, @description, @priority, @startDate, @dueDate,
           ISNULL(MAX(display_order), 0) + 1 FROM dbo.TM_tasks
         WHERE owner_user_id = @ownerUserId AND list_id = @listId AND deleted_at_utc IS NULL;`);
     const createdId = result.recordset[0]?.id;
@@ -285,13 +288,14 @@ export const tasksRepository = {
       .input("ownerUserId", sql.Int, ownerUserId)
       .input("taskId", sql.BigInt, taskId)
       .input("listId", sql.BigInt, input.listId)
+      .input("groupId", sql.BigInt, input.groupId)
       .input("title", sql.NVarChar(1000), input.title)
       .input("description", sql.NVarChar(sql.MAX), input.description)
       .input("priority", sql.VarChar(10), input.priority)
       .input("startDate", sql.Date, input.startDate)
       .input("dueDate", sql.Date, input.dueDate)
       .input("referenceDate", sql.Date, input.referenceDate).query(`
-        UPDATE dbo.TM_tasks SET list_id=@listId, title=@title, description=@description,
+        UPDATE dbo.TM_tasks SET list_id=@listId, group_id=@groupId, title=@title, description=@description,
           priority=@priority, start_date=@startDate, due_date=@dueDate, reference_date=@referenceDate,
           updated_at_utc=SYSUTCDATETIME()
         WHERE id=@taskId AND owner_user_id=@ownerUserId AND deleted_at_utc IS NULL;`);
@@ -352,6 +356,3 @@ export const tasksRepository = {
         VALUES (@taskId, @ownerUserId, @actorUserId, @type, @data);`);
   },
 };
-
-
-

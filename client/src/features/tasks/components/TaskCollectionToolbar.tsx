@@ -45,6 +45,7 @@ interface TaskCollectionToolbarProps {
   onClearFilters: () => void
   closeLabel: string
 
+  showGroup?: boolean
   groupValue: string
   groupLabel: string
   groupOptions: TaskCollectionToolbarOption[]
@@ -95,6 +96,7 @@ export function TaskCollectionToolbar({
   onClearFilters,
   closeLabel,
   groupValue,
+  showGroup = true,
   groupLabel,
   groupOptions,
   onGroupChange,
@@ -180,7 +182,7 @@ export function TaskCollectionToolbar({
               filterTrigger
             )}
 
-            <Select value={groupValue} onValueChange={onGroupChange}>
+            {showGroup ? <Select value={groupValue} onValueChange={onGroupChange}>
               <SelectTrigger
                 className="h-10 w-auto min-w-[9.5rem] max-w-[13rem]"
                 aria-label={groupLabel}
@@ -201,7 +203,7 @@ export function TaskCollectionToolbar({
                   </SelectItem>
                 ))}
               </SelectContent>
-            </Select>
+            </Select> : null}
 
             <Popover>
               <PopoverTrigger asChild>

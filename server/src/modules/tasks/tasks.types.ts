@@ -21,6 +21,7 @@ export interface MeetingActionItemTaskContext {
 export interface TaskRecord {
   id: number;
   listId: number | null;
+  groupId?: number | null;
   kpiInstanceId: number | null;
   kpiId: number | null;
   cycleId: number | null;
@@ -69,6 +70,7 @@ export interface TaskRecord {
 export interface PersonalTask {
   id: number;
   listId: number | null;
+  groupId?: number | null;
   kpiInstanceId: number | null;
   kpiId: number | null;
   cycleId: number | null;
@@ -116,6 +118,7 @@ export interface TaskListQuery {
   sortDirection: SortDirection;
   page: number;
   pageSize: number;
+  groupId?: number | "UNGROUPED" | undefined;
 }
 
 export interface TaskListResult {
@@ -155,6 +158,7 @@ export interface CreateTaskInput {
   dueDate?: string | null | undefined;
   assigneeUserId?: number | null | undefined;
   assigneeUserIds?: number[] | undefined;
+  groupId?: number | null | undefined;
   tagIds?: number[] | undefined;
 }
 
@@ -165,6 +169,7 @@ export interface UpdateTaskInput {
   startDate?: string | null | undefined;
   dueDate?: string | null | undefined;
   listId?: number | undefined;
+  groupId?: number | null | undefined;
   tagIds?: number[] | undefined;
   referenceDate?: string | null | undefined;
 }
@@ -173,6 +178,3 @@ export interface ChangeTaskStatusInput {
   status: TaskStatus;
   cancellationReason?: string | undefined;
 }
-
-
-

@@ -1,5 +1,6 @@
 import { tagsService } from "../tags/tags.service.js";
 import { withTransaction } from "../../database/transaction.js";
+import { sql } from "../../database/sql.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
 import { resolveKpiTaskDates } from "../kpis/kpi-task-dates.js";
@@ -103,7 +104,7 @@ export const tasksService = {
     const task = await loadTask(access.ownerUserId, taskId);
     return {
       ...task,
-      ...((access.generalAssignment || access.context || access.sharedPermission) && access.ownerUserId !== actorUserId ? {listId:null} : {}),
+      ...((access.generalAssignment || access.context || access.sharedPermission) && access.ownerUserId !== actorUserId ? {listId:null,groupId:null} : {}),
       isReadOnly: task.isReadOnly || !access.capabilities.canEditDetails,
     };
   },
@@ -116,6 +117,12 @@ export const tasksService = {
         throw listNotFound();
       }
 
+      if (input.groupId != null) {
+        const matches = await transaction.request().input('owner', sql.Int, ownerUserId)
+          .input('list', sql.BigInt, listId).input('group', sql.BigInt, input.groupId)
+          .query(`SELECT TOP (1) id FROM dbo.TM_task_groups WHERE id=@group AND list_id=@list AND owner_user_id=@owner`);
+        if (!matches.recordset.length) throw new AppError({statusCode:400,code:'TASK_GROUP_INVALID',message:'Selected group is not in this List.'});
+      }
       const createdId = await tasksRepository.create(transaction, ownerUserId, listId, input);
       if (!createdId) {
         throw new AppError({
@@ -174,6 +181,12 @@ export const tasksService = {
       );
       if (!current) throw notFound();
       assertTaskWritable(current);
+      if (input.groupId !== undefined && actorUserId !== ownerUserId) {
+        throw forbidden('TASK_GROUP_OWNER_ONLY','Only the Task List owner can change a Task Group.');
+      }
+      if (input.groupId !== undefined && (current.kpiInstanceId !== null || access.context !== null)) {
+        throw new AppError({statusCode:400,code:'TASK_GROUP_NOT_SUPPORTED',message:'KPI and Meeting Action Item Tasks cannot use Groups.'});
+      }
 
       if (access.sharedPermission && (input.listId !== undefined || input.referenceDate !== undefined)) {
         throw forbidden('TASK_SHARE_SCOPE_FORBIDDEN','Shared editors cannot move tasks or change KPI metadata.');
@@ -240,8 +253,17 @@ export const tasksService = {
         assertDateRange(startDate, dueDate);
       }
 
+      const groupId = input.groupId !== undefined ? input.groupId
+        : destinationListId === current.listId ? current.groupId ?? null : null;
+      if (groupId !== null) {
+        const matches = await transaction.request().input('owner',sql.Int,ownerUserId)
+          .input('list',sql.BigInt,destinationListId).input('group',sql.BigInt,groupId)
+          .query(`SELECT TOP(1) id FROM dbo.TM_task_groups WHERE id=@group AND list_id=@list AND owner_user_id=@owner`);
+        if (!matches.recordset.length) throw new AppError({statusCode:400,code:'TASK_GROUP_INVALID',message:'Selected group is not in this List.'});
+      }
       await tasksRepository.update(transaction, ownerUserId, taskId, {
         listId: destinationListId,
+        groupId,
         title: input.title ?? current.title,
         description: input.description !== undefined ? input.description : current.description,
         priority: input.priority ?? mapTask(current).priority,

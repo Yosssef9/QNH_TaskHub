@@ -117,7 +117,7 @@ export const taskDetailsService = {
     return {
       task: {
         ...mappedTask,
-        ...(isRestricted || externalShare ? {listId:null} : {}),
+        ...(isRestricted || externalShare ? {listId:null,groupId:null} : {}),
         isReadOnly: mappedTask.isReadOnly || !resolved.capabilities.canEditDetails,
         ...(resolved.collaborationActive && isRestricted || externalShare ? {completionSummary:null} : {}),
         // Authorized Meeting viewers may read parent context, not the team roster.
@@ -692,9 +692,3 @@ export const taskDetailsService = {
     await removeStoredAttachment(record.storageKey);
   },
 };
-
-
-
-
-
-

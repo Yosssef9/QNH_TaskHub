@@ -75,6 +75,9 @@ import { ShareTaskDialog } from '@/features/task-shares/ShareTaskDialog'
 import { TaskTagFilter } from '../tags/TaskTagFilter'
 import { TaskTypeFilterSelect } from './TaskTypeFilterSelect'
 import { TaskTeamIndicator } from './TaskTeamIndicator'
+import { TaskGroupsWorkspace } from '../assignment/TaskGroupsWorkspace'
+import { useTaskGroups } from '../assignment/use-task-groups'
+import { buildGroupTree } from '../assignment/task-groups.tree'
 import { TaskDueIndicator, TaskPriorityIndicator } from './TaskSelectIndicators'
 
 type Props =
@@ -173,6 +176,8 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
   const [sortBy, setSortBy] = useState<TaskSortField>('createdAt')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
   const [groupBy, setGroupBy] = useState<TaskListGroupBy>('NONE')
+  const [taskLayout,setTaskLayout] = useState<'GROUPED'|'ALL'>('GROUPED')
+  const [initialGroupId,setInitialGroupId] = useState<number|null>(null)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [editorOpen, setEditorOpen] = useState(false)
@@ -234,6 +239,8 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
     ...(isKpiAggregate && selectedKpi ? { kpiId: selectedKpi.templateId } : {}),
   })
   const summaryQuery = useTaskSummary(listId ?? null)
+  const groupsQuery = useTaskGroups(isKpiMode ? null : (listId ?? null))
+  const groupPaths=useMemo(()=>new Map(buildGroupTree(groupsQuery.data?.groups??[]).map(g=>[g.id,g.path])),[groupsQuery.data?.groups])
   const statusMutation = useChangeTaskStatus()
   const deleteMutation = useDeleteTask()
   const restoreMutation = useRestoreTask()
@@ -616,6 +623,7 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
         onClearFilters={clearStructuredFilters}
         closeLabel={t('common.close')}
         groupValue={groupBy}
+        showGroup={isKpiMode || taskLayout==='ALL'}
         groupLabel={t('tasks.toolbar.group')}
         groupOptions={[
           { value: 'NONE', label: t('tasks.toolbar.groupValues.NONE') },
@@ -654,6 +662,7 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
             disabled={createDisabled}
             onClick={() => {
               setEditing(null)
+              setInitialGroupId(null)
               setEditorOpen(true)
             }}
           >
@@ -663,6 +672,24 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
         }
       />
 
+      {!isKpiMode ? (
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t('taskGroups.layout')}>
+          <Button size="sm" variant={taskLayout==='GROUPED'?'default':'outline'} onClick={()=>setTaskLayout('GROUPED')}>{t('taskGroups.groupedView')}</Button>
+          <Button size="sm" variant={taskLayout==='ALL'?'default':'outline'} onClick={()=>setTaskLayout('ALL')}>{t('taskGroups.allTasks')}</Button>
+          {groupsQuery.data?.groups.length ? <span className="text-muted-foreground text-xs">{groupsQuery.data.groups.length} {t('taskGroups.title')}</span>:null}
+        </div>
+      ):null}
+
+      {!isKpiMode && taskLayout==='GROUPED' ? (
+        <TaskGroupsWorkspace listId={listId!}
+          filters={{search,...(status?{status}:{}),...(priority?{priority}:{}),due,taskType,
+            ...(tagIds.length?{tagIds:tagIds.join(',')}:{}),tagMatch,
+            sortBy,sortDirection,page:1,pageSize:20}}
+          onOpenTask={setDetailsTaskId}
+          onEditTask={task=>{setEditing(task);setInitialGroupId(null);setEditorOpen(true)}}
+          onNewTask={groupId=>{setEditing(null);setInitialGroupId(groupId);setEditorOpen(true)}}
+        />
+      ) : (
       <AnimatedState stateKey={resultsState}>
         {query.isPending ? (
           <LoadingState />
@@ -813,9 +840,9 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
                                       : t('tasks.completeTask', { title: task.title })}
                                 </TooltipContent>
                               </Tooltip>}
-                                title={<p className={cn('break-words text-start text-base font-semibold transition-colors duration-200', task.status === 'DONE' && 'text-foreground/85')}>
+                                title={<div className="space-y-1"><p className={cn('break-words text-start text-base font-semibold transition-colors duration-200', task.status === 'DONE' && 'text-foreground/85')}>
   {task.title}
-</p>}
+</p>{task.groupId != null && groupPaths.has(task.groupId) ? <p className="text-muted-foreground truncate text-xs" title={groupPaths.get(task.groupId)}>{groupPaths.get(task.groupId)}</p> : null}</div>}
                                 tags={task.kpiInstanceId === null && task.tags?.length ? <TaskTags tags={task.tags} /> : null}
                                 details={<>{task.kpiInstanceId === null ? <TaskTeamIndicator
                                   className="" summary={task}
@@ -990,6 +1017,8 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
         )}
       </AnimatedState>
 
+      )}
+
       {editorOpen ? (
         isKpiMode ? (
           <TaskEditorDialog
@@ -1005,6 +1034,7 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
             open
             onOpenChange={setEditorOpen}
             listId={listId!}
+            initialGroupId={initialGroupId}
             lists={lists!}
             task={editing}
           />
@@ -1059,7 +1089,3 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
     </div>
   )
 }
-
-
-
-

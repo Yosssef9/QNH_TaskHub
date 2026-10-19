@@ -44,6 +44,8 @@ import { cn } from '@/lib/cn'
 
 import { downloadAttachment } from '../api/tasks.api'
 import { TaskAssigneePicker } from '../assignment/TaskAssigneePicker'
+import { TaskGroupSelect } from '../assignment/TaskGroupSelect'
+import { useTaskGroups,useTaskGroupActions } from '../assignment/use-task-groups'
 import { CollaborativeAssignmentsPanel } from '../assignment/CollaborativeAssignmentsPanel'
 import { useAssignMainTask, useAssignSubtask, useSaveWorkNotes, useSaveCompletionSummary, useEligibleTaskUser } from '../assignment/use-general-assignment'
 import {
@@ -390,6 +392,11 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
   const subtaskDraggingRef = useRef(false)
   const taskFileRef = useRef<HTMLInputElement>(null)
   const query = useTaskDetails(taskId)
+  const groupQuery=useTaskGroups(query.data?.capabilities.role==='OWNER' &&
+    query.data.task.kpiInstanceId===null && query.data.task.meetingActionItem===null
+      ? query.data.task.listId : null)
+  const groupActions=useTaskGroupActions()
+  const [groupDraft,setGroupDraft]=useState<{taskId:number;groupId:number|null}|null>(null)
   const completeMutation = useCompleteSubtask()
   const statusMutation = useChangeTaskStatus()
   const deleteMutation = useDeleteSubtask()
@@ -957,6 +964,22 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                             })} /> : <span>{mainAssigneeId === null ? t('tasks.assignment.unassigned') :
                               (mainAssigneeLookup.data?.userName ?? t('tasks.assignment.userCode', {code:mainAssigneeId}))}</span>
                         } /> : null}
+                        {groupQuery.data?.groups.length && query.data.task.listId!==null &&
+                          capabilities?.role==='OWNER' && query.data.task.meetingActionItem===null ? (
+                          <div className="space-y-2 py-2">
+                            <label className="text-muted-foreground text-xs font-medium">{t('taskGroups.select')}</label>
+                            <TaskGroupSelect groups={groupQuery.data.groups}
+                              value={groupDraft?.taskId===query.data.task.id?groupDraft.groupId:query.data.task.groupId??null}
+                              onChange={groupId=>setGroupDraft({taskId:query.data.task.id,groupId})}/>
+                            <Button type="button" variant="outline" size="sm"
+                              disabled={groupActions.moveTask.isPending || groupDraft?.taskId!==query.data.task.id ||
+                                groupDraft.groupId===(query.data.task.groupId??null)}
+                              onClick={()=>groupActions.moveTask.mutate({taskId:query.data.task.id,groupId:groupDraft?.groupId??null},{
+                                onSuccess:()=>setGroupDraft(null),
+                                onError:()=>toast.error(t('taskGroups.saveError')),
+                              })}>{t('taskGroups.moveTask')}</Button>
+                          </div>
+                        ) : null}
                         <InfoRow
                           icon={CalendarDays}
                           label={t('tasks.startDate')}
@@ -1106,11 +1129,3 @@ function InfoRow({
     </div>
   )
 }
-
-
-
-
-
-
-
-

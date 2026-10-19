@@ -55,6 +55,7 @@ export const taskListQuerySchema = z.object({
   due: z.enum(TASK_DUE_FILTERS).default("ALL"),
   sortBy: z.enum(TASK_SORT_FIELDS).default("createdAt"),
   sortDirection: z.enum(SORT_DIRECTIONS).default("desc"),
+  groupId: z.union([z.coerce.number().int().positive(),z.literal("UNGROUPED")]).optional(),
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
 });
@@ -66,6 +67,7 @@ export const createTaskBodySchema = z
     priority: z.enum(TASK_PRIORITIES).default("MEDIUM"),
     startDate: dateOnlySchema.nullable().optional(),
     dueDate: dateOnlySchema.nullable().optional(),
+    groupId: z.number().int().positive().nullable().optional(),
     assigneeUserId: z.number().int().positive().nullable().optional(),
     assigneeUserIds: z.array(z.number().int().positive()).min(1).max(30).optional(),
     tagIds:z.array(z.number().int().positive()).max(8).optional(),
@@ -80,6 +82,7 @@ export const updateTaskBodySchema = z
     startDate: dateOnlySchema.nullable().optional(),
     dueDate: dateOnlySchema.nullable().optional(),
     listId: z.number().int().positive().optional(),
+    groupId: z.number().int().positive().nullable().optional(),
     tagIds:z.array(z.number().int().positive()).max(8).optional(),
     referenceDate: dateOnlySchema.nullable().optional(),
   })
@@ -114,6 +117,3 @@ export type TaskListQueryInput = z.infer<typeof taskListQuerySchema>;
 export type CreateTaskBody = z.infer<typeof createTaskBodySchema>;
 export type UpdateTaskBody = z.infer<typeof updateTaskBodySchema>;
 export type ChangeTaskStatusBody = z.infer<typeof changeTaskStatusBodySchema>;
-
-
-

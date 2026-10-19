@@ -25,6 +25,7 @@ export interface MeetingActionItemTaskContext {
 export interface PersonalTask {
   id: number
   listId: number | null
+  groupId?: number | null
   kpiInstanceId: number | null
   kpiId: number | null
   cycleId: number | null
@@ -72,6 +73,7 @@ export interface TaskListFilters {
   sortDirection: 'asc' | 'desc'
   page: number
   pageSize: number
+  groupId?: number | "UNGROUPED"
   kpiId?: number
   cycleId?: number
 }
@@ -104,6 +106,7 @@ export interface SaveTaskInput {
   referenceDate?: string | null
   assigneeUserId?: number | null
   assigneeUserIds?: number[]
+  groupId?: number | null
   tagIds?: number[]
 }
 
@@ -198,8 +201,3 @@ export interface TaskDetails {
   activity: TaskActivity[]
   progress: { completed: number; total: number; percentage: number }
 }
-
-
-
-
-

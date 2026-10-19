@@ -29,6 +29,7 @@ export function mapTask(record: TaskRecord): PersonalTask {
 
   return {
     id: parsePositiveIntegerId(record.id, "task id"),
+    groupId: record.groupId == null ? null : parsePositiveIntegerId(record.groupId, "task group id"),
     listId:
       record.listId === null ? null : parsePositiveIntegerId(record.listId, "task list id"),
     kpiInstanceId: record.kpiInstanceId === null ? null : parsePositiveIntegerId(record.kpiInstanceId, "task KPI instance id"),
@@ -90,6 +91,3 @@ export function mapTask(record: TaskRecord): PersonalTask {
           },
   };
 }
-
-
-

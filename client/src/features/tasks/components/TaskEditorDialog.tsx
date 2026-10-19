@@ -2,6 +2,8 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect, useState } from 'react'
 import { TagPicker } from '../tags/TagPicker'
 import { TaskAssigneeMultiPicker } from '../assignment/TaskAssigneeMultiPicker'
+import { TaskGroupSelect } from '../assignment/TaskGroupSelect'
+import { useTaskGroups } from '../assignment/use-task-groups'
 import { Loader2, Plus, Save } from 'lucide-react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import toast from 'react-hot-toast'
@@ -43,6 +45,7 @@ const schema = z
     description: z.string().trim().max(4000).nullable().optional(),
     priority: z.enum(TASK_PRIORITIES),
     startDate: z.string().nullable().optional(),
+    groupId: z.number().int().positive().nullable().optional(),
     dueDate: z.string().nullable().optional(),
     listId: z.number().int().positive().nullable().optional(),
     referenceDate: z.string().nullable().optional(),
@@ -64,6 +67,7 @@ type Props = {
   initialCycleId?: number | null
   initialKpiInstanceId?: number | null
   initialCalendarDate?: string | null
+  initialGroupId?: number | null
   allowListSelectionOnCreate?: boolean
   onSaved?: () => void
 } & (
@@ -86,6 +90,7 @@ export function TaskEditorDialog({
   initialCycleId,
   initialKpiInstanceId,
   initialCalendarDate,
+  initialGroupId,
   allowListSelectionOnCreate = false,
   onSaved,
 }: Props) {
@@ -152,6 +157,7 @@ export function TaskEditorDialog({
       description: task?.description ?? '',
       priority: task?.priority ?? 'MEDIUM',
       startDate: task?.startDate ?? initialDateDefaults.startDate,
+      groupId: task?.groupId ?? initialGroupId ?? null,
       dueDate:
         fixedInstance?.taskPolicy.dueDateMode === 'AUTO'
           ? null
@@ -163,6 +169,8 @@ export function TaskEditorDialog({
     },
   })
 
+  const currentListId = useWatch({control,name:'listId'})
+  const groupQuery = useTaskGroups((fixedInstance || fixedCycle || cycles) ? null : (currentListId ?? null))
   const selectedCycleId = useWatch({ control, name: 'cycleId' })
   const selectedInstanceId = useWatch({ control, name: 'kpiInstanceId' })
   const selectedCycle = fixedCycle ?? selectableCycles.find((item) => item.id === selectedCycleId)
@@ -243,6 +251,7 @@ export function TaskEditorDialog({
       description: values.description ?? null,
       priority: values.priority,
       startDate: values.startDate ?? null,
+      ...(!isKpiTask ? {groupId:values.groupId??null} : {}),
     }
 
     let taskValues: SaveTaskInput
@@ -446,6 +455,14 @@ export function TaskEditorDialog({
                 <p className="text-muted-foreground text-xs">{t('tasks.assignment.optionalHint')}</p>
               </div>
             ) : null}
+            {!isKpiTask && groupQuery.data?.groups.length ? (
+              <Controller name="groupId" control={control} render={({field})=>(
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="text-sm font-medium">{t('taskGroups.select')}</label>
+                  <TaskGroupSelect groups={groupQuery.data.groups} value={field.value??null} onChange={field.onChange} />
+                </div>
+              )}/>
+            ) : null}
             {!isKpiTask ? <div className="space-y-1.5 sm:col-span-2">
               <label className="text-sm font-medium">{t('tags.title')}</label>
               <TagPicker value={tagIds} onChange={setTagIds} disabled={pending}/>
@@ -489,6 +506,7 @@ export function TaskEditorDialog({
                         disabled={task?.meetingActionItem !== null && task?.meetingActionItem !== undefined}
                         onValueChange={(value) => {
                           field.onChange(Number(value))
+                          setValue('groupId',null)
                           clearErrors('listId')
                         }}
                       >

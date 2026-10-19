@@ -32,6 +32,10 @@ vi.mock('../assignment/use-general-assignment', () => ({
   useEligibleTaskUser: () => ({data:null}),
 }))
 
+vi.mock('../assignment/use-task-groups', () => ({
+  useTaskGroups: () => ({ data: { groups: [] } }),
+}))
+
 vi.mock('@/features/kpis/hooks/use-kpis', () => ({
   useKpiTaskDeadline: () => deadlineQuery,
 }))
@@ -320,4 +324,3 @@ describe('TaskEditorDialog', () => {
     expect(mutations.createKpi).not.toHaveBeenCalled()
   })
 })
-
