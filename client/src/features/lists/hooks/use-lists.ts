@@ -5,10 +5,11 @@ import type { PersonalList } from '../types/list.types'
 
 export const listsQueryKey = ['lists'] as const
 
-export function useLists() {
+export function useLists(enabled = true) {
   return useQuery({
     queryKey: listsQueryKey,
     queryFn: getLists,
+    enabled,
   })
 }
 
@@ -83,3 +84,4 @@ export function useArchiveList() {
     },
   })
 }
+

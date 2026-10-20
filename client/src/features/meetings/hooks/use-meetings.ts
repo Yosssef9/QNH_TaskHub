@@ -7,6 +7,8 @@ import {
   approveMeetingReschedule,
   archiveMeetingTemplate,
   bulkUpdateMeetingAttendance,
+  getMeetingEditDependencies,
+  updateHistoricalMeeting,
   cancelMeeting,
   cancelMeetingRescheduleRequest,
   checkMeetingAvailability,
@@ -128,6 +130,22 @@ export function useCreateDirectMeeting() {
   return useMeetingMutation(createDirectMeeting)
 }
 
+export function useMeetingEditDependencies(meetingId: number | null) {
+  return useQuery({
+    queryKey: [...meetingsQueryKey, 'edit-dependencies', meetingId],
+    queryFn: () => getMeetingEditDependencies(meetingId as number),
+    enabled: meetingId !== null,
+    staleTime: 0,
+  })
+}
+
+// The historical editor shares this dependency contract with scheduled Meetings.
+export const useHistoricalMeetingEditDependencies = useMeetingEditDependencies
+
+export function useUpdateHistoricalMeeting() {
+  return useMeetingMutation(updateHistoricalMeeting)
+}
+
 export function useUpdatePendingMeetingSchedule() {
   return useMeetingMutation(updatePendingMeetingSchedule)
 }
@@ -202,6 +220,7 @@ export function useUpdateMeetingAttendance() {
     mutationFn: updateMeetingAttendance,
     onSuccess: (detail, input) => {
       client.setQueryData([...meetingsQueryKey, 'detail', input.meetingId], detail)
+      void client.invalidateQueries({ queryKey: [...meetingsQueryKey, 'edit-dependencies', input.meetingId] })
     },
   })
 }
@@ -212,6 +231,7 @@ export function useBulkUpdateMeetingAttendance() {
     mutationFn: bulkUpdateMeetingAttendance,
     onSuccess: (detail, input) => {
       client.setQueryData([...meetingsQueryKey, 'detail', input.meetingId], detail)
+      void client.invalidateQueries({ queryKey: [...meetingsQueryKey, 'edit-dependencies', input.meetingId] })
     },
   })
 }
@@ -222,6 +242,7 @@ export function useUpdateMeetingAgenda() {
     mutationFn: updateMeetingAgenda,
     onSuccess: (detail, input) => {
       client.setQueryData([...meetingsQueryKey, 'detail', input.meetingId], detail)
+      void client.invalidateQueries({ queryKey: [...meetingsQueryKey, 'edit-dependencies', input.meetingId] })
       void client.invalidateQueries({ queryKey: myMeetingsQueryKey })
       void client.invalidateQueries({ queryKey: myMeetingRequestsQueryKey })
       void client.invalidateQueries({ queryKey: ['meetings', 'action-items', input.meetingId] })
@@ -281,6 +302,7 @@ export function useUploadMeetingAttachment() {
     onSuccess: (_attachment, input) => {
       void client.invalidateQueries({ queryKey: [...meetingsQueryKey, 'attachments', input.meetingId] })
       void client.invalidateQueries({ queryKey: [...meetingsQueryKey, 'detail', input.meetingId] })
+      void client.invalidateQueries({ queryKey: [...meetingsQueryKey, 'edit-dependencies', input.meetingId] })
     },
   })
 }
@@ -293,6 +315,7 @@ export function useRemoveMeetingAttachment() {
     onSuccess: (_result, input) => {
       void client.invalidateQueries({ queryKey: [...meetingsQueryKey, 'attachments', input.meetingId] })
       void client.invalidateQueries({ queryKey: [...meetingsQueryKey, 'detail', input.meetingId] })
+      void client.invalidateQueries({ queryKey: [...meetingsQueryKey, 'edit-dependencies', input.meetingId] })
     },
   })
 }
@@ -350,3 +373,4 @@ export function useRecreateMeetingOutlookSync() {
     },
   })
 }
+

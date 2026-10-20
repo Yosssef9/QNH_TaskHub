@@ -5,6 +5,22 @@ import { useTimeFormatPreference } from '@/features/preferences/hooks/use-time-f
 import { formatDateTime } from '@/lib/date-time'
 
 import type { Subtask, TaskActivity } from '../types/task.types'
+
+type ChangedField = 'title' | 'description' | 'priority' | 'startDate' | 'dueDate' | 'agendaItemId' | 'assigneeUserIds' | 'tagIds'
+const AUDIT_FIELDS: readonly ChangedField[] = ['title', 'description', 'priority', 'startDate', 'dueDate', 'agendaItemId', 'assigneeUserIds', 'tagIds']
+
+function activityChanges(event: TaskActivity['eventData']): Array<{field: ChangedField; from: string | null; to: string | null}> {
+  const entries = event?.changes
+  if (!Array.isArray(entries)) return []
+  return entries.flatMap((entry: unknown) => {
+    if (!entry || typeof entry !== 'object') return []
+    const value = entry as Record<string, unknown>
+    if (!AUDIT_FIELDS.some((field) => field === value.field)) return []
+    if (!(value.from === null || typeof value.from === 'string')) return []
+    if (!(value.to === null || typeof value.to === 'string')) return []
+    return [{field: value.field as ChangedField, from: value.from as string | null, to: value.to as string | null}]
+  })
+}
 import { taskActivityDetails } from './task-activity-details'
 
 /** Keep each person's name, user code and email together in both RTL and LTR. */
@@ -49,6 +65,7 @@ export function TaskActivityTimeline({ activity, subtasks }: {
       {activity.length ? <ol className="max-h-[38rem] space-y-0 overflow-y-auto pe-2">
         {activity.map(item => {
           const detail = taskActivityDetails(item, subtasks)
+          const changes = activityChanges(item.eventData)
           return <li key={item.id} className="border-border relative border-s py-3 ps-5 text-sm last:pb-0">
             <span className="bg-primary ring-background absolute -start-[4.5px] top-[1.15rem] size-2 rounded-full ring-4" />
             <div className="w-full min-w-0 max-w-2xl space-y-2 text-start">
@@ -61,6 +78,20 @@ export function TaskActivityTimeline({ activity, subtasks }: {
                 {detail.from && detail.to && <p className="text-muted-foreground text-xs">
                   <bdi dir="auto" className="break-words">{detail.from}</bdi> <span aria-hidden="true">→</span> <bdi dir="auto" className="break-words">{detail.to}</bdi>
                 </p>}
+                {changes.length > 0 && <ul className="space-y-1 rounded-md border border-border/60 bg-muted/20 p-2 text-xs">
+                  {changes.map((change) => <li key={change.field} className="min-w-0 break-words">
+                    <span className="font-semibold">{change.field === 'agendaItemId'
+                      ? t('meetings.followUp.relatedAgenda')
+                      : change.field === 'assigneeUserIds'
+                        ? t('meetings.followUp.assignTo')
+                        : change.field === 'tagIds'
+                          ? t('tags.title')
+                          : t(`tasks.details.activityFields.${change.field}`)}:</span>{' '}
+                    <bdi dir="auto">{change.from ?? t('tasks.details.notSet')}</bdi>{' '}
+                    <span aria-hidden="true">→</span>{' '}
+                    <bdi dir="auto">{change.to ?? t('tasks.details.notSet')}</bdi>
+                  </li>)}
+                </ul>}
                 {detail.oldTitle && detail.newTitle && detail.oldTitle !== detail.newTitle && <p className="text-muted-foreground text-xs">
                   <bdi dir="auto" className="break-words">{detail.oldTitle}</bdi> <span aria-hidden="true">→</span> <bdi dir="auto" className="break-words">{detail.newTitle}</bdi>
                 </p>}
@@ -89,3 +120,4 @@ export function TaskActivityTimeline({ activity, subtasks }: {
     </CardContent>
   </Card>
 }
+

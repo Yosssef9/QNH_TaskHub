@@ -3,7 +3,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Clock3,
-  Ellipsis,
+  Pencil,
   FileCheck2,
   LayoutDashboard,
   ListChecks,
@@ -15,6 +15,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router'
 
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
@@ -23,7 +24,6 @@ import { taskHubEase, taskHubItemMotion } from '@/components/shared/TaskHubMotio
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
@@ -49,7 +49,6 @@ import {
 import type { MeetingDetail } from '@/features/meetings/types/meeting.types'
 import { TaskCollectionToolbar } from '@/features/tasks/components/TaskCollectionToolbar'
 import { TaskDetailsDrawer } from '@/features/tasks/components/TaskDetailsDrawer'
-import { TaskAssigneePicker } from '@/features/tasks/assignment/TaskAssigneePicker'
 import {
   TaskDueIndicator,
   TaskPriorityIndicator,
@@ -75,7 +74,6 @@ import { MeetingActionTaskCard } from './MeetingActionTaskCard'
 import {
   useMeetingActionItemAssignees,
   useMeetingActionItems,
-  useReassignMeetingActionItem,
 } from './use-meeting-action-items'
 
 const ALL = 'ALL'
@@ -161,19 +159,29 @@ function ActionItemPreviewRow({
   item,
   showAssignee,
   onOpen,
+  onEdit,
 }: {
   item: MeetingActionItem
   showAssignee: boolean
   onOpen: () => void
+  onEdit?: () => void
 }) {
   const { i18n, t } = useTranslation()
   const dueDate = item.dueDate ? parseDateOnly(item.dueDate) : null
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={t('tasks.details.open', { title: item.title })}
       onClick={onOpen}
-      className="hover:border-primary/25 hover:bg-muted/10 focus-visible:ring-ring flex w-full min-w-0 flex-col gap-3 rounded-xl border border-border/70 bg-card p-3.5 text-start shadow-sm transition-[border-color,background-color,box-shadow] hover:shadow-md focus-visible:ring-2 focus-visible:outline-none sm:p-4"
+      onKeyDown={(event) => {
+        if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault()
+          onOpen()
+        }
+      }}
+      className="hover:border-primary/25 hover:bg-muted/10 focus-visible:ring-ring flex w-full min-w-0 cursor-pointer flex-col gap-3 rounded-xl border border-border/70 bg-card p-3.5 text-start shadow-sm transition-[border-color,background-color,box-shadow] hover:shadow-md focus-visible:ring-2 focus-visible:outline-none sm:p-4"
     >
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -184,7 +192,21 @@ function ActionItemPreviewRow({
             </p>
           ) : null}
         </div>
-        <TaskStatusIndicator status={item.status} pill />
+        <div className="flex shrink-0 items-center gap-2">
+          {onEdit ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              aria-label={t('tasks.editTitle')}
+              title={t('tasks.editTitle')}
+              onClick={(event) => { event.stopPropagation(); onEdit() }}
+            >
+              <Pencil aria-hidden="true" className="size-4" />
+            </Button>
+          ) : null}
+          <TaskStatusIndicator status={item.status} pill />
+        </div>
       </div>
       <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
         <TaskPriorityIndicator priority={item.priority} />
@@ -213,7 +235,7 @@ function ActionItemPreviewRow({
           </span>
         ) : null}
       </div>
-    </button>
+    </div>
   )
 }
 
@@ -261,6 +283,7 @@ export function MeetingFollowUpPanel({
   onSectionChange?: (section: MeetingFollowUpSectionKey | null) => void
 }) {
   const { i18n, t } = useTranslation()
+  const [searchParams,setSearchParams] = useSearchParams()
   const currentUser = useCurrentUser()
   const shouldReduceMotion = useReducedMotion()
   const meeting = detail.meeting
@@ -274,11 +297,10 @@ export function MeetingFollowUpPanel({
   const scheduling = useFollowUpMeetingScheduling(detail)
 
   const [createOpen, setCreateOpen] = useState(false)
+  const [editItem, setEditItem] = useState<MeetingActionItem | null>(null)
   const [createAgendaItemId, setCreateAgendaItemId] = useState<number | null>(null)
   const [localDecisionLaunch, setLocalDecisionLaunch] = useState<MeetingFollowUpLaunchRequest | null>(null)
   const [taskId, setTaskId] = useState<number | null>(null)
-  const [reassignItem, setReassignItem] = useState<MeetingActionItem | null>(null)
-  const [reassignAssignee, setReassignAssignee] = useState('')
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<TaskStatus | undefined>()
@@ -297,9 +319,17 @@ export function MeetingFollowUpPanel({
     onLaunchRequestHandled?.()
   }, [launchRequest, onLaunchRequestHandled])
 
-  const reassignMutation = useReassignMeetingActionItem(meeting.id, reassignItem?.taskId ?? 0)
 
   const allItems = actionItems.data?.items ?? []
+  useEffect(() => {
+    const target = Number(searchParams.get('editTask'))
+    if (!target || !actionItems.data) return
+    const item = actionItems.data.items.find(candidate => candidate.taskId === target)
+    if (item && currentUserId === item.organizerUserId && item.status !== 'CANCELLED') setEditItem(item)
+    const next = new URLSearchParams(searchParams)
+    next.delete('editTask')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, actionItems.data, currentUserId, setSearchParams])
   const today = getCurrentDateOnlyInAppTimeZone()
   const summary = useMemo(
     () => ({
@@ -494,29 +524,6 @@ export function MeetingFollowUpPanel({
           void actionItems.refetch()
         },
         onError: () => toast.error(t('tasks.errors.status')),
-      },
-    )
-  }
-
-  function openReassign(item: MeetingActionItem) {
-    setReassignItem(item)
-    setReassignAssignee(String(item.assigneeUserId))
-  }
-
-  function submitReassign() {
-    if (!reassignItem || !reassignAssignee) return
-    reassignMutation.mutate(
-      {
-        assigneeUserId: Number(reassignAssignee),
-        rowVersion: reassignItem.rowVersion,
-      },
-      {
-        onSuccess: () => {
-          toast.success(t('meetings.followUp.reassigned'))
-          setReassignItem(null)
-          setReassignAssignee('')
-        },
-        onError: () => toast.error(t('meetings.followUp.reassignError')),
       },
     )
   }
@@ -861,6 +868,8 @@ export function MeetingFollowUpPanel({
                         item={item}
                         showAssignee
                         onOpen={() => setTaskId(item.taskId)}
+                        {...(currentUserId === item.assignedByUserId && item.status !== 'CANCELLED'
+                          ? { onEdit: () => setEditItem(item) } : {})}
                       />
                     ))}
                   </div>
@@ -1115,39 +1124,17 @@ export function MeetingFollowUpPanel({
                                 statusPending={statusMutation.isPending}
                                 onStatusChange={(nextStatus) => changeStatus(item, nextStatus)}
                                 showAssignee
-                                actionMenu={
-                                  isOrganizer && item.status !== 'CANCELLED' ? (
-                                    <Popover>
-                                      <PopoverTrigger asChild>
-                                        <Button
-                                          size="icon"
-                                          variant="ghost"
-                                          aria-label={t('meetings.followUp.moreActions')}
-                                        >
-                                          <Ellipsis className="size-4" />
-                                        </Button>
-                                      </PopoverTrigger>
-                                      <PopoverContent align="end" className="w-48 p-1">
-{!item.isCollaborative ? (                                        <button
-                                          type="button"
-                                          className="hover:bg-muted focus-visible:bg-muted flex w-full items-center gap-2 rounded-md px-3 py-2 text-start text-sm outline-none"
-                                          onClick={() => openReassign(item)}
-                                        >
-                                          <UserRound className="size-4" />
-                                          {t('meetings.followUp.reassign')}
-                                        </button>) : null}
-                                        <button
-                                          type="button"
-                                          className="hover:bg-muted focus-visible:bg-muted flex w-full items-center gap-2 rounded-md px-3 py-2 text-start text-sm outline-none"
-                                          onClick={() => setTaskId(item.taskId)}
-                                        >
-                                          <ClipboardCheck className="size-4" />
-                                          {t('meetings.followUp.openDetails')}
-                                        </button>
-                                      </PopoverContent>
-                                    </Popover>
-                                  ) : null
-                                }
+                                actionMenu={currentUserId === item.assignedByUserId && item.status !== 'CANCELLED' ? (
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    title={t('tasks.editTitle')}
+                                    aria-label={t('tasks.editTitle')}
+                                    onClick={(event) => { event.stopPropagation(); setEditItem(item) }}
+                                  >
+                                    <Pencil aria-hidden="true" className="size-4" />
+                                  </Button>
+                                ) : null}
                               />
                             </motion.li>
                           ))}
@@ -1200,6 +1187,18 @@ export function MeetingFollowUpPanel({
         initialValues={scheduling.initialValues}
       />
 
+      {editItem ? (
+        <MeetingActionItemCreateDialog
+          key={`meeting-action-edit-${editItem.taskId}`}
+          meetingId={meeting.id}
+          item={editItem}
+          agendaItems={detail.agendaItems}
+          assignees={assignees.data ?? []}
+          assigneesLoading={assignees.isPending}
+          open
+          onOpenChange={(open) => { if (!open) setEditItem(null) }}
+        />
+      ) : null}
       <MeetingActionItemCreateDialog
         meetingId={meeting.id}
         agendaItems={detail.agendaItems}
@@ -1213,59 +1212,12 @@ export function MeetingFollowUpPanel({
         initialAgendaItemId={createAgendaItemId}
       />
 
-      <Dialog
-        open={reassignItem !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setReassignItem(null)
-            setReassignAssignee('')
-          }
-        }}
-      >
-        <DialogContent variant="modal" closeLabel={t('common.close')}>
-          <DialogTitle>{t('meetings.followUp.reassignTitle')}</DialogTitle>
-          <DialogDescription className="mt-1">
-            {t('meetings.followUp.reassignDescription')}
-          </DialogDescription>
-          <div className="mt-6 space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">{t('meetings.followUp.assignTo')}</label>
-              <TaskAssigneePicker
-                value={reassignAssignee ? Number(reassignAssignee) : null}
-                onChange={(userId) => setReassignAssignee(userId === null ? '' : String(userId))}
-                meetingId={meeting.id}
-                allowClear={false}
-                disabled={reassignMutation.isPending}
-              />
-              {!assignees.isPending && (assignees.data?.filter((item) => item.eligible).length ?? 0) === 0 ? (
-                <p className="border-warning/25 bg-warning/10 text-warning-foreground rounded-lg border px-3 py-2 text-xs leading-5">
-                  {t('meetings.followUp.noEligibleAssigneesDescription')}
-                </p>
-              ) : null}
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setReassignItem(null)}>
-                {t('common.cancel')}
-              </Button>
-              <Button
-                disabled={
-                  reassignMutation.isPending ||
-                  !reassignAssignee ||
-                  Number(reassignAssignee) === reassignItem?.assigneeUserId
-                }
-                onClick={submitReassign}
-              >
-                {t('meetings.followUp.reassign')}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       <TaskDetailsDrawer taskId={taskId} onOpenChange={(open) => !open && setTaskId(null)} />
     </div>
   )
 }
+
+
 
 
 

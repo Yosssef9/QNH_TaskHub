@@ -81,6 +81,7 @@ export interface MeetingDetailPermissions {
   canManageAgenda: boolean;
   canManageAttachments: boolean;
   canSaveAsTemplate: boolean;
+  canEditHistorical: boolean;
   canManageAttendance: boolean;
 }
 
@@ -195,5 +196,6 @@ export interface SaveMeetingTemplateInput {
 export interface UpdateMeetingTemplateInput extends SaveMeetingTemplateInput {
   rowVersion: string;
 }
+
 
 

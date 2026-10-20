@@ -103,11 +103,10 @@ export const notificationsRepository = {
       .input("listId", sql.BigInt, input.listId)
       .input("subtaskId", sql.BigInt, input.subtaskId ?? null)
       .input("eventDate", sql.Date, input.eventDate ?? null)
-      .query(`IF NOT EXISTS (
-                 SELECT 1 FROM dbo.TM_meeting_action_items actionItem
-                 JOIN dbo.TM_meetings meeting ON meeting.id = actionItem.meeting_id
-                 WHERE actionItem.task_id = @taskId AND meeting.is_historical_entry = 1
-               ) AND NOT EXISTS (SELECT 1 FROM dbo.TM_notifications WITH (UPDLOCK,HOLDLOCK)
+      // Follow-up tasks use the normal assignment notification pipeline even if their
+      // source Meeting was recorded historically. Meeting lifecycle notifications
+      // are suppressed separately by meeting-notifications.repository.ts.
+      .query(`IF NOT EXISTS (SELECT 1 FROM dbo.TM_notifications WITH (UPDLOCK,HOLDLOCK)
                   WHERE owner_user_id=@ownerUserId AND dedupe_key=@dedupe)
         INSERT dbo.TM_notifications(owner_user_id,notification_type,dedupe_key,subject_title,
           context_title,task_id,list_id,subtask_id,event_date,email_processed_at_utc)
@@ -130,8 +129,8 @@ export const notificationsRepository = {
       .input("listId", sql.BigInt, input.listId ?? null)
       .input("meetingId", sql.BigInt, input.meetingId)
       .query(`
-        IF NOT EXISTS (SELECT 1 FROM dbo.TM_meetings WHERE id = @meetingId AND is_historical_entry = 1)
-        AND NOT EXISTS (
+        -- An Action Item is actionable regardless of the Meeting's historical status.
+        IF NOT EXISTS (
           SELECT 1
           FROM dbo.TM_notifications WITH (UPDLOCK, HOLDLOCK)
           WHERE owner_user_id = @owner AND dedupe_key = @dedupeKey
@@ -739,6 +738,7 @@ export const notificationsRepository = {
     return result.rowsAffected[0] ?? 0;
   },
 };
+
 
 
 

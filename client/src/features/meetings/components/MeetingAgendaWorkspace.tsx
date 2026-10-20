@@ -4,9 +4,9 @@ import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
-import { toApiClientError } from '@/lib/api-error'
+import { meetingMutationErrorMessage } from '../meeting-edit-restrictions'
 
-import { useUpdateMeetingAgenda } from '../hooks/use-meetings'
+import { useMeetingEditDependencies, useUpdateMeetingAgenda } from '../hooks/use-meetings'
 import type { MeetingAgendaItem, MeetingDetail, MeetingParticipant } from '../types/meeting.types'
 import {
   MeetingAgendaEditor,
@@ -48,6 +48,10 @@ export function MeetingAgendaWorkspace({
   const { t } = useTranslation()
   const updateAgenda = useUpdateMeetingAgenda()
   const meeting = detail.meeting
+  const dependencies = useMeetingEditDependencies(
+    meeting.status === 'SCHEDULED' ? meeting.id : null,
+  )
+  const isLoadingDependencies = meeting.status === 'SCHEDULED' && !dependencies.data
   const participants = useMemo<MeetingParticipant[]>(
     () => (meeting.organizerAttending ? [meeting.organizer, ...meeting.attendees] : meeting.attendees),
     [meeting.attendees, meeting.organizer, meeting.organizerAttending],
@@ -88,12 +92,7 @@ export function MeetingAgendaWorkspace({
       })
       toast.success(t('meetings.workspace.agendaSaved'))
     } catch (error) {
-      const apiError = toApiClientError(error)
-      toast.error(
-        t(`meetings.errors.${apiError.code}`, {
-          defaultValue: t('meetings.workspace.agendaSaveError'),
-        }),
-      )
+      toast.error(meetingMutationErrorMessage(t, error, t('meetings.workspace.agendaSaveError')))
     }
   }
 
@@ -106,7 +105,7 @@ export function MeetingAgendaWorkspace({
             {t('meetings.workspace.agendaManageDescription')}
           </p>
         </div>
-        <Button size="sm" disabled={!changed || updateAgenda.isPending} onClick={() => void save()}>
+        <Button size="sm" disabled={!changed || updateAgenda.isPending || isLoadingDependencies} onClick={() => void save()}>
           <Save aria-hidden="true" className="size-4" />
           {t('meetings.workspace.saveAgenda')}
         </Button>
@@ -117,7 +116,9 @@ export function MeetingAgendaWorkspace({
         participants={participants}
         organizerUserId={meeting.organizer.userId}
         meetingDurationMinutes={meetingDurationMinutes}
-        disabled={updateAgenda.isPending}
+        disabled={updateAgenda.isPending || isLoadingDependencies}
+        protectedAgendaIds={dependencies.data?.agendaIds ?? []}
+        protectedAgendaDetails={dependencies.data?.agenda ?? []}
         errors={errors}
         onChange={setItems}
         followUpActionsEnabled={followUpActionsEnabled}
@@ -135,5 +136,6 @@ export function MeetingAgendaWorkspace({
     </div>
   )
 }
+
 
 

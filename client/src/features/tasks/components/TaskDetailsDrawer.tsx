@@ -598,6 +598,17 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                     </DialogDescription>
                     {query.data.task.kpiInstanceId === null ? <div className="mt-3 flex flex-wrap items-center gap-3">
                       <TaskTags tags={query.data.task.tags ?? []}/>
+                      {query.data.actionItem && isOwner && capabilities?.canEditDetails && !readOnly && query.data.task.listId !== null ? (
+                        <Button type="button" size="sm" variant="outline"
+                          onClick={() => {
+                            const meetingId = query.data?.actionItem?.meetingId
+                            if (!meetingId || !query.data) return
+                            onOpenChange(false)
+                            navigate(`/meetings/${meetingId}?tab=follow-up&editTask=${query.data.task.id}`)
+                          }}>
+                          <Pencil className="size-4" />{t('tasks.editTitle')}
+                        </Button>
+                      ) : null}
                       {capabilities?.role==='OWNER'?<Button type="button" size="sm" variant="outline" onClick={()=>setShareOpen(true)}>
                         <Share2 className="size-4"/>{t('taskSharing.share')}
                       </Button>:null}
@@ -1129,3 +1140,4 @@ function InfoRow({
     </div>
   )
 }
+

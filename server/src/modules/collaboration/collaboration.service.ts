@@ -103,23 +103,14 @@ export async function initializeCollaborativeTask(
   await recalculate(taskId,ownerId,transaction);
 }
 
-export const collaborationService={
-  async view(actorId:number,taskId:number){
-    const task=await repo.task(taskId);
-    if (!task || task.kpiInstanceId!==null) throw notFound();
-    if (!task.isCollaborative) {
-      if (task.ownerUserId!==actorId) throw notFound();
-      return {enabled:false,canManage:true,members:[],notes:[],files:[],modes:[],progress:[]};
-    }
-    if (task.ownerUserId!==actorId && !(await repo.isAssigned(taskId,actorId))) throw notFound();
-    return {enabled:true,canManage:task.ownerUserId===actorId,
-      ...(await repo.snapshot(taskId,actorId,task.ownerUserId) as object)};
-  },
-  async setMainTeam(actorId:number,taskId:number,inputIds:number[]){
-    const selected=normalizeCollaborators(inputIds);
-    if (selected.length===0 || selected.length>30) throw new AppError({statusCode:400,
-      code:'COLLABORATION_TEAM_SIZE',message:'Choose between 1 and 30 users.'});
-    await withTransaction(async transaction=>{
+/** Used by Meeting Action Item updates to commit membership with metadata and audit atomically. */
+export async function setCollaborativeMainTeamInTransaction(
+  actorId: number, taskId: number, inputIds: number[], transaction: DatabaseTransaction,
+): Promise<void> {
+  const selected = normalizeCollaborators(inputIds);
+  if (selected.length === 0 || selected.length > 30) throw new AppError({statusCode:400,
+    code:'COLLABORATION_TEAM_SIZE',message:'Choose between 1 and 30 users.'});
+
       const {context,task}=await lockTask(actorId,taskId,transaction,true);
       await validateTeam(context,selected,transaction);
       if (!context.isCollaborative && task.status==='DONE') throw new AppError({statusCode:409,
@@ -145,7 +136,22 @@ export const collaborationService={
           child.isCompleted);
       }
       await recalculate(taskId,actorId,transaction);
-    });
+}
+
+export const collaborationService={
+  async view(actorId:number,taskId:number){
+    const task=await repo.task(taskId);
+    if (!task || task.kpiInstanceId!==null) throw notFound();
+    if (!task.isCollaborative) {
+      if (task.ownerUserId!==actorId) throw notFound();
+      return {enabled:false,canManage:true,members:[],notes:[],files:[],modes:[],progress:[]};
+    }
+    if (task.ownerUserId!==actorId && !(await repo.isAssigned(taskId,actorId))) throw notFound();
+    return {enabled:true,canManage:task.ownerUserId===actorId,
+      ...(await repo.snapshot(taskId,actorId,task.ownerUserId) as object)};
+  },
+  async setMainTeam(actorId:number,taskId:number,inputIds:number[]){
+    await withTransaction(transaction=>setCollaborativeMainTeamInTransaction(actorId,taskId,inputIds,transaction));
     return this.view(actorId,taskId);
   },
   async setChildTeam(actorId:number,taskId:number,subtaskId:number,mode:'INHERIT'|'CUSTOM',selectedIds:number[]){
@@ -244,3 +250,4 @@ export const collaborationService={
     return {name:file.name,mime:file.mime,buffer:await readAttachment(file.key)};
   },
 };
+

@@ -2,6 +2,10 @@ import { tagsService } from "../tags/tags.service.js";
 import { withTransaction } from "../../database/transaction.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
+import { assertNormalTaskStartDateAllowed } from '../tasks/tasks.start-date.policy.js';
+import { taskUpdateFieldChanges } from '../tasks/tasks.audit.js';
+import { assertTaskWritable } from '../tasks/tasks.policy.js';
+import { sql } from '../../database/sql.js';
 import type { TaskHubAccess } from "../auth/auth.types.js";
 import { meetingSchedulingRepository } from "../meetings/meeting-scheduling.repository.js";
 import { meetingWorkspaceRepository } from "../meetings/meeting-workspace.repository.js";
@@ -9,7 +13,7 @@ import { requireMeetingContentAccess } from "../meetings/meeting-content-access.
 import { notificationsRepository } from "../notifications/notifications.repository.js";
 import { tasksRepository } from "../tasks/tasks.repository.js";
 import { collaborationRepository } from "../collaboration/collaboration.repository.js";
-import { initializeCollaborativeTask } from "../collaboration/collaboration.service.js";
+import { initializeCollaborativeTask, setCollaborativeMainTeamInTransaction } from "../collaboration/collaboration.service.js";
 import { meetingActionItemsRepository } from "./meeting-action-items.repository.js";
 import type {
   AssignedMeetingActionItemListData,
@@ -17,6 +21,7 @@ import type {
   CreateMeetingActionItemInput,
   MeetingActionItemListData,
   ReassignMeetingActionItemInput,
+  UpdateMeetingActionItemInput,
 } from "./meeting-action-items.types.js";
 
 function meetingNotFound(): AppError {
@@ -106,6 +111,12 @@ export const meetingActionItemsService = {
     }
 
     const taskId = await withTransaction(async (transaction) => {
+      // Stable request IDs make client retries safe after an uncertain network response.
+      if (input.requestId) {
+        const existing = await meetingActionItemsRepository.findCreationRequest(transaction, meetingId, input.requestId);
+        if (existing !== null) return existing;
+      }
+      await meetingWorkspaceRepository.lockMeetingForContentMutation(transaction, meetingId);
       const locked = await meetingWorkspaceRepository.findAccessContext(
         meetingId,
         actorUserId,
@@ -188,6 +199,7 @@ export const meetingActionItemsService = {
         {
           taskId: created,
           meetingId,
+          requestId: input.requestId,
           agendaItemId: input.agendaItemId ?? null,
           assigneeUserId: input.assigneeUserId,
           assignedByUserId: actorUserId,
@@ -245,6 +257,131 @@ export const meetingActionItemsService = {
     return { item };
   },
 
+  async update(
+    actorUserId: number,
+    access: TaskHubAccess,
+    meetingId: number,
+    taskId: number,
+    input: UpdateMeetingActionItemInput,
+  ) {
+    await accessContext(actorUserId, access, meetingId);
+    await withTransaction(async transaction => {
+      await meetingWorkspaceRepository.lockMeetingForContentMutation(transaction, meetingId);
+      const relation = await meetingActionItemsRepository.findContext(taskId, transaction);
+      // The actual task creator is its immutable owner; being a Meeting attendee
+      // or holding Coordinator permission does not grant permission to edit it.
+      if (!relation || relation.meetingId !== meetingId) throw actionItemNotFound();
+      if (relation.ownerUserId !== actorUserId) throw new AppError({statusCode:403,
+        code:'MEETING_ACTION_ITEM_CREATOR_REQUIRED',message:'Only the Action Item creator may edit it.'});
+      const task = await tasksRepository.findOwnedForUpdate(transaction, relation.ownerUserId, taskId);
+      if (!task) throw actionItemNotFound();
+      assertTaskWritable(task);
+      if (task.status === 'CANCELLED') throw new AppError({statusCode:409,
+        code:'MEETING_ACTION_ITEM_CANCELLED',message:'Restore the Action Item before editing.'});
+      const validIds = [...new Set(input.assigneeUserIds)];
+      if (validIds.length !== input.assigneeUserIds.length) throw new AppError({statusCode:400,
+        code:'MEETING_ACTION_ITEM_DUPLICATE_ASSIGNEE',message:'Each employee can be selected once.'});
+      for (const id of validIds) {
+        if (!(await meetingActionItemsRepository.eligibleAssignee(transaction,meetingId,actorUserId,id))) {
+          throw new AppError({statusCode:400,code:'MEETING_ACTION_ITEM_ASSIGNEE_INVALID',
+            message:'Select active, eligible Meeting participants.'});
+        }
+      }
+      if (input.agendaItemId !== null && !(await meetingActionItemsRepository.agendaBelongsToMeeting(
+        transaction,meetingId,input.agendaItemId))) throw new AppError({statusCode:400,
+        code:'MEETING_ACTION_ITEM_AGENDA_INVALID',message:'Agenda topic is not part of this Meeting.'});
+      const startDate = input.startDate ?? null;
+      const dueDate = input.dueDate ?? null;
+      const previousStart = task.startDate?.toISOString().slice(0,10) ?? null;
+      const previousDue = task.dueDate?.toISOString().slice(0,10) ?? null;
+      assertNormalTaskStartDateAllowed(startDate, previousStart);
+      if (startDate && dueDate && startDate > dueDate) throw new AppError({statusCode:400,
+        code:'TASK_DATE_RANGE_INVALID',message:'Start date must not be after due date.'});
+      const previousMembers = (await collaborationRepository.activeAssignments(taskId,transaction))
+        .filter(member => member.subtaskId === null).map(member => member.assigneeUserId);
+      const previousTeam = previousMembers.length ? previousMembers : [relation.assigneeUserId];
+      const changedTeam = previousTeam.length !== validIds.length ||
+        previousTeam.some(id => !validIds.includes(id));
+      const nextPrimary = validIds.includes(relation.assigneeUserId) ? relation.assigneeUserId : validIds[0]!;
+      const relationChanged = changedTeam || relation.agendaItemId !== input.agendaItemId;
+      const changes: Array<{field:string;from:string|null;to:string|null}> = taskUpdateFieldChanges({
+        title:task.title,description:task.description,priority:task.priority,
+        startDate:previousStart,dueDate:previousDue,
+      },{
+        title:input.title,description:input.description,priority:input.priority,
+        startDate,dueDate,
+      });
+      const priorTags = await transaction.request().input('taskId',sql.BigInt,taskId)
+        .query<{id:number|string}>(`SELECT tag_id AS id FROM dbo.TM_task_tags WHERE task_id=@taskId ORDER BY tag_id`);
+      const beforeTags=priorTags.recordset.map(row=>Number(row.id)).sort((a,b)=>a-b);
+      const afterTags=[...input.tagIds].sort((a,b)=>a-b);
+      const changedTags=JSON.stringify(beforeTags)!==JSON.stringify(afterTags);
+      if (changes.length===0 && !relationChanged && !changedTags) return;
+      // Persist the old/new display values in the immutable event payload. It
+      // must remain intelligible even if staff names or Agenda topics change.
+      if (relation.agendaItemId !== input.agendaItemId) {
+        const nextAgenda = input.agendaItemId === null ? null : await transaction.request()
+          .input('agendaId',sql.BigInt,input.agendaItemId)
+          .query<{topic:string}>(`SELECT TOP (1) topic FROM dbo.TM_meeting_agenda_items WHERE id=@agendaId`);
+        changes.push({field:'agendaItemId',from:relation.agendaTitle,to:nextAgenda?.recordset[0]?.topic ?? null});
+      }
+      if (changedTeam) {
+        const people = await transaction.request()
+          .input('ids',sql.NVarChar(sql.MAX),JSON.stringify([...new Set([...previousTeam,...validIds])]))
+          .query<{id:number;name:string}>(`SELECT USER_ID AS id, USER_NAME AS name
+            FROM dbo.users WHERE USER_ID IN (SELECT TRY_CONVERT(INT,value) FROM OPENJSON(@ids))`);
+        const names = new Map(people.recordset.map(row=>[Number(row.id),row.name]));
+        const describe = (ids:number[])=>ids.map(id=>names.get(id) ?? String(id)).join(', ');
+        changes.push({field:'assigneeUserIds',from:describe(previousTeam),to:describe(validIds)});
+      }
+      if (changedTags) changes.push({field:'tagIds',
+        from:beforeTags.join(', ') || null,to:afterTags.join(', ') || null});
+      const nextVersion = await meetingActionItemsRepository.updateRelationship(
+        transaction,taskId,meetingId,input.agendaItemId,nextPrimary,actorUserId,
+        input.rowVersion,changedTeam,
+      );
+      if (!nextVersion) throw new AppError({statusCode:409,code:'STALE_MEETING_ACTION_ITEM',
+        message:'Another user has changed this Action Item. Reload and try again.'});
+      if (changes.length) {
+        await tasksRepository.update(transaction,actorUserId,taskId,{
+          listId:task.listId,groupId:task.groupId ?? null,title:input.title,
+          description:input.description,priority:input.priority,startDate,dueDate,referenceDate:null,
+        });
+        await tasksRepository.addActivity(transaction,actorUserId,taskId,'UPDATED',
+          {fromListId:task.listId,toListId:task.listId,changes},actorUserId);
+      }
+      if (changedTags) {
+        await tagsService.replaceTaskTags(transaction,actorUserId,taskId,afterTags);
+        await tasksRepository.addActivity(transaction,actorUserId,taskId,'TAGS_CHANGED',
+          {fromTagIds:beforeTags,toTagIds:afterTags},actorUserId);
+      }
+      if (changedTeam) {
+        if (previousMembers.length || validIds.length > 1) {
+          await setCollaborativeMainTeamInTransaction(actorUserId,taskId,validIds,transaction);
+        } else {
+          await notificationsRepository.ensureMeetingActionItemNotification(nextPrimary,{
+            type:'MEETING_ACTION_ITEM_ASSIGNED',
+            dedupeKey:`MEETING_ACTION_ITEM_ASSIGNED:${taskId}:${nextPrimary}:${nextVersion}`,
+            subjectTitle:input.title,contextTitle:relation.meetingTitle,taskId,meetingId,
+          },transaction);
+        }
+        await tasksRepository.addActivity(transaction,actorUserId,taskId,'MEETING_ACTION_ITEM_REASSIGNED',
+          {meetingId,fromAssigneeUserIds:previousTeam,toAssigneeUserIds:validIds},actorUserId);
+      }
+      if (relation.agendaItemId !== input.agendaItemId) {
+        await tasksRepository.addActivity(transaction,actorUserId,taskId,'MEETING_ACTION_ITEM_AGENDA_CHANGED',
+          {meetingId,from:relation.agendaItemId,to:input.agendaItemId},actorUserId);
+      }
+      await meetingSchedulingRepository.addActivity(transaction,meetingId,actorUserId,'ACTION_ITEM_UPDATED',{
+        taskId,changes,changedTeam,changedTags,
+        fromAgendaItemId:relation.agendaItemId,toAgendaItemId:input.agendaItemId,
+      });
+    });
+    const item=(await meetingActionItemsRepository.listForMeeting(meetingId)).find(row=>row.taskId===taskId);
+    if (!item) throw actionItemNotFound();
+    return {item};
+  },
+
   async reassign(
     actorUserId: number,
     access: TaskHubAccess,
@@ -262,6 +399,7 @@ export const meetingActionItemsService = {
     }
 
     await withTransaction(async (transaction) => {
+      await meetingWorkspaceRepository.lockMeetingForContentMutation(transaction, meetingId);
       const relation = await meetingActionItemsRepository.findContext(taskId, transaction);
       if (!relation || relation.meetingId !== meetingId || relation.ownerUserId !== actorUserId) {
         throw actionItemNotFound();
@@ -386,6 +524,8 @@ export const meetingActionItemsService = {
     return { ...result, page: query.page, pageSize: query.pageSize };
   },
 };
+
+
 
 
 

@@ -212,6 +212,7 @@ export const meetingFollowUpService = {
     input: CreateMeetingDecisionInput,
   ) {
     const decisionId = await withTransaction(async (transaction) => {
+      await meetingWorkspaceRepository.lockMeetingForContentMutation(transaction, meetingId);
       await requireWritableFollowUp(actorUserId, access, meetingId, transaction);
       await assertAgendaRelationship(transaction, meetingId, input.agendaItemId);
       const id = await meetingFollowUpRepository.createDecision(transaction, meetingId, actorUserId, {
@@ -238,6 +239,7 @@ export const meetingFollowUpService = {
     input: UpdateMeetingDecisionInput,
   ) {
     await withTransaction(async (transaction) => {
+      await meetingWorkspaceRepository.lockMeetingForContentMutation(transaction, meetingId);
       await requireWritableFollowUp(actorUserId, access, meetingId, transaction);
       const locked = await meetingFollowUpRepository.findDecisionForUpdate(
         transaction,
@@ -278,6 +280,7 @@ export const meetingFollowUpService = {
     input: SaveMeetingFollowUpNotesInput,
   ) {
     await withTransaction(async (transaction) => {
+      await meetingWorkspaceRepository.lockMeetingForContentMutation(transaction, meetingId);
       await requireWritableFollowUp(actorUserId, access, meetingId, transaction);
       const locked = await meetingFollowUpRepository.findNotesForUpdate(transaction, meetingId);
       const notesText = input.notesText.trim();
@@ -313,6 +316,7 @@ export const meetingFollowUpService = {
     return { notes };
   },
 };
+
 
 
 

@@ -14,6 +14,7 @@ import {
   listMeetingActionItemAssignees,
   listMeetingActionItems,
   reassignMeetingActionItem,
+  updateMeetingActionItem,
 } from "../meeting-action-items/meeting-action-items.controller.js";
 import {
   createMeetingDecision,
@@ -32,6 +33,7 @@ import {
   createMeetingActionItemBodySchema,
   meetingActionItemParamsSchema,
   reassignMeetingActionItemBodySchema,
+  updateMeetingActionItemBodySchema,
 } from "../meeting-action-items/meeting-action-items.schemas.js";
 import {
   adjustAndApproveMeetingRequest,
@@ -78,6 +80,8 @@ import {
   updateCoordinatorMeetingSchedule,
   updateCoordinatorReschedule,
   updateMeetingAgenda,
+  updateHistoricalMeeting,
+  getHistoricalMeetingEditDependencies,
   updateMeetingAttendance,
   updateOrganizerMeetingReschedule,
   updateOrganizerPendingMeetingSchedule,
@@ -94,6 +98,7 @@ import {
   meetingSeriesParamsSchema,
   meetingSeriesPreviewBodySchema,
 } from "./meeting-series.schemas.js";
+import { updateHistoricalMeetingBodySchema } from "./meeting-historical-edit.schemas.js";
 import {
   createMeetingBodySchema,
   decideMeetingRequestBodySchema,
@@ -418,6 +423,11 @@ meetingsRouter.post(
   validateRequest({ params: meetingWorkspaceParamsSchema, body: createMeetingActionItemBodySchema }),
   createMeetingActionItem,
 );
+meetingsRouter.put(
+  '/:meetingId/action-items/:taskId',
+  validateRequest({ params: meetingActionItemParamsSchema, body: updateMeetingActionItemBodySchema }),
+  updateMeetingActionItem,
+);
 meetingsRouter.patch(
   "/:meetingId/action-items/:taskId/assignee",
   validateRequest({
@@ -482,6 +492,23 @@ meetingsRouter.put(
     body: bulkUpdateMeetingAttendanceBodySchema,
   }),
   bulkUpdateMeetingAttendance,
+);
+
+meetingsRouter.get(
+  "/:meetingId/edit-dependencies",
+  validateRequest({ params: meetingWorkspaceParamsSchema }),
+  getHistoricalMeetingEditDependencies,
+);
+// Preserve the previous historical endpoint for compatible clients.
+meetingsRouter.get(
+  "/:meetingId/historical/dependencies",
+  validateRequest({ params: meetingWorkspaceParamsSchema }),
+  getHistoricalMeetingEditDependencies,
+);
+meetingsRouter.put(
+  "/:meetingId/historical",
+  validateRequest({ params: meetingWorkspaceParamsSchema, body: updateHistoricalMeetingBodySchema }),
+  updateHistoricalMeeting,
 );
 
 meetingsRouter.put(
@@ -554,6 +581,8 @@ meetingRoomsAdminRouter.put(
   }),
   updateMeetingRoom,
 );
+
+
 
 
 

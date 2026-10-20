@@ -251,7 +251,7 @@ export function TaskEditorDialog({
       description: values.description ?? null,
       priority: values.priority,
       startDate: values.startDate ?? null,
-      ...(!isKpiTask ? {groupId:values.groupId??null} : {}),
+      ...(!isKpiTask && !task?.meetingActionItem ? {groupId:values.groupId??null} : {}),
     }
 
     let taskValues: SaveTaskInput
@@ -646,6 +646,7 @@ export function TaskEditorDialog({
     </Dialog>
   )
 }
+
 
 
 

@@ -43,6 +43,7 @@ export interface MeetingActionItemAssigneeOption {
 }
 
 export interface CreateMeetingActionItemInput {
+  requestId?: string
   title: string
   description?: string | null
   priority: TaskPriority
@@ -52,6 +53,18 @@ export interface CreateMeetingActionItemInput {
   assigneeUserIds?: number[]
   tagIds?: number[]
   agendaItemId?: number | null
+}
+
+export interface UpdateMeetingActionItemInput {
+  rowVersion: string
+  title: string
+  description: string | null
+  priority: TaskPriority
+  startDate: string | null
+  dueDate: string | null
+  assigneeUserIds: number[]
+  agendaItemId: number | null
+  tagIds: number[]
 }
 
 export interface ReassignMeetingActionItemInput {
@@ -108,5 +121,6 @@ export interface MeetingActionItemListData {
   items: MeetingActionItem[]
   canCreate: boolean
 }
+
 
 

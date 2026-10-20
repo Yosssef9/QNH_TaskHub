@@ -4,6 +4,7 @@ import {
   ClipboardCheck,
   Clock3,
   ListChecks,
+  LockKeyhole,
   Pencil,
   Plus,
   Trash2,
@@ -12,6 +13,8 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import toast from 'react-hot-toast'
+import { describeProtectedAgenda, type ProtectedAgendaReference } from '../meeting-edit-restrictions'
 
 import {
   SortableDragHandle,
@@ -54,6 +57,8 @@ interface MeetingAgendaEditorProps {
   onChange: (items: MeetingAgendaDraftItem[]) => void
   onErrorClear?: (clientId: string) => void
   followUpActionsEnabled?: boolean
+  protectedAgendaIds?: readonly number[]
+  protectedAgendaDetails?: readonly ProtectedAgendaReference[]
   preserveInvalidPresenters?: boolean
   onAddDecision?: ((agendaItemId: number) => void) | undefined
   onAddActionItem?: ((agendaItemId: number) => void) | undefined
@@ -112,6 +117,8 @@ export function MeetingAgendaEditor({
   onChange,
   onErrorClear,
   followUpActionsEnabled = false,
+  protectedAgendaIds = [],
+  protectedAgendaDetails = [],
   preserveInvalidPresenters = false,
   onAddDecision,
   onAddActionItem,
@@ -291,6 +298,10 @@ export function MeetingAgendaEditor({
                         }}
                         onEdit={() => setEditingId(item.clientId)}
                         onDone={() => setEditingId(null)}
+                        protectedFromDeletion={item.id != null && protectedAgendaIds.includes(item.id)}
+                        blockedDeletionReason={item.id != null && protectedAgendaIds.includes(item.id)
+                          ? describeProtectedAgenda(t, protectedAgendaDetails.find((detail) => detail.id === item.id))
+                          : null}
                         onDelete={() => deleteItem(item.clientId)}
                         onChange={(patch) => updateItem(item.clientId, patch)}
                         onTopicChange={(topic) => {
@@ -372,6 +383,8 @@ function SortableAgendaItem({
   onEdit,
   onDone,
   onDelete,
+  protectedFromDeletion,
+  blockedDeletionReason,
   onChange,
   onTopicChange,
   followUpActionsEnabled,
@@ -390,6 +403,8 @@ function SortableAgendaItem({
   onEdit: () => void
   onDone: () => void
   onDelete: () => void
+  protectedFromDeletion: boolean
+  blockedDeletionReason: string | null
   onChange: (patch: Partial<MeetingAgendaDraftItem>) => void
   onTopicChange: (topic: string) => void
   followUpActionsEnabled: boolean
@@ -492,11 +507,18 @@ function SortableAgendaItem({
               size="icon"
               variant="ghost"
               disabled={disabled}
-              aria-label={t('meetings.create.agenda.deleteTopic', { number: index + 1 })}
+              title={blockedDeletionReason ?? undefined}
+              aria-label={blockedDeletionReason ?? t('meetings.create.agenda.deleteTopic', { number: index + 1 })}
               className="text-destructive hover:text-destructive"
-              onClick={onDelete}
+              onClick={() => {
+                if (protectedFromDeletion) {
+                  toast.error(blockedDeletionReason ?? t('meetings.historicalEdit.protectedAgenda'))
+                  return
+                }
+                onDelete()
+              }}
             >
-              <Trash2 aria-hidden="true" className="size-4" />
+              {protectedFromDeletion ? <LockKeyhole aria-hidden="true" className="size-4" /> : <Trash2 aria-hidden="true" className="size-4" />}
             </Button>
           </div>
         </div>
@@ -598,5 +620,6 @@ function SortableAgendaItem({
     </div>
   )
 }
+
 
 

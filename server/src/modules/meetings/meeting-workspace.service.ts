@@ -323,6 +323,7 @@ async function loadDetail(
         coordinatorCanRead && context.status === "SCHEDULED" && !scheduledMeetingHasStarted,
       canDecidePendingReschedule:
         coordinatorCanRead && context.status === "SCHEDULED" && context.hasPendingReschedule && pendingReschedule?.meetingMode === "ROOM",
+      canEditHistorical: isOrganizer && meeting.isHistoricalEntry && context.status === "SCHEDULED",
       canManageAgenda:
         isOrganizer && ["PENDING_APPROVAL", "SCHEDULED"].includes(context.status),
       canManageAttachments:
@@ -412,6 +413,7 @@ export const meetingWorkspaceService = {
     input: UpdateMeetingAttendanceInput,
   ): Promise<MeetingDetail> {
     await withTransaction(async (transaction) => {
+      await meetingWorkspaceRepository.lockMeetingForContentMutation(transaction, meetingId);
       await assertAttendanceWritable(transaction, actorUserId, meetingId);
       const participant = await meetingWorkspaceRepository.findAttendanceParticipantForUpdate(
         transaction,
@@ -463,6 +465,7 @@ export const meetingWorkspaceService = {
     input: BulkUpdateMeetingAttendanceInput,
   ): Promise<MeetingDetail> {
     await withTransaction(async (transaction) => {
+      await meetingWorkspaceRepository.lockMeetingForContentMutation(transaction, meetingId);
       await assertAttendanceWritable(transaction, actorUserId, meetingId);
       const participants = await meetingWorkspaceRepository.listAttendanceForUpdate(
         transaction,
@@ -1087,6 +1090,7 @@ export const meetingWorkspaceService = {
     const storageKey = await storeMeetingAttachment(file.buffer, extension);
     try {
       const attachmentId = await withTransaction(async (transaction) => {
+        await meetingWorkspaceRepository.lockMeetingForContentMutation(transaction, meetingId);
         await assertAttachmentWriteAccess(transaction, actorUserId, meetingId);
         const count = await meetingWorkspaceRepository.countActiveAttachments(
           transaction,
@@ -1148,6 +1152,7 @@ export const meetingWorkspaceService = {
       const attachment = await meetingWorkspaceRepository.findAttachment(attachmentId, transaction);
       if (!attachment) throw attachmentNotFound();
       const meetingId = Number(attachment.meetingId);
+      await meetingWorkspaceRepository.lockMeetingForContentMutation(transaction, meetingId);
       await assertAttachmentWriteAccess(transaction, actorUserId, meetingId);
       if (!(await meetingWorkspaceRepository.deactivateAttachment(transaction, attachmentId))) {
         throw attachmentNotFound();
@@ -1272,6 +1277,7 @@ export const meetingWorkspaceService = {
     });
   },
 };
+
 
 
 

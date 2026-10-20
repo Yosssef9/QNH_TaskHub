@@ -8,6 +8,7 @@ import type {
   CreateMeetingActionItemBody,
   MeetingActionItemParams,
   ReassignMeetingActionItemBody,
+  UpdateMeetingActionItemBody,
 } from "./meeting-action-items.schemas.js";
 import { meetingActionItemsService } from "./meeting-action-items.service.js";
 
@@ -75,6 +76,15 @@ export const createMeetingActionItem: RequestHandler = async (req, res) => {
   });
 };
 
+export const updateMeetingActionItem: RequestHandler = async (req, res) => {
+  const { meetingId, taskId } = getValidatedRequestPart<MeetingActionItemParams>(req, 'params');
+  const input = getValidatedRequestPart<UpdateMeetingActionItemBody>(req, 'body');
+  res.status(200).json({
+    success: true,
+    data: await meetingActionItemsService.update(actor(req), currentAccess(req), meetingId, taskId, input),
+  });
+};
+
 export const reassignMeetingActionItem: RequestHandler = async (req, res) => {
   const { meetingId, taskId } = getValidatedRequestPart<MeetingActionItemParams>(req, "params");
   const input = getValidatedRequestPart<ReassignMeetingActionItemBody>(req, "body");
@@ -101,4 +111,5 @@ export const listAssignedMeetingActionItems: RequestHandler = async (req, res) =
     }),
   });
 };
+
 

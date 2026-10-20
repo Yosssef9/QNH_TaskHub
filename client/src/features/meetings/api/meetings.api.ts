@@ -3,6 +3,8 @@ import type { ApiSuccessResponse } from '@/types/api.types'
 
 import type {
   BulkUpdateMeetingAttendanceInput,
+  HistoricalMeetingEditDependencies,
+  UpdateHistoricalMeetingInput,
   CancelMeetingInput,
   CancelMeetingRescheduleRequestInput,
   DecideMeetingRequestInput,
@@ -193,6 +195,24 @@ export async function getMeetingSchedule(input: {
 export async function getMeetingDetail(meetingId: number): Promise<MeetingDetail> {
   const response = await apiClient.get<ApiSuccessResponse<{ meeting: MeetingDetail }>>(
     `/meetings/${meetingId}`,
+  )
+  return response.data.data.meeting
+}
+
+export async function getMeetingEditDependencies(meetingId: number): Promise<HistoricalMeetingEditDependencies> {
+  const response = await apiClient.get<ApiSuccessResponse<{ dependencies: HistoricalMeetingEditDependencies }>>(
+    `/meetings/${meetingId}/edit-dependencies`,
+  )
+  return response.data.data.dependencies
+}
+
+// Keep the historical name available to existing consumers.
+export const getHistoricalMeetingEditDependencies = getMeetingEditDependencies
+
+export async function updateHistoricalMeeting(input: UpdateHistoricalMeetingInput): Promise<MeetingDetail> {
+  const { meetingId, ...body } = input
+  const response = await apiClient.put<ApiSuccessResponse<{ meeting: MeetingDetail }>>(
+    `/meetings/${meetingId}/historical`, body,
   )
   return response.data.data.meeting
 }
@@ -431,3 +451,4 @@ export async function restoreMeetingOutlookSync(meetingId: number): Promise<void
 export async function recreateMeetingOutlookSync(meetingId: number): Promise<void> {
   await apiClient.post(`/meetings/${meetingId}/outlook-sync/recreate`)
 }
+

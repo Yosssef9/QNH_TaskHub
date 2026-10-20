@@ -21,6 +21,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
 
+import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { InputField, TextareaField } from '@/components/shared/Input'
 import {
   SearchableMultiSelect,
@@ -31,6 +32,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { cn } from '@/lib/cn'
 import { toApiClientError } from '@/lib/api-error'
+import { describeProtectedParticipant, meetingMutationErrorMessage } from '../meeting-edit-restrictions'
 import {
   formatClockTime,
   formatRiyadhDateInput,
@@ -41,6 +43,8 @@ import {
 import { useActiveMeetingRooms } from '../hooks/use-meeting-rooms'
 import {
   useCreateDirectMeeting,
+  useUpdateHistoricalMeeting,
+  useHistoricalMeetingEditDependencies,
   useCreateMeetingRequest,
   useMeetingAvailability,
   useMeetingParticipantAvailability,
@@ -57,6 +61,7 @@ import {
 } from '../meeting-attachment-policy'
 import type {
   MeetingAvailabilityInput,
+  MeetingDetail,
   MeetingMode,
   MeetingParticipant,
   MeetingTemplate,
@@ -115,6 +120,7 @@ interface MeetingEditorDialogProps {
   template?: MeetingTemplate | null
   initialSchedule?: MeetingEditorInitialSchedule | null
   initialValues?: MeetingEditorInitialValues | null | undefined
+  editMeeting?: MeetingDetail | null
   onOpenChange: (open: boolean) => void
 }
 
@@ -252,6 +258,7 @@ export function MeetingEditorDialog({
   template = null,
   initialSchedule = null,
   initialValues = null,
+  editMeeting = null,
   onOpenChange,
 }: MeetingEditorDialogProps) {
   const { i18n, t } = useTranslation()
@@ -260,20 +267,23 @@ export function MeetingEditorDialog({
   const templates = useMeetingTemplates(open)
   const createRequest = useCreateMeetingRequest()
   const createDirect = useCreateDirectMeeting()
+  const updateHistorical = useUpdateHistoricalMeeting()
+  const dependencies = useHistoricalMeetingEditDependencies(editMeeting?.meeting.id ?? null)
+  const isHistoricalEdit = editMeeting !== null
   const uploadAttachment = useUploadMeetingAttachment()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const attachmentInputRef = useRef<HTMLInputElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
-  const canRoom = canOrganizeRoomMeetings(currentUser.data?.access)
+  const canRoom = canOrganizeRoomMeetings(currentUser.data?.access) || isHistoricalEdit
   const canCoordinate = canCoordinateMeetings(currentUser.data?.access)
-  const allowHistoricalDates = mode === 'DIRECT' && canCoordinate
+  const allowHistoricalDates = isHistoricalEdit || (mode === 'DIRECT' && canCoordinate)
   const canZoom = canOrganizeZoomMeetings(currentUser.data?.access) || allowHistoricalDates
 
   const initialDurationMinutes = initialValues?.durationMinutes ?? template?.durationMinutes ?? 60
   const scheduleStartsUnselected = initialValues?.scheduleStartsUnselected === true
   const [defaultSchedule] = useState(() =>
-    usableInitialSchedule(initialSchedule) ?? defaultMeetingSchedule(initialDurationMinutes),
+    (isHistoricalEdit ? initialSchedule : usableInitialSchedule(initialSchedule)) ?? defaultMeetingSchedule(initialDurationMinutes),
   )
   const initialAttendees = initialValues?.attendees ?? template?.attendees ?? []
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(template?.id ?? null)
@@ -281,7 +291,15 @@ export function MeetingEditorDialog({
   const [description, setDescription] = useState(
     initialValues?.description ?? template?.description ?? '',
   )
-  const [agendaItems, setAgendaItems] = useState<MeetingAgendaDraftItem[]>([])
+  const [agendaItems, setAgendaItems] = useState<MeetingAgendaDraftItem[]>(() =>
+    editMeeting?.agendaItems.map((item) => ({
+      clientId: `agenda-${item.id}`,
+      id: item.id,
+      topic: item.topic,
+      presenterUserId: item.presenter?.userId ?? null,
+      plannedDurationMinutes: item.plannedDurationMinutes,
+    })) ?? [],
+  )
   const [agendaErrors, setAgendaErrors] = useState<Record<string, string>>({})
   const [agendaFocusItemId, setAgendaFocusItemId] = useState<string | null>(null)
   const [agendaFocusRequestId, setAgendaFocusRequestId] = useState(0)
@@ -317,6 +335,7 @@ export function MeetingEditorDialog({
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [focusMode, setFocusMode] = useState<MeetingEditorFocusMode>('NONE')
   const [validationErrors, setValidationErrors] = useState<MeetingEditorValidationErrors>({})
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
   const [scheduleFocusField, setScheduleFocusField] = useState<MeetingScheduleFocusField>(null)
   const [scheduleFocusRequestId, setScheduleFocusRequestId] = useState(0)
   const [scheduleSelectionState, setScheduleSelectionState] =
@@ -374,7 +393,14 @@ export function MeetingEditorDialog({
 
   const participantCount = attendeeUserIds.length + (organizerAttending ? 1 : 0)
   const meetingDurationMinutes = durationBetweenTimes(startTime, endTime)
-  const selectedRoom = (rooms.data ?? []).find((room) => room.id === roomId) ?? null
+  const roomsForEditor = useMemo(() => {
+    const all = rooms.data ?? []
+    const previousRoom = editMeeting?.meeting.room
+    return previousRoom && !all.some((room) => room.id === previousRoom.id)
+      ? [previousRoom, ...all]
+      : all
+  }, [rooms.data, editMeeting])
+  const selectedRoom = roomsForEditor.find((room) => room.id === roomId) ?? null
   const roomName = selectedRoom
     ? i18n.language.startsWith('ar')
       ? selectedRoom.nameAr
@@ -410,7 +436,7 @@ export function MeetingEditorDialog({
         participantCount,
       })
     : null
-  const availability = useMeetingAvailability(open ? availabilityInput : null)
+  const availability = useMeetingAvailability(open && !isHistoricalEdit ? availabilityInput : null)
   const participantAvailabilityInput = (() => {
     if (!timeSelected || !date) return null
     try {
@@ -427,10 +453,41 @@ export function MeetingEditorDialog({
     }
   })()
   const participantAvailability = useMeetingParticipantAvailability(
-    open ? participantAvailabilityInput : null,
+    open && !isHistoricalEdit ? participantAvailabilityInput : null,
   )
   const saveMutation = mode === 'DIRECT' ? createDirect : createRequest
-  const isSaving = saveMutation.isPending || uploadAttachment.isPending
+  const isSaving = saveMutation.isPending || updateHistorical.isPending || uploadAttachment.isPending
+  const lockedUserIds = dependencies.data?.participants.map((item) => item.userId) ?? []
+  const protectedAgendaIds = dependencies.data?.agendaIds ?? []
+  const organizerLockReasons = dependencies.data?.participants.find(
+    (item) => item.userId === currentUserId,
+  )?.reasons ?? []
+  const originalEditSignature = editMeeting && initialValues && initialSchedule
+    ? JSON.stringify({
+      title: initialValues.title,
+      description: initialValues.description ?? '',
+      mode: initialValues.meetingMode,
+      roomId: initialValues.roomId,
+      url: initialValues.onlineJoinUrl ?? '',
+      attending: initialValues.organizerAttending,
+      attendees: initialValues.attendees.map((person) => person.userId).sort((a, b) => a - b),
+      date: initialSchedule.date, startTime: initialSchedule.startTime, endTime: initialSchedule.endTime,
+      agenda: editMeeting.agendaItems.map((item) => [item.id, item.topic, item.presenter?.userId ?? null, item.plannedDurationMinutes]),
+    }) : null
+  const currentEditSignature = JSON.stringify({
+    title, description, mode: meetingMode, roomId, url: onlineJoinUrl,
+    attending: organizerAttending, attendees: [...attendeeUserIds].sort((a, b) => a - b),
+    date, startTime, endTime,
+    agenda: agendaItems.map((item) => [item.id ?? null, item.topic, item.presenterUserId, item.plannedDurationMinutes]),
+  })
+  const hasUnsavedHistoricalChanges = Boolean(
+    isHistoricalEdit && (pendingFiles.length > 0 || originalEditSignature !== currentEditSignature),
+  )
+  function requestClose() {
+    if (isSaving) return
+    if (hasUnsavedHistoricalChanges) setConfirmDiscard(true)
+    else onOpenChange(false)
+  }
 
   function applyTemplate(selected: MeetingTemplate) {
     setValidationErrors({})
@@ -557,6 +614,7 @@ export function MeetingEditorDialog({
     const nextErrors: MeetingEditorValidationErrors = {}
 
     if (!title.trim()) nextErrors.title = t('meetings.create.validation.titleRequired')
+    if (isHistoricalEdit && !dependencies.data) nextErrors.attendees = t('meetings.historicalEdit.loadingDependencies')
 
     const nextAgendaErrors = Object.fromEntries(
       agendaItems
@@ -588,7 +646,9 @@ export function MeetingEditorDialog({
     } else {
       try {
         const selectedStartAtUtc = riyadhLocalDateTimeToUtcIso(date, startTime)
-        if (new Date(selectedStartAtUtc).getTime() <= Date.now() && !isHistoricalSelection) {
+        if (isHistoricalEdit && !isHistoricalSelection) {
+          nextErrors.time = t('meetings.historicalEdit.pastOnly')
+        } else if (new Date(selectedStartAtUtc).getTime() <= Date.now() && !isHistoricalSelection) {
           nextErrors.time = t('meetings.create.validation.timePassed')
         }
         if (meetingMode === 'ZOOM' && mode === 'DIRECT' && !canOrganizeZoomMeetings(currentUser.data?.access) && !isHistoricalSelection) {
@@ -610,7 +670,7 @@ export function MeetingEditorDialog({
       })
     }
 
-    if (meetingMode === 'ROOM' && mode === 'DIRECT' && availabilityInput && !nextErrors.capacity) {
+    if (meetingMode === 'ROOM' && mode === 'DIRECT' && !isHistoricalEdit && availabilityInput && !nextErrors.capacity) {
       if (availability.isFetching || availability.isPending) {
         nextErrors.time = t('meetings.create.validation.availabilityChecking')
       } else if (availability.isError || !availability.data) {
@@ -680,7 +740,7 @@ export function MeetingEditorDialog({
     if (meetingMode === 'ROOM' && !availabilityInput) return
 
     try {
-      const meeting = await saveMutation.mutateAsync({
+      const values = {
         title: title.trim(),
         description: description.trim() || null,
         meetingMode,
@@ -696,7 +756,21 @@ export function MeetingEditorDialog({
           plannedDurationMinutes: item.plannedDurationMinutes,
         })),
         followUpOfMeetingId: initialValues?.followUpOfMeetingId ?? null,
-      })
+      }
+      const meeting = isHistoricalEdit && editMeeting
+        ? (await updateHistorical.mutateAsync({
+            ...values,
+            meetingId: editMeeting.meeting.id,
+            meetingRowVersion: editMeeting.meeting.meetingRowVersion,
+            revisionRowVersion: editMeeting.meeting.revisionRowVersion,
+            agendaItems: agendaItems.map((item) => ({
+              id: item.id ?? null,
+              topic: item.topic.trim(),
+              presenterUserId: item.presenterUserId,
+              plannedDurationMinutes: item.plannedDurationMinutes,
+            })),
+          })).meeting
+        : await saveMutation.mutateAsync(values)
 
       let failedUploads = 0
       for (const file of pendingFiles) {
@@ -708,7 +782,7 @@ export function MeetingEditorDialog({
       }
 
       toast.success(
-        t(meeting.isHistoricalEntry ? 'meetings.historical.saved' : meetingMode === 'ZOOM' || mode === 'DIRECT' ? 'meetings.directScheduled' : 'meetings.requestSubmitted'),
+        t(isHistoricalEdit ? 'meetings.historicalEdit.saved' : meeting.isHistoricalEntry ? 'meetings.historical.saved' : meetingMode === 'ZOOM' || mode === 'DIRECT' ? 'meetings.directScheduled' : 'meetings.requestSubmitted'),
       )
       if (failedUploads > 0) {
         toast.error(
@@ -718,12 +792,10 @@ export function MeetingEditorDialog({
         )
       }
       onOpenChange(false)
-      if (meeting.isHistoricalEntry) navigate(`/meetings/${meeting.id}?tab=follow-up`)
+      if (!isHistoricalEdit && meeting.isHistoricalEntry) navigate(`/meetings/${meeting.id}?tab=follow-up`)
     } catch (error) {
       const apiError = toApiClientError(error)
-      const message = t(`meetings.errors.${apiError.code}`, {
-        defaultValue: t('meetings.errors.save'),
-      })
+      const message = meetingMutationErrorMessage(t, error, t('meetings.errors.save'))
 
       if (
         apiError.code === 'MEETING_ROOM_TIME_CONFLICT' ||
@@ -767,11 +839,12 @@ export function MeetingEditorDialog({
       : null
 
   return (
+    <>
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (!nextOpen && isSaving) return
-        onOpenChange(nextOpen)
+        if (!nextOpen) requestClose()
+        else onOpenChange(nextOpen)
       }}
     >
       <DialogContent
@@ -926,7 +999,7 @@ export function MeetingEditorDialog({
                 </Button>
               </div>
 
-              {templateOptions.length > 0 || templates.isPending ? (
+              {!isHistoricalEdit && (templateOptions.length > 0 || templates.isPending) ? (
                 <div className="bg-muted/30 rounded-xl border p-4">
                   <div className="mb-3 flex items-center gap-2">
                     <Sparkles aria-hidden="true" className="text-primary size-4" />
@@ -1021,7 +1094,7 @@ export function MeetingEditorDialog({
                     <input
                       type="checkbox"
                       checked={organizerAttending}
-                      disabled={isSaving}
+                      disabled={isSaving || (isHistoricalEdit && (!dependencies.data || (currentUserId !== undefined && lockedUserIds.includes(currentUserId))))}
                       className="accent-primary mt-0.5 size-4 shrink-0"
                       onChange={(event) => updateOrganizerAttendance(event.target.checked)}
                     />
@@ -1034,6 +1107,15 @@ export function MeetingEditorDialog({
                       </span>
                     </span>
                   </label>
+                  {isHistoricalEdit && organizerLockReasons.length > 0 ? (
+                    <p role="status" className="text-muted-foreground mt-2 text-xs leading-5">
+                      {describeProtectedParticipant(
+                        t,
+                        organizerLockReasons,
+                        currentUser.data?.user.userName,
+                      )}
+                    </p>
+                  ) : null}
                 </div>
 
                 <label className="mb-1.5 block text-sm font-medium">
@@ -1049,7 +1131,9 @@ export function MeetingEditorDialog({
                   loading={participantQuery.isPending}
                   loadingMore={participantQuery.isFetchingNextPage}
                   hasMore={participantQuery.hasNextPage}
-                  disabled={isSaving}
+                  disabled={isSaving || (isHistoricalEdit && !dependencies.data)}
+                  lockedUserIds={lockedUserIds}
+                  lockedUserReasons={dependencies.data?.participants ?? []}
                   participantConflicts={participantAvailability.isError ? [] : (participantAvailability.data?.conflicts ?? [])}
                   participantConflictsLoading={participantAvailability.isFetching}
                   onSearchChange={setParticipantSearch}
@@ -1082,7 +1166,10 @@ export function MeetingEditorDialog({
                 participants={agendaParticipants}
                 organizerUserId={currentUserId ?? null}
                 meetingDurationMinutes={meetingDurationMinutes}
-                disabled={isSaving}
+                disabled={isSaving || (isHistoricalEdit && !dependencies.data)}
+                protectedAgendaIds={protectedAgendaIds}
+                protectedAgendaDetails={dependencies.data?.agenda ?? []}
+                preserveInvalidPresenters={isHistoricalEdit}
                 errors={agendaErrors}
                 focusItemId={agendaFocusItemId}
                 focusRequestId={agendaFocusRequestId}
@@ -1225,13 +1312,13 @@ export function MeetingEditorDialog({
               <MeetingSchedulePicker
                 date={date}
                 roomId={roomId}
-                rooms={rooms.data ?? []}
+                rooms={roomsForEditor}
                 participantCount={participantCount}
                 startTime={startTime}
                 endTime={endTime}
                 timeSelected={timeSelected}
                 disabled={isSaving}
-                allowBusySelection={mode === 'REQUEST'}
+                allowBusySelection={mode === 'REQUEST' || isHistoricalEdit}
                 allowPast={allowHistoricalDates}
                 focused={focusMode === 'SCHEDULE'}
                 validationErrors={validationErrors}
@@ -1334,7 +1421,7 @@ export function MeetingEditorDialog({
                   )}
                 </div>
 
-                {meetingMode === 'ROOM' && availabilityInput ? (
+                {meetingMode === 'ROOM' && availabilityInput && !isHistoricalEdit ? (
                   <div className="mt-2 flex items-start gap-2 text-xs">
                     {availability.isFetching ? (
                       <Loader2
@@ -1393,7 +1480,7 @@ export function MeetingEditorDialog({
                 <Button
                   variant="outline"
                   disabled={isSaving}
-                  onClick={() => onOpenChange(false)}
+                  onClick={requestClose}
                 >
                   {t('common.cancel')}
                 </Button>
@@ -1401,7 +1488,7 @@ export function MeetingEditorDialog({
                   {isSaving ? (
                     <Loader2 aria-hidden="true" className="size-4 animate-spin" />
                   ) : null}
-                  {t(meetingMode === 'ZOOM' || mode === 'DIRECT' ? 'meetings.scheduleNow' : 'meetings.submitRequest')}
+                  {t(isHistoricalEdit ? 'meetings.historicalEdit.save' : meetingMode === 'ZOOM' || mode === 'DIRECT' ? 'meetings.scheduleNow' : 'meetings.submitRequest')}
                 </Button>
               </div>
             </div>
@@ -1409,8 +1496,20 @@ export function MeetingEditorDialog({
         </div>
       </DialogContent>
     </Dialog>
+    <ConfirmModal
+      open={confirmDiscard}
+      title={t('meetings.historicalEdit.discardTitle')}
+      message={t('meetings.historicalEdit.discardMessage')}
+      confirmText={t('meetings.historicalEdit.discard')}
+      cancelText={t('common.cancel')}
+      danger
+      onCancel={() => setConfirmDiscard(false)}
+      onConfirm={() => { setConfirmDiscard(false); onOpenChange(false) }}
+    />
+    </>
   )
 }
+
 
 
 

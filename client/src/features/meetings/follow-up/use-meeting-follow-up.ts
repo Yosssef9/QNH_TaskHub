@@ -38,6 +38,7 @@ function useFollowUpMutation<TInput, TResult>(
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: meetingFollowUpQueryKey(meetingId) }),
         queryClient.invalidateQueries({ queryKey: ['meetings', 'detail', meetingId] }),
+        queryClient.invalidateQueries({ queryKey: ['meetings', 'edit-dependencies', meetingId] }),
       ])
     },
   })
@@ -70,4 +71,5 @@ export function useRelatedMeetings(meetingId: number | null) {
     enabled: meetingId !== null,
   })
 }
+
 

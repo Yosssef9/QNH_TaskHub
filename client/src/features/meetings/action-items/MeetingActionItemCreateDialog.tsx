@@ -1,4 +1,4 @@
-import { Plus } from 'lucide-react'
+import { LoaderCircle, Pencil, Plus } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
@@ -13,12 +13,15 @@ import { TaskPriorityIndicator } from '@/features/tasks/components/TaskSelectInd
 import { TagPicker } from '@/features/tasks/tags/TagPicker'
 import { TaskAssigneeMultiPicker } from '@/features/tasks/assignment/TaskAssigneeMultiPicker'
 import type { MeetingAgendaItem } from '@/features/meetings/types/meeting.types'
+import { meetingMutationErrorMessage } from '@/features/meetings/meeting-edit-restrictions'
 
-import type { MeetingActionItemAssigneeOption } from './meeting-action-items.types'
-import { useCreateMeetingActionItem } from './use-meeting-action-items'
+import type { MeetingActionItem, MeetingActionItemAssigneeOption } from './meeting-action-items.types'
+import { useCreateMeetingActionItem, useUpdateMeetingActionItem } from './use-meeting-action-items'
+import { newActionCreationRequestId } from './creation-request-id'
 
 interface Props {
   meetingId: number
+  item?: MeetingActionItem | null
   agendaItems: readonly MeetingAgendaItem[]
   assignees: readonly MeetingActionItemAssigneeOption[]
   assigneesLoading: boolean
@@ -30,6 +33,7 @@ interface Props {
 
 export function MeetingActionItemCreateDialog({
   meetingId,
+  item = null,
   agendaItems,
   assignees,
   assigneesLoading,
@@ -40,12 +44,18 @@ export function MeetingActionItemCreateDialog({
 }: Props) {
   const { t } = useTranslation()
   const createMutation = useCreateMeetingActionItem(meetingId)
+  const updateMutation = useUpdateMeetingActionItem(meetingId, item?.taskId ?? 0)
+  const pending = createMutation.isPending || updateMutation.isPending
+  // Retain this ID through failed/uncertain requests; reset it only after
+  // a successful submission or an explicit cancellation.
+  const [requestId, setRequestId] = useState(() => newActionCreationRequestId())
   const [tags,setTags]=useState<number[]>([])
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [selectedAssignees, setSelectedAssignees] = useState<number[]>([])
   const [priority, setPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH'>('MEDIUM')
   const [dueDate, setDueDate] = useState('')
+  const [startDate, setStartDate] = useState('')
   const [agenda, setAgenda] = useState('NONE')
 
   const eligibleAssignees = useMemo(
@@ -61,46 +71,66 @@ export function MeetingActionItemCreateDialog({
     setSelectedAssignees([])
     setPriority('MEDIUM')
     setDueDate('')
+    setStartDate('')
+    setRequestId(newActionCreationRequestId())
     setAgenda('NONE')
   }
 
   useEffect(() => {
     if (!open) return
-    const initialAssignee = initialAssigneeUserId === null
-      ? null
-      : assignees.find((item) => item.userId === initialAssigneeUserId && item.eligible) ?? null
-    setSelectedAssignees(initialAssignee ? [initialAssignee.userId] : [])
-    setAgenda(initialAgendaItemId === null ? 'NONE' : String(initialAgendaItemId))
-  }, [assignees, initialAgendaItemId, initialAssigneeUserId, open])
+    if (item) {
+      setTitle(item.title)
+      setDescription(item.description ?? '')
+      setPriority(item.priority)
+      setDueDate(item.dueDate ?? '')
+      setStartDate(item.startDate ?? '')
+      setAgenda(item.agendaItemId === null ? 'NONE' : String(item.agendaItemId))
+      setTags(item.tags?.map(tag => tag.id) ?? [])
+      const ids = item.teamRoster?.filter(member => member.mainAssignee).map(member => member.userId) ?? []
+      setSelectedAssignees(ids.length ? ids : [item.assigneeUserId])
+    } else {
+      setAgenda(initialAgendaItemId === null ? 'NONE' : String(initialAgendaItemId))
+      setSelectedAssignees(initialAssigneeUserId === null ? [] : [initialAssigneeUserId])
+    }
+    // A new dialog instance is mounted for each edit/create session.
+    // Do not reinitialize form values when the assignee query refetches.
+  }, [open, item?.taskId, initialAgendaItemId, initialAssigneeUserId])
 
   function changeOpen(nextOpen: boolean) {
-    if (createMutation.isPending) return
+    if (pending) return
     onOpenChange(nextOpen)
     if (!nextOpen) resetForm()
   }
 
-  function submitCreate() {
-    if (!title.trim() || !selectedAssignees.length) return
-    createMutation.mutate(
-      {
-        title: title.trim(),
-        description: description.trim() || null,
-        priority,
-        tagIds:tags,
-        dueDate: dueDate || null,
+  function submitForm() {
+    if (!title.trim() || !selectedAssignees.length || pending) return
+    const fields = {
+      title: title.trim(),
+      description: description.trim() || null,
+      priority,
+      startDate: startDate || null,
+      dueDate: dueDate || null,
+      tagIds: tags,
+      assigneeUserIds: selectedAssignees,
+      agendaItemId: agenda === 'NONE' ? null : Number(agenda),
+    }
+    const callbacks = {
+      onSuccess: () => {
+        toast.success(t(item ? 'tasks.updated' : 'meetings.followUp.actionCreated'))
+        onOpenChange(false)
+        resetForm()
+      },
+      onError: (error: unknown) => toast.error(meetingMutationErrorMessage(t, error, t(item ? 'tasks.errors.save' : 'meetings.followUp.actionCreateError'))),
+    }
+    if (item) {
+      updateMutation.mutate({ ...fields, rowVersion: item.rowVersion }, callbacks)
+    } else {
+      createMutation.mutate({
+        ...fields,
+        requestId,
         assigneeUserId: selectedAssignees[0]!,
-        assigneeUserIds: selectedAssignees,
-        agendaItemId: agenda === 'NONE' ? null : Number(agenda),
-      },
-      {
-        onSuccess: () => {
-          toast.success(t('meetings.followUp.actionCreated'))
-          onOpenChange(false)
-          resetForm()
-        },
-        onError: () => toast.error(t('meetings.followUp.actionCreateError')),
-      },
-    )
+      }, callbacks)
+    }
   }
 
   return (
@@ -112,12 +142,12 @@ export function MeetingActionItemCreateDialog({
       >
         <div className="flex items-start gap-3 pe-10">
           <div className="bg-primary/10 text-primary grid size-11 shrink-0 place-items-center rounded-xl">
-            <Plus aria-hidden="true" className="size-5" />
+            {item ? <Pencil aria-hidden="true" className="size-5" /> : <Plus aria-hidden="true" className="size-5" />}
           </div>
           <div className="min-w-0">
-            <DialogTitle>{t('meetings.followUp.newAction')}</DialogTitle>
+            <DialogTitle>{t(item ? 'tasks.editTitle' : 'meetings.followUp.newAction')}</DialogTitle>
             <DialogDescription className="text-muted-foreground mt-1 max-w-lg text-sm leading-6">
-              {t('meetings.followUp.newActionDescription')}
+              {t(item ? 'tasks.formDescription' : 'meetings.followUp.newActionDescription')}
             </DialogDescription>
           </div>
         </div>
@@ -147,7 +177,7 @@ export function MeetingActionItemCreateDialog({
               onChange={setSelectedAssignees}
               meetingId={meetingId}
               knownUsers={eligibleAssignees}
-              disabled={createMutation.isPending}
+              disabled={pending}
             />
             {hasNoEligibleAssignees ? (
               <p className="border-warning/25 bg-warning/10 text-warning-foreground rounded-lg border px-3 py-2 text-xs leading-5">
@@ -156,6 +186,12 @@ export function MeetingActionItemCreateDialog({
             ) : null}
           </div>
 
+          <div className="grid items-start gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">{t('tasks.startDate')}</label>
+              <DatePicker value={startDate} onChange={setStartDate} />
+            </div>
+          </div>
           <div className="grid items-start gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <label className="text-sm font-medium">{t('tasks.priority')}</label>
@@ -232,17 +268,18 @@ export function MeetingActionItemCreateDialog({
 
       <div className="space-y-2">
         <label className="text-sm font-medium">{t('tags.title')}</label>
-        <TagPicker value={tags} onChange={setTags} disabled={createMutation.isPending}/>
+        <TagPicker value={tags} onChange={setTags} disabled={pending}/>
       </div>
           <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
-            <Button variant="outline" disabled={createMutation.isPending} onClick={() => changeOpen(false)}>
+            <Button variant="outline" disabled={pending} onClick={() => changeOpen(false)}>
               {t('common.cancel')}
             </Button>
             <Button
-              disabled={createMutation.isPending || !title.trim() || selectedAssignees.length === 0 || eligibleAssignees.length === 0}
-              onClick={submitCreate}
+              disabled={pending || !title.trim() || selectedAssignees.length === 0 || (eligibleAssignees.length === 0 && !item)}
+              onClick={submitForm}
+              aria-busy={pending}
             >
-              {t('meetings.followUp.createAction')}
+              {pending ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : null}{t(item ? 'common.save' : 'meetings.followUp.createAction')}
             </Button>
           </div>
         </div>
@@ -250,6 +287,4 @@ export function MeetingActionItemCreateDialog({
     </Dialog>
   )
 }
-
-
 

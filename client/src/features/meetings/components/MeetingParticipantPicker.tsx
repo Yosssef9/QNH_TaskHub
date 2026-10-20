@@ -3,12 +3,15 @@ import {
   Check,
   ChevronDown,
   Loader2,
+  LockKeyhole,
   Trash2,
   UsersRound,
   X,
 } from 'lucide-react'
 import { useId, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import toast from 'react-hot-toast'
+import { describeProtectedParticipant } from '../meeting-edit-restrictions'
 
 import type { SearchableSelectOption } from '@/components/shared/SearchableMultiSelect'
 import { Button } from '@/components/ui/button'
@@ -34,6 +37,8 @@ interface MeetingParticipantPickerProps {
   loadingMore?: boolean
   hasMore?: boolean
   disabled?: boolean
+  lockedUserIds?: readonly number[]
+  lockedUserReasons?: readonly { userId: number; reasons: string[] }[]
   participantConflicts?: readonly MeetingParticipantScheduleConflict[]
   participantConflictsLoading?: boolean
   onSearchChange: (value: string) => void
@@ -81,6 +86,8 @@ export function MeetingParticipantPicker({
   loadingMore = false,
   hasMore = false,
   disabled = false,
+  lockedUserIds = [],
+  lockedUserReasons = [],
   participantConflicts = [],
   participantConflictsLoading = false,
   onSearchChange,
@@ -126,10 +133,19 @@ export function MeetingParticipantPicker({
     if (!nextOpen && searchValue) onSearchChange('')
   }
 
+  function lockedReason(option: SearchableSelectOption) {
+    const reasons = lockedUserReasons.find((item) => item.userId === Number(option.value))?.reasons ?? []
+    return describeProtectedParticipant(t, reasons, option.label)
+  }
+
   function toggleOption(option: SearchableSelectOption) {
     const numericValue = Number(option.value)
     if (!Number.isFinite(numericValue)) return
     const key = valueKey(option.value)
+    if (selectedKeys.has(key) && lockedUserIds.includes(numericValue)) {
+      toast.error(lockedReason(option))
+      return
+    }
     onChange(
       selectedKeys.has(key)
         ? values.filter((value) => valueKey(value) !== key)
@@ -138,6 +154,10 @@ export function MeetingParticipantPicker({
   }
 
   function removeOption(option: SearchableSelectOption) {
+    if (lockedUserIds.includes(Number(option.value))) {
+      toast.error(lockedReason(option))
+      return
+    }
     const key = valueKey(option.value)
     onChange(values.filter((value) => valueKey(value) !== key))
   }
@@ -193,7 +213,17 @@ export function MeetingParticipantPicker({
                           className="text-warning-foreground size-3.5 shrink-0"
                         />
                       ) : null}
-                      <button
+                      {lockedUserIds.includes(Number(option.value)) ? (
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-primary pointer-events-auto shrink-0 rounded-md p-1 focus-visible:ring-2 focus-visible:ring-ring"
+                          title={lockedReason(option)}
+                          aria-label={lockedReason(option)}
+                          onClick={(event) => { event.stopPropagation(); toast.error(lockedReason(option)) }}
+                        >
+                          <LockKeyhole className="size-3.5" aria-hidden="true" />
+                        </button>
+                      ) : <button
                         type="button"
                         disabled={disabled}
                         aria-label={t('meetings.create.removeAttendee', { name: option.label })}
@@ -201,7 +231,7 @@ export function MeetingParticipantPicker({
                         onClick={() => removeOption(option)}
                       >
                         <X aria-hidden="true" className="size-3" />
-                      </button>
+                      </button>}
                     </span>
                   ))}
                   {hiddenSelectedCount > 0 ? (
@@ -339,7 +369,12 @@ export function MeetingParticipantPicker({
                             {option.description}
                           </span>
                         ) : null}
-                        {selected && conflictsByUserId.has(Number(option.value)) ? (
+                        {selected && lockedUserIds.includes(Number(option.value)) ? (
+                          <span className="text-muted-foreground mt-1 flex items-center gap-1 text-xs">
+                            <LockKeyhole aria-hidden="true" className="size-3" />
+                            {lockedReason(option)}
+                          </span>
+                        ) : selected && conflictsByUserId.has(Number(option.value)) ? (
                           <span className="text-warning-foreground mt-1 inline-flex items-center gap-1 text-xs font-semibold">
                             <AlertTriangle aria-hidden="true" className="size-3" />
                             {t('meetings.participantAvailability.conflictLabel')}
@@ -458,4 +493,5 @@ export function MeetingParticipantPicker({
     </Popover>
   )
 }
+
 

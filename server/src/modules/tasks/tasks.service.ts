@@ -16,6 +16,7 @@ import { mapTask } from "./tasks.mapper.js";
 import { assertTaskStatusTransition, assertTaskWritable } from "./tasks.policy.js";
 import { tasksRepository } from "./tasks.repository.js";
 import { assertNormalTaskStartDateAllowed } from "./tasks.start-date.policy.js";
+import { taskUpdateFieldChanges } from "./tasks.audit.js";
 import type {
   ChangeTaskStatusInput,
   CreateTaskInput,
@@ -276,12 +277,31 @@ export const tasksService = {
         await tagsService.replaceTaskTags(transaction, actorUserId, taskId, input.tagIds);
         await tasksRepository.addActivity(transaction,ownerUserId,taskId,"TAGS_CHANGED",{tagIds:input.tagIds},actorUserId);
       }
+      // Audit the actual before/after values as part of the same transaction.
+      // Meeting Action Item creators can correct forgotten details later, and
+      // the Task history must explain each such correction.
+      const changes = taskUpdateFieldChanges(
+        {
+          title: current.title,
+          description: current.description,
+          priority: mapTask(current).priority,
+          startDate: toDateOnly(current.startDate),
+          dueDate: toDateOnly(current.dueDate),
+        },
+        {
+          title: input.title ?? current.title,
+          description: input.description !== undefined ? input.description : current.description,
+          priority: input.priority ?? mapTask(current).priority,
+          startDate,
+          dueDate,
+        },
+      );
       await tasksRepository.addActivity(
         transaction,
         ownerUserId,
         taskId,
         "UPDATED",
-        { fromListId: current.listId, toListId: destinationListId },
+        { fromListId: current.listId, toListId: destinationListId, changes },
         actorUserId,
       );
       if (access.collaborationActive && dueDate !== toDateOnly(current.dueDate)) {
@@ -554,6 +574,7 @@ export const tasksService = {
     return loadTask(ownerUserId, taskId);
   },
 };
+
 
 
 

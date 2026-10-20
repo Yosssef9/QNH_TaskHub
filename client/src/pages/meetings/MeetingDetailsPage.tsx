@@ -14,6 +14,7 @@ import {
   LayoutGrid,
   ListChecks,
   Paperclip,
+  Pencil,
   RefreshCcw,
   Save,
   UsersRound,
@@ -41,6 +42,7 @@ import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { CoordinatorDirectRescheduleDialog } from '@/features/meetings/components/CoordinatorDirectRescheduleDialog'
 import { CoordinatorMeetingScheduleDialog } from '@/features/meetings/components/CoordinatorMeetingScheduleDialog'
 import { CoordinatorRescheduleDialog } from '@/features/meetings/components/CoordinatorRescheduleDialog'
+import { MeetingEditorDialog } from '@/features/meetings/components/MeetingEditorDialog'
 import { MeetingAgendaDisplay } from '@/features/meetings/components/MeetingAgendaDisplay'
 import { MeetingAgendaWorkspace } from '@/features/meetings/components/MeetingAgendaWorkspace'
 import { MeetingFilesPanel } from '@/features/meetings/components/MeetingFilesPanel'
@@ -75,7 +77,7 @@ import type {
 } from '@/features/meetings/types/meeting.types'
 import { toApiClientError } from '@/lib/api-error'
 import { cn } from '@/lib/cn'
-import { APP_TIME_ZONE, formatDateTime, formatTime, formatTimeRange } from '@/lib/date-time'
+import { APP_TIME_ZONE, formatDateTime, formatTime, formatTimeRange, formatRiyadhDateInput, formatRiyadhTimeInput } from '@/lib/date-time'
 import { useTimeFormatPreference } from '@/features/preferences/hooks/use-time-format'
 import { getMeetingRoomAccent } from '@/features/meetings/meeting-room-colors'
 import { useMeetingSeriesLink } from '@/features/meetings/series/use-meeting-series'
@@ -392,6 +394,7 @@ export function MeetingDetailsPage() {
     query.data?.meeting.status === 'SCHEDULED' || query.data?.meeting.status === 'CANCELLED'
   const meetingActionItems = useMeetingActionItems(validMeetingId, meetingActionItemsEnabled)
 
+  const [historicalEditOpen, setHistoricalEditOpen] = useState(false)
   const [organizerScheduleOpen, setOrganizerScheduleOpen] = useState(false)
   const [coordinatorInitialAdjustOpen, setCoordinatorInitialAdjustOpen] = useState(false)
   const [approveInitialOpen, setApproveInitialOpen] = useState(false)
@@ -755,6 +758,13 @@ export function MeetingDetailsPage() {
                 <span className="whitespace-nowrap">{t('meetings.zoom.join')}</span>
                 <ExternalLink aria-hidden="true" className="size-3.5 shrink-0" />
               </a>
+            ) : null}
+
+            {detail.permissions.canEditHistorical ? (
+              <Button dir={arabic ? 'rtl' : 'ltr'} onClick={() => setHistoricalEditOpen(true)}>
+                <Pencil aria-hidden="true" className="size-4" />
+                {t('meetings.historicalEdit.button')}
+              </Button>
             ) : null}
 
             {detail.permissions.canDecidePendingRequest ? (
@@ -1461,6 +1471,33 @@ export function MeetingDetailsPage() {
           onOpenChange={setCoordinatorAdjustOpen}
         />
       ) : null}
+      {historicalEditOpen && detail.permissions.canEditHistorical ? (
+        <MeetingEditorDialog
+          key={`${meeting.id}-${meeting.meetingRowVersion}`}
+          open
+          mode="DIRECT"
+          editMeeting={detail}
+          heading={t('meetings.historicalEdit.title')}
+          description={t('meetings.historicalEdit.description')}
+          initialSchedule={{
+            date: formatRiyadhDateInput(meeting.startAtUtc),
+            startTime: formatRiyadhTimeInput(meeting.startAtUtc),
+            endTime: formatRiyadhTimeInput(meeting.endAtUtc),
+            roomId: meeting.room?.id ?? null,
+          }}
+          initialValues={{
+            title: meeting.title,
+            description: meeting.description,
+            durationMinutes,
+            meetingMode: meeting.meetingMode,
+            roomId: meeting.room?.id ?? null,
+            onlineJoinUrl: meeting.onlineJoinUrl,
+            organizerAttending: meeting.organizerAttending,
+            attendees: meeting.attendees,
+          }}
+          onOpenChange={setHistoricalEditOpen}
+        />
+      ) : null}
       {templateOpen ? (
         <MeetingTemplateEditorDialog
           open
@@ -1592,6 +1629,7 @@ export function MeetingDetailsPage() {
     </div>
   )
 }
+
 
 
 

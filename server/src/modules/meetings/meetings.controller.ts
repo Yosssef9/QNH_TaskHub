@@ -70,6 +70,8 @@ import type {
   UpdateMeetingTemplateBody,
 } from "./meeting-workspace.schemas.js";
 import { meetingWorkspaceService } from "./meeting-workspace.service.js";
+import { historicalMeetingEditService } from "./meeting-historical-edit.service.js";
+import type { UpdateHistoricalMeetingInput } from "./meeting-historical-edit.schemas.js";
 import type {
   MeetingAttachment,
   MeetingDetail,
@@ -468,6 +470,23 @@ export const getMeetingDetail: RequestHandler = async (req, res) => {
   res.status(200).json(body);
 };
 
+export const getHistoricalMeetingEditDependencies: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
+  const dependencies = await historicalMeetingEditService.dependencies(actorUserId(req), params.meetingId);
+  const body: ApiSuccessResponse<{ dependencies: typeof dependencies }> = { success: true, data: { dependencies } };
+  res.status(200).json(body);
+};
+
+export const updateHistoricalMeeting: RequestHandler = async (req, res) => {
+  const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
+  const input = getValidatedRequestPart<UpdateHistoricalMeetingInput>(req, "body");
+  const meeting = await historicalMeetingEditService.update(
+    actorUserId(req), currentAccess(req), params.meetingId, input,
+  );
+  const body: ApiSuccessResponse<{ meeting: MeetingDetail }> = { success: true, data: { meeting } };
+  res.status(200).json(body);
+};
+
 export const updateMeetingAttendance: RequestHandler = async (req, res) => {
   const params = getValidatedRequestPart<MeetingWorkspaceParams>(req, "params");
   const input = getValidatedRequestPart<UpdateMeetingAttendanceBody>(req, "body");
@@ -737,3 +756,4 @@ export const archiveMeetingTemplate: RequestHandler = async (req, res) => {
   await meetingWorkspaceService.archiveTemplate(actorUserId(req), params.templateId, input.rowVersion);
   res.status(200).json({ success: true, data: { templateId: params.templateId } });
 };
+

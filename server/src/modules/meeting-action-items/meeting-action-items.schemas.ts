@@ -11,6 +11,7 @@ export const meetingActionItemParamsSchema = z.object({
 
 export const createMeetingActionItemBodySchema = z
   .object({
+    requestId: z.string().uuid().optional(),
     title: z.string().trim().min(1).max(250),
     description: z.string().max(10000).nullable().optional(),
     priority: z.enum(TASK_PRIORITIES).default("MEDIUM"),
@@ -30,6 +31,22 @@ export const createMeetingActionItemBodySchema = z
       });
     }
   });
+
+export const updateMeetingActionItemBodySchema = z.object({
+  rowVersion: rowVersionSchema,
+  title: z.string().trim().min(1).max(250),
+  description: z.string().max(10000).nullable(),
+  priority: z.enum(TASK_PRIORITIES),
+  startDate: z.string().date().nullable(),
+  dueDate: z.string().date().nullable(),
+  assigneeUserIds: z.array(z.number().int().positive()).min(1).max(30),
+  agendaItemId: z.coerce.number().int().positive().nullable(),
+  tagIds: z.array(z.number().int().positive()).max(8),
+}).superRefine((value, context) => {
+  if (value.startDate && value.dueDate && value.startDate > value.dueDate) {
+    context.addIssue({ code: 'custom', path: ['dueDate'], message: 'Due date must not be before start date.' });
+  }
+});
 
 export const reassignMeetingActionItemBodySchema = z.object({
   assigneeUserId: z.coerce.number().int().positive(),
@@ -58,3 +75,6 @@ export type ReassignMeetingActionItemBody = z.infer<typeof reassignMeetingAction
 export type AssignedActionItemsQuery = z.infer<typeof assignedActionItemsQuerySchema>;
 
 
+
+
+export type UpdateMeetingActionItemBody = z.infer<typeof updateMeetingActionItemBodySchema>;

@@ -21,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import type { MeetingDetail } from '@/features/meetings/types/meeting.types'
 import { useTimeFormatPreference } from '@/features/preferences/hooks/use-time-format'
-import { toApiClientError } from '@/lib/api-error'
+import { meetingMutationErrorMessage } from '@/features/meetings/meeting-edit-restrictions'
 import { formatDateTime } from '@/lib/date-time'
 
 import type {
@@ -151,12 +151,7 @@ export function MeetingDecisionsWorkspace({
             resetDialog()
           },
           onError: (error) => {
-            const apiError = toApiClientError(error)
-            toast.error(
-              t(`meetings.errors.${apiError.code}`, {
-                defaultValue: t('meetings.followUp.decisions.saveError'),
-              }),
-            )
+            toast.error(meetingMutationErrorMessage(t, error, t('meetings.followUp.decisions.saveError')))
           },
         },
       )
@@ -172,12 +167,7 @@ export function MeetingDecisionsWorkspace({
           resetDialog()
         },
         onError: (error) => {
-          const apiError = toApiClientError(error)
-          toast.error(
-            t(`meetings.errors.${apiError.code}`, {
-              defaultValue: t('meetings.followUp.decisions.saveError'),
-            }),
-          )
+          toast.error(meetingMutationErrorMessage(t, error, t('meetings.followUp.decisions.saveError')))
         },
       },
     )
@@ -483,12 +473,7 @@ export function MeetingNotesWorkspace({
       {
         onSuccess: () => toast.success(t('meetings.followUp.notes.saved')),
         onError: (error) => {
-          const apiError = toApiClientError(error)
-          toast.error(
-            t(`meetings.errors.${apiError.code}`, {
-              defaultValue: t('meetings.followUp.notes.saveError'),
-            }),
-          )
+          toast.error(meetingMutationErrorMessage(t, error, t('meetings.followUp.notes.saveError')))
         },
       },
     )
@@ -621,4 +606,5 @@ export function MeetingNotesWorkspace({
     </div>
   )
 }
+
 

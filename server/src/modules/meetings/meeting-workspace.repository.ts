@@ -1,4 +1,5 @@
 import type { DatabaseTransaction } from "../../database/types.js";
+import { AppError } from "../../shared/errors/app-error.js";
 import { getDatabasePool, sql } from "../../database/sql.js";
 import { normalizeSqlRowVersion, rowVersionToBuffer } from "../../shared/utils/sql-row-version.js";
 import { mapMeetingRoom, type MeetingRoomRecord } from "./meetings.mapper.js";
@@ -339,6 +340,12 @@ const templateFields = `
 `;
 
 export const meetingWorkspaceRepository = {
+  /** Serialize Meeting-linked writes with historical participant and agenda edits. */
+  async lockMeetingForContentMutation(transaction: DatabaseTransaction, meetingId: number): Promise<void> {
+    await transaction.request().input("meetingId", sql.BigInt, meetingId)
+      .query(`SELECT id FROM dbo.TM_meetings WITH (UPDLOCK, HOLDLOCK) WHERE id = @meetingId;`);
+  },
+
   async findAccessContext(
     meetingId: number,
     userId: number,
@@ -677,6 +684,26 @@ export const meetingWorkspaceRepository = {
     const retainedIds = new Set(submittedIds);
     for (const existingId of existingIds) {
       if (retainedIds.has(existingId)) continue;
+      const links = await transaction.request()
+        .input("agendaItemId", sql.BigInt, existingId)
+        .query<{ source: string }>(`
+          SELECT 'task' AS source WHERE EXISTS (
+            SELECT 1 FROM dbo.TM_meeting_action_items WITH (UPDLOCK, HOLDLOCK)
+            WHERE agenda_item_id = @agendaItemId
+          )
+          UNION ALL SELECT 'decision' WHERE EXISTS (
+            SELECT 1 FROM dbo.TM_meeting_decisions WITH (UPDLOCK, HOLDLOCK)
+            WHERE agenda_item_id = @agendaItemId
+          );
+        `);
+      if (links.recordset.length > 0) {
+        throw new AppError({
+          statusCode: 409,
+          code: "MEETING_AGENDA_HAS_DEPENDENCIES",
+          message: "This agenda topic is linked to a Meeting task or decision and cannot be deleted.",
+          details: { agendaItemId: existingId, links: links.recordset.map((row) => row.source) },
+        });
+      }
       await transaction
         .request()
         .input("meetingId", sql.BigInt, input.meetingId)
@@ -1431,6 +1458,7 @@ export const meetingWorkspaceRepository = {
 export function mapMeetingAttachmentRecord(record: MeetingAttachmentRecord): MeetingAttachment {
   return mapAttachment(record);
 }
+
 
 
 

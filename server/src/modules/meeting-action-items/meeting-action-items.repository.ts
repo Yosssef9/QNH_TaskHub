@@ -297,6 +297,7 @@ export const meetingActionItemsRepository = {
   async createRelationship(
     transaction: DatabaseTransaction,
     values: {
+      requestId?: string | undefined;
       taskId: number;
       meetingId: number;
       agendaItemId: number | null;
@@ -311,13 +312,15 @@ export const meetingActionItemsRepository = {
       .input("agendaItemId", sql.BigInt, values.agendaItemId)
       .input("assigneeUserId", sql.Int, values.assigneeUserId)
       .input("assignedByUserId", sql.Int, values.assignedByUserId)
+      .input("requestId", sql.UniqueIdentifier, values.requestId ?? null)
       .query<{ rowVersion: unknown }>(`
         INSERT INTO dbo.TM_meeting_action_items (
           task_id,
           meeting_id,
           agenda_item_id,
           assignee_user_id,
-          assigned_by_user_id
+          assigned_by_user_id,
+          creation_request_id
         )
         OUTPUT inserted.row_version AS rowVersion
         VALUES (
@@ -325,10 +328,50 @@ export const meetingActionItemsRepository = {
           @meetingId,
           @agendaItemId,
           @assigneeUserId,
-          @assignedByUserId
+          @assignedByUserId,
+          @requestId
         );
       `);
     return normalizedRowVersion(result.recordset[0]?.rowVersion);
+  },
+
+  async findCreationRequest(transaction: DatabaseTransaction, meetingId: number, requestId: string): Promise<number | null> {
+    const result = await transaction.request()
+      .input('meetingId', sql.BigInt, meetingId)
+      .input('requestId', sql.UniqueIdentifier, requestId)
+      .query<{taskId: number | string}>(`SELECT TOP (1) task_id AS taskId
+        FROM dbo.TM_meeting_action_items WITH (UPDLOCK, HOLDLOCK)
+        WHERE meeting_id=@meetingId AND creation_request_id=@requestId`);
+    return result.recordset[0] ? Number(result.recordset[0].taskId) : null;
+  },
+
+  async updateRelationship(
+    transaction: DatabaseTransaction,
+    taskId: number,
+    meetingId: number,
+    agendaItemId: number | null,
+    assigneeUserId: number,
+    actorUserId: number,
+    rowVersion: string,
+    assigneeChanged: boolean,
+  ): Promise<string | null> {
+    const expected = rowVersionToBuffer(rowVersion);
+    if (!expected) return null;
+    const result = await transaction.request()
+      .input('taskId', sql.BigInt, taskId)
+      .input('meetingId', sql.BigInt, meetingId)
+      .input('agendaItemId', sql.BigInt, agendaItemId)
+      .input('assigneeUserId', sql.Int, assigneeUserId)
+      .input('actorUserId', sql.Int, actorUserId)
+      .input('changed', sql.Bit, assigneeChanged)
+      .input('rowVersion', sql.VarBinary(8), expected)
+      .query<{rowVersion: unknown}>(`UPDATE dbo.TM_meeting_action_items
+        SET agenda_item_id=@agendaItemId, assignee_user_id=@assigneeUserId,
+          assigned_by_user_id=CASE WHEN @changed=1 THEN @actorUserId ELSE assigned_by_user_id END,
+          assigned_at_utc=CASE WHEN @changed=1 THEN SYSUTCDATETIME() ELSE assigned_at_utc END
+        OUTPUT inserted.row_version AS rowVersion
+        WHERE task_id=@taskId AND meeting_id=@meetingId AND row_version=@rowVersion`);
+    return result.recordset[0] ? normalizedRowVersion(result.recordset[0].rowVersion) : null;
   },
 
   async updateAssignee(
@@ -600,6 +643,7 @@ export const meetingActionItemsRepository = {
     };
   },
 };
+
 
 
 

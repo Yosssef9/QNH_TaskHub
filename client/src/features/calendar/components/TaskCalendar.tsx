@@ -820,7 +820,7 @@ export function TaskCalendar({
           }}
           datesSet={(info) => {
             setWeekOverflow(null)
-            setCurrentTitle(formatViewTitle(info.view.type, info.start, info.end))
+            setCurrentTitle(formatViewTitle(info.view.type, info.view.currentStart, info.end))
 
             const rangeStart = dateOnlyInTimeZone(info.start)
             const rangeEnd = dateOnlyInTimeZone(info.end)

@@ -8,6 +8,7 @@ import type {
   MeetingActionItemAssigneeOption,
   MeetingActionItemListData,
   ReassignMeetingActionItemInput,
+  UpdateMeetingActionItemInput,
 } from './meeting-action-items.types'
 
 export async function getMeetingActionItems(meetingId: number) {
@@ -35,6 +36,13 @@ export async function createMeetingActionItem(
   return response.data.data.item
 }
 
+export async function updateMeetingActionItem(meetingId: number, taskId: number, input: UpdateMeetingActionItemInput) {
+  const response = await apiClient.put<ApiSuccessResponse<{ item: MeetingActionItem }>>(
+    `/meetings/${meetingId}/action-items/${taskId}`, input,
+  )
+  return response.data.data.item
+}
+
 export async function reassignMeetingActionItem(
   meetingId: number,
   taskId: number,
@@ -53,3 +61,4 @@ export async function getAssignedMeetingActionItems(query: AssignedMeetingAction
   )
   return response.data.data
 }
+

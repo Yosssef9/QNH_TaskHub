@@ -229,6 +229,27 @@ describe("Existing Organizer and assignee behavior", () => {
     assert.equal(mocks.activity.mock.calls.length, 1);
   });
 
+  it("lets the Meeting Action Item creator correct details and logs before/after values", async () => {
+    const mocks = arrange();
+    await tasksService.update(OWNER, TASK, {
+      description: "Corrected after the meeting",
+      priority: "HIGH",
+      dueDate: "2026-10-30",
+    });
+    assert.equal(mocks.update.mock.calls.length, 1);
+    assert.equal(mocks.activity.mock.calls.length, 1);
+    assert.equal(mocks.activity.mock.calls[0]?.[3], "UPDATED");
+    const payload = mocks.activity.mock.calls[0]?.[4] as {
+      changes: Array<{ field: string; from: string | null; to: string | null }>;
+    };
+    assert.deepEqual(payload.changes, [
+      { field: "description", from: "Full task description", to: "Corrected after the meeting" },
+      { field: "priority", from: "MEDIUM", to: "HIGH" },
+      { field: "dueDate", from: null, to: "2026-10-30" },
+    ]);
+    assert.equal(mocks.activity.mock.calls[0]?.[5], OWNER);
+  });
+
   it("still prevents the Organizer completing the assigned task", async () => {
     const mocks = arrange();
     await assert.rejects(tasksService.changeStatus(OWNER, TASK, { status: "DONE" }), {
@@ -298,5 +319,6 @@ describe("Existing Organizer and assignee behavior", () => {
     assert.equal(mocks.deleteFile.mock.calls.length, 1);
   });
 });
+
 
 

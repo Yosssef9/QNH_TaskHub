@@ -210,6 +210,19 @@ export interface SaveMeetingInput {
   followUpOfMeetingId?: number | null
 }
 
+export interface HistoricalMeetingEditDependencies {
+  participants: Array<{ userId: number; reasons: string[] }>
+  agendaIds: number[]
+  agenda: Array<{ id: number; taskCount: number; decisionCount: number }>
+}
+
+export interface UpdateHistoricalMeetingInput extends Omit<SaveMeetingInput, 'agendaItems'> {
+  meetingId: number
+  meetingRowVersion: string
+  revisionRowVersion: string
+  agendaItems: Array<MeetingAgendaItemInput & { id?: number | null }>
+}
+
 export interface UpdatePendingMeetingScheduleInput {
   meetingId: number
   revisionId: number
@@ -346,6 +359,7 @@ export interface MeetingDetail {
     canManageAgenda: boolean
     canManageAttachments: boolean
     canSaveAsTemplate: boolean
+    canEditHistorical: boolean
     canManageAttendance: boolean
   }
 }
@@ -471,4 +485,5 @@ export interface UpdateMeetingTemplateInput extends SaveMeetingTemplateInput {
   templateId: number
   rowVersion: string
 }
+
 
