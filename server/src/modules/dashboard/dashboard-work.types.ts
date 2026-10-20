@@ -32,7 +32,7 @@ export interface WorkItem {
   listName: string | null;
   meetingId: number | null;
   title: string;
-  status: Exclude<WorkStatus, 'ALL'>;
+  status: Exclude<WorkStatus, 'ALL' | 'ACTIVE'>;
   priority: Exclude<WorkPriority, 'ALL'>;
   dueDate: string | null;
   createdAtUtc: string;
