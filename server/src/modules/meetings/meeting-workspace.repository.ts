@@ -2,6 +2,7 @@ import type { DatabaseTransaction } from "../../database/types.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import { getDatabasePool, sql } from "../../database/sql.js";
 import { normalizeSqlRowVersion, rowVersionToBuffer } from "../../shared/utils/sql-row-version.js";
+import { recoverAttachmentFileName } from "../../shared/utils/attachment-filename.js";
 import { mapMeetingRoom, type MeetingRoomRecord } from "./meetings.mapper.js";
 import type {
   CancelMeetingInput,
@@ -243,7 +244,7 @@ function mapAttachment(record: MeetingAttachmentRecord): MeetingAttachment {
   return {
     id: record.id,
     meetingId: Number(record.meetingId),
-    originalFileName: record.originalFileName,
+    originalFileName: recoverAttachmentFileName(record.originalFileName),
     mimeType: record.mimeType,
     fileExtension: record.fileExtension,
     sizeBytes: Number(record.sizeBytes),

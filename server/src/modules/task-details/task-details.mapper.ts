@@ -1,4 +1,5 @@
 import { parsePositiveIntegerId } from "../../shared/utils/id.utils.js";
+import { recoverAttachmentFileName } from "../../shared/utils/attachment-filename.js";
 
 import type {
   ActivityRecord,
@@ -32,7 +33,7 @@ export function mapAttachment(record: AttachmentRecord): Attachment {
       record.subtaskId === null
         ? null
         : parsePositiveIntegerId(record.subtaskId, "subtask id"),
-    originalFileName: record.originalFileName,
+    originalFileName: recoverAttachmentFileName(record.originalFileName),
     mimeType: record.mimeType,
     fileExtension: record.fileExtension,
     sizeBytes: Number(record.sizeBytes),
@@ -61,5 +62,3 @@ export function mapActivity(record: ActivityRecord): TaskActivity {
     createdAtUtc: record.createdAtUtc.toISOString(),
   };
 }
-
-

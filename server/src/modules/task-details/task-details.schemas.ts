@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sqlServerGuidSchema } from "../../shared/validation/sql-server-guid.schema.js";
 
 const dateOnlySchema = z
   .string()
@@ -7,13 +8,6 @@ const dateOnlySchema = z
 
 export const taskIdParamsSchema = z.object({ taskId: z.coerce.number().int().positive() });
 export const subtaskIdParamsSchema = z.object({ subtaskId: z.coerce.number().int().positive() });
-const sqlServerGuidSchema = z
-  .string()
-  .regex(
-    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
-    "Invalid attachment ID.",
-  );
-
 export const attachmentIdParamsSchema = z.object({ attachmentId: sqlServerGuidSchema });
 export const createSubtaskBodySchema = z.object({
   title: z.string().trim().min(1).max(1000),

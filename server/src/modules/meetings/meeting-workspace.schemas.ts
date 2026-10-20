@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { sqlServerGuidSchema } from "../../shared/validation/sql-server-guid.schema.js";
 import { isValidZoomJoinUrl } from "./meeting-online-location.js";
 
 const utcDateTimeSchema = z.string().datetime({ offset: true });
@@ -41,7 +42,7 @@ export const meetingWorkspaceParamsSchema = z.object({
 });
 
 export const meetingAttachmentParamsSchema = z.object({
-  attachmentId: z.string().uuid(),
+  attachmentId: sqlServerGuidSchema,
 });
 
 export const meetingTemplateParamsSchema = z.object({

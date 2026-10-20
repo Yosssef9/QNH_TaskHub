@@ -1,4 +1,5 @@
 import path from "node:path";
+import { cleanUploadedAttachmentFileName } from "../../shared/utils/attachment-filename.js";
 
 import { withTransaction } from "../../database/transaction.js";
 import { AppError } from "../../shared/errors/app-error.js";
@@ -120,14 +121,7 @@ function contractAttachmentNotFound(): AppError {
 }
 
 function cleanAttachmentName(rawName: string): string {
-  const value = Array.from(path.basename(rawName))
-    .filter((character) => {
-      const code = character.charCodeAt(0);
-      return code >= 32 && code !== 127;
-    })
-    .join("")
-    .trim()
-    .slice(0, 260);
+  const value = cleanUploadedAttachmentFileName(rawName);
   if (!value) {
     throw new AppError({
       statusCode: 400,

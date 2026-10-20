@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { sqlServerGuidSchema } from "../../shared/validation/sql-server-guid.schema.js";
 import { normalizeSqlRowVersion } from "./contracts-row-version.js";
 
 const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -17,7 +18,7 @@ function optionalBooleanQuery(value: unknown): unknown {
 }
 
 export const attachmentIdParamsSchema = z.object({
-  attachmentId: z.guid(),
+  attachmentId: sqlServerGuidSchema,
 });
 
 export const contractIdParamsSchema = z.object({

@@ -1,5 +1,6 @@
 import { getDatabasePool, sql } from '../../database/sql.js';
 import type { DatabaseTransaction } from '../../database/types.js';
+import { recoverAttachmentFileName } from '../../shared/utils/attachment-filename.js';
 
 export interface CollaborativeTaskRow {
   taskId: number;
@@ -321,7 +322,8 @@ export const collaborationRepository = {
           WHERE member.task_id=@taskId AND member.subtask_id=a.subtask_id
             AND member.assignee_user_id=@actorId AND member.is_active=1))
       GROUP BY a.subtask_id;`);
-    return {members:members.recordset,notes:notes.recordset,files:files.recordset,
+    return {members:members.recordset,notes:notes.recordset,
+      files:files.recordset.map(file=>({...file,originalFileName:recoverAttachmentFileName(file.originalFileName)})),
       modes:modes.recordset,progress:progress.recordset};
   },
   async file(id:string):Promise<{id:string;taskId:number;assignmentId:number;assigneeUserId:number;ownerUserId:number;

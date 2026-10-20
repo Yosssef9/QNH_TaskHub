@@ -1,4 +1,5 @@
 import path from "node:path";
+import { cleanUploadedAttachmentFileName } from "../../shared/utils/attachment-filename.js";
 
 import { withTransaction } from "../../database/transaction.js";
 import { AppError } from "../../shared/errors/app-error.js";
@@ -522,9 +523,7 @@ export const taskDetailsService = {
     }
     const task = await assertTask(preflight.ownerUserId, taskId);
     assertTaskWritable(task);
-    const originalFileName = Array.from(path.basename(file.originalname))
-      .filter((character) => { const code = character.charCodeAt(0); return code >= 32 && code !== 127; })
-      .join("").trim().slice(0, 260);
+    const originalFileName = cleanUploadedAttachmentFileName(file.originalname);
     if (!originalFileName) throw new AppError({ statusCode: 400, code: "ATTACHMENT_NAME_INVALID", message: "Attachment file name is invalid." });
     const extension = path.extname(originalFileName).toLowerCase();
     const key = await storeAttachment(file.buffer, extension);
@@ -614,7 +613,7 @@ export const taskDetailsService = {
       throw attachmentNotFound();
     const attachment = await taskDetailsRepository.findAttachment(resolved.ownerUserId, id);
     if (!attachment) throw attachmentNotFound();
-    return { attachment, buffer: await readAttachment(attachment.storageKey) };
+    return { attachment: mapAttachment(attachment), buffer: await readAttachment(attachment.storageKey) };
   },
 
   async deleteAttachment(actorUserId: number, id: string) {

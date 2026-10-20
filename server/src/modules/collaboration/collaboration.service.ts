@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { cleanUploadedAttachmentFileName, recoverAttachmentFileName } from '../../shared/utils/attachment-filename.js';
 import { withTransaction } from '../../database/transaction.js';
 import type { DatabaseTransaction } from '../../database/types.js';
 import { AppError } from '../../shared/errors/app-error.js';
@@ -219,8 +220,7 @@ export const collaborationService={
     if (!row || !row.isActive || row.assigneeUserId!==actorId) throw notFound();
     const task=await repo.task(row.taskId);
     if (!task?.isCollaborative || task.status==='CANCELLED') throw notFound();
-    const name=Array.from(path.basename(file.originalname)).filter(c=>c.charCodeAt(0)>=32 && c.charCodeAt(0)!==127)
-      .join('').trim().slice(0,255);
+    const name=cleanUploadedAttachmentFileName(file.originalname,255);
     if (!name) throw new AppError({statusCode:400,code:'ATTACHMENT_NAME_INVALID',message:'Invalid file name.'});
     const extension=path.extname(name).toLowerCase();
     const key=await storeAttachment(file.buffer,extension);
@@ -247,7 +247,6 @@ export const collaborationService={
           context.meetingOrganizerUserId??context.ownerUserId,transaction))))) throw notFound();
     // Revoked assignments are excluded by repo.file. Former assignees cannot
     // retrieve private files through a saved direct URL.
-    return {name:file.name,mime:file.mime,buffer:await readAttachment(file.key)};
+    return {name:recoverAttachmentFileName(file.name),mime:file.mime,buffer:await readAttachment(file.key)};
   },
 };
-

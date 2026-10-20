@@ -1,4 +1,5 @@
 import { AppError } from "../../shared/errors/app-error.js";
+import { recoverAttachmentFileName } from "../../shared/utils/attachment-filename.js";
 import { normalizeSqlRowVersion } from "./contracts-row-version.js";
 import type {
   Contract,
@@ -97,7 +98,7 @@ export function mapContractAttachment(record: ContractAttachmentRecord): Contrac
   return {
     id: record.id,
     contractId: Number(record.contractId),
-    originalFileName: record.originalFileName,
+    originalFileName: recoverAttachmentFileName(record.originalFileName),
     mimeType: record.mimeType,
     fileExtension: record.fileExtension,
     sizeBytes: Number(record.sizeBytes),

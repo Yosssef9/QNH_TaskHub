@@ -5,13 +5,14 @@ import { resolveTaskHubAccess } from '../../middleware/resolveTaskHubAccess.midd
 import { validateRequest } from '../../middleware/validate.middleware.js';
 import { getValidatedRequestPart } from '../../shared/http/validated-request.js';
 import { AppError } from '../../shared/errors/app-error.js';
+import { sqlServerGuidSchema } from '../../shared/validation/sql-server-guid.schema.js';
 import { uploadSingleAttachment } from '../task-details/attachment-upload.middleware.js';
 import { collaborationService as service } from './collaboration.service.js';
 
 const taskParams = z.object({taskId:z.coerce.number().int().positive()});
 const childParams = taskParams.extend({subtaskId:z.coerce.number().int().positive()});
 const assignmentParams = z.object({assignmentId:z.coerce.number().int().positive()});
-const fileParams = z.object({fileId:z.string().uuid()});
+const fileParams = z.object({fileId:sqlServerGuidSchema});
 const assignees = z.object({userIds:z.array(z.number().int().positive()).min(1).max(30)});
 const childAssignees = z.discriminatedUnion('mode', [
   z.object({mode:z.literal('INHERIT'),userIds:z.array(z.number().int().positive()).optional()}),
