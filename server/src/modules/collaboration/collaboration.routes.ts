@@ -8,6 +8,7 @@ import { AppError } from '../../shared/errors/app-error.js';
 import { sqlServerGuidSchema } from '../../shared/validation/sql-server-guid.schema.js';
 import { uploadSingleAttachment } from '../task-details/attachment-upload.middleware.js';
 import { collaborationService as service } from './collaboration.service.js';
+import { collaborationPreviewMime } from './collaboration-preview.js';
 
 const taskParams = z.object({taskId:z.coerce.number().int().positive()});
 const childParams = taskParams.extend({subtaskId:z.coerce.number().int().positive()});
@@ -66,6 +67,19 @@ collaborationRouter.get('/files/:fileId/download',validateRequest({params:filePa
   const file=await service.download(actor(req),fileId);
   res.setHeader('Content-Type',file.mime);
   res.setHeader('Content-Disposition',`attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`);
+  res.setHeader('Cache-Control','private, no-store');
+  res.send(file.buffer);
+});
+
+// Same service-level membership and file permissions as the download endpoint.
+// Only known inline-safe formats are exposed as browser previews.
+collaborationRouter.get('/files/:fileId/preview',validateRequest({params:fileParams}),async(req,res)=>{
+  const {fileId}=getValidatedRequestPart<z.infer<typeof fileParams>>(req,'params');
+  const file=await service.download(actor(req),fileId);
+  const mime=collaborationPreviewMime(file.name,file.buffer);
+  res.setHeader('Content-Type',mime);
+  res.setHeader('Content-Disposition',`inline; filename*=UTF-8''${encodeURIComponent(file.name)}`);
+  res.setHeader('X-Content-Type-Options','nosniff');
   res.setHeader('Cache-Control','private, no-store');
   res.send(file.buffer);
 });

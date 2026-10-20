@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, CheckCircle2, ChevronDown, Download, FileUp, LockKeyhole, Pencil, Plus, RotateCcw, UsersRound } from 'lucide-react'
+import { ArrowDown, ArrowUp, CheckCircle2, ChevronDown, Download, Eye, FileUp, LockKeyhole, Pencil, Plus, RotateCcw, UsersRound } from 'lucide-react'
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
@@ -8,12 +8,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/cn'
+import { AttachmentPreviewDialog } from '@/components/shared/AttachmentPreviewDialog'
+import { attachmentPreviewKind } from '@/components/shared/attachment-preview'
 
 import type { EligibleTaskUser } from './general-assignment.api'
 import type { TaskPriority } from '../types/task.types'
 import { TaskPriorityIndicator } from '../components/TaskSelectIndicators'
 import { TaskAssigneeMultiPicker } from './TaskAssigneeMultiPicker'
-import { collaborativeApi, type CollaborativeMember, type CollaborativeView } from './collaboration.api'
+import { collaborativeApi, type CollaborativeFile, type CollaborativeMember, type CollaborativeView } from './collaboration.api'
 import { useCollaborativeAssignments } from './use-collaboration'
 import { collaborativeScopeProgress, myCollaborativeAssignment, visibleCollaborativeSubmissions } from './collaborative-workspace.policy'
 
@@ -71,6 +73,7 @@ function Submission({ row, view, actorId, owner, actions }: {
 }) {
   const { t, i18n } = useTranslation()
   const [note, setNote] = useState('')
+  const [previewFile, setPreviewFile] = useState<CollaborativeFile | null>(null)
   const mine = actorId === row.userId
   const updates = view.notes.filter(item => item.assignmentId === row.id)
   const files = view.files.filter(file => file.assignmentId === row.id)
@@ -94,10 +97,21 @@ function Submission({ row, view, actorId, owner, actions }: {
     </div> : <p className="text-muted-foreground text-sm">{t('tasks.workspace.noUpdates')}</p>}
     {files.length ? <div className="space-y-1 border-t pt-3">
       <p className="text-muted-foreground text-xs font-semibold">{t('tasks.workspace.evidence')}</p>
-      {files.map(file => <Button key={file.id} type="button" variant="ghost" size="sm" className="flex max-w-full justify-start"
-        onClick={() => void collaborativeApi.download(file.id, file.originalFileName).catch(() => toast.error(t('tasks.collaboration.fileError')))}>
-        <Download className="size-4 shrink-0" /><span className="truncate">{file.originalFileName}</span>
-      </Button>)}
+      {files.map(file => <div key={file.id} className="hover:bg-muted/30 flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5">
+        <FileUp aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
+        <span className="min-w-0 flex-1 truncate text-sm" title={file.originalFileName}>{file.originalFileName}</span>
+        {attachmentPreviewKind(file) !== 'unsupported' ? <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0"
+          aria-label={t('attachments.previewFile', { name: file.originalFileName })} onClick={() => setPreviewFile(file)}>
+          <Eye aria-hidden="true" className="size-4" />
+        </Button> : null}
+        <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0"
+          aria-label={t('attachments.downloadFile', { name: file.originalFileName })}
+          onClick={() => void collaborativeApi.download(file.id, file.originalFileName).catch(() => toast.error(t('tasks.collaboration.fileError')))}>
+          <Download aria-hidden="true" className="size-4" />
+        </Button>
+      </div>)}
+      <AttachmentPreviewDialog attachment={previewFile} onOpenChange={open => { if (!open) setPreviewFile(null) }}
+        getPreview={collaborativeApi.preview} download={file => collaborativeApi.download(file.id, file.originalFileName)} />
     </div> : null}
     {mine && row.isActive ? <div className="space-y-3 border-t pt-3">
       <label htmlFor={`work-notes-${row.id}`} className="text-sm font-medium">{t('tasks.collaboration.myNotes')}</label>
@@ -404,4 +418,3 @@ export function CollaborativeAssignmentsPanel({ taskId, actorId, ownerId, meetin
       view={view} meetingId={meetingId} actions={actions} />}
   </section>
 }
-

@@ -1,8 +1,11 @@
-import { FileText, Paperclip, Trash2 } from 'lucide-react'
+import { Download, Eye, FileText, Paperclip, Trash2 } from 'lucide-react'
+import { useCallback, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
+import { AttachmentPreviewDialog } from '@/components/shared/AttachmentPreviewDialog'
+import { attachmentPreviewKind } from '@/components/shared/attachment-preview'
 import {
   formatMeetingAttachmentBytes,
   MEETING_ATTACHMENT_EXTENSIONS,
@@ -35,6 +38,29 @@ export function MeetingSeriesFilePicker({
 }) {
   const { t } = useTranslation()
   const disabled = maxCount <= files.length
+  const [previewId, setPreviewId] = useState<string | null>(null)
+  const selected = files.find(item => item.id === previewId)
+  const previewFile = useMemo(() => selected ? {
+    id: selected.id, originalFileName: selected.file.name, mimeType: selected.file.type,
+  } : null, [selected])
+  const getPreview = useCallback(async (id: string, _signal: AbortSignal): Promise<Blob> => {
+    const found = files.find(item => item.id === id)
+    if (!found) throw new Error('Attachment not found')
+    return found.file
+  }, [files])
+  const download = useCallback(async (attachment: {id:string;originalFileName:string}) => {
+    const found = files.find(item => item.id === attachment.id)
+    if (!found) throw new Error('Attachment not found')
+    const url = URL.createObjectURL(found.file)
+    const link = document.createElement('a')
+    try {
+      link.href = url
+      link.download = found.file.name
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+    } finally { URL.revokeObjectURL(url) }
+  }, [files])
 
   function addFiles(input: FileList | null) {
     if (!input?.length) return
@@ -95,6 +121,15 @@ export function MeetingSeriesFilePicker({
                 <p className="truncate text-xs font-semibold">{item.file.name}</p>
                 <p className="text-muted-foreground text-[11px]">{formatMeetingAttachmentBytes(item.file.size)}</p>
               </div>
+              {attachmentPreviewKind({originalFileName:item.file.name, mimeType:item.file.type}) !== 'unsupported' ? <Button
+                type="button" variant="ghost" size="icon"
+                aria-label={t('attachments.previewFile', {name:item.file.name})}
+                onClick={() => setPreviewId(item.id)}
+              ><Eye aria-hidden="true" className="size-3.5" /></Button> : null}
+              <Button type="button" variant="ghost" size="icon"
+                aria-label={t('attachments.downloadFile', {name:item.file.name})}
+                onClick={() => void download({id:item.id,originalFileName:item.file.name})}
+              ><Download aria-hidden="true" className="size-3.5" /></Button>
               <Button
                 type="button"
                 variant="ghost"
@@ -108,6 +143,8 @@ export function MeetingSeriesFilePicker({
           ))}
         </div>
       ) : null}
+      <AttachmentPreviewDialog attachment={previewFile} onOpenChange={open => { if (!open) setPreviewId(null) }}
+        getPreview={getPreview} download={download} />
     </div>
   )
 }

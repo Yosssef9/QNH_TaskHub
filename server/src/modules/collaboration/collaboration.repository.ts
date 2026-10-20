@@ -296,7 +296,8 @@ export const collaborationRepository = {
           ORDER BY e.created_at_utc,e.id;`),
       pool.request().input('taskId',sql.BigInt,taskId).input('actorId',sql.Int,actorId).input('ownerId',sql.Int,ownerId)
         .query(`SELECT f.id,f.assignment_id AS assignmentId,f.original_file_name AS originalFileName,
-          f.size_bytes AS sizeBytes,f.uploaded_at_utc AS uploadedAtUtc
+          f.size_bytes AS sizeBytes,f.mime_type AS mimeType, f.file_extension AS fileExtension,
+          f.uploaded_at_utc AS uploadedAtUtc
           FROM dbo.TM_collaboration_files f JOIN dbo.TM_collaboration_assignments a ON a.id=f.assignment_id
           WHERE a.task_id=@taskId AND f.deleted_at_utc IS NULL
             AND (@actorId=@ownerId OR a.is_active=1 AND a.assignee_user_id=@actorId)

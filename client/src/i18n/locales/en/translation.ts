@@ -63,6 +63,14 @@ export const enTranslation = {
     deleteError: 'Could not delete group. Reload and try again.',
     loadError: 'Could not load Item Code Groups.',
   },
+  attachments: {
+    preview: 'Preview attachment', previewFile: 'Preview {{name}}', downloadFile: 'Download {{name}}',
+    previewDescription: 'View this attachment securely without leaving TaskHub.',
+    unavailable: 'Preview is not available for this file type.',
+    unavailableDescription: 'Download the file to open it in a suitable application.',
+    previewFailed: 'Could not load the preview. You can still try downloading the file.',
+    download: 'Download file', downloadFailed: 'Could not download this attachment.',
+  },
   common: {
     appName: 'QNH TaskHub',
     appShortName: 'QNH',

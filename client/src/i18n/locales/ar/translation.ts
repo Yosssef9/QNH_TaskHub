@@ -63,6 +63,14 @@ export const arTranslation = {
     deleteError: 'تعذّر حذف المجموعة. حدّث الصفحة وحاول مرة أخرى.',
     loadError: 'تعذّر تحميل مجموعات أكواد الأصناف.',
   },
+  attachments: {
+    preview: 'معاينة المرفق', previewFile: 'معاينة {{name}}', downloadFile: 'تنزيل {{name}}',
+    previewDescription: 'عرض المرفق بأمان دون مغادرة منصة المهام.',
+    unavailable: 'المعاينة غير متاحة لهذا النوع من الملفات.',
+    unavailableDescription: 'يمكنك تنزيل الملف وفتحه باستخدام التطبيق المناسب.',
+    previewFailed: 'تعذّر تحميل المعاينة. يمكنك محاولة تنزيل الملف.',
+    download: 'تنزيل الملف', downloadFailed: 'تعذّر تنزيل هذا المرفق.',
+  },
   common: {
     appName: 'منصة مهام QNH',
     appShortName: 'QNH',

@@ -1,8 +1,9 @@
-import { Download, File, Trash2 } from 'lucide-react'
+import { Download, Eye, File, Trash2 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 
 import { taskHubItemMotion } from '@/components/shared/TaskHubMotion'
+import { attachmentPreviewKind } from '@/components/shared/attachment-preview'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/cn'
 
@@ -99,6 +100,14 @@ export function TaskAttachmentList({
             </div>
 
             <div className="flex shrink-0 items-center gap-1 opacity-75 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+              {attachmentPreviewKind(item) !== 'unsupported' ? (
+                <Button type="button" variant="ghost" size="icon"
+                  className={cn('text-muted-foreground hover:text-foreground', compact ? 'size-8' : 'size-9')}
+                  aria-label={t('attachments.previewFile', { name: item.originalFileName })}
+                  onClick={(event) => { event.stopPropagation(); onOpen(item) }}>
+                  <Eye className="size-4" aria-hidden="true" />
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 variant="ghost"
@@ -138,4 +147,3 @@ export function TaskAttachmentList({
     </ul>
   )
 }
-
