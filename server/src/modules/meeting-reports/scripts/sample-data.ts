@@ -62,7 +62,7 @@ export function sampleMeetingReport(language: MeetingReportLanguage = "en"): Mee
         { id: 6, activityType: "NOTES_UPDATED", actor: people[0], changes: null, createdAtUtc: "2026-09-27T07:10:00.000Z" },
       ],
       pendingReschedule: null,
-      permissions: { canCancel: false, canReschedule: false, canEditPendingSchedule: false, canEditPendingReschedule: false, canCancelPendingReschedule: false, canDecidePendingRequest: false, canCoordinatorReschedule: false, canDecidePendingReschedule: false, canManageAgenda: false, canManageAttachments: false, canSaveAsTemplate: false, canManageAttendance: false },
+      permissions: { canEditHistorical: false, canCancel: false, canReschedule: false, canEditPendingSchedule: false, canEditPendingReschedule: false, canCancelPendingReschedule: false, canDecidePendingRequest: false, canCoordinatorReschedule: false, canDecidePendingReschedule: false, canManageAgenda: false, canManageAttachments: false, canSaveAsTemplate: false, canManageAttendance: false },
     },
     attendanceSummary: { total: 4, ATTENDED: 2, ABSENT: 1, NOT_MARKED: 1 },
     followUp: { summary: { actionItems: 3, completed: 1, overdue: 0, decisions: 2 }, canManageContent: false,
@@ -80,4 +80,5 @@ export function sampleMeetingReport(language: MeetingReportLanguage = "en"): Mee
     relatedMeetings: [{ id: 128, title: ar ? "متابعة الإجراءات التشغيلية" : "Operations Action Item Follow-up", status: "SCHEDULED", organizer: people[0], meetingMode: "ROOM", room, startAtUtc: "2026-10-04T06:00:00.000Z", endAtUtc: "2026-10-04T07:00:00.000Z", participantCount: 4, isCurrent: false }],
   };
 }
+
 
