@@ -1,4 +1,4 @@
-import { Building2, CalendarDays, CalendarRange, House, Settings, ShieldCheck } from 'lucide-react'
+import { Building2, CalendarDays, CalendarRange, House, Inbox, Settings, ShieldCheck } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { TaskHubRoleCode } from '@/features/auth/types/auth.types'
 
@@ -6,6 +6,7 @@ export interface NavigationItem {
   to: string
   labelKey:
     | 'navigation.home'
+    | 'navigation.workInbox'
     | 'navigation.calendar'
     | 'navigation.meetings'
     | 'navigation.settings'
@@ -22,6 +23,12 @@ export const navigationItems: readonly NavigationItem[] = [
     to: '/',
     labelKey: 'navigation.home',
     icon: House,
+    end: true,
+  },
+  {
+    to: '/work-inbox',
+    labelKey: 'navigation.workInbox',
+    icon: Inbox,
     end: true,
   },
   {

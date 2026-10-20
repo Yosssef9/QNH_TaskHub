@@ -81,7 +81,7 @@ export function UserAccountMenu() {
             {userInitial}
           </span>
           {user ? (
-            <span className="hidden min-w-0 xl:block">
+            <span className="hidden min-w-0 lg:block">
               <span className="block max-w-40 truncate text-sm leading-5 font-semibold">
                 {user.userName}
               </span>

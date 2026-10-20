@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Outlet, useNavigation } from 'react-router'
+import { Outlet, useLocation, useNavigation } from 'react-router'
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { useAutoExpandSidebar } from '@/hooks/use-auto-expand-sidebar'
@@ -15,6 +15,8 @@ export function AppShell() {
   const { t } = useTranslation()
   const desktopSidebar = useAutoExpandSidebar()
   const navigation = useNavigation()
+  const location = useLocation()
+  const wideWorkspace = location.pathname === '/' || location.pathname === '/work-inbox'
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const navigationPending = navigation.state !== 'idle'
 
@@ -82,7 +84,7 @@ export function AppShell() {
 
         <main
           aria-busy={navigationPending}
-          className="mx-auto w-full max-w-[100rem] p-4 sm:p-6 lg:p-8"
+          className={cn('mx-auto w-full p-4 sm:p-6 lg:p-8', wideWorkspace ? 'max-w-none' : 'max-w-[100rem]')}
         >
           <Outlet />
         </main>

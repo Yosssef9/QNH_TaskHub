@@ -8,7 +8,7 @@ import { listsQueryKey } from '@/features/lists/hooks/use-lists'
 
 import { AppSidebar } from './AppSidebar'
 
-function renderSidebar(collapsed: boolean) {
+function renderSidebar(collapsed: boolean, initialRoute = '/') {
   const queryClient = new QueryClient()
   queryClient.setQueryData(listsQueryKey, [
     {
@@ -31,7 +31,7 @@ function renderSidebar(collapsed: boolean) {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialRoute]}>
         <TooltipProvider>
           <AppSidebar collapsed={collapsed} />
         </TooltipProvider>
@@ -45,6 +45,7 @@ describe('AppSidebar', () => {
     const { container } = renderSidebar(true)
 
     expect(screen.getByRole('link', { name: 'الرئيسية' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'صندوق العمل' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'مهامي' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'التخطيط' })).toBeVisible()
     expect(screen.queryByRole('button', { name: 'توسيع القائمة الجانبية' })).not.toBeInTheDocument()
@@ -56,6 +57,17 @@ describe('AppSidebar', () => {
     expect(compactLogo?.parentElement).toHaveAttribute('aria-hidden', 'false')
     expect(fullLogo).toBeInTheDocument()
     expect(fullLogo?.parentElement).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('places Work Inbox immediately after Home and highlights the active page', () => {
+    const { container } = renderSidebar(false, '/work-inbox')
+    const homeLink = screen.getByRole('link', { name: 'الرئيسية' })
+    const inboxLink = screen.getByRole('link', { name: 'صندوق العمل' })
+    const navigationLinks = Array.from(container.querySelectorAll('nav a'))
+
+    expect(inboxLink).toHaveAttribute('href', '/work-inbox')
+    expect(inboxLink).toHaveAttribute('aria-current', 'page')
+    expect(navigationLinks.indexOf(inboxLink)).toBe(navigationLinks.indexOf(homeLink) + 1)
   })
 
   it('shows the full hospital brand and application name when expanded', () => {

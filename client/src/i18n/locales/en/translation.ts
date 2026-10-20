@@ -162,6 +162,7 @@ export const enTranslation = {
   navigation: {
     main: 'Main navigation',
     home: 'Home',
+    workInbox: 'Work Inbox',
     calendar: 'Calendar',
     meetings: 'Meetings',
     kpiTasks: 'KPI tasks',
@@ -3840,6 +3841,35 @@ export const enTranslation = {
       restore: 'The task could not be restored.',
     },
   },
+  workDashboard: {
+    active: 'Active',
+    eyebrow: 'Personal workspace', title: 'Work dashboard',
+    greeting: 'Your tasks, assignments and Meetings at a glance, {{name}}.',
+    refresh: 'Refresh', newTask: 'New task',
+    assigned: 'Assigned to me', shared: 'Shared with me', dueToday: 'Due today', overdue: 'Overdue',
+    inbox: 'Work inbox', inboxDescription: 'Tasks you own, receive, share or delegate in one place.',
+    openFullPage: 'Open full view', search: 'Search task titles or people…',
+    tabs: {attention: 'Needs attention', assigned: 'Assigned to me', shared: 'Shared with me', personal: 'My tasks', delegated: 'Assigned by me'},
+    sort: 'Sort', sortOptions: {urgency: 'Needs attention', created: 'Newest first', due: 'Due date', priority: 'Priority'},
+    all: 'All', status: 'Status', priority: 'Priority', due: 'Due date',
+    task: 'Task', context: 'List / Context', meetingTask: 'Meeting task', assignedContext: 'Assigned task', sharedContext: 'Shared task', generalContext: 'Task',
+    alsoShared: 'Also shared', noTasks: 'No tasks match the current filters.',
+    loading: 'Loading…', loadError: 'Dashboard data could not be loaded.',
+    meetings: 'Upcoming Meetings', viewAll: 'View all', delegated: 'Assigned by me',
+    noDelegated: 'No delegated tasks yet.', completed: 'completed', activity: 'Recent activity', taskActivity: 'Task activity', meetingActivity: 'Meeting activity',
+    noActivity: 'No recent activity.', quickActions: 'Quick actions', calendar: 'Calendar',
+    meetingQueue: '{{count}} Meeting items need review',
+    welcomeSubtitle: 'An overview of your work and quick access to your TaskHub lists and assignments.',
+    inboxPreviewDescription: 'A short preview of the work that needs your attention.',
+    viewRemaining: 'View all matching tasks ({{count}} more)',
+    backToDashboard: 'Back to dashboard',
+    activeTasksCount: '{{count}} active tasks',
+    myLists: 'My lists',
+    manageLists: 'Manage lists',
+    noLists: 'No lists have been created yet.',
+    listLoadError: 'Unable to load your lists.',
+    moreLists: 'View {{count}} more lists',
+  },
   home: {
     eyebrow: 'Personal workspace',
     title: 'Welcome, {{name}}',
@@ -4206,9 +4236,3 @@ export const enTranslation = {
     backHome: 'Back to home',
   },
 } as const
-
-
-
-
-
-

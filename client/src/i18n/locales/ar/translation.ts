@@ -162,6 +162,7 @@ export const arTranslation = {
   navigation: {
     main: 'التنقل الرئيسي',
     home: 'الرئيسية',
+    workInbox: 'صندوق العمل',
     calendar: 'التقويم',
     meetings: 'الاجتماعات',
     kpiTasks: 'مهام المؤشرات',
@@ -3781,6 +3782,35 @@ export const arTranslation = {
       restore: 'تعذرت استعادة المهمة.',
     },
   },
+  workDashboard: {
+    active: 'النشطة',
+    eyebrow: 'مساحة العمل الشخصية', title: 'لوحة العمل',
+    greeting: 'نظرة سريعة على مهامك وتكليفاتك واجتماعاتك، {{name}}.',
+    refresh: 'تحديث', newTask: 'مهمة جديدة',
+    assigned: 'المُسندة إليّ', shared: 'المشاركة معي', dueToday: 'مستحقة اليوم', overdue: 'متأخرة',
+    inbox: 'صندوق العمل', inboxDescription: 'مهامك والتكليفات والمشاركات في مكان واحد.',
+    openFullPage: 'فتح الصفحة الكاملة', search: 'ابحث عن عنوان المهمة أو اسم شخص…',
+    tabs: {attention: 'تحتاج انتباهي', assigned: 'المُسندة إليّ', shared: 'المشاركة معي', personal: 'مهامي', delegated: 'أسندتها للآخرين'},
+    sort: 'الترتيب', sortOptions: {urgency: 'الأهم أولًا', created: 'الأحدث أولًا', due: 'تاريخ الاستحقاق', priority: 'الأولوية'},
+    all: 'الكل', status: 'الحالة', priority: 'الأولوية', due: 'تاريخ الاستحقاق',
+    task: 'المهمة', context: 'القائمة / السياق', meetingTask: 'مهمة اجتماع', assignedContext: 'مهمة مسندة', sharedContext: 'مهمة مشتركة', generalContext: 'مهمة',
+    alsoShared: 'مشاركة أيضًا', noTasks: 'لا توجد مهام مطابقة للفلاتر الحالية.',
+    loading: 'جارٍ التحميل…', loadError: 'تعذر تحميل بيانات لوحة العمل.',
+    meetings: 'الاجتماعات القادمة', viewAll: 'عرض الكل', delegated: 'أسندتها للآخرين',
+    noDelegated: 'لا توجد مهام مفوضة بعد.', completed: 'مكتملة', activity: 'الأنشطة الأخيرة', taskActivity: 'نشاط مهمة', meetingActivity: 'نشاط اجتماع',
+    noActivity: 'لا توجد أنشطة حديثة.', quickActions: 'إجراءات سريعة', calendar: 'التقويم',
+    meetingQueue: '{{count}} طلبات اجتماعات تحتاج إلى مراجعة',
+    welcomeSubtitle: 'نظرة عامة على أعمالك والوصول السريع إلى قوائمك وتكليفاتك في TaskHub.',
+    inboxPreviewDescription: 'معاينة مختصرة للمهام التي تحتاج إلى متابعتك.',
+    viewRemaining: 'عرض جميع المهام المطابقة ({{count}} إضافية)',
+    backToDashboard: 'العودة إلى لوحة العمل',
+    activeTasksCount: '{{count}} مهمة نشطة',
+    myLists: 'قوائمي',
+    manageLists: 'إدارة القوائم',
+    noLists: 'لم يتم إنشاء قوائم بعد.',
+    listLoadError: 'تعذر تحميل قوائمك.',
+    moreLists: 'عرض {{count}} قوائم إضافية',
+  },
   home: {
     eyebrow: 'مساحة العمل الشخصية',
     title: 'مرحباً {{name}}',
@@ -4132,9 +4162,3 @@ export const arTranslation = {
     backHome: 'العودة إلى الرئيسية',
   },
 } as const
-
-
-
-
-
-

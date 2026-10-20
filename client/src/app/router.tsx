@@ -11,6 +11,7 @@ import { CalendarPage } from '@/pages/calendar/CalendarPage'
 import { ContractDetailsPage } from '@/pages/contracts/ContractDetailsPage'
 import { ContractsPage } from '@/pages/contracts/ContractsPage'
 import { HomePage } from '@/pages/home/HomePage'
+import { WorkInboxPage } from '@/pages/home/WorkInboxPage'
 import { ItemDetailsPage } from '@/pages/items/ItemDetailsPage'
 import { ItemsPage } from '@/pages/items/ItemsPage'
 import { KpisPage } from '@/pages/kpis/KpisPage'
@@ -51,6 +52,7 @@ export const router = createBrowserRouter(
       ),
       children: [
         { index: true, element: <HomePage /> },
+        { path: 'work-inbox', element: <WorkInboxPage /> },
 
         { path: 'calendar', element: <CalendarPage /> },
 
@@ -303,7 +305,3 @@ export const router = createBrowserRouter(
     basename: routerBasename,
   },
 )
-
-
-
-
