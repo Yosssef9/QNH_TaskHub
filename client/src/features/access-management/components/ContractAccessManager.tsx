@@ -40,7 +40,6 @@ export function ContractAccessManager() {
     () => users.map((user) => ({
       value: user.userId,
       label: `${user.userName} · ${user.userCode}`,
-      ...(user.email ? { description: user.email } : {}),
     })),
     [users],
   )
