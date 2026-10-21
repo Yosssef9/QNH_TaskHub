@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { LoadingState } from '@/components/shared/LoadingState'
+import { SearchableMultiSelect, type SearchableSelectOption } from '@/components/shared/SearchableMultiSelect'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -35,6 +36,14 @@ export function ContractAccessManager() {
 
   const users = query.data?.users ?? []
   const owners = useMemo(() => users.filter((user) => user.contractsAccess), [users])
+  const granteeOptions = useMemo<SearchableSelectOption[]>(
+    () => users.map((user) => ({
+      value: user.userId,
+      label: `${user.userName} · ${user.userCode}`,
+      ...(user.email ? { description: user.email } : {}),
+    })),
+    [users],
+  )
 
   useEffect(() => {
     if (granteeUserId !== null && ownerUserId === granteeUserId) setOwnerUserId(null)
@@ -104,21 +113,16 @@ export function ContractAccessManager() {
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="space-y-2">
               <label className="text-sm font-medium">{t('access.contractAccess.grantee')}</label>
-              <Select
-                value={granteeUserId === null ? '' : String(granteeUserId)}
-                onValueChange={(value) => setGranteeUserId(Number(value))}
-              >
-                <SelectTrigger aria-label={t('access.contractAccess.grantee')}>
-                  <SelectValue placeholder={t('access.contractAccess.selectUser')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {users.map((user) => (
-                    <SelectItem key={user.userId} value={String(user.userId)}>
-                      {user.userName} · {user.userCode}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableMultiSelect
+                value={granteeUserId}
+                onChange={(value) => setGranteeUserId(value === null ? null : Number(value))}
+                options={granteeOptions}
+                placeholder={t('access.contractAccess.selectUser')}
+                searchPlaceholder={t('access.searchPlaceholder')}
+                noResultsText={t('access.emptyTitle')}
+                ariaLabel={t('access.contractAccess.grantee')}
+                className="w-full"
+              />
             </div>
 
             <div className="space-y-2">
@@ -267,3 +271,4 @@ function PermissionSwitch({
     </div>
   )
 }
+
