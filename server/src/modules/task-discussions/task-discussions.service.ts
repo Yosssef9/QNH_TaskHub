@@ -42,87 +42,227 @@ function mapRow(row:any, files:DiscussionFile[],reactions:DiscussionReaction[]=[
 }
 
 export const taskDiscussionsService={
-  /** Recent discussion scopes, authorized independently for every candidate. A share grant
-   * does not itself give discussion access. Cursor is the latest message ID per scope. */
-  async inbox(userId:number,options:{beforeId?:number;limit:number}){
+  /** Discover discussion scopes independently of message creation. A scope is visible
+   * only when the viewer is authorized and at least two current members can read it.
+   * Positive cursors page existing messages; negative cursors page zero-message scopes. */
+  async inbox(userId:number,options:{beforeId?:number;limit:number;filter?:'all'|'unread'|'mentions'|'empty'}){
     const pool=await getDatabasePool();
-    // Candidate selection touches no private content in the API response until after
-    // assertDiscussionAccess. Bound the scan to prevent unbounded per-scope ACL queries.
-    const result=await pool.request()
-      .input('viewer',sql.Int,userId)
-      .input('beforeId',sql.BigInt,options.beforeId??null)
-      .query<{taskId:number|string;subtaskId:number|string|null;taskTitle:string;subtaskTitle:string|null;lastMessageId:number|string;lastBody:string;lastAtUtc:Date;senderName:string}>(`
-        WITH recent AS (
-          SELECT m.task_id taskId,m.subtask_id subtaskId,MAX(m.id) lastMessageId
-          FROM dbo.TM_task_discussion_messages m
-          JOIN dbo.TM_tasks t ON t.id=m.task_id AND t.deleted_at_utc IS NULL AND t.kpi_instance_id IS NULL
-          LEFT JOIN dbo.TM_subtasks s ON s.id=m.subtask_id AND s.deleted_at_utc IS NULL
-          WHERE m.deleted_at_utc IS NULL AND (m.subtask_id IS NULL OR s.id IS NOT NULL)
-          GROUP BY m.task_id,m.subtask_id
-        )
-        SELECT TOP(150) r.taskId,r.subtaskId,t.title taskTitle,s.title subtaskTitle,
-          r.lastMessageId,LEFT(m.body,120) lastBody,m.created_at_utc lastAtUtc,
-          COALESCE(u.USER_NAME,N'Unknown') senderName
-        FROM recent r
-        JOIN dbo.TM_tasks t ON t.id=r.taskId
-        LEFT JOIN dbo.TM_subtasks s ON s.id=r.subtaskId
-        JOIN dbo.TM_task_discussion_messages m ON m.id=r.lastMessageId
-        LEFT JOIN dbo.users u ON u.USER_ID=m.author_user_id
-        WHERE (@beforeId IS NULL OR r.lastMessageId<@beforeId)
-          AND (
-            t.owner_user_id=@viewer
-            OR (r.subtaskId IS NULL AND (
-              EXISTS(SELECT 1 FROM dbo.TM_collaboration_assignments a
+    const filter=options.filter??'all';
+    type InboxItem={taskId:number;subtaskId:number|null;taskTitle:string;subtaskTitle:string|null;
+      lastMessageId:number;lastPreview:string;lastAtUtc:string|null;senderName:string;
+      unread:number;mentions:number;participantCount:number};
+    const conversations:InboxItem[]=[];
+    const scopeAllowed=async(taskId:number,subtaskId:number|null):Promise<number>=>{
+      try{
+        const members=await listDiscussionMembers(userId,{taskId,subtaskId});
+        return members.filter(member=>member.canView).length;
+      }catch(error){
+        if(error instanceof AppError && error.code==='DISCUSSION_NOT_FOUND')return 0;
+        throw error;
+      }
+    };
+    // Existing discussions continue to use their latest visible message ID as cursor.
+    // Filtering happens after the scope ACL, never by trusting a share grant alone.
+    if(filter!=='empty' && (options.beforeId??1)>0){
+      const result=await pool.request()
+        .input('viewer',sql.Int,userId)
+        .input('beforeId',sql.BigInt,options.beforeId??null)
+        .query<{taskId:number|string;subtaskId:number|string|null;taskTitle:string;subtaskTitle:string|null;
+          lastMessageId:number|string;lastBody:string;lastAtUtc:Date;senderName:string}>(`
+          WITH recent AS (
+            SELECT m.task_id taskId,m.subtask_id subtaskId,MAX(m.id) lastMessageId
+            FROM dbo.TM_task_discussion_messages m
+            JOIN dbo.TM_tasks t ON t.id=m.task_id AND t.deleted_at_utc IS NULL AND t.kpi_instance_id IS NULL
+            LEFT JOIN dbo.TM_subtasks s ON s.id=m.subtask_id AND s.deleted_at_utc IS NULL
+            WHERE m.deleted_at_utc IS NULL AND (m.subtask_id IS NULL OR s.id IS NOT NULL)
+            GROUP BY m.task_id,m.subtask_id
+          )
+          SELECT TOP(150) r.taskId,r.subtaskId,t.title taskTitle,s.title subtaskTitle,
+            r.lastMessageId,LEFT(m.body,120) lastBody,m.created_at_utc lastAtUtc,
+            COALESCE(u.USER_NAME,N'Unknown') senderName
+          FROM recent r
+          JOIN dbo.TM_tasks t ON t.id=r.taskId
+          LEFT JOIN dbo.TM_subtasks s ON s.id=r.subtaskId
+          JOIN dbo.TM_task_discussion_messages m ON m.id=r.lastMessageId
+          LEFT JOIN dbo.users u ON u.USER_ID=m.author_user_id
+          WHERE (@beforeId IS NULL OR r.lastMessageId<@beforeId)
+            AND (t.owner_user_id=@viewer
+              OR (r.subtaskId IS NULL AND (
+                EXISTS(SELECT 1 FROM dbo.TM_collaboration_assignments a
+                  WHERE a.task_id=t.id AND a.subtask_id IS NULL AND a.assignee_user_id=@viewer AND a.is_active=1)
+                OR (NOT EXISTS(SELECT 1 FROM dbo.TM_collaboration_tasks ct WHERE ct.task_id=t.id)
+                  AND (EXISTS(SELECT 1 FROM dbo.TM_general_task_assignments g WHERE g.task_id=t.id AND g.assignee_user_id=@viewer)
+                    OR EXISTS(SELECT 1 FROM dbo.TM_meeting_action_items ma WHERE ma.task_id=t.id AND ma.assignee_user_id=@viewer)))))
+              OR (r.subtaskId IS NOT NULL AND (
+                EXISTS(SELECT 1 FROM dbo.TM_collaboration_assignments a
+                  WHERE a.task_id=t.id AND a.subtask_id=r.subtaskId AND a.assignee_user_id=@viewer AND a.is_active=1)
+                OR (NOT EXISTS(SELECT 1 FROM dbo.TM_collaboration_tasks ct WHERE ct.task_id=t.id)
+                  AND EXISTS(SELECT 1 FROM dbo.TM_subtasks st
+                    LEFT JOIN dbo.TM_general_task_assignments g ON g.task_id=t.id
+                    LEFT JOIN dbo.TM_meeting_action_items ma ON ma.task_id=t.id
+                    WHERE st.id=r.subtaskId AND st.task_id=t.id AND st.deleted_at_utc IS NULL
+                      AND COALESCE(st.assignee_user_id,g.assignee_user_id,ma.assignee_user_id)=@viewer)))))
+          ORDER BY r.lastMessageId DESC;`);
+      let lastScanned:number|null=null;
+      for(const row of result.recordset){
+        const taskId=Number(row.taskId),subtaskId=row.subtaskId===null?null:Number(row.subtaskId);
+        lastScanned=Number(row.lastMessageId);
+        const participantCount=await scopeAllowed(taskId,subtaskId);
+        // Existing histories stay visible to their authorized viewer even if
+        // the original team shrank to one user after the messages were sent.
+        const counts=await pool.request().input('taskId',sql.BigInt,taskId)
+          .input('subtaskId',sql.BigInt,subtaskId).input('viewer',sql.Int,userId)
+          .query<{unread:number;mentions:number}>(`
+            SELECT COUNT(*) unread,
+              SUM(CASE WHEN n.id IS NOT NULL OR mention.message_id IS NOT NULL THEN 1 ELSE 0 END) mentions
+            FROM dbo.TM_task_discussion_messages m
+            LEFT JOIN dbo.TM_task_discussion_mentions mention ON mention.message_id=m.id AND mention.mentioned_user_id=@viewer
+            LEFT JOIN dbo.TM_notifications n ON n.owner_user_id=@viewer
+              AND n.notification_type='TASK_DISCUSSION_MENTION'
+              AND n.dedupe_key=CONCAT('TASK_DISCUSSION:',CONVERT(varchar(20),m.id),':',CONVERT(varchar(20),@viewer))
+            WHERE m.task_id=@taskId
+              AND (m.subtask_id=@subtaskId OR (m.subtask_id IS NULL AND @subtaskId IS NULL))
+              AND m.deleted_at_utc IS NULL AND m.author_user_id<>@viewer
+              AND m.id>ISNULL((SELECT TOP(1) r.last_read_message_id
+                FROM dbo.TM_task_discussion_read_state r WHERE r.task_id=@taskId
+                  AND r.user_id=@viewer AND (r.subtask_id=@subtaskId OR (r.subtask_id IS NULL AND @subtaskId IS NULL))),0);`);
+        const unread=Number(counts.recordset[0]?.unread??0);
+        const mentions=Number(counts.recordset[0]?.mentions??0);
+        if(filter==='unread' && unread===0 || filter==='mentions' && mentions===0)continue;
+        conversations.push({taskId,subtaskId,taskTitle:row.taskTitle,subtaskTitle:row.subtaskTitle,
+          lastMessageId:Number(row.lastMessageId),lastPreview:row.lastBody??'',
+          lastAtUtc:new Date(row.lastAtUtc).toISOString(),senderName:row.senderName,
+          unread,mentions,participantCount});
+        if(conversations.length>=options.limit)break;
+      }
+      if(lastScanned!==null && (conversations.length>=options.limit || result.recordset.length===150)){
+        return {conversations,nextCursor:lastScanned};
+      }
+      if(filter!=='all')return {conversations,nextCursor:null};
+    }
+    if(filter!=='all' && filter!=='empty')return {conversations,nextCursor:null};
+    // A separate, bounded scope discovery query finds still-unstarted conversations.
+    // Offset cursors are encoded as -(offset+1), keeping them distinct from message IDs.
+    const skip=options.beforeId!==undefined && options.beforeId<0 ? -options.beforeId-1 : 0;
+    const emptyResult=await pool.request().input('viewer',sql.Int,userId)
+      .input('skip',sql.Int,skip)
+      .query<{taskId:number|string;subtaskId:number|string|null;taskTitle:string;subtaskTitle:string|null}>(`
+        WITH candidateScopes AS (
+          SELECT t.id taskId,CAST(NULL AS BIGINT) subtaskId,t.title taskTitle,
+            CAST(NULL AS NVARCHAR(500)) subtaskTitle,t.owner_user_id ownerId
+          FROM dbo.TM_tasks t
+          WHERE t.deleted_at_utc IS NULL AND t.kpi_instance_id IS NULL
+            AND (t.owner_user_id=@viewer
+              OR EXISTS(SELECT 1 FROM dbo.TM_collaboration_assignments a
                 WHERE a.task_id=t.id AND a.subtask_id IS NULL AND a.assignee_user_id=@viewer AND a.is_active=1)
               OR (NOT EXISTS(SELECT 1 FROM dbo.TM_collaboration_tasks ct WHERE ct.task_id=t.id)
-                AND (EXISTS(SELECT 1 FROM dbo.TM_general_task_assignments g WHERE g.task_id=t.id AND g.assignee_user_id=@viewer)
-                  OR EXISTS(SELECT 1 FROM dbo.TM_meeting_action_items ma WHERE ma.task_id=t.id AND ma.assignee_user_id=@viewer)))
-            ))
-            OR (r.subtaskId IS NOT NULL AND (
-              EXISTS(SELECT 1 FROM dbo.TM_collaboration_assignments a
-                WHERE a.task_id=t.id AND a.subtask_id=r.subtaskId AND a.assignee_user_id=@viewer AND a.is_active=1)
+                AND (EXISTS(SELECT 1 FROM dbo.TM_general_task_assignments g
+                      WHERE g.task_id=t.id AND g.assignee_user_id=@viewer)
+                  OR EXISTS(SELECT 1 FROM dbo.TM_meeting_action_items ma
+                      WHERE ma.task_id=t.id AND ma.assignee_user_id=@viewer))))
+          UNION ALL
+          SELECT t.id taskId,s.id subtaskId,t.title taskTitle,s.title subtaskTitle,t.owner_user_id ownerId
+          FROM dbo.TM_subtasks s
+          JOIN dbo.TM_tasks t ON t.id=s.task_id AND t.deleted_at_utc IS NULL AND t.kpi_instance_id IS NULL
+          WHERE s.deleted_at_utc IS NULL
+            AND (t.owner_user_id=@viewer
+              OR EXISTS(SELECT 1 FROM dbo.TM_collaboration_assignments a
+                WHERE a.task_id=t.id AND a.subtask_id=s.id AND a.assignee_user_id=@viewer AND a.is_active=1)
               OR (NOT EXISTS(SELECT 1 FROM dbo.TM_collaboration_tasks ct WHERE ct.task_id=t.id)
                 AND EXISTS(SELECT 1 FROM dbo.TM_subtasks st
                   LEFT JOIN dbo.TM_general_task_assignments g ON g.task_id=t.id
                   LEFT JOIN dbo.TM_meeting_action_items ma ON ma.task_id=t.id
-                  WHERE st.id=r.subtaskId AND st.task_id=t.id AND st.deleted_at_utc IS NULL
-                    AND COALESCE(st.assignee_user_id,g.assignee_user_id,ma.assignee_user_id)=@viewer))
-            ))
-          )
-        ORDER BY r.lastMessageId DESC;`);
-    const conversations=[] as {taskId:number;subtaskId:number|null;taskTitle:string;subtaskTitle:string|null;
-      lastMessageId:number;lastPreview:string;lastAtUtc:string;senderName:string;unread:number;mentions:number}[];
-    let lastScanned:number|null=null;
-    for(const row of result.recordset){
+                  WHERE st.id=s.id AND st.task_id=t.id AND st.deleted_at_utc IS NULL
+                    AND COALESCE(st.assignee_user_id,g.assignee_user_id,ma.assignee_user_id)=@viewer)))
+        )
+        SELECT candidate.taskId,candidate.subtaskId,candidate.taskTitle,candidate.subtaskTitle
+        FROM candidateScopes candidate
+        WHERE NOT EXISTS(SELECT 1 FROM dbo.TM_task_discussion_messages m
+          WHERE m.task_id=candidate.taskId AND m.deleted_at_utc IS NULL
+            AND (m.subtask_id=candidate.subtaskId OR (m.subtask_id IS NULL AND candidate.subtaskId IS NULL)))
+          -- Do not let single-user personal scopes consume all 150 scan slots.
+          -- The definitive count/ACL still comes from listDiscussionMembers below.
+          AND (EXISTS(SELECT 1 FROM dbo.TM_collaboration_assignments a
+                WHERE a.task_id=candidate.taskId AND a.is_active=1
+                  AND a.assignee_user_id<>candidate.ownerId
+                  AND (a.subtask_id=candidate.subtaskId
+                    OR (a.subtask_id IS NULL AND candidate.subtaskId IS NULL)))
+            OR (NOT EXISTS(SELECT 1 FROM dbo.TM_collaboration_tasks ct WHERE ct.task_id=candidate.taskId)
+              AND ((candidate.subtaskId IS NULL AND (
+                EXISTS(SELECT 1 FROM dbo.TM_general_task_assignments g
+                  WHERE g.task_id=candidate.taskId AND g.assignee_user_id<>candidate.ownerId)
+                OR EXISTS(SELECT 1 FROM dbo.TM_meeting_action_items ma
+                  WHERE ma.task_id=candidate.taskId AND ma.assignee_user_id<>candidate.ownerId)))
+              OR (candidate.subtaskId IS NOT NULL AND EXISTS(
+                SELECT 1 FROM dbo.TM_subtasks st
+                LEFT JOIN dbo.TM_general_task_assignments g ON g.task_id=st.task_id
+                LEFT JOIN dbo.TM_meeting_action_items ma ON ma.task_id=st.task_id
+                WHERE st.id=candidate.subtaskId AND st.task_id=candidate.taskId
+                  AND st.deleted_at_utc IS NULL
+                  AND COALESCE(st.assignee_user_id,g.assignee_user_id,ma.assignee_user_id)<>candidate.ownerId)))))
+        ORDER BY candidate.taskId DESC,candidate.subtaskId DESC
+        OFFSET @skip ROWS FETCH NEXT 150 ROWS ONLY;`);
+    let scanned=0;
+    for(const row of emptyResult.recordset){
+      scanned++;
       const taskId=Number(row.taskId),subtaskId=row.subtaskId===null?null:Number(row.subtaskId);
-      lastScanned=Number(row.lastMessageId);
-      try {await assertDiscussionAccess(userId,{taskId,subtaskId});}
-      catch(error){if(error instanceof AppError && error.code==='DISCUSSION_NOT_FOUND')continue;throw error;}
-      const counts=await pool.request().input('taskId',sql.BigInt,taskId)
-        .input('subtaskId',sql.BigInt,subtaskId).input('viewer',sql.Int,userId)
-        .query<{unread:number;mentions:number}>(`
-          SELECT COUNT(*) unread,
-            SUM(CASE WHEN n.id IS NOT NULL OR mention.message_id IS NOT NULL THEN 1 ELSE 0 END) mentions
-          FROM dbo.TM_task_discussion_messages m
-          LEFT JOIN dbo.TM_task_discussion_mentions mention ON mention.message_id=m.id AND mention.mentioned_user_id=@viewer
-          LEFT JOIN dbo.TM_notifications n ON n.owner_user_id=@viewer
-            AND n.notification_type='TASK_DISCUSSION_MENTION'
-            AND n.dedupe_key=CONCAT('TASK_DISCUSSION:',CONVERT(varchar(20),m.id),':',CONVERT(varchar(20),@viewer))
-          WHERE m.task_id=@taskId
-            AND (m.subtask_id=@subtaskId OR (m.subtask_id IS NULL AND @subtaskId IS NULL))
-            AND m.deleted_at_utc IS NULL AND m.author_user_id<>@viewer
-            AND m.id>ISNULL((SELECT TOP(1) r.last_read_message_id
-              FROM dbo.TM_task_discussion_read_state r WHERE r.task_id=@taskId
-                AND r.user_id=@viewer AND (r.subtask_id=@subtaskId OR (r.subtask_id IS NULL AND @subtaskId IS NULL))),0);`);
+      const participantCount=await scopeAllowed(taskId,subtaskId);
+      if(participantCount<2)continue;
       conversations.push({taskId,subtaskId,taskTitle:row.taskTitle,subtaskTitle:row.subtaskTitle,
-        lastMessageId:Number(row.lastMessageId),lastPreview:row.lastBody,
-        lastAtUtc:new Date(row.lastAtUtc).toISOString(),senderName:row.senderName,
-        unread:Number(counts.recordset[0]?.unread??0),mentions:Number(counts.recordset[0]?.mentions??0)});
+        lastMessageId:0,lastPreview:'',lastAtUtc:null,senderName:'',unread:0,mentions:0,participantCount});
       if(conversations.length>=options.limit)break;
     }
-    // Cursor advances beyond excluded scopes too. An exact 150-row scan remains pageable.
-    return {conversations,nextCursor:lastScanned!==null &&
-      (result.recordset.length===150 || conversations.length===options.limit)?lastScanned:null};
+    const hasMore=scanned>0 && (conversations.length>=options.limit || emptyResult.recordset.length===150);
+    return {conversations,nextCursor:hasMore?-(skip+scanned+1):null};
+  },
+  /** Every mention is its own inbox entry (not collapsed to one row per task).
+   * Candidate message contents are returned only after validating current scope access. */
+  async mentionsInbox(userId:number,options:{beforeId?:number;limit:number}){
+    const pool=await getDatabasePool();
+    const result=await pool.request()
+      .input('viewer',sql.Int,userId)
+      .input('beforeId',sql.BigInt,options.beforeId??null)
+      .query<{messageId:number|string;taskId:number|string;subtaskId:number|string|null;
+        taskTitle:string;subtaskTitle:string|null;body:string;createdAtUtc:Date;
+        senderName:string;authorUserId:number|string;lastReadMessageId:number|string|null}>(`
+        SELECT TOP(150) m.id messageId,m.task_id taskId,m.subtask_id subtaskId,
+          t.title taskTitle,s.title subtaskTitle,m.body,m.created_at_utc createdAtUtc,
+          COALESCE(NULLIF(LTRIM(RTRIM(author.USER_NAME)),N''),CONVERT(nvarchar(100),author.USER_CODE)) senderName,
+          m.author_user_id authorUserId,readState.last_read_message_id lastReadMessageId
+        FROM dbo.TM_task_discussion_messages m
+        JOIN dbo.TM_tasks t ON t.id=m.task_id AND t.deleted_at_utc IS NULL AND t.kpi_instance_id IS NULL
+        LEFT JOIN dbo.TM_subtasks s ON s.id=m.subtask_id AND s.deleted_at_utc IS NULL
+        JOIN dbo.users author ON author.USER_ID=m.author_user_id
+        JOIN dbo.users recipient ON recipient.USER_ID=@viewer
+        LEFT JOIN dbo.TM_task_discussion_read_state readState ON readState.task_id=m.task_id
+          AND readState.user_id=@viewer AND (readState.subtask_id=m.subtask_id
+            OR (readState.subtask_id IS NULL AND m.subtask_id IS NULL))
+        WHERE m.deleted_at_utc IS NULL AND m.author_user_id<>@viewer
+          AND (m.subtask_id IS NULL OR s.id IS NOT NULL)
+          AND (@beforeId IS NULL OR m.id<@beforeId)
+          AND (EXISTS(SELECT 1 FROM dbo.TM_task_discussion_mentions mention
+              WHERE mention.message_id=m.id AND mention.mentioned_user_id=@viewer)
+            OR m.body=N'@'+CONVERT(nvarchar(100),recipient.USER_CODE)
+            OR m.body LIKE N'@'+CONVERT(nvarchar(100),recipient.USER_CODE)+N'[^0-9A-Za-z_]%'
+            OR m.body LIKE N'%[^0-9A-Za-z_]@'+CONVERT(nvarchar(100),recipient.USER_CODE)
+            OR m.body LIKE N'%[^0-9A-Za-z_]@'+CONVERT(nvarchar(100),recipient.USER_CODE)+N'[^0-9A-Za-z_]%')
+        ORDER BY m.created_at_utc DESC,m.id DESC;`);
+    const mentions=[] as {messageId:number;taskId:number;subtaskId:number|null;taskTitle:string;
+      subtaskTitle:string|null;body:string;createdAtUtc:string;senderName:string;unread:boolean}[];
+    let lastScanned:number|null=null;
+    for(const row of result.recordset){
+      const messageId=Number(row.messageId),taskId=Number(row.taskId);
+      const subtaskId=row.subtaskId===null?null:Number(row.subtaskId);
+      lastScanned=messageId;
+      try{await assertDiscussionAccess(userId,{taskId,subtaskId});}
+      catch(error){if(error instanceof AppError && error.code==='DISCUSSION_NOT_FOUND')continue;throw error;}
+      mentions.push({messageId,taskId,subtaskId,taskTitle:row.taskTitle,subtaskTitle:row.subtaskTitle,
+        body:row.body,createdAtUtc:new Date(row.createdAtUtc).toISOString(),senderName:row.senderName,
+        unread:messageId>Number(row.lastReadMessageId??0)});
+      if(mentions.length>=options.limit)break;
+    }
+    return {mentions,nextCursor:lastScanned!==null &&
+      (result.recordset.length===150 || mentions.length===options.limit)?lastScanned:null};
   },
   /** Complete unread total for the sidebar. Keep the same ACL and cursor rules as card badges. */
   async unreadTotal(userId:number):Promise<number>{
@@ -592,4 +732,5 @@ export const taskDiscussionsService={
     return {buffer:await readAttachment(row.key),name:recoverAttachmentFileName(row.name),mime:row.mime};
   }
 };
+
 

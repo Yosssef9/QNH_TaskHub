@@ -40,3 +40,13 @@ Files: use the same private storage, upload limits and authorized preview/downlo
 - Email preferences avoid immediate ordinary-chat email spam by default; mentions are opt-in/out through existing Settings.
 - Unread markers advance monotonically and cannot be set beyond persisted messages in that exact conversation.
 - Rollback through patch backups restores source files, **not** database migration 059. Keep the additive schema during application rollback until a separately approved database remediation plan exists.
+
+
+## My Discussions inbox contract (October 26, 2026)
+
+- `GET /api/task-discussions/inbox?filter=all|unread|mentions|empty&limit=25` lists authorized task/subtask scopes. Existing discussion histories are shown first (newest message ID first). `all` then includes unstarted scopes, while `empty` lists only unstarted scopes.
+- **Unstarted** means the scope has no non-deleted discussion messages. These scopes appear before anyone sends a first message only when at least two currently authorized, active TaskHub/Portal participants can read that same scope. Neither Task Sharing alone nor a sibling-subtask assignment makes a user a participant. Existing one-person conversation histories remain readable.
+- An unstarted scope has `lastMessageId: 0`, `lastPreview: ""`, `lastAtUtc: null`, `senderName: ""`, `unread: 0`, `mentions: 0`, and an accurate `participantCount`. No fake message or read-state row is inserted.
+- Inbox pagination uses **positive message-ID cursors** for existing message histories and **negative offset cursors** for unstarted scopes. Clients must pass the opaque `nextCursor` unchanged, including when it is negative, until it becomes `null`.
+- `GET /api/task-discussions/inbox/mentions?limit=25&beforeId=...` provides one item per mention message (stable mention identity or legacy `@userCode` text). Deleted messages are excluded and current task/subtask authorization is checked before returning any body. The response includes `messageId`, scope IDs/titles, `body`, `createdAtUtc`, `senderName`, `unread`, and `nextCursor`.
+- These endpoints reuse existing SQL tables including the stable-mentions table from **migration 063**. No additional migration is needed for this API change, provided all prior discussion migrations are already deployed. Deploy the updated server build, then check All / Unread / Mentions / No messages with a second active user and a child-only assignee. Refresh and repeat after revoking access.

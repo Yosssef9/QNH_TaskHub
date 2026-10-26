@@ -73,6 +73,20 @@ describe('My Discussions: empty scope discovery',()=>{
     expect(result.conversations.map(item=>item.lastMessageId)).toEqual([55,0])
     expect(result.conversations.every(item=>item.participantCount===2)).toBe(true)
   })
+  it('preserves a one-person historical conversation without listing it as unstarted',async()=>{
+    mocks.members.mockResolvedValue([person(10)])
+    mocks.query.mockImplementation(async(statement:string)=>{
+      if(statement.includes('WITH recent AS'))return {recordset:[{
+        taskId:12,subtaskId:null,taskTitle:'Existing personal history',subtaskTitle:null,
+        lastMessageId:55,lastBody:'Saved note',lastAtUtc:new Date('2026-10-25T12:00:00Z'),senderName:'Employee 10',
+      }]}
+      if(statement.includes('SUM(CASE WHEN'))return {recordset:[{unread:0,mentions:0}]}
+      if(statement.includes('WITH candidateScopes AS'))return {recordset:[]}
+      throw new Error('Unexpected database query')
+    })
+    const result=await taskDiscussionsService.inbox(10,{filter:'all',limit:25})
+    expect(result.conversations).toEqual([expect.objectContaining({taskId:12,lastMessageId:55,participantCount:1})])
+  })
   it('paginates empty scopes using a distinct negative cursor',async()=>{
     mocks.query.mockResolvedValue({recordset:[emptyTask,emptyChild]})
     const first=await taskDiscussionsService.inbox(10,{filter:'empty',limit:1})
@@ -88,3 +102,4 @@ describe('My Discussions: empty scope discovery',()=>{
     expect(mocks.query).toHaveBeenCalledTimes(1)
   })
 })
+
