@@ -145,7 +145,7 @@ export function DiscussionsWhatsNewProvider({ children }: { children: ReactNode 
                 key={step}
                 initial={reducedMotion ? false : { opacity: 0, x: ar ? -16 : 16 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={reducedMotion ? undefined : { opacity: 0, x: ar ? 16 : -16 }}
+                exit={reducedMotion ? {} : { opacity: 0, x: ar ? 16 : -16 }}
                 transition={{ duration: reducedMotion ? 0 : 0.18 }}
                 onFocusCapture={step === 1 ? event => setAccessFocused(event.target instanceof HTMLElement && event.target.matches(':focus-visible')) : undefined}
                 onBlurCapture={step === 1 ? event => {
@@ -213,7 +213,7 @@ export function DiscussionsWhatsNewProvider({ children }: { children: ReactNode 
                         key={accessMethod}
                         initial={reducedMotion ? false : { opacity: 0, y: 5 }}
                         animate={{ opacity: 1, y: 0 }}
-                        exit={reducedMotion ? undefined : { opacity: 0, y: -5 }}
+                        exit={reducedMotion ? {} : { opacity: 0, y: -5 }}
                         transition={{ duration: reducedMotion ? 0 : 0.2 }}
                         className="text-muted-foreground text-sm leading-relaxed"
                       >{accessMethodHint}</motion.p>
@@ -263,3 +263,4 @@ export function DiscussionsWhatsNewProvider({ children }: { children: ReactNode 
     </Dialog>
   </WhatsNewContext.Provider>
 }
+

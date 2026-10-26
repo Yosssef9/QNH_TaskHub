@@ -21,7 +21,7 @@ describe('Home recent activity', () => {
       activity(1, 0),
     ])
     expect(groups).toHaveLength(1)
-    expect(groups[0].events.map(event => event.eventType)).toEqual([
+    expect(groups[0]?.events.map(event => event.eventType)).toEqual([
       'SUBTASK_CREATED', 'GENERAL_TASK_ASSIGNED', 'CREATED',
     ])
   })
@@ -46,3 +46,4 @@ describe('Home recent activity', () => {
     expect(humanizeActivityType('GENERAL_TASK_ASSIGNED')).toBe('General Task Assigned')
   })
 })
+

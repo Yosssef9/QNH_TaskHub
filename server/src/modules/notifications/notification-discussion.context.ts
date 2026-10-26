@@ -80,7 +80,7 @@ export async function getDiscussionNotificationDetails(
     const message = messageId === null ? undefined : byId.get(messageId);
     const scopeTaskId = Number(notification.taskId);
     const scopeSubtaskId = notification.subtaskId == null ? null : Number(notification.subtaskId);
-    if (!message || !Number.isSafeInteger(scopeTaskId) || scopeTaskId <= 0 ||
+    if (messageId === null || !message || !Number.isSafeInteger(scopeTaskId) || scopeTaskId <= 0 ||
       Number(message.taskId) !== scopeTaskId ||
       (message.subtaskId == null ? null : Number(message.subtaskId)) !== scopeSubtaskId ||
       viewerId === Number(message.authorUserId)) {
@@ -124,3 +124,4 @@ export async function getDiscussionNotificationDetails(
   }
   return details;
 }
+

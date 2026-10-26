@@ -160,6 +160,7 @@ export function HomePage() {
               :!activity.data?.length?<p className="text-muted-foreground py-6 text-center text-xs">{t('workDashboard.noActivity')}</p>
               :activityGroups.map(group=>{
                 const event=group.events[0]
+                if (!event) return null
                 const Icon=activityIcon(event)
                 // The oldest event remains stable when another event joins the same group.
                 const groupKey=`${event.kind}:${event.objectId}:${event.actorUserId}:${group.events.at(-1)?.id??event.id}`
@@ -294,3 +295,4 @@ function activityTone(event:DashboardActivity):string {
   if(event.eventType.includes('DELET')||event.eventType.includes('REMOV'))return 'bg-rose-500/10 text-rose-700 dark:text-rose-300'
   return 'bg-primary/10 text-primary'
 }
+
