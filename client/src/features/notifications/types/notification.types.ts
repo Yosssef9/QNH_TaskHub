@@ -37,6 +37,17 @@ export const NOTIFICATION_TYPES = [
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number]
 
+export interface DiscussionNotificationDetails {
+  status: 'active' | 'deleted' | 'unavailable';
+  messageId?: number;
+  senderName?: string | null;
+  senderCode?: string | null;
+  taskTitle?: string;
+  subtaskTitle?: string | null;
+  preview?: string | null;
+  hasAttachment?: boolean;
+}
+
 export interface NotificationItem {
   id: number
   type: NotificationType
@@ -49,12 +60,14 @@ export interface NotificationItem {
   readAtUtc: string | null
   createdAtUtc: string
   href: string
+  discussion?: DiscussionNotificationDetails
 }
 
 export interface NotificationListData {
   items: NotificationItem[]
   unreadCount: number
 }
+
 
 
 

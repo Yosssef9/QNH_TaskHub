@@ -7,6 +7,25 @@ interface IdRecord {
 }
 
 export const taskDetailsRepository = {
+  async findCreator(ownerUserId:number,taskId:number) {
+    const pool=await getDatabasePool();
+    const found=await pool.request().input('owner',sql.Int,ownerUserId).input('taskId',sql.BigInt,taskId)
+      .query<{userId:number;userName:string;userCode:string|null}>(`
+        SELECT TOP (1) COALESCE(creator.USER_ID,taskOwner.USER_ID) userId,
+          COALESCE(NULLIF(LTRIM(RTRIM(creator.USER_NAME)),N''),creator.USER_CODE,
+            NULLIF(LTRIM(RTRIM(taskOwner.USER_NAME)),N''),taskOwner.USER_CODE) userName,
+          COALESCE(creator.USER_CODE,taskOwner.USER_CODE) userCode
+        FROM dbo.TM_tasks t
+        OUTER APPLY (SELECT TOP (1) a.actor_user_id AS userId
+          FROM dbo.TM_task_activity a
+          WHERE a.task_id=t.id AND a.owner_user_id=t.owner_user_id AND a.activity_type='CREATED'
+          ORDER BY a.created_at_utc ASC,a.id ASC) creation
+        LEFT JOIN dbo.users creator ON creator.USER_ID=creation.userId
+        JOIN dbo.users taskOwner ON taskOwner.USER_ID=t.owner_user_id
+        WHERE t.id=@taskId AND t.owner_user_id=@owner;
+      `);
+    return found.recordset[0]??null;
+  },
   async listSubtasks(ownerUserId: number, taskId: number, transaction?: DatabaseTransaction) {
     const request = transaction ? transaction.request() : (await getDatabasePool()).request();
     const result = await request
@@ -255,6 +274,7 @@ export const taskDetailsRepository = {
         WHERE id=@id AND owner_user_id=@ownerUserId AND deleted_at_utc IS NULL;`);
   },
 };
+
 
 
 

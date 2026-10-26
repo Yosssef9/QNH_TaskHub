@@ -277,8 +277,10 @@ async function resolveBaseOperationalDelivery(
   ownerUserId: number,
 ): Promise<OperationalEmailDelivery | null> {
   if (!env.EMAIL_ENABLED) return null;
-  const record = await getRequiredRecord(ownerUserId);
-  if (!record.notificationsEnabled) return null;
+  // Worker delivery is optional: a revoked or removed user is a terminal skip,
+  // not a 404 that should be retried on every email-worker poll.
+  const record = await emailSettingsRepository.getSettings(ownerUserId);
+  if (!record || !record.notificationsEnabled) return null;
   const email = getActiveEmail(record);
   if (!email) return null;
   return {
@@ -293,19 +295,17 @@ async function resolveOperationalDelivery(
 ): Promise<OperationalEmailDelivery | null> {
   if (!env.EMAIL_ENABLED) return null;
 
-  await emailSettingsRepository.ensureDefaultPreferences(ownerUserId, EMAIL_EVENT_DEFAULTS);
-
-  const [record, storedPreferences] = await Promise.all([
-    getRequiredRecord(ownerUserId),
-    emailSettingsRepository.listPreferences(ownerUserId),
-  ]);
-
-  if (!record.notificationsEnabled) return null;
-  const stored = new Map(storedPreferences.map((item) => [item.eventType, item.enabled]));
-  if (!(stored.get(eventType) ?? EMAIL_EVENT_DEFAULTS[eventType])) return null;
-
+  // Resolve active Portal/TaskHub identity FIRST. Inactive or absent recipients
+  // should be skipped rather than repeatedly retried or seeded with preferences.
+  const record = await emailSettingsRepository.getSettings(ownerUserId);
+  if (!record || !record.notificationsEnabled) return null;
   const email = getActiveEmail(record);
   if (!email) return null;
+
+  await emailSettingsRepository.ensureDefaultPreferences(ownerUserId, EMAIL_EVENT_DEFAULTS);
+  const storedPreferences = await emailSettingsRepository.listPreferences(ownerUserId);
+  const stored = new Map(storedPreferences.map((item) => [item.eventType, item.enabled]));
+  if (!(stored.get(eventType) ?? EMAIL_EVENT_DEFAULTS[eventType])) return null;
 
   return {
     recipient: {
@@ -480,5 +480,6 @@ export const emailSettingsService = {
     return { recipient: maskEmail(recipient.email) };
   },
 };
+
 
 

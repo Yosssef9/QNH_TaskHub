@@ -1,4 +1,4 @@
-import { discussionEmailAllowed } from '../task-discussions/task-discussions.notifications.js';
+import { discussionEmailAllowed, discussionMentionEmailContext } from '../task-discussions/task-discussions.notifications.js';
 import { taskSharesRepository } from '../task-shares/task-shares.repository.js';
 import { logger } from "../../config/logger.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
@@ -22,6 +22,7 @@ import {
 import type { NotificationType } from "../notifications/notifications.types.js";
 import { workCyclesService } from "../work-cycles/work-cycles.service.js";
 import { meetingActionItemsService } from "../meeting-action-items/meeting-action-items.service.js";
+import { meetingActionItemsRepository } from "../meeting-action-items/meeting-action-items.repository.js";
 import { buildGeneralAssignmentEmailPayload, isGeneralAssignmentMailEvent, refreshGeneralAssignmentEmailPayload } from "../general-task-assignments/general-task-assignments.email.js";
 import { meetingNotificationsService } from "../meetings/meeting-notifications.service.js";
 import { emailService } from "./email.service.js";
@@ -339,12 +340,15 @@ async function buildPayload(
       const meetingId = id(candidate.meetingId);
       if (taskId === null || meetingId === null) return null;
 
+      const relation = await meetingActionItemsRepository.findContext(taskId);
       const payload = {
         taskId,
         meetingId,
         taskTitle: candidate.subjectTitle,
         contextTitle: candidate.contextTitle,
         href: notificationHref(candidate),
+        ...(candidate.notificationType==='MEETING_ACTION_ITEM_ASSIGNED'&&relation?.assignedByName
+          ? {assignedByName:relation.assignedByName}:{}),
       };
 
       return (await meetingActionItemsService.validateEmailPayload(
@@ -359,6 +363,11 @@ async function buildPayload(
     case "TASK_DISCUSSION_MENTION": {
       const messageId = Number(candidate.dedupeKey.split(':')[1]);
       if (!Number.isSafeInteger(messageId) || !await discussionEmailAllowed(candidate.ownerUserId, messageId)) return null;
+      if(candidate.notificationType==='TASK_DISCUSSION_MENTION'){
+        const context=await discussionMentionEmailContext(candidate.ownerUserId,messageId);
+        if(!context)return null;
+        return {...context,href:notificationHref(candidate),messageId};
+      }
       return {taskTitle: candidate.subjectTitle, href: notificationHref(candidate), messageId};
     }
     case "TASK_SHARED":
@@ -536,14 +545,23 @@ export const operationalEmailService = {
       type === "MEETING_ACTION_ITEM_ASSIGNED" ||
       type === "MEETING_ACTION_ITEM_COMPLETED"
     ) {
-      return (await meetingActionItemsService.validateEmailPayload(ownerUserId, type, payload))
-        ? { delivery, payload }
-        : null;
+      if(!await meetingActionItemsService.validateEmailPayload(ownerUserId,type,payload))return null;
+      if(type==='MEETING_ACTION_ITEM_ASSIGNED'){
+        const taskId=Number(payload.taskId);
+        const relation=await meetingActionItemsRepository.findContext(taskId);
+        if(!relation||relation.assigneeUserId!==ownerUserId)return null;
+        return {delivery,payload:{...payload,assignedByName:relation.assignedByName}};
+      }
+      return {delivery,payload};
     }
     if (type === "TASK_DISCUSSION_MESSAGE" || type === "TASK_DISCUSSION_MENTION") {
       const messageId=Number(payload.messageId);
-      return Number.isSafeInteger(messageId) && await discussionEmailAllowed(ownerUserId,messageId)
-        ? {delivery,payload} : null;
+      if(!Number.isSafeInteger(messageId)||!await discussionEmailAllowed(ownerUserId,messageId))return null;
+      if(type==='TASK_DISCUSSION_MENTION'){
+        const context=await discussionMentionEmailContext(ownerUserId,messageId);
+        return context?{delivery,payload:{...payload,...context}}:null;
+      }
+      return {delivery,payload};
     }
     if (isGeneralAssignmentMailEvent(type)) {
       const refreshed = await refreshGeneralAssignmentEmailPayload(ownerUserId, type, payload);
@@ -603,6 +621,7 @@ export const operationalEmailService = {
     return processed;
   },
 };
+
 
 
 

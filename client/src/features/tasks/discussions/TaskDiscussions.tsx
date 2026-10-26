@@ -18,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useDialogFloatingContainer } from '@/components/ui/dialog'
 import { attachmentPreviewKind } from '@/components/shared/attachment-preview'
 import { discussionApi, watchDiscussion, type DiscussionFile, type DiscussionMessage } from './discussions.api'
+import { DiscussionParticipantsPopover } from './DiscussionParticipantsPopover'
 import { newActionCreationRequestId } from '@/features/meetings/action-items/creation-request-id'
 
 const REACTIONS = ['👍', '❤️', '😂', '🎉', '👏', '😮', '🙏', '✅'] as const
@@ -67,24 +68,29 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
   const [searchText,setSearchText]=useState('')
   const [searchTerm,setSearchTerm]=useState('')
   const [showNew,setShowNew]=useState(false)
-  const [atBottom,setAtBottom]=useState(true)
+  const [atBottom,setAtBottom]=useState(false)
+  // Do not mark unread messages read until this specific scope has been positioned.
+  const [viewportReadyKey,setViewportReadyKey]=useState<string|null>(null)
+  const initialPositionKey=useRef<string|null>(null)
   const [highlightId,setHighlightId]=useState<number|null>(null)
   const [highlightPhase,setHighlightPhase]=useState<'active'|'fading'|null>(null)
   // A fresh token also replays the focus animation when the same result is clicked twice.
-  const [focusTarget,setFocusTarget]=useState<{id:number;token:number}|null>(null)
+  const [focusTarget,setFocusTarget]=useState<{id:number;token:number;initial?:boolean}|null>(null)
   const navigationToken=useRef(0)
   const initialMessageDone=useRef<number|null>(null)
   const lastTyping=useRef(0)
   const fileRef=useRef<HTMLInputElement>(null)
   const composerRef=useRef<HTMLTextAreaElement>(null)
   const searchInputRef=useRef<HTMLInputElement>(null)
+  const searchPanelRef=useRef<HTMLDivElement>(null)
+  const searchToggleRef=useRef<HTMLButtonElement>(null)
   const scrollRef=useRef<HTMLDivElement>(null)
   const lastSeenMessage=useRef<number|null>(null)
   const [unreadBoundary,setUnreadBoundary]=useState<{taskId:number;scope:number|null;messageId:number}|null>(null)
   const scopes=useQuery({queryKey:['discussions',taskId,'scopes'],queryFn:()=>discussionApi.scopes(taskId),refetchInterval:30000})
   const canSee=useMemo(()=>scopes.data?.some(s=>s.subtaskId===selected)??false,[scopes.data,selected])
   const selectedScope=scopes.data?.find(s=>s.subtaskId===selected)
-  const members=useQuery({queryKey:['discussions',taskId,'members',selected],queryFn:()=>discussionApi.members(taskId,selected),enabled:canSee})
+  const members=useQuery({queryKey:['discussions',taskId,'members',selected],queryFn:()=>discussionApi.members(taskId,selected),enabled:canSee,refetchInterval:30000})
   const messagesKey=['discussions',taskId,'messages',selected] as const
   const msgs=useQuery({queryKey:messagesKey,queryFn:()=>discussionApi.messages(taskId,selected),enabled:canSee,refetchInterval:60000})
   const searchResults=useQuery({queryKey:['discussions',taskId,'search',selected,searchTerm],
@@ -104,8 +110,14 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
       if(!scroller||!node)return
       const scrollBox=scroller.getBoundingClientRect()
       const targetBox=node.getBoundingClientRect()
-      const top=scroller.scrollTop+targetBox.top-scrollBox.top-(scroller.clientHeight-targetBox.height)/2
-      scroller.scrollTo({top:Math.max(0,top),behavior:'smooth'})
+      const top=focusTarget.initial
+        ? scroller.scrollTop+targetBox.top-scrollBox.top-56
+        : scroller.scrollTop+targetBox.top-scrollBox.top-(scroller.clientHeight-targetBox.height)/2
+      scroller.scrollTo({top:Math.max(0,top),behavior:focusTarget.initial?'auto':'smooth'})
+      if(focusTarget.initial){
+        setAtBottom(scroller.scrollHeight-Math.max(0,top)-scroller.clientHeight<100)
+        setViewportReadyKey(`${taskId}:${selected??'main'}`)
+      }
       setHighlightId(focusId)
       setHighlightPhase('active')
     })
@@ -113,17 +125,14 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
     const fade=window.setTimeout(()=>setHighlightPhase('fading'),2500)
     const finish=window.setTimeout(()=>{setHighlightId(null);setHighlightPhase(null)},3050)
     return()=>{window.cancelAnimationFrame(frame);window.clearTimeout(fade);window.clearTimeout(finish)}
-  },[focusTarget,focusTargetLoaded])
+  },[focusTarget,focusTargetLoaded,taskId,selected])
   const newest=msgs.data?.at(-1)?.id??null
   const firstUnreadId=displayed.find(m=>m.id>(unreadBoundary?.taskId===taskId&&unreadBoundary.scope===selected?unreadBoundary.messageId:Number.MAX_SAFE_INTEGER)&&m.authorUserId!==actorId)?.id
 
   useEffect(()=>setSelected(initialSubtaskId),[initialSubtaskId,taskId])
-  useEffect(()=>{if(initialMessageId&&canSee&&msgs.isSuccess&&initialMessageDone.current!==initialMessageId){
-    initialMessageDone.current=initialMessageId;void jumpTo(initialMessageId)
-  }},[initialMessageId,canSee,msgs.isSuccess,taskId,selected])
   useEffect(()=>{if(scopes.data?.length && !canSee)setSelected(scopes.data[0].subtaskId)},[scopes.data,canSee])
   useEffect(()=>{setOlder([]);setSearchOpen(false);setSearchText('');setSearchTerm('');setTypingUsers([]);
-    setShowNew(false);setAtBottom(true);lastSeenMessage.current=null;
+    setShowNew(false);setAtBottom(false);lastSeenMessage.current=null;
     navigationToken.current+=1;setFocusTarget(null);setHighlightId(null);setHighlightPhase(null);
     setReply(null);setEditing(null);setText('');setPendingFile(null);
     setEmojiOpen(false);setMentionOpen(false);setActionMessage(null);setReactionMessage(null)},[taskId,selected])
@@ -131,16 +140,69 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
     setUnreadBoundary({taskId,scope:selected,messageId:selectedScope.lastReadMessageId})
   },[selectedScope,canSee,unreadBoundary,taskId,selected])
   useEffect(()=>{const timer=window.setTimeout(()=>setSearchTerm(searchText.trim()),300);return ()=>window.clearTimeout(timer)},[searchText])
+  const scopeKey=`${taskId}:${selected??'main'}`
+  // Each conversation opens at its first unread incoming message. This is based on
+  // the server read cursor, not on the last (possibly already-read) message.
+  // Message deep links still take priority over this default positioning.
+  useEffect(()=>{
+    if(!canSee||!msgs.isSuccess||!selectedScope||initialPositionKey.current===scopeKey)return
+    initialPositionKey.current=scopeKey
+    if(initialMessageId!==null&&selected===initialSubtaskId)return
+    if(typeof selectedScope.firstUnreadMessageId==='number'&&selectedScope.firstUnreadMessageId>0){
+      void jumpTo(selectedScope.firstUnreadMessageId,true)
+      return
+    }
+    // All messages were read: preserve the familiar newest-message opening.
+    const frame=window.requestAnimationFrame(()=>{
+      const scroller=scrollRef.current
+      if(!scroller)return
+      scroller.scrollTop=scroller.scrollHeight
+      setAtBottom(true)
+      setViewportReadyKey(scopeKey)
+    })
+    return()=>window.cancelAnimationFrame(frame)
+  },[scopeKey,canSee,msgs.isSuccess,selectedScope?.firstUnreadMessageId,initialMessageId,selected,initialSubtaskId])
+  // Opening a specific mention/reply from the Inbox overrides the unread default.
+  useEffect(()=>{if(initialMessageId&&canSee&&msgs.isSuccess&&initialMessageDone.current!==initialMessageId){
+    initialMessageDone.current=initialMessageId;void jumpTo(initialMessageId,true)
+  }},[initialMessageId,canSee,msgs.isSuccess,taskId,selected])
   useEffect(()=>{if(searchOpen){const frame=window.requestAnimationFrame(()=>searchInputRef.current?.focus());return()=>window.cancelAnimationFrame(frame)}},[searchOpen])
+  // Dismiss search with an outside pointer press, including while the chat is full screen.
+  // Exempt the search toggle so its own onClick remains the only close/open action.
+  useEffect(()=>{
+    if(!searchOpen)return
+    const onPointerDown=(event:PointerEvent)=>{
+      const target=event.target
+      if(!(target instanceof Node))return
+      if(searchPanelRef.current?.contains(target)||searchToggleRef.current?.contains(target))return
+      setSearchOpen(false)
+      setSearchText('')
+      setSearchTerm('')
+    }
+    const onKeyDown=(event:KeyboardEvent)=>{
+      if(event.key!=='Escape')return
+      event.preventDefault()
+      setSearchOpen(false)
+      setSearchText('')
+      setSearchTerm('')
+    }
+    document.addEventListener('pointerdown',onPointerDown,true)
+    document.addEventListener('keydown',onKeyDown)
+    return()=>{
+      document.removeEventListener('pointerdown',onPointerDown,true)
+      document.removeEventListener('keydown',onKeyDown)
+    }
+  },[searchOpen])
+
   useEffect(()=>{if(!fullScreen)return;const onKey=(event:KeyboardEvent)=>{
     if(event.key!=='Escape')return
     // Escape dismisses the active picker/confirmation before leaving full screen.
-    if(emojiOpen||mentionOpen||actionMessage!==null||reactionMessage!==null||deleteMessage||deleteFile||preview)return
+    if(searchOpen||emojiOpen||mentionOpen||actionMessage!==null||reactionMessage!==null||deleteMessage||deleteFile||preview)return
     setFullScreen(false)
   };
     document.addEventListener('keydown',onKey);const old=document.body.style.overflow;document.body.style.overflow='hidden';
     return ()=>{document.removeEventListener('keydown',onKey);document.body.style.overflow=old}},
-  [fullScreen,emojiOpen,mentionOpen,actionMessage,reactionMessage,deleteMessage,deleteFile,preview])
+  [fullScreen,searchOpen,emojiOpen,mentionOpen,actionMessage,reactionMessage,deleteMessage,deleteFile,preview])
 
   const update=useCallback(()=>{void qc.invalidateQueries({queryKey:['discussions',taskId]});void qc.invalidateQueries({queryKey:['discussions','cards']});void qc.invalidateQueries({queryKey:['discussions','assigned-cards']});void qc.invalidateQueries({queryKey:['discussions','meeting-cards']});void qc.invalidateQueries({queryKey:['discussions','shared-cards']});void qc.invalidateQueries({queryKey:['discussions','inbox']});void qc.invalidateQueries({queryKey:['discussions','inbox-total']})},[qc,taskId])
   useEffect(()=>{if(!canSee)return;const controller=new AbortController();let alive=true
@@ -159,11 +221,11 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
     const timeout=window.setTimeout(()=>void discussionApi.typing(taskId,selected,false).catch(()=>{}),1900)
     return()=>window.clearTimeout(timeout)
   },[taskId,selected,text,canSee,editing])
-  useEffect(()=>{if(!newest||!canSee||!atBottom||document.visibilityState!=='visible')return;
+  useEffect(()=>{if(!newest||!canSee||!atBottom||viewportReadyKey!==scopeKey||document.visibilityState!=='visible')return;
     void discussionApi.read(taskId,selected,newest).then(()=>{void qc.invalidateQueries({queryKey:['discussions',taskId,'scopes']});void qc.invalidateQueries({queryKey:['discussions','inbox']});void qc.invalidateQueries({queryKey:['discussions','inbox-total']})}).catch(()=>{})
-  },[newest,taskId,selected,canSee,atBottom,qc])
+  },[newest,taskId,selected,canSee,atBottom,viewportReadyKey,scopeKey,qc])
   useEffect(()=>{if(newest===null)return;
-    if(lastSeenMessage.current===null){lastSeenMessage.current=newest;requestAnimationFrame(()=>scrollRef.current?.scrollTo({top:scrollRef.current.scrollHeight}));return}
+    if(lastSeenMessage.current===null){lastSeenMessage.current=newest;return}
     if(newest>lastSeenMessage.current){if(atBottom){requestAnimationFrame(()=>scrollRef.current?.scrollTo({top:scrollRef.current.scrollHeight,behavior:'smooth'}))}
       else setShowNew(true)}lastSeenMessage.current=newest
   },[newest,atBottom])
@@ -236,28 +298,37 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
     if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();submit()}
   }
   function closeSearch(){setSearchOpen(false);setSearchText('');setSearchTerm('')}
-  async function jumpTo(id:number){
+  async function jumpTo(id:number,initial=false){
     const token=++navigationToken.current
     closeSearch()
     // Loaded messages need no additional query. An unloaded reply/search match is
     // fetched through the same authorized, scope-filtered history endpoint.
-    if(messageById.has(id)){setFocusTarget({id,token});return}
+    if(messageById.has(id)){setFocusTarget({id,token,initial});return}
     try{
       const batch=await discussionApi.messages(taskId,selected,id+1)
       if(navigationToken.current!==token)return // conversation changed while loading
       if(!batch.some(message=>message.id===id)){
-        toast.error(t('discussions.originalUnavailable'))
+        if(initial){
+          const scroller=scrollRef.current
+          if(scroller){scroller.scrollTop=scroller.scrollHeight;setAtBottom(true);setViewportReadyKey(scopeKey)}
+        }else toast.error(t('discussions.originalUnavailable'))
         return
       }
       setOlder(previous=>[...batch,...previous])
-      setFocusTarget({id,token})
-    }catch{if(navigationToken.current===token)toast.error(t('discussions.loadFailed'))}
+      setFocusTarget({id,token,initial})
+    }catch{if(navigationToken.current===token){
+      if(initial){
+        // Do not silently acknowledge messages when their first-unread page could not load.
+        setViewportReadyKey(scopeKey)
+        setAtBottom(false)
+      }else toast.error(t('discussions.loadFailed'))
+    }}
   }
   function onScroll(){const el=scrollRef.current;if(!el)return;const bottom=el.scrollHeight-el.scrollTop-el.clientHeight<100;
     setAtBottom(bottom);if(bottom)setShowNew(false)}
   const emojiResults=EMOJIS.filter(item=>!emojiSearch.trim()||item[1].includes(emojiSearch.toLowerCase())||item[0].includes(emojiSearch))
-  const discussion=(<TooltipProvider delayDuration={180}><section className={`bg-background text-foreground flex min-w-0 flex-col overflow-hidden ${fullScreen?'fixed inset-0 z-[70] h-dvh w-screen p-3 sm:p-6':inboxMode?'h-[min(75vh,850px)] rounded-xl border':'rounded-xl border'}`} aria-label={t('discussions.title')}
-    onKeyDownCapture={event=>{if(fullScreen&&event.key==='Escape'&&!emojiOpen&&!mentionOpen&&actionMessage===null&&reactionMessage===null&&!deleteMessage&&!deleteFile&&!preview){
+  const discussion=(<TooltipProvider delayDuration={180}><section className={`bg-background text-foreground flex min-w-0 flex-col overflow-hidden ${fullScreen?'fixed inset-0 z-[70] h-dvh w-screen p-3 sm:p-6':inboxMode?'h-full min-h-0 rounded-xl border':'rounded-xl border'}`} aria-label={t('discussions.title')}
+    onKeyDownCapture={event=>{if(fullScreen&&event.key==='Escape'&&!searchOpen&&!emojiOpen&&!mentionOpen&&actionMessage===null&&reactionMessage===null&&!deleteMessage&&!deleteFile&&!preview){
       event.stopPropagation();setFullScreen(false)
     }}}>
     {fullScreen&&<header className="mb-3 flex items-center justify-between gap-3 border-b pb-3">
@@ -283,14 +354,15 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
           <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-semibold">{selectedScope?.title||t('discussions.main')}</h3>
             <p className="text-muted-foreground truncate text-xs">{t('discussions.scopeNotice')} · {members.data?.length??0} {t('discussions.members')}</p>
           </div>
-          <Button size="icon" variant="ghost" aria-label={t('discussions.search')} aria-expanded={searchOpen} onClick={()=>searchOpen?closeSearch():setSearchOpen(true)}><Search className="size-4"/></Button>
+          {canSee&&<DiscussionParticipantsPopover taskId={taskId} subtaskId={selected} count={members.data?.length}/>}
+          <Button ref={searchToggleRef} size="icon" variant="ghost" aria-label={t('discussions.search')} aria-expanded={searchOpen} onClick={()=>searchOpen?closeSearch():setSearchOpen(true)}><Search className="size-4"/></Button>
           <Button size="icon" variant="ghost" aria-label={fullScreen?t('discussions.exitFullScreen'):t('discussions.fullScreen')}
             onClick={()=>setFullScreen(v=>!v)}>{fullScreen?<Minimize2 className="size-4"/>:<Maximize2 className="size-4"/>}</Button>
           <AnimatePresence initial={false}>
             {searchOpen&&<motion.div key="discussion-search" initial={{opacity:0,y:-10,scale:0.985}} animate={{opacity:1,y:0,scale:1}}
               exit={{opacity:0,y:-10,scale:0.985}} transition={{duration:0.22,ease:[0.2,0.8,0.2,1]}}
               className="bg-card absolute inset-x-2 top-full z-30 mt-1 origin-top rounded-xl border p-3 shadow-xl sm:inset-x-4"
-              role="search" onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();closeSearch()}}}>
+              ref={searchPanelRef} role="search" onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();closeSearch()}}}>
               <div className="flex items-center gap-2 rounded-lg border px-2 py-1">
                 <Search className="text-muted-foreground size-4 shrink-0"/>
                 <input ref={searchInputRef} className="min-w-0 flex-1 bg-transparent py-1.5 text-sm outline-none" value={searchText} onChange={e=>setSearchText(e.target.value)}
@@ -325,7 +397,7 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
                   {!own&&(!grouped?<span className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold">{shortName(m.authorName)}</span>:<span className="w-8 shrink-0"/>)}
                   <div className="max-w-[min(88%,44rem)] min-w-0 space-y-1">
                     {!grouped&&<div className="flex items-baseline justify-between gap-3 px-1"><span className="truncate text-xs font-semibold">{m.authorName}</span><time className="text-muted-foreground shrink-0 text-[10px]">{readTime(m.createdAtUtc,locale)}</time></div>}
-                    <div className={`relative rounded-2xl px-3 py-2 text-sm shadow-sm ${own?'rounded-se-sm':'rounded-ss-sm'} transition-[background-color,box-shadow] duration-500 ease-out ${highlightId===m.id&&highlightPhase==='active'?'bg-sky-100/90 ring-2 ring-sky-400/70 shadow-md dark:bg-sky-900/40':own?'bg-primary/10':'bg-muted/70'}`}>
+                    <div className={`relative rounded-2xl px-3 py-2 text-sm shadow-sm ${own?'rounded-se-sm':'rounded-ss-sm'} transition-[background-color,box-shadow] duration-500 ease-out ${highlightId===m.id&&highlightPhase==='active'?'bg-sky-100/90 ring-2 ring-sky-400/70 shadow-md dark:bg-sky-900/40':own?'border border-sky-300/70 bg-sky-100 text-slate-900 dark:border-sky-600/60 dark:bg-sky-900/60 dark:text-sky-50':'border border-border/60 bg-muted/70'}`}>
                       {m.replyToMessageId&&<button type="button"
                         className="border-primary/60 bg-background/55 hover:bg-primary/10 focus-visible:ring-primary mb-2 block w-full rounded-md border-s-2 px-2 py-1 text-start text-xs transition-colors focus-visible:outline-none focus-visible:ring-2"
                         title={t('discussions.jumpToOriginal')} aria-label={t('discussions.jumpToOriginal')}
@@ -347,19 +419,31 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
                       {!m.deletedAtUtc&&m.reactions?.map(reaction=><Tooltip key={reaction.emoji}><TooltipTrigger asChild><button type="button" disabled={react.isPending} onClick={()=>toggleReaction(m,reaction.emoji)}
                           className={`rounded-full border px-2 py-0.5 text-xs ${reaction.reacted?'border-primary bg-primary/10':'bg-background hover:bg-muted'}`} aria-label={`${reaction.emoji} ${reaction.count}`}>
                           {reaction.emoji} {reaction.count}</button></TooltipTrigger>
-                          <TooltipContent side="top" collisionPadding={12} className="z-[90] max-w-60 space-y-1.5 p-3 text-start" aria-label={`${reaction.emoji} ${reaction.count}`}>
-                            <p className="font-semibold">{reaction.emoji} · {reaction.count}</p>
-                            {reaction.users?.slice(0,8).map(person=><p key={person.userId} className="break-words">{person.userName}</p>)}
-                            {(reaction.users?.length??0)>8&&<p className="opacity-75">+{reaction.users.length-8}</p>}
+                          <TooltipContent side="top" collisionPadding={12} sideOffset={10} className="z-[90] w-60 rounded-xl border border-border bg-popover p-0 text-popover-foreground shadow-xl" aria-label={`${reaction.emoji} ${reaction.count}`}>
+                            <div className="flex items-center justify-between border-b border-border/70 px-3 py-2.5">
+                              <span className="text-xs font-semibold">{locale==='ar-SA'?'المتفاعلون':'Reactions'}</span>
+                              <span className="bg-primary/10 text-primary rounded-full px-2 py-0.5 text-xs">{reaction.emoji} {reaction.count}</span>
+                            </div>
+                            <div className="max-h-52 space-y-0.5 overflow-y-auto p-1.5">
+                              {reaction.users?.slice(0,12).map(person=><div key={person.userId} className="flex items-center gap-2 rounded-lg px-2 py-1.5">
+                                <span className="bg-primary/10 text-primary flex size-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold">{shortName(person.userName)}</span>
+                                <span className="min-w-0 flex-1 truncate text-xs font-medium">{person.userName}{person.userId===actorId?<span className="text-muted-foreground ms-1">({locale==='ar-SA'?'أنت':'You'})</span>:null}</span>
+                              </div>)}
+                              {(reaction.users?.length??0)>12&&<p className="text-muted-foreground px-2 py-1 text-xs">+{reaction.users.length-12}</p>}
+                              {!reaction.users?.length&&<p className="text-muted-foreground p-2 text-xs">{locale==='ar-SA'?'لا توجد بيانات للمشاركين':'Participant details unavailable'}</p>}
+                            </div>
                           </TooltipContent></Tooltip>)}
                       {own&&m.readByCount>0&&<span className="text-muted-foreground inline-flex items-center gap-1 text-[10px]" title={t('discussions.readBy',{count:m.readByCount,total:m.recipientCount})}><CheckCheck className="size-3 text-primary"/>{m.readByCount}/{m.recipientCount}</span>}
                       <span className="flex-1"/>
                       {!m.deletedAtUtc&&<div className="flex items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
                         <Popover open={reactionMessage===m.id} onOpenChange={open=>{setReactionMessage(open?m.id:null);if(open)setActionMessage(null)}}>
                           <PopoverTrigger asChild><Button size="icon" variant="ghost" className="size-7" aria-label={t('discussions.react')} aria-expanded={reactionMessage===m.id}><Smile className="size-4"/></Button></PopoverTrigger>
-                          <PopoverContent side="top" align="end" sideOffset={8} collisionPadding={12} className="z-[90] flex w-auto max-w-[min(95vw,23rem)] flex-wrap gap-1 p-2" aria-label={t('discussions.react')}>
-                            {REACTIONS.map(emoji=><button key={emoji} type="button" className={`hover:bg-muted focus-visible:ring-primary rounded-md p-1.5 text-xl transition-colors focus-visible:outline-none focus-visible:ring-2 ${m.reactions?.some(r=>r.emoji===emoji&&r.reacted)?'bg-primary/10 ring-primary/40 ring-1':''}`} aria-label={emoji} aria-pressed={m.reactions?.some(r=>r.emoji===emoji&&r.reacted)??false}
-                              disabled={react.isPending} onClick={()=>toggleReaction(m,emoji)}>{emoji}</button>)}
+                          <PopoverContent side="top" align="end" sideOffset={10} collisionPadding={12} className="z-[90] w-auto max-w-[min(95vw,25rem)] rounded-2xl border border-border bg-popover p-2.5 shadow-xl" aria-label={t('discussions.react')}>
+                            <div className="text-muted-foreground mb-2 px-1 text-[11px] font-medium">{locale==='ar-SA'?'اختر تفاعلاً':'Choose a reaction'}</div>
+                            <div className="flex flex-wrap items-center gap-1">
+                              {REACTIONS.map(emoji=><button key={emoji} type="button" className={`focus-visible:ring-primary flex size-9 items-center justify-center rounded-xl text-xl transition-all duration-150 hover:-translate-y-0.5 hover:scale-110 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 ${m.reactions?.some(r=>r.emoji===emoji&&r.reacted)?'bg-primary/15 ring-1 ring-primary/50':''}`} aria-label={emoji} aria-pressed={m.reactions?.some(r=>r.emoji===emoji&&r.reacted)??false}
+                                disabled={react.isPending} onClick={()=>toggleReaction(m,emoji)}>{emoji}</button>)}
+                            </div>
                           </PopoverContent>
                         </Popover>
                         <Popover open={actionMessage===m.id} onOpenChange={open=>{setActionMessage(open?m.id:null);if(open)setReactionMessage(null)}}>
@@ -386,16 +470,16 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
           {reply&&<div className="bg-muted/60 mb-2 flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs"><Reply className="size-4"/><span className="min-w-0 flex-1 truncate">{reply.authorName} · {reply.body?.slice(0,100)}</span><Button size="icon" variant="ghost" className="size-7" onClick={()=>setReply(null)}><X className="size-4"/></Button></div>}
           {editing&&<div className="text-primary mb-1 flex items-center gap-2 text-xs"><Pencil className="size-3"/>{t('discussions.edit')}<Button size="sm" variant="ghost" onClick={()=>{setEditing(null);setText('')}}>{t('common.cancel')}</Button></div>}
           {pendingFile&&<div className="bg-muted/50 mb-2 flex items-center gap-2 rounded-lg px-3 py-2 text-xs"><Paperclip className="size-4"/><span className="min-w-0 flex-1 truncate">{pendingFile.name}</span><Button size="icon" variant="ghost" className="size-6" onClick={()=>setPendingFile(null)}><X className="size-4"/></Button></div>}
-          <div className="bg-background flex items-end gap-2 rounded-xl border p-1.5 focus-within:ring-1 focus-within:ring-primary/50">
+          <div className="bg-background flex items-end gap-2 rounded-xl border border-border p-1.5 shadow-sm transition-[border-color,box-shadow,background-color] duration-300 ease-out focus-within:border-primary/50 focus-within:bg-primary/[0.025] focus-within:ring-2 focus-within:ring-primary/15 motion-reduce:transition-none">
             <Textarea ref={composerRef} rows={1} maxLength={4000} value={text} onChange={e=>onComposerInput(e.target.value,e.target.selectionStart)} onKeyDown={onComposerKeyDown}
-              placeholder={t('discussions.placeholder')} aria-label={t('discussions.placeholder')} className="max-h-36 min-h-9 flex-1 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"/>
+              placeholder={t('discussions.placeholder')} aria-label={t('discussions.placeholder')} className="max-h-36 min-h-9 flex-1 resize-none border-0 bg-transparent shadow-none focus-visible:border-transparent focus-visible:ring-0"/>
             {!editing&&<><input type="file" ref={fileRef} hidden accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.doc,.docx,.xls,.xlsx,.ppt,.pptx" onChange={e=>{setPendingFile(e.target.files?.[0]??null);e.target.value=''}}/>
               <Button size="icon" variant="ghost" aria-label={t('discussions.attachment')} onClick={()=>fileRef.current?.click()}><Paperclip className="size-4"/></Button>
               <Popover open={emojiOpen} onOpenChange={open=>{setEmojiOpen(open);if(open)setMentionOpen(false)}}>
                 <PopoverTrigger asChild><Button size="icon" variant="ghost" aria-label={t('discussions.emoji')} aria-expanded={emojiOpen}><Smile className="size-4"/></Button></PopoverTrigger>
-                <PopoverContent side="top" align="end" sideOffset={8} collisionPadding={12} className="z-[90] w-64 p-3" aria-label={t('discussions.emoji')}>
+                <PopoverContent side="top" align="end" sideOffset={8} collisionPadding={12} className="z-[90] w-72 rounded-2xl border border-border bg-popover p-3 shadow-xl" aria-label={t('discussions.emoji')}>
                   <input className="bg-muted mb-2 w-full rounded-md px-2 py-1.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary/50" value={emojiSearch} onChange={e=>setEmojiSearch(e.target.value)} placeholder={t('discussions.searchEmoji')} aria-label={t('discussions.searchEmoji')}/>
-                  <div className="grid max-h-44 grid-cols-6 gap-1 overflow-y-auto">{emojiResults.map(([emoji,name])=><button key={name} type="button" className="hover:bg-muted focus-visible:ring-primary rounded-md p-1 text-xl transition-colors focus-visible:outline-none focus-visible:ring-2" onClick={()=>addEmoji(emoji)} title={name}>{emoji}</button>)}</div>
+                  <div className="grid max-h-44 grid-cols-6 gap-1.5 overflow-y-auto rounded-xl p-1">{emojiResults.map(([emoji,name])=><button key={name} type="button" className="hover:bg-primary/10 focus-visible:ring-primary flex size-9 items-center justify-center rounded-lg text-xl transition-all duration-150 hover:scale-110 focus-visible:outline-none focus-visible:ring-2" onClick={()=>addEmoji(emoji)} title={name}>{emoji}</button>)}</div>
                 </PopoverContent>
               </Popover>
               <Popover open={mentionOpen} onOpenChange={open=>{setMentionOpen(open);if(open){setEmojiOpen(false);setMentionIndex(0)}}}>
@@ -426,4 +510,5 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
   // Render inside its own DialogContent instead, while avoiding scroll clipping.
   return fullScreen?createPortal(discussion,dialogContainer??document.body):discussion
 }
+
 

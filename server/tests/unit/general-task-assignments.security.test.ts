@@ -37,6 +37,7 @@ function arrange() {
     {...attachmentRecord(),id:"00000000-0000-0000-0000-000000000002",taskId:null,subtaskId:HIDDEN,originalFileName:"secret.pdf"},
     {...attachmentRecord(),id:"00000000-0000-0000-0000-000000000003",taskId:TASK,subtaskId:null},
   ]);
+  vi.spyOn(taskDetailsRepository, "findCreator").mockResolvedValue({userId:100,userName:"Task creator",userCode:"0100"});
   const activity=vi.spyOn(taskDetailsRepository,"listActivity").mockResolvedValue([
     {id:1,actorUserId:OTHER,actorName:"Other",activityType:"SUBTASK_UPDATED",
       eventDataJson:JSON.stringify({subtaskId:HIDDEN,title:"secret"}),createdAtUtc:new Date()},
@@ -53,6 +54,7 @@ describe("General task relationship-scoped visibility",()=>{
     arrange();
     const details=await taskDetailsService.get(CHILD,TASK);
     assert.equal(details.task.title,"General work");
+    assert.equal(details.createdBy?.userName,"Task creator");
     assert.equal(details.task.listId,null);
     assert.equal(details.progress.total,2);
     assert.deepEqual(details.subtasks.map(item=>item.id),[VISIBLE]);
@@ -111,3 +113,4 @@ describe("Automatic parent completion",()=>{
     assert.equal(counts.mock.calls.length,0);
   });
 });
+

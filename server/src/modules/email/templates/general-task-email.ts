@@ -10,6 +10,9 @@ const schema = z.object({
   dueDate: z.string().nullable().optional(),
   href: z.string().optional(),
   notice: z.string().optional(),
+  assignedByName: z.string().optional(),
+  senderName: z.string().optional(),
+  messagePreview: z.string().optional(),
 });
 
 const WORDING: Record<string, { en: [string, string]; ar: [string, string] }> = {
@@ -62,6 +65,9 @@ export function renderGeneralTaskEmail(
   const removed = templateKey === "GENERAL_ASSIGNMENT_REMOVED" || templateKey === "TASK_SHARE_REVOKED";
   const title = removed ? heading : data.taskTitle ?? heading;
   const rows = removed ? [] : [
+    ...(data.assignedByName ? [{ label: ar ? 'أسندها' : 'Assigned by', value: data.assignedByName }] : []),
+    ...(templateKey==='TASK_DISCUSSION_MENTION'&&data.senderName ? [{label:ar?'أشار إليك':'Mentioned by',value:data.senderName}]:[]),
+    ...(templateKey==='TASK_DISCUSSION_MENTION'&&data.messagePreview ? [{label:ar?'الرسالة':'Message',value:data.messagePreview}]:[]),
     ...(data.subtaskTitle ? [{ label: ar ? "المهمة الفرعية" : "Your subtask", value: data.subtaskTitle }] : []),
     ...(data.dueDate !== undefined ? [{ label: ar ? "تاريخ الاستحقاق" : "Due date",
       value: data.dueDate ? formatEmailDate(data.dueDate, language) : ar ? "بدون موعد" : "No due date" }] : []),
@@ -77,10 +83,17 @@ export function renderGeneralTaskEmail(
   });
   const subject = removed ? heading : `${heading} — ${title}`;
   const text = `QNH TaskHub\n\n${intro}\n${title}` +
+    (data.assignedByName && !removed ? `
+${ar ? 'أسندها' : 'Assigned by'}: ${data.assignedByName}` : '') +
+    (templateKey==='TASK_DISCUSSION_MENTION'&&data.senderName ? `
+${ar?'أشار إليك':'Mentioned by'}: ${data.senderName}`:'') +
+    (templateKey==='TASK_DISCUSSION_MENTION'&&data.messagePreview ? `
+${ar?'الرسالة':'Message'}: ${data.messagePreview}`:'') +
     (data.subtaskTitle && !removed ? `\n${ar ? "المهمة الفرعية" : "Subtask"}: ${data.subtaskTitle}` : "") +
     (data.dueDate !== undefined && !removed ? `\n${ar ? "الموعد" : "Due date"}: ${data.dueDate ?? "-"}` : "") +
     (href ? `\n\n${href}` : "");
   return { subject, preheader: intro, html, text };
 }
+
 
 

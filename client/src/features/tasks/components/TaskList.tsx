@@ -182,7 +182,7 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
   const [sortBy, setSortBy] = useState<TaskSortField>('createdAt')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
   const [groupBy, setGroupBy] = useState<TaskListGroupBy>('NONE')
-  const [taskLayout,setTaskLayout] = useState<'GROUPED'|'ALL'>('GROUPED')
+  const [taskLayout,setTaskLayout] = useState<'GROUPED'|'ALL'>('ALL')
   const [initialGroupId,setInitialGroupId] = useState<number|null>(null)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
@@ -1117,4 +1117,5 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
     </div>
   )
 }
+
 

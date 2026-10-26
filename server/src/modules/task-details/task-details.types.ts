@@ -86,6 +86,7 @@ export interface TaskActivity {
 }
 
 export interface TaskDetails {
+  createdBy?: {userId:number;userName:string;userCode:string|null}|null;
   collaborationActive?: boolean;
   sharedPermission?: "VIEW" | "EDIT";
   task: PersonalTask;
@@ -97,6 +98,7 @@ export interface TaskDetails {
   activity: TaskActivity[];
   progress: { completed: number; total: number; percentage: number };
 }
+
 
 
 

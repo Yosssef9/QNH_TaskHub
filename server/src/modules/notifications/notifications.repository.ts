@@ -6,6 +6,7 @@ import type { NotificationType } from "./notifications.types.js";
 export interface NotificationRecord {
   id: number | string;
   notificationType: NotificationType;
+  dedupeKey?: string | null;
   subjectTitle: string;
   contextTitle: string | null;
   taskId: number | string | null;
@@ -614,6 +615,7 @@ export const notificationsRepository = {
         SELECT TOP (@limit)
           id,
           notification_type AS notificationType,
+          dedupe_key AS dedupeKey,
           subject_title AS subjectTitle,
           context_title AS contextTitle,
           task_id AS taskId,

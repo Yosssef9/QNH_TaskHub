@@ -8,6 +8,9 @@ import {
   FileWarning,
   Gauge,
   Loader2,
+  MessageCircle,
+  AtSign,
+  Paperclip,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useState } from 'react'
@@ -261,6 +264,9 @@ function NotificationRow({
   onOpen: () => void
 }) {
   const { t } = useTranslation()
+  if (item.type === 'TASK_DISCUSSION_MESSAGE' || item.type === 'TASK_DISCUSSION_MENTION') {
+    return <DiscussionNotificationRow item={item} locale={locale} onOpen={onOpen} />
+  }
   const Icon = notificationIcons[item.type]
   const eventDate = formatDate(item.eventDate, locale)
   const unread = item.readAtUtc === null
@@ -304,6 +310,99 @@ function NotificationRow({
         <NotificationDetail item={item} eventDate={eventDate} locale={locale} />
         <span className="text-muted-foreground mt-1.5 block text-[11px]">
           {relativeTime(item.createdAtUtc, locale)}
+        </span>
+      </span>
+    </button>
+  )
+}
+
+/** Dedicated compact, permission-safe rendering for discussion events. */
+function DiscussionNotificationRow({
+  item,
+  locale,
+  onOpen,
+}: {
+  item: NotificationItem
+  locale: string
+  onOpen: () => void
+}) {
+  const isArabic = locale.toLowerCase().startsWith('ar')
+  const mention = item.type === 'TASK_DISCUSSION_MENTION'
+  const unread = item.readAtUtc === null
+  const details = item.discussion
+  const available = details?.status === 'active'
+  const deleted = details?.status === 'deleted'
+  const sender = available ? details.senderName || (isArabic ? 'أحد الزملاء' : 'A colleague') : null
+  const title = available || deleted ? details.taskTitle : null
+  const subtask = available || deleted ? details.subtaskTitle : null
+  const preview = available ? details.preview : null
+  const fallback = deleted
+    ? (isArabic ? 'تم حذف هذه الرسالة' : 'This message was deleted')
+    : (isArabic ? 'هذه المناقشة لم تعد متاحة' : 'This discussion is no longer available')
+  const initials = sender
+    ? sender.trim().split(/\s+/u).slice(0, 2).map((part) => part[0] || '').join('').toUpperCase()
+    : ''
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={cn(
+        'hover:bg-muted/55 focus-visible:ring-ring relative flex w-full items-start gap-3 px-4 py-3 text-start outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset',
+        unread && 'bg-primary/[0.045]',
+      )}
+    >
+      {unread ? <span aria-hidden="true" className="bg-primary absolute end-3 top-3 size-2 rounded-full" /> : null}
+      <span className={cn(
+        'mt-0.5 grid size-9 shrink-0 place-items-center rounded-full text-[11px] font-bold',
+        mention ? 'bg-info/10 text-info-foreground' : 'bg-primary/10 text-primary',
+      )} aria-hidden="true">
+        {initials || (mention ? <AtSign className="size-4" /> : <MessageCircle className="size-4" />)}
+      </span>
+      <span className="min-w-0 flex-1 pe-3">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-sm font-semibold">
+            {sender ?? (deleted ? (isArabic ? 'رسالة محذوفة' : 'Deleted message') : (isArabic ? 'مناقشة غير متاحة' : 'Unavailable discussion'))}
+          </span>
+          {available && mention ? (
+            <span className="bg-info/10 text-info-foreground shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold">
+              {isArabic ? 'أشار إليك' : 'Mentioned you'}
+            </span>
+          ) : available ? (
+            <span className="text-muted-foreground truncate text-[11px]">
+              {isArabic ? 'أرسل رسالة' : 'sent a message'}
+            </span>
+          ) : null}
+        </span>
+        {title ? (
+          <span className="text-foreground mt-1 flex min-w-0 items-center gap-1.5 text-xs font-medium">
+            <span className="truncate">{title}</span>
+            {subtask ? <span className="text-muted-foreground truncate">· {subtask}</span> : null}
+          </span>
+        ) : null}
+        <span className={cn(
+          'mt-1.5 block rounded-md px-2.5 py-2 text-xs leading-5',
+          available ? 'border-border/70 bg-background/75 border' : 'text-muted-foreground bg-muted/60',
+        )}>
+          {available ? (
+            <span className="line-clamp-3 break-words" dir="auto">
+              {preview || (details.hasAttachment
+                ? (isArabic ? 'مرفق جديد' : 'New attachment')
+                : (isArabic ? 'رسالة جديدة' : 'New message'))}
+            </span>
+          ) : fallback}
+          {available && details.hasAttachment ? (
+            <span className="text-muted-foreground mt-1 flex items-center gap-1 text-[11px]">
+              <Paperclip aria-hidden="true" className="size-3" />
+              {isArabic ? 'يحتوي على مرفق' : 'Includes an attachment'}
+            </span>
+          ) : null}
+        </span>
+        <span className="text-muted-foreground mt-1.5 flex items-center justify-between gap-2 text-[11px]">
+          <span>{relativeTime(item.createdAtUtc, locale)}</span>
+          {(available || deleted) ? (
+            <span className="text-primary font-medium">{isArabic ? 'عرض الرسالة' : 'View message'}</span>
+          ) : null}
         </span>
       </span>
     </button>
@@ -366,6 +465,7 @@ function NotificationDetail({
 
   return null
 }
+
 
 
 

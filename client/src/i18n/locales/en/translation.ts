@@ -3861,6 +3861,7 @@ export const enTranslation = {
       noTaskFiles: 'No files are attached directly to this task.',
       subtaskFiles: 'Subtask attachments',
       taskInformation: 'Task information',
+      createdBy: 'Created by',
       noDescription: 'No description was added for this task.',
       notSet: 'Not set',
       noActivity: 'No activity has been recorded yet.',
@@ -3907,6 +3908,9 @@ export const enTranslation = {
         TASK_SHARE_REVOKED: 'Task sharing revoked',
         GENERAL_TASK_ASSIGNED: 'Task assignee updated',
         GENERAL_SUBTASK_ASSIGNED: 'Subtask assignee updated',
+        MEETING_ACTION_ITEM_CREATED: 'Meeting follow-up task created',
+        MEETING_ACTION_ITEM_REASSIGNED: 'Meeting follow-up assignee changed',
+        MEETING_ACTION_ITEM_AGENDA_CHANGED: 'Linked meeting agenda item changed',
 
         CREATED: 'Task created',
         UPDATED: 'Task updated',
@@ -3961,6 +3965,10 @@ export const enTranslation = {
     alsoShared: 'Also shared', noTasks: 'No tasks match the current filters.',
     loading: 'Loading…', loadError: 'Dashboard data could not be loaded.',
     meetings: 'Upcoming Meetings', viewAll: 'View all', delegated: 'Assigned by me',
+    activityFeedLabel: 'Recent activities feed', activityLatest: 'Latest: {{action}}', activityExpand: 'Expand {{count}} actions for {{task}}', activityCollapse: 'Collapse {{count}} actions for {{task}}',
+    activityGroup: '{{count}} recent actions', activityBy: 'By {{name}}',
+    activitySubtask: 'Subtask: {{name}}', activityAssignee: 'Assigned to: {{name}}', activityField: 'Changed: {{field}}',
+    meetingEvents: { CREATED: 'Meeting created', REQUESTED: 'Meeting requested', APPROVED: 'Meeting approved', REJECTED: 'Meeting rejected', CANCELLED: 'Meeting cancelled', SCHEDULED: 'Meeting scheduled', SCHEDULE_CHANGED: 'Meeting schedule changed', RESCHEDULED: 'Meeting rescheduled', RESCHEDULE_REQUESTED: 'Reschedule requested', RESCHEDULE_REQUEST_UPDATED: 'Reschedule request updated', RESCHEDULE_APPROVED: 'Reschedule approved', RESCHEDULE_REJECTED: 'Reschedule rejected', ACTION_ITEM_CREATED: 'Follow-up item added', ACTION_ITEM_UPDATED: 'Follow-up item updated', ATTENDANCE_RECORDED: 'Attendance recorded', },
     noDelegated: 'No delegated tasks yet.', completed: 'completed', activity: 'Recent activity', taskActivity: 'Task activity', meetingActivity: 'Meeting activity',
     noActivity: 'No recent activity.', quickActions: 'Quick actions', calendar: 'Calendar',
     meetingQueue: '{{count}} Meeting items need review',
@@ -4343,6 +4351,7 @@ export const enTranslation = {
     backHome: 'Back to home',
   },
 } as const
+
 
 
 

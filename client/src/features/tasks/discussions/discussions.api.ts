@@ -3,10 +3,14 @@ import { clientEnv } from '@/config/env'
 import { getPortalToken } from '@/lib/get-portal-token'
 import type { ApiSuccessResponse } from '@/types/api.types'
 
-export type DiscussionScope={subtaskId:number|null;title:string|null;unread:number;lastReadMessageId:number;lastPreview:string|null;lastAtUtc:string|null}
+export type DiscussionScope={subtaskId:number|null;title:string|null;unread:number;lastReadMessageId:number;firstUnreadMessageId:number|null;lastPreview:string|null;lastAtUtc:string|null}
 export type DiscussionInboxItem={taskId:number;subtaskId:number|null;taskTitle:string;subtaskTitle:string|null;
-  lastMessageId:number;lastPreview:string;lastAtUtc:string;senderName:string;unread:number;mentions:number}
+  lastMessageId:number;lastPreview:string;lastAtUtc:string|null;senderName:string;unread:number;mentions:number;participantCount:number}
 export type DiscussionInboxPage={conversations:DiscussionInboxItem[];nextCursor:number|null}
+export type DiscussionMentionItem={messageId:number;taskId:number;subtaskId:number|null;taskTitle:string;
+  subtaskTitle:string|null;body:string;createdAtUtc:string;senderName:string;unread:boolean}
+export type DiscussionMentionsPage={mentions:DiscussionMentionItem[];nextCursor:number|null}
+export type DiscussionParticipant={userId:number;userCode:string;userName:string;role:'owner'|'participant';canView:boolean;canSend:boolean}
 export type DiscussionFile={id:string;name:string;mimeType:string;sizeBytes:number}
 export type DiscussionMessage={
   id:number;taskId:number;subtaskId:number|null;authorUserId:number;authorName:string;
@@ -17,14 +21,19 @@ export type DiscussionMessage={
 }
 function scopeParams(subtaskId:number|null){return subtaskId===null?{}:{subtaskId}}
 export const discussionApi={
+  async mentionsInbox(beforeId?:number,limit=25){
+    const r=await apiClient.get<ApiSuccessResponse<DiscussionMentionsPage>>('/task-discussions/inbox/mentions',
+      {params:{...(beforeId?{beforeId}:{}),limit}});
+    return r.data.data;
+  },
   async unreadTotal(){const r=await apiClient.get<ApiSuccessResponse<{unread:number}>>('/task-discussions/inbox/unread-total');return r.data.data.unread},
-  async inbox(beforeId?:number,limit=25){
-    const r=await apiClient.get<ApiSuccessResponse<DiscussionInboxPage>>('/task-discussions/inbox',{params:{... (beforeId?{beforeId}:{}),limit}});
+  async inbox(beforeId?:number,limit=25,filter:'all'|'unread'|'mentions'|'empty'='all'){
+    const r=await apiClient.get<ApiSuccessResponse<DiscussionInboxPage>>('/task-discussions/inbox',{params:{... (beforeId?{beforeId}:{}),limit,filter}});
     return r.data.data;
   },
   async unread(taskIds:number[]){if(!taskIds.length)return {} as Record<number,number>;
     const r=await apiClient.get<ApiSuccessResponse<Record<number,number>>>('/task-discussions/unread',{params:{taskIds:taskIds.join(',')}});return r.data.data},
-  async members(taskId:number,subtaskId:number|null){const r=await apiClient.get<ApiSuccessResponse<{userId:number;userCode:string;userName:string}[]>>(`/task-discussions/${taskId}/members`,{params:scopeParams(subtaskId)});return r.data.data},
+  async members(taskId:number,subtaskId:number|null){const r=await apiClient.get<ApiSuccessResponse<DiscussionParticipant[]>>(`/task-discussions/${taskId}/members`,{params:scopeParams(subtaskId)});return r.data.data},
   async scopes(taskId:number){const r=await apiClient.get<ApiSuccessResponse<DiscussionScope[]>>(`/task-discussions/${taskId}/scopes`);return r.data.data},
   async messages(taskId:number,subtaskId:number|null,beforeId?:number){const r=await apiClient.get<ApiSuccessResponse<DiscussionMessage[]>>(`/task-discussions/${taskId}/messages`,{params:{...scopeParams(subtaskId),beforeId}});return r.data.data},
   async search(taskId:number,subtaskId:number|null,q:string){
@@ -64,4 +73,5 @@ export async function watchDiscussion(taskId:number,subtaskId:number|null,onEven
     }
   }finally{reader.releaseLock()}
 }
+
 

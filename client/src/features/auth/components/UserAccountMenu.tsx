@@ -1,5 +1,6 @@
-import { ChevronDown, ExternalLink, Languages, Monitor, Moon, Settings, Sun } from 'lucide-react'
+import { ChevronDown, ExternalLink, Languages, Monitor, Moon, Settings, Sun, Sparkles } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
@@ -8,6 +9,7 @@ import type { Theme } from '@/app/providers/theme-context'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { clientEnv } from '@/config/env'
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
+import { useDiscussionsWhatsNew } from '@/features/announcements/DiscussionsWhatsNew'
 import { useUpdatePreferences } from '@/features/preferences/hooks/use-update-preferences'
 import { useTheme } from '@/hooks/use-theme'
 import { getAppLanguage, setAppLanguage } from '@/i18n'
@@ -25,7 +27,9 @@ const languageOptions = [
 ] as const
 
 export function UserAccountMenu() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const whatsNew = useDiscussionsWhatsNew()
+  const [menuOpen, setMenuOpen] = useState(false)
   const { data } = useCurrentUser()
   const updatePreferences = useUpdatePreferences()
   const { setTheme, theme } = useTheme()
@@ -67,7 +71,7 @@ export function UserAccountMenu() {
   }
 
   return (
-    <Popover>
+    <Popover open={menuOpen} onOpenChange={setMenuOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -171,6 +175,11 @@ export function UserAccountMenu() {
         </div>
 
         <div className="border-border border-t p-2">
+          <button type="button" onClick={() => { setMenuOpen(false); whatsNew.open() }}
+            className="text-primary hover:bg-primary/10 focus-visible:ring-ring flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-start text-sm font-medium transition-colors outline-none focus-visible:ring-2">
+            <Sparkles aria-hidden="true" className="size-4" />
+            <span>{i18n.language.startsWith('ar') ? 'ما الجديد في TaskHub؟' : 'What’s new in TaskHub?'}</span>
+          </button>
           <Link
             to="/settings"
             className="hover:bg-accent focus-visible:ring-ring flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors outline-none focus-visible:ring-2"
@@ -201,3 +210,4 @@ export function UserAccountMenu() {
     </Popover>
   )
 }
+

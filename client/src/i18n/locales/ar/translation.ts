@@ -3803,6 +3803,7 @@ export const arTranslation = {
       noTaskFiles: 'لا توجد ملفات مرفقة مباشرة بهذه المهمة.',
       subtaskFiles: 'مرفقات المهمة الفرعية',
       taskInformation: 'معلومات المهمة',
+      createdBy: 'أنشأ المهمة',
       noDescription: 'لا يوجد وصف لهذه المهمة.',
       notSet: 'غير محدد',
       noActivity: 'لا يوجد نشاط مسجل بعد.',
@@ -3848,6 +3849,9 @@ export const arTranslation = {
         TASK_SHARE_REVOKED: 'تم إلغاء المشاركة',
         GENERAL_TASK_ASSIGNED: 'تم تحديث المكلف بالمهمة',
         GENERAL_SUBTASK_ASSIGNED: 'تم تحديث المكلف بالمهمة الفرعية',
+        MEETING_ACTION_ITEM_CREATED: 'تم إنشاء مهمة متابعة اجتماع',
+        MEETING_ACTION_ITEM_REASSIGNED: 'تم تغيير المكلف بمهمة متابعة الاجتماع',
+        MEETING_ACTION_ITEM_AGENDA_CHANGED: 'تم تغيير بند جدول الأعمال المرتبط',
 
         CREATED: 'تم إنشاء المهمة',
         UPDATED: 'تم تحديث المهمة',
@@ -3902,6 +3906,10 @@ export const arTranslation = {
     alsoShared: 'مشاركة أيضًا', noTasks: 'لا توجد مهام مطابقة للفلاتر الحالية.',
     loading: 'جارٍ التحميل…', loadError: 'تعذر تحميل بيانات لوحة العمل.',
     meetings: 'الاجتماعات القادمة', viewAll: 'عرض الكل', delegated: 'أسندتها للآخرين',
+    activityFeedLabel: 'قائمة الأنشطة الأخيرة', activityLatest: 'الأحدث: {{action}}', activityExpand: 'عرض تفاصيل {{count}} أنشطة للمهمة {{task}}', activityCollapse: 'إخفاء تفاصيل {{count}} أنشطة للمهمة {{task}}',
+    activityGroup: '{{count}} أنشطة متتابعة', activityBy: 'بواسطة {{name}}',
+    activitySubtask: 'المهمة الفرعية: {{name}}', activityAssignee: 'المكلف: {{name}}', activityField: 'تم تعديل: {{field}}',
+    meetingEvents: { CREATED: 'تم إنشاء الاجتماع', REQUESTED: 'تم طلب اجتماع', APPROVED: 'تمت الموافقة على الاجتماع', REJECTED: 'تم رفض الاجتماع', CANCELLED: 'تم إلغاء الاجتماع', SCHEDULED: 'تمت جدولة الاجتماع', SCHEDULE_CHANGED: 'تم تعديل موعد الاجتماع', RESCHEDULED: 'تمت إعادة جدولة الاجتماع', RESCHEDULE_REQUESTED: 'تم طلب إعادة الجدولة', RESCHEDULE_REQUEST_UPDATED: 'تم تحديث طلب إعادة الجدولة', RESCHEDULE_APPROVED: 'تمت الموافقة على إعادة الجدولة', RESCHEDULE_REJECTED: 'تم رفض إعادة الجدولة', ACTION_ITEM_CREATED: 'تمت إضافة بند متابعة', ACTION_ITEM_UPDATED: 'تم تحديث بند متابعة', ATTENDANCE_RECORDED: 'تم تسجيل الحضور', },
     noDelegated: 'لا توجد مهام مفوضة بعد.', completed: 'مكتملة', activity: 'الأنشطة الأخيرة', taskActivity: 'نشاط مهمة', meetingActivity: 'نشاط اجتماع',
     noActivity: 'لا توجد أنشطة حديثة.', quickActions: 'إجراءات سريعة', calendar: 'التقويم',
     meetingQueue: '{{count}} طلبات اجتماعات تحتاج إلى مراجعة',
@@ -4269,6 +4277,7 @@ export const arTranslation = {
     backHome: 'العودة إلى الرئيسية',
   },
 } as const
+
 
 
 

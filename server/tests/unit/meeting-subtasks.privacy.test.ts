@@ -32,6 +32,7 @@ function setup() {
     attachmentRecord({ id: "44444444-4444-4444-8444-444444444444", subtaskId: null, originalFileName: "shared-parent.pdf" }),
   ]);
   const when = new Date("2026-10-12T07:00:00Z");
+  vi.spyOn(taskDetailsRepository, "findCreator").mockResolvedValue({userId:100,userName:"Task creator",userCode:"0100"});
   vi.spyOn(taskDetailsRepository, "listActivity").mockResolvedValue([
     { id: 1, activityType: "SUBTASK_COMPLETED", eventDataJson: JSON.stringify({ subtaskId: childOfViewer }), actorName: "Viewer", actorUserId: VIEWER, createdAtUtc: when },
     { id: 2, activityType: "SUBTASK_WORK_NOTES_UPDATED", eventDataJson: JSON.stringify({ subtaskId: childOfMain }), actorName: "Main", actorUserId: ASSIGNEE, createdAtUtc: when },
@@ -74,3 +75,4 @@ describe("Meeting subtask executor privacy", () => {
     assert.deepEqual(details.subtasks.map(s => s.id), [childOfViewer, childOfMain]);
   });
 });
+

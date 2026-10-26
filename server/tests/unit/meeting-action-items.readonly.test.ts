@@ -40,6 +40,7 @@ function arrange(uploadedByUserId = ASSIGNEE) {
   vi.spyOn(generalTaskAssignmentsRepository,"effectiveSubtaskAssignee").mockResolvedValue(ASSIGNEE);
   vi.spyOn(taskDetailsRepository, "listSubtasks").mockResolvedValue([subtaskRecord()]);
   vi.spyOn(taskDetailsRepository, "listAttachments").mockResolvedValue([attachmentRecord({ uploadedByUserId })]);
+  vi.spyOn(taskDetailsRepository, "findCreator").mockResolvedValue({userId:100,userName:"Task creator",userCode:"0100"});
   vi.spyOn(taskDetailsRepository, "listActivity").mockResolvedValue([]);
   vi.spyOn(taskDetailsRepository, "findSubtaskAccess").mockResolvedValue({ taskId: TASK, ownerUserId: OWNER });
   vi.spyOn(taskDetailsRepository, "findSubtask").mockResolvedValue(subtaskRecord());
@@ -319,6 +320,7 @@ describe("Existing Organizer and assignee behavior", () => {
     assert.equal(mocks.deleteFile.mock.calls.length, 1);
   });
 });
+
 
 
 

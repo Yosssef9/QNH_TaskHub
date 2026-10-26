@@ -9,12 +9,16 @@ export interface DashboardActivity {
   ownerUserId: number | null
   isShared: boolean
   title: string
+  actorUserId: number
   actorName: string
   eventType: string
+  subtaskTitle: string | null
+  affectedUserName: string | null
+  changeField: string | null
   createdAtUtc: string
 }
 
-export async function getDashboardActivity():Promise<DashboardActivity[]> {
-  const response=await apiClient.get<ApiSuccessResponse<DashboardActivity[]>>('/dashboard/activity')
+export async function getDashboardActivity(): Promise<DashboardActivity[]> {
+  const response = await apiClient.get<ApiSuccessResponse<DashboardActivity[]>>('/dashboard/activity')
   return response.data.data
 }

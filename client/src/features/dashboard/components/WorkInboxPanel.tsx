@@ -1,8 +1,8 @@
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, Inbox, ListChecks } from 'lucide-react'
+import { ArrowDownUp, ArrowLeft, ArrowRight, CircleDot, Inbox, ListChecks } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useSearchParams } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 
 import { SearchInput } from '@/components/shared/SearchInput'
 import { TablePagination } from '@/components/shared/TablePagination'
@@ -12,7 +12,7 @@ import { getDashboardWork } from '@/features/dashboard/api/dashboard-work.api'
 import { taskHref } from '@/features/dashboard/dashboard-work.links'
 import { dashboardWorkDestination, dashboardWorkInitialFilters } from '@/features/dashboard/dashboard-work.navigation'
 import type { WorkDue, WorkFilters, WorkPriority, WorkStatus, WorkTab } from '@/features/dashboard/types/dashboard-work.types'
-import { TaskPriorityIndicator } from '@/features/tasks/components/TaskSelectIndicators'
+import { TaskPriorityIndicator, TaskDueIndicator } from '@/features/tasks/components/TaskSelectIndicators'
 import { TaskStatusIndicator } from '@/features/tasks/components/TaskStatusIndicator'
 import { cn } from '@/lib/cn'
 import { formatRiyadhDateInput } from '@/lib/date-time'
@@ -34,6 +34,7 @@ interface WorkInboxPanelProps {
 
 export function WorkInboxPanel({mode}: WorkInboxPanelProps) {
   const {t,i18n} = useTranslation()
+  const navigate = useNavigate()
   const [params] = useSearchParams()
   const [filters,setFilters] = useState<WorkFilters>(() => mode === 'preview' ? PREVIEW : dashboardWorkInitialFilters(params))
   const isPreview = mode === 'preview'
@@ -81,10 +82,10 @@ export function WorkInboxPanel({mode}: WorkInboxPanelProps) {
     <div className="flex flex-wrap items-center gap-2 p-3">
       <SearchInput className="min-w-[160px] flex-1" value={filters.search} onChange={value=>update('search',value.slice(0,100))} placeholder={t('workDashboard.search')} ariaLabel={t('workDashboard.search')}/>
       <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-        <WorkSelect label={t('workDashboard.status')} value={filters.status} values={STATUS} onChange={value=>update('status',value as WorkStatus)} text={value=>value==='ACTIVE'?t('workDashboard.active'):value==='ALL'?t('workDashboard.all'):t(`tasks.statuses.${value}`)}/>
-        <WorkSelect label={t('workDashboard.priority')} value={filters.priority} values={PRIORITIES} onChange={value=>update('priority',value as WorkPriority)} text={value=>value==='ALL'?t('workDashboard.all'):t(`tasks.priorities.${value}`)}/>
-        <WorkSelect label={t('workDashboard.due')} value={filters.due} values={DUE} onChange={value=>update('due',value as WorkDue)} text={value=>value==='ALL'?t('workDashboard.all'):t(`tasks.dueFilters.${value}`)}/>
-        {!isPreview?<WorkSelect label={t('workDashboard.sort')} value={filters.sort} values={['urgency','created','due','priority']} onChange={value=>update('sort',value as WorkFilters['sort'])} text={value=>t(`workDashboard.sortOptions.${value}`)}/>:null}
+        <WorkSelect kind="status" label={t('workDashboard.status')} value={filters.status} values={STATUS} onChange={value=>update('status',value as WorkStatus)} text={value=>value==='ACTIVE'?t('workDashboard.active'):value==='ALL'?t('workDashboard.all'):t(`tasks.statuses.${value}`)}/>
+        <WorkSelect kind="priority" label={t('workDashboard.priority')} value={filters.priority} values={PRIORITIES} onChange={value=>update('priority',value as WorkPriority)} text={value=>value==='ALL'?t('workDashboard.all'):t(`tasks.priorities.${value}`)}/>
+        <WorkSelect kind="due" label={t('workDashboard.due')} value={filters.due} values={DUE} onChange={value=>update('due',value as WorkDue)} text={value=>value==='ALL'?t('workDashboard.all'):t(`tasks.dueFilters.${value}`)}/>
+        {!isPreview?<WorkSelect kind="sort" label={t('workDashboard.sort')} value={filters.sort} values={['urgency','created','due','priority']} onChange={value=>update('sort',value as WorkFilters['sort'])} text={value=>t(`workDashboard.sortOptions.${value}`)}/>:null}
       </div>
     </div>
     {query.isError?<div role="alert" className="text-destructive p-8 text-center text-sm">{t('workDashboard.loadError')}</div>
@@ -99,8 +100,11 @@ export function WorkInboxPanel({mode}: WorkInboxPanelProps) {
             <th scope="col" className="px-3 py-3 text-start font-semibold">{t('workDashboard.priority')}</th>
             <th scope="col" className="px-4 py-3 text-start font-semibold">{t('workDashboard.due')}</th>
           </tr></thead>
-          <tbody className="divide-y">{query.data.items.map(task=><tr key={task.taskId} className="hover:bg-muted/35 transition-colors">
-            <td className="max-w-[380px] px-4 py-3"><Link to={taskHref(task,filters.tab)} title={task.title} className="hover:text-primary block truncate font-semibold hover:underline">{task.title}</Link>
+          <tbody className="divide-y">{query.data.items.map(task=><tr key={task.taskId} tabIndex={0} role="link" aria-label={`${t('workDashboard.task')}: ${task.title}`}
+            onClick={()=>navigate(taskHref(task,filters.tab))}
+            onKeyDown={event=>{if(event.target!==event.currentTarget)return;if(event.key==='Enter'||event.key===' '){event.preventDefault();navigate(taskHref(task,filters.tab))}}}
+            className="hover:bg-primary/5 focus-visible:bg-primary/5 focus-visible:ring-primary cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2">
+            <td className="max-w-[380px] px-4 py-3"><Link to={taskHref(task,filters.tab)} onClick={event=>event.stopPropagation()} title={task.title} className="hover:text-primary block truncate font-semibold hover:underline">{task.title}</Link>
               <span className="text-muted-foreground block truncate text-[11px]">{task.ownerName}{task.isAssigned&&task.isShared?` · ${t('workDashboard.alsoShared')}`:''}</span></td>
             <td className="text-muted-foreground max-w-[150px] truncate px-3 py-3" title={task.listName??''}>{task.listName??t(task.meetingId!==null?'workDashboard.meetingTask':task.isShared?'workDashboard.sharedContext':task.isAssigned?'workDashboard.assignedContext':'workDashboard.generalContext')}</td>
             <td className="px-3 py-3"><TaskStatusIndicator status={task.status} pill/></td>
@@ -117,9 +121,17 @@ export function WorkInboxPanel({mode}: WorkInboxPanelProps) {
   </Card>
 }
 
-function WorkSelect({label,value,values,onChange,text}:{label:string;value:string;values:readonly string[];onChange:(value:string)=>void;text:(value:string)=>string}) {
+function WorkSelect({label,value,values,onChange,text,kind}:{label:string;value:string;values:readonly string[];onChange:(value:string)=>void;text:(value:string)=>string;kind:'status'|'priority'|'due'|'sort'}) {
+  function optionLabel(option:string) {
+    if(kind==='status'&&option==='ACTIVE')return <span className="text-info-foreground inline-flex items-center gap-2 text-xs"><CircleDot className="size-4"/>{text(option)}</span>
+    if(kind==='status'&&option!=='ACTIVE')return <TaskStatusIndicator status={option as 'ALL'|'TODO'|'IN_PROGRESS'|'DONE'|'CANCELLED'} />
+    if(kind==='priority')return <TaskPriorityIndicator priority={option as 'ALL'|'LOW'|'MEDIUM'|'HIGH'} />
+    if(kind==='due')return <TaskDueIndicator due={option as 'ALL'|'OVERDUE'|'TODAY'|'UPCOMING'|'NO_DATE'} />
+    return <span className="inline-flex items-center gap-2"><ArrowDownUp className="text-muted-foreground size-4 shrink-0"/><span className="truncate">{text(option)}</span></span>
+  }
   return <Select value={value} onValueChange={onChange}>
     <SelectTrigger className="h-9 w-auto min-w-[104px] max-w-44 text-xs" aria-label={label}><SelectValue><span className="truncate">{value==='ALL'?label:text(value)}</span></SelectValue></SelectTrigger>
-    <SelectContent>{values.map(option=><SelectItem key={option} value={option}>{text(option)}</SelectItem>)}</SelectContent>
+    <SelectContent>{values.map(option=><SelectItem key={option} value={option}>{optionLabel(option)}</SelectItem>)}</SelectContent>
   </Select>
 }
+

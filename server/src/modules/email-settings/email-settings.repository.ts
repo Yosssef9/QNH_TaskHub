@@ -59,9 +59,9 @@ export const emailSettingsRepository = {
     const result = await pool.request().input("owner", sql.Int, ownerUserId).query<EmailSettingsRecord>(`
       SELECT TOP (1)
         portal.USER_NAME AS userName,
-        settings.language_code AS languageCode,
+        COALESCE(settings.language_code, 'AR') AS languageCode,
         NULLIF(LTRIM(RTRIM(portal.email)), N'') AS portalEmail,
-        CAST(settings.email_notifications_enabled AS BIT) AS notificationsEnabled,
+        CAST(COALESCE(settings.email_notifications_enabled, 1) AS BIT) AS notificationsEnabled,
         email_settings.alternate_email AS alternateEmail,
         email_settings.alternate_email_normalized AS alternateEmailNormalized,
         email_settings.alternate_email_verified_at_utc AS alternateVerifiedAtUtc,
@@ -72,13 +72,17 @@ export const emailSettingsRepository = {
         verification.resend_available_at_utc AS resendAvailableAtUtc,
         COALESCE(verification.attempt_count, 0) AS verificationAttemptCount
       FROM dbo.users AS portal
-      INNER JOIN dbo.TM_user_settings AS settings
+      -- An active TaskHub/Portal user can receive an assignment before first sign-in
+      -- has created TM_user_settings. Never treat that missing settings row as a missing user.
+      INNER JOIN dbo.TM_user_access AS access
+        ON access.portal_user_id = portal.USER_ID AND access.is_active = 1
+      LEFT JOIN dbo.TM_user_settings AS settings
         ON settings.portal_user_id = portal.USER_ID
       LEFT JOIN dbo.TM_user_email_settings AS email_settings
         ON email_settings.owner_user_id = portal.USER_ID
       LEFT JOIN dbo.TM_email_verifications AS verification
         ON verification.owner_user_id = portal.USER_ID
-      WHERE portal.USER_ID = @owner;
+      WHERE portal.USER_ID = @owner AND portal.IS_ACTIVE = 1;
     `);
 
     return result.recordset[0] ?? null;
@@ -510,4 +514,5 @@ export const emailSettingsRepository = {
     });
   },
 };
+
 

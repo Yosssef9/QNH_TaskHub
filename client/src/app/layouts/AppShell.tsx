@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { useAutoExpandSidebar } from '@/hooks/use-auto-expand-sidebar'
 import { ProcurementSyncObserver } from '@/features/procurement/components/ProcurementSyncObserver'
 import { cn } from '@/lib/cn'
+import { DiscussionsWhatsNewProvider } from '@/features/announcements/DiscussionsWhatsNew'
 
 import { AppHeader } from './AppHeader'
 import { AppSidebar } from './AppSidebar'
@@ -21,6 +22,7 @@ export function AppShell() {
   const navigationPending = navigation.state !== 'idle'
 
   return (
+    <DiscussionsWhatsNewProvider>
     <div className="bg-background text-foreground flex min-h-screen">
       <ProcurementSyncObserver />
       <div
@@ -90,6 +92,7 @@ export function AppShell() {
         </main>
       </div>
     </div>
+    </DiscussionsWhatsNewProvider>
   )
 }
 

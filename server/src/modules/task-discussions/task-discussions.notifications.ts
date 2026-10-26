@@ -6,8 +6,8 @@ async function fetchMembers(scope:DiscussionScope,senderId:number){
   const pool=await getDatabasePool();
   const members=await pool.request().input('taskId',sql.BigInt,scope.taskId)
     .input('subtaskId',sql.BigInt,scope.subtaskId).input('sender',sql.Int,senderId)
-    .query<{userId:number;userCode:string;userName:string;taskTitle:string;listId:number|null}>(`
-      SELECT DISTINCT users.USER_ID userId,users.USER_CODE userCode,users.USER_NAME userName,t.title taskTitle,t.list_id listId
+    .query<{userId:number;userCode:string;userName:string;taskTitle:string;listId:number|null;ownerUserId:number;taskStatus:string}>(`
+      SELECT DISTINCT users.USER_ID userId,users.USER_CODE userCode,users.USER_NAME userName,t.title taskTitle,t.list_id listId,t.owner_user_id ownerUserId,t.status taskStatus
       FROM dbo.TM_tasks t
       CROSS APPLY (
         SELECT t.owner_user_id AS member_id
@@ -36,8 +36,8 @@ async function fetchMembers(scope:DiscussionScope,senderId:number){
 export async function listDiscussionMembers(actorId:number,scope:DiscussionScope){
   await assertDiscussionAccess(actorId,scope);
   const candidates=await fetchMembers(scope,0);
-  const authorized=[] as {userId:number;userCode:string;userName:string}[];
-  for(const p of candidates){try{await assertDiscussionAccess(Number(p.userId),scope);authorized.push({userId:Number(p.userId),userCode:p.userCode,userName:p.userName})}catch{}}
+  const authorized=[] as {userId:number;userCode:string;userName:string;role:'owner'|'participant';canView:boolean;canSend:boolean}[];
+  for(const p of candidates){try{await assertDiscussionAccess(Number(p.userId),scope);authorized.push({userId:Number(p.userId),userCode:p.userCode,userName:p.userName,role:Number(p.userId)===Number(p.ownerUserId)?'owner':'participant',canView:true,canSend:p.taskStatus!=='CANCELLED'})}catch{}}
   return authorized;
 }
 
@@ -81,5 +81,32 @@ export async function discussionEmailAllowed(recipientId:number,messageId:number
   if(!row || row.deletedAtUtc || Number(row.authorId)===recipientId)return false;
   try{await assertDiscussionAccess(recipientId,{taskId:Number(row.taskId),subtaskId:row.subtaskId===null?null:Number(row.subtaskId)});return true}
   catch{return false}
+}
+
+
+/** Email-safe projection of an authorized, still-active mention. Never log the body. */
+export async function discussionMentionEmailContext(recipientId:number,messageId:number):Promise<{
+  taskTitle:string;senderName:string;messagePreview:string
+}|null>{
+  if(!await discussionEmailAllowed(recipientId,messageId))return null;
+  const pool=await getDatabasePool();
+  const result=await pool.request().input('messageId',sql.BigInt,messageId)
+    .input('recipient',sql.Int,recipientId)
+    .query<{taskTitle:string;senderName:string;body:string}>(`
+      SELECT t.title taskTitle,COALESCE(NULLIF(LTRIM(RTRIM(author.USER_NAME)),N''),CONVERT(nvarchar(100),author.USER_CODE)) senderName,m.body
+      FROM dbo.TM_task_discussion_messages m
+      JOIN dbo.TM_tasks t ON t.id=m.task_id AND t.deleted_at_utc IS NULL
+      JOIN dbo.users author ON author.USER_ID=m.author_user_id
+      JOIN dbo.users recipient ON recipient.USER_ID=@recipient
+      WHERE m.id=@messageId AND m.deleted_at_utc IS NULL AND m.body IS NOT NULL
+        AND m.author_user_id<>@recipient
+        AND (EXISTS(SELECT 1 FROM dbo.TM_task_discussion_mentions mentions
+            WHERE mentions.message_id=m.id AND mentions.mentioned_user_id=@recipient)
+          OR m.body=N'@'+CONVERT(nvarchar(100),recipient.USER_CODE)
+          OR m.body LIKE N'@'+CONVERT(nvarchar(100),recipient.USER_CODE)+N'[^0-9A-Za-z]%'
+          OR m.body LIKE N'%[^0-9A-Za-z]@'+CONVERT(nvarchar(100),recipient.USER_CODE)
+          OR m.body LIKE N'%[^0-9A-Za-z]@'+CONVERT(nvarchar(100),recipient.USER_CODE)+N'[^0-9A-Za-z]%');`);
+  const row=result.recordset[0];
+  return row?{taskTitle:row.taskTitle,senderName:row.senderName,messagePreview:row.body.slice(0,800)}:null;
 }
 

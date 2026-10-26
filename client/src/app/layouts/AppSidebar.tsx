@@ -1,6 +1,7 @@
 import { Loader2 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { discussionApi } from '@/features/tasks/discussions/discussions.api'
+import { useDiscussionsWhatsNew } from '@/features/announcements/DiscussionsWhatsNew'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NavLink, useLocation } from 'react-router'
@@ -31,6 +32,7 @@ export function AppSidebar({ collapsed = false, onNavigate }: AppSidebarProps) {
   const { i18n, t } = useTranslation()
   const isRtl = i18n.dir() === 'rtl'
   const { data } = useCurrentUser()
+  const whatsNew = useDiscussionsWhatsNew()
   const location = useLocation()
   const unreadDiscussions=useQuery({queryKey:['discussions','inbox-total'],queryFn:discussionApi.unreadTotal,enabled:!!data?.user.userId,refetchInterval:30000})
   const [openSection, setOpenSection] = useState<
@@ -150,7 +152,7 @@ export function AppSidebar({ collapsed = false, onNavigate }: AppSidebarProps) {
                 : {})}
               className={({ isActive, isPending }) =>
                 cn(
-                  'flex h-11 w-full items-center overflow-hidden text-sm font-medium transition-colors duration-150',
+                  'relative flex h-11 w-full items-center overflow-hidden text-sm font-medium transition-colors duration-150',
 
                   collapsed
                     ? 'justify-center gap-0 p-0'
@@ -191,6 +193,7 @@ export function AppSidebar({ collapsed = false, onNavigate }: AppSidebarProps) {
                   >
                     {label}
                   </span>
+                  {item.to==='/discussions' && whatsNew.isNew && <span className={cn('bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 text-[10px] font-bold', collapsed && 'absolute end-0.5 top-0.5')}>{collapsed?'•':isRtl?'جديد':'New'}</span>}
                   {item.to==='/discussions' && (unreadDiscussions.data??0)>0 && (
                     <span aria-label={`${unreadDiscussions.data} unread discussions`} className="bg-primary text-primary-foreground ms-auto rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">{Number(unreadDiscussions.data)>99?'99+':unreadDiscussions.data}</span>
                   )}

@@ -77,10 +77,11 @@ export const taskDetailsService = {
     const resolved = await resolveTaskAccess(actorUserId, taskId);
     if (!resolved) throw notFound();
     const task = await assertTask(resolved.ownerUserId, taskId);
-    const [subtasks, attachments, activity] = await Promise.all([
+    const [subtasks, attachments, activity, createdBy] = await Promise.all([
       taskDetailsRepository.listSubtasks(resolved.ownerUserId, taskId),
       taskDetailsRepository.listAttachments(resolved.ownerUserId, taskId),
       taskDetailsRepository.listActivity(resolved.ownerUserId, taskId),
+      taskDetailsRepository.findCreator(resolved.ownerUserId, taskId),
     ]);
     const completed = subtasks.filter((item) => item.isCompleted).length;
     const externalShare = Boolean(resolved.sharedPermission && actorUserId !== resolved.ownerUserId);
@@ -125,6 +126,7 @@ export const taskDetailsService = {
         // Authorized Meeting viewers may read parent context, not the team roster.
         ...(resolved.capabilities.role === 'VIEWER' ? {teamRoster: []} : {}),
       },
+      createdBy,
       collaborationActive: resolved.collaborationActive ?? false,
       ...(resolved.sharedPermission?{sharedPermission:resolved.sharedPermission}:{}),
       actionItem: resolved.context,
@@ -699,4 +701,5 @@ export const taskDetailsService = {
     await removeStoredAttachment(record.storageKey);
   },
 };
+
 

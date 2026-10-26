@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import {
   AlertTriangle, ArrowLeft, ArrowRight, Bell, CalendarClock, CalendarDays,
   CalendarPlus2, ClipboardList, FolderOpen, Inbox, Plus, RefreshCw,
-  ShieldCheck, UsersRound, MessageCircleMore,
+  ShieldCheck, UsersRound, MessageCircleMore, Sparkles, ListPlus, UserRoundPlus, CheckCircle2, PencilLine, CalendarCheck2, Activity, ChevronDown,
   type LucideIcon,
 } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
@@ -11,9 +11,11 @@ import { Link } from 'react-router'
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { useDiscussionsWhatsNew } from '@/features/announcements/DiscussionsWhatsNew'
 import { hasKpiWorkCyclesAccess } from '@/features/auth/access-permissions'
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
-import { getDashboardActivity } from '@/features/dashboard/api/dashboard-activity.api'
+import { getDashboardActivity, type DashboardActivity } from '@/features/dashboard/api/dashboard-activity.api'
+import { activityDetails, groupDashboardActivity, humanizeActivityType } from '@/features/dashboard/dashboard-activity.presentation'
 import { getDashboardListSummaries } from '@/features/dashboard/api/dashboard-lists.api'
 import { getDashboardWork } from '@/features/dashboard/api/dashboard-work.api'
 import { WorkInboxPanel } from '@/features/dashboard/components/WorkInboxPanel'
@@ -28,7 +30,7 @@ import { useTimeFormatPreference } from '@/features/preferences/hooks/use-time-f
 import { TaskEditorDialog } from '@/features/tasks/components/TaskEditorDialog'
 import { discussionApi } from '@/features/tasks/discussions/discussions.api'
 import { cn } from '@/lib/cn'
-import { formatRiyadhDateInput, formatTimeRange } from '@/lib/date-time'
+import { formatDateTime, formatRiyadhDateInput, formatTimeRange } from '@/lib/date-time'
 
 const BASE_FILTERS: WorkFilters = {tab:'attention',page:1,pageSize:5,search:'',status:'ACTIVE',priority:'ALL',due:'ALL',sort:'urgency'}
 
@@ -41,17 +43,21 @@ export function HomePage() {
   const locale = i18n.language.startsWith('ar')?'ar-SA':'en-SA'
   const Arrow = i18n.dir()==='rtl'?ArrowLeft:ArrowRight
   const user = useCurrentUser().data
+  const whatsNew = useDiscussionsWhatsNew()
   const lists = useLists()
   const listCounts = useQuery({queryKey:['dashboard','list-summaries'],queryFn:getDashboardListSummaries,staleTime:30_000,refetchInterval:60_000})
   const dashboard = useQuery({queryKey:['dashboard','work',BASE_FILTERS],queryFn:()=>getDashboardWork(BASE_FILTERS),placeholderData:keepPreviousData,staleTime:30_000,refetchInterval:60_000})
   const delegated = useQuery({queryKey:['dashboard','work','delegated-preview'],queryFn:()=>getDashboardWork({...BASE_FILTERS,tab:'delegated',pageSize:3}),staleTime:30_000,refetchInterval:60_000})
   const activity = useQuery({queryKey:['dashboard','activity'],queryFn:getDashboardActivity,staleTime:30_000,refetchInterval:60_000})
+  const activityGroups = useMemo(() => groupDashboardActivity(activity.data ?? []), [activity.data])
   const discussionUnread = useQuery({queryKey:['discussions','inbox-total'],queryFn:discussionApi.unreadTotal,staleTime:15000,refetchInterval:30000})
   const meetings = useMyMeetings()
   const timeFormat = useTimeFormatPreference()
   const [createTaskOpen,setCreateTaskOpen] = useState(false)
   const [createMeetingOpen,setCreateMeetingOpen] = useState(false)
   const [manageListsOpen,setManageListsOpen] = useState(false)
+  // Keep each group expanded only when the employee chooses to inspect its audit events.
+  const [expandedActivityGroups,setExpandedActivityGroups] = useState<string[]>([])
   const organizer = user?.access.meetingOrganizeEnabled === true
   const coordinator = user?.access.meetingCoordinateEnabled === true
   const canCreateMeeting = organizer||coordinator
@@ -104,17 +110,31 @@ export function HomePage() {
     {/* RTL places the first column on the right: Meetings | Work Inbox | My Lists. */}
     <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,2.7fr)_minmax(0,1fr)] 2xl:grid-cols-[minmax(0,1fr)_minmax(0,3fr)_minmax(0,1fr)]">
       <aside className="order-3 min-w-0 space-y-4 xl:order-none">
-        <Link to="/discussions" className="bg-card hover:border-primary/40 focus-visible:ring-primary group flex items-center gap-3 rounded-xl border p-3 shadow-xs transition-all hover:shadow-sm focus-visible:ring-2 focus-visible:outline-none"
-          aria-label={i18n.language.startsWith('ar')?'فتح محادثاتي':'Open My Discussions'}>
-          <span className="bg-primary/10 text-primary grid size-10 shrink-0 place-items-center rounded-xl"><MessageCircleMore className="size-5"/></span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold">{i18n.language.startsWith('ar')?'محادثاتي':'My Discussions'}</span>
-            <span className="text-muted-foreground mt-1 block text-xs">{i18n.language.startsWith('ar')?'مناقشات المهام والمهام الفرعية':'Task and subtask conversations'}</span>
+        <div className="group relative overflow-hidden rounded-2xl border border-primary/35 bg-gradient-to-bl from-primary/10 via-card to-card p-3 shadow-sm transition-shadow hover:shadow-md dark:from-primary/20 sm:p-4">
+          <Link to="/discussions" aria-label={i18n.language.startsWith('ar')?'فتح محادثاتي':'Open My Discussions'} className="focus-visible:ring-ring absolute inset-0 z-0 rounded-2xl focus-visible:ring-2 focus-visible:outline-none" />
+          <div className="pointer-events-none relative flex items-start justify-between gap-3">
+            <div className="bg-primary text-primary-foreground grid size-12 shrink-0 place-items-center rounded-2xl shadow-sm">
+              <MessageCircleMore className="size-6" aria-hidden="true" />
+            </div>
+            <div className="min-w-0 flex-1 space-y-1 text-end">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {whatsNew.isNew && <span className="bg-primary/15 text-primary rounded-full px-2.5 py-0.5 text-[11px] font-bold">{i18n.language.startsWith('ar')?'جديد':'New'}</span>}
+                <h2 className="text-base font-extrabold">{i18n.language.startsWith('ar')?'محادثاتي':'My Discussions'}</h2>
+              </div>
+              <p className="text-muted-foreground text-xs leading-5">{i18n.language.startsWith('ar')?'ناقش المهام والمهام الفرعية مع زملائك وتابع الإشارات إليك.':'Discuss tasks and subtasks with teammates, and follow your mentions.'}</p>
+            </div>
+          </div>
+          <div className="pointer-events-none relative mt-3 flex items-center justify-between gap-2 rounded-xl border border-primary/15 bg-background/70 p-2.5">
+            <span className="text-muted-foreground text-xs">{i18n.language.startsWith('ar')?'رسائل غير مقروءة':'Unread messages'}</span>
+            <span className="text-primary text-lg font-extrabold tabular-nums" aria-live="polite">{discussionUnread.isError?'—':discussionUnread.data??'—'}</span>
+          </div>
+          <span aria-hidden="true" className="bg-primary text-primary-foreground pointer-events-none relative mt-3 flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold transition-all group-hover:bg-primary/90">
+            <MessageCircleMore className="size-4" />{i18n.language.startsWith('ar')?'فتح المحادثات':'Open discussions'}<Arrow className="size-4" />
           </span>
-          {discussionUnread.isError?<span className="text-muted-foreground text-xs" aria-label={i18n.language.startsWith('ar')?'تعذّر تحميل الرسائل غير المقروءة':'Could not load unread count'}>—</span>:
-            (discussionUnread.data??0)>0?<span className="bg-primary text-primary-foreground min-w-6 rounded-full px-2 py-1 text-center text-xs font-bold tabular-nums" aria-label={i18n.language.startsWith('ar')?`${discussionUnread.data} رسائل غير مقروءة`:`${discussionUnread.data} unread messages`}>{(discussionUnread.data??0)>99?'99+':discussionUnread.data}</span>:null}
-          <Arrow className="text-muted-foreground size-4 shrink-0 transition-transform group-hover:translate-x-0.5"/>
-        </Link>
+          <button type="button" onClick={whatsNew.open} className="text-primary focus-visible:ring-ring relative z-10 mt-2 flex w-full items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold hover:underline focus-visible:ring-2 focus-visible:outline-none">
+            <Sparkles className="size-3.5" />{i18n.language.startsWith('ar')?'تعرّف على الميزة الجديدة':'See what’s new'}
+          </button>
+        </div>
         <Card className="overflow-hidden">
           <PanelHeader title={t('workDashboard.meetings')} icon={CalendarDays} action={<Link to="/meetings" className="text-primary text-xs font-semibold hover:underline">{t('workDashboard.viewAll')}</Link>}/>
           <div className="divide-y px-3">
@@ -128,12 +148,69 @@ export function HomePage() {
           </div>
         </Card>
         <Card className="overflow-hidden">
+          {/* The header stays visible; only the activity feed scrolls. */}
           <PanelHeader title={t('workDashboard.activity')} icon={Bell}/>
-          <div className="divide-y px-3">{activity.isPending?<p className="text-muted-foreground py-6 text-center text-xs">{t('workDashboard.loading')}</p>
-            :activity.isError?<p className="text-destructive py-6 text-center text-xs">{t('workDashboard.loadError')}</p>
-            :!activity.data.length?<p className="text-muted-foreground py-6 text-center text-xs">{t('workDashboard.noActivity')}</p>
-            :activity.data.slice(0,4).map(event=><Link key={`${event.kind}-${event.id}`} to={event.kind==='MEETING'?`/meetings/${event.objectId}`:event.ownerUserId===user?.user.userId&&event.listId?`/lists/${event.listId}?taskId=${event.objectId}`:event.isShared?`/shared-tasks?tab=with&taskId=${event.objectId}`:`/assigned-to-me?taskId=${event.objectId}`}
-              className="hover:bg-muted/40 flex items-start gap-2 py-3"><span className="bg-primary mt-1.5 size-2 shrink-0 rounded-full"/><span className="min-w-0"><span className="block truncate text-xs font-semibold">{event.title}</span><span className="text-muted-foreground mt-1 block truncate text-[11px]">{event.actorName} · {event.kind==='MEETING'?t('workDashboard.meetingActivity'):t('workDashboard.taskActivity')}</span><span className="text-muted-foreground mt-1 block text-[10px]">{formattedDate(formatRiyadhDateInput(event.createdAtUtc),locale)}</span></span></Link>)}
+          <div
+            className="max-h-[440px] min-w-0 space-y-2.5 overflow-y-auto overscroll-contain px-3 py-3"
+            role="region"
+            aria-label={t('workDashboard.activityFeedLabel')}
+          >
+            {activity.isPending?<p className="text-muted-foreground py-6 text-center text-xs">{t('workDashboard.loading')}</p>
+              :activity.isError?<p className="text-destructive py-6 text-center text-xs">{t('workDashboard.loadError')}</p>
+              :!activity.data?.length?<p className="text-muted-foreground py-6 text-center text-xs">{t('workDashboard.noActivity')}</p>
+              :activityGroups.map(group=>{
+                const event=group.events[0]
+                const Icon=activityIcon(event)
+                // The oldest event remains stable when another event joins the same group.
+                const groupKey=`${event.kind}:${event.objectId}:${event.actorUserId}:${group.events.at(-1)?.id??event.id}`
+                const contentId=`home-activity-${event.kind.toLowerCase()}-${event.id}`
+                const isGrouped=group.events.length>1
+                const isExpanded=expandedActivityGroups.includes(groupKey)
+                const href=event.kind==='MEETING'?`/meetings/${event.objectId}`
+                  :event.ownerUserId===user?.user.userId&&event.listId?`/lists/${event.listId}?taskId=${event.objectId}`
+                  :event.isShared?`/shared-tasks?tab=with&taskId=${event.objectId}`:`/assigned-to-me?taskId=${event.objectId}`
+                const label=(item:DashboardActivity)=>t(item.kind==='MEETING'
+                  ?`workDashboard.meetingEvents.${item.eventType}`:`tasks.details.activities.${item.eventType}`, {
+                    defaultValue:humanizeActivityType(item.eventType),
+                    assigneeName:item.affectedUserName??'',
+                  })
+                return <article key={groupKey} className="border-border/80 bg-card hover:border-primary/30 min-w-0 rounded-xl border p-2.5 shadow-xs transition-colors">
+                  <div className="flex min-w-0 items-start gap-2.5">
+                    <span className={cn('mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg',activityTone(event))}>
+                      <Icon className="size-4" aria-hidden="true" />
+                    </span>
+                    <div className="min-w-0 flex-1 space-y-1">
+                      {isGrouped?<button type="button"
+                        aria-expanded={isExpanded}
+                        aria-controls={contentId}
+                        aria-label={t(isExpanded?'workDashboard.activityCollapse':'workDashboard.activityExpand',{count:group.events.length,task:event.title})}
+                        onClick={()=>setExpandedActivityGroups(current=>current.includes(groupKey)?current.filter(key=>key!==groupKey):[...current,groupKey])}
+                        className="focus-visible:ring-primary hover:text-primary flex w-full min-w-0 items-center justify-between gap-2 rounded-md text-start text-xs font-semibold leading-5 transition-colors focus-visible:ring-2 focus-visible:outline-none">
+                        <span className="min-w-0 break-words">{t('workDashboard.activityGroup',{count:group.events.length})}</span>
+                        <ChevronDown className={cn('text-muted-foreground size-3.5 shrink-0 transition-transform duration-200',isExpanded&&'rotate-180')} aria-hidden="true" />
+                      </button>:<p className="break-words text-xs font-semibold leading-5">{label(event)}</p>}
+                      <Link to={href} className="text-muted-foreground hover:text-primary focus-visible:ring-primary block min-w-0 truncate rounded text-[11px] font-medium transition-colors hover:underline focus-visible:ring-2 focus-visible:outline-none" title={event.title}>
+                        {event.title}
+                      </Link>
+                      {isGrouped?<p className="text-muted-foreground truncate text-[11px]" title={label(event)}>{t('workDashboard.activityLatest',{action:label(event)})}</p>
+                        :<ActivityDetails event={event} t={t} compact/>}
+                      <div className="text-muted-foreground flex min-w-0 flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5 text-[10px]">
+                        <span className="min-w-0 truncate" title={event.actorName}>{t('workDashboard.activityBy',{name:event.actorName})}</span>
+                        <time className="shrink-0 tabular-nums" dateTime={event.createdAtUtc}>{formatDateTime(event.createdAtUtc,i18n.language,timeFormat)}</time>
+                      </div>
+                    </div>
+                  </div>
+                  {isGrouped?<div id={contentId} hidden={!isExpanded} className="border-border/70 mt-2 border-t pt-2">
+                    {isExpanded?<ol className="space-y-2 border-s-2 border-primary/20 ps-3">
+                      {group.events.map(entry=><li key={`${entry.kind}-${entry.id}`} className="min-w-0 space-y-0.5 text-[11px]">
+                        <p className="break-words font-medium leading-4">{label(entry)}</p>
+                        <ActivityDetails event={entry} t={t}/>
+                        <time dateTime={entry.createdAtUtc} className="text-muted-foreground block text-[10px] tabular-nums">{formatDateTime(entry.createdAtUtc,i18n.language,timeFormat)}</time>
+                      </li>)}
+                    </ol>:null}
+                  </div>:null}
+                </article>
+              })}
           </div>
         </Card>
         {canCreateMeeting&&(organizerQueue.data?.length||coordinatorQueue.data?.length||reschedules.data?.length)?<Card className="flex items-center gap-2 p-3"><ShieldCheck className="text-primary size-4"/><p className="text-muted-foreground text-xs">{t('workDashboard.meetingQueue',{count:(organizerQueue.data?.length??0)+(coordinatorQueue.data?.length??0)+(reschedules.data?.length??0)})}</p></Card>:null}
@@ -186,3 +263,34 @@ function PanelHeader({title,icon:Icon,action}:{title:string;icon:LucideIcon;acti
   return <div className="flex items-center justify-between gap-2 border-b px-3 py-3"><h2 className="flex min-w-0 items-center gap-2 text-sm font-bold"><Icon className="text-primary size-4 shrink-0"/>{title}</h2>{action}</div>
 }
 
+
+/** Small readable context, restricted to the backend's safe audit metadata allowlist. */
+function ActivityDetails({event,t,compact=false}:{event:DashboardActivity;t:ReturnType<typeof useTranslation>['t'];compact?:boolean}) {
+  const detail=activityDetails(event)
+  if(!detail.subtaskTitle&&!detail.affectedUserName&&!detail.changeField)return null
+  return <span className={cn("text-muted-foreground block min-w-0 break-words text-[11px] leading-4",compact&&"line-clamp-2")}>
+    {detail.subtaskTitle?<span className="block">{t('workDashboard.activitySubtask',{name:detail.subtaskTitle})}</span>:null}
+    {detail.affectedUserName?<span className="block">{t('workDashboard.activityAssignee',{name:detail.affectedUserName})}</span>:null}
+    {detail.changeField?<span className="block">{t('workDashboard.activityField',{field:t(`tasks.details.activityFields.${detail.changeField}`)})}</span>:null}
+  </span>
+}
+
+function activityIcon(event:DashboardActivity):LucideIcon {
+  if(event.kind==='MEETING')return CalendarDays
+  if(event.eventType.includes('ASSIGN')||event.eventType.includes('SHAR'))return UserRoundPlus
+  if(event.eventType.includes('SUBTASK')&&event.eventType.includes('CREAT'))return ListPlus
+  if(event.eventType.includes('COMPLET')||event.eventType.includes('DONE'))return CheckCircle2
+  if(event.eventType==='CREATED')return ClipboardList
+  if(event.eventType.includes('DATE')||event.eventType.includes('SCHEDULE'))return CalendarCheck2
+  if(event.eventType.includes('UPDAT')||event.eventType.includes('CHANG'))return PencilLine
+  return Activity
+}
+
+function activityTone(event:DashboardActivity):string {
+  if(event.kind==='MEETING')return 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+  if(event.eventType.includes('ASSIGN')||event.eventType.includes('SHAR'))return 'bg-violet-500/10 text-violet-700 dark:text-violet-300'
+  if(event.eventType.includes('COMPLET')||event.eventType.includes('DONE'))return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+  if(event.eventType.includes('SUBTASK'))return 'bg-sky-500/10 text-sky-700 dark:text-sky-300'
+  if(event.eventType.includes('DELET')||event.eventType.includes('REMOV'))return 'bg-rose-500/10 text-rose-700 dark:text-rose-300'
+  return 'bg-primary/10 text-primary'
+}

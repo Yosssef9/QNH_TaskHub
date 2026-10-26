@@ -30,13 +30,20 @@ function actor(req:Request){const id=req.authContext?.user.userId;
 }
 export const taskDiscussionsRouter=Router();
 taskDiscussionsRouter.use(verifyPortalJwt,resolveTaskHubAccess);
+taskDiscussionsRouter.get('/inbox/mentions',validateRequest({query:z.object({
+  beforeId:z.coerce.number().int().positive().optional(),limit:z.coerce.number().int().min(1).max(40).default(25),
+})}),async(req,res)=>{
+  const query=getValidatedRequestPart<{beforeId?:number;limit:number}>(req,'query');
+  res.json({success:true,data:await service.mentionsInbox(actor(req),query)});
+});
 taskDiscussionsRouter.get('/inbox/unread-total',async(req,res)=>{
   res.json({success:true,data:{unread:await service.unreadTotal(actor(req))}});
 });
 taskDiscussionsRouter.get('/inbox',validateRequest({query:z.object({
-  beforeId:z.coerce.number().int().positive().optional(),limit:z.coerce.number().int().min(1).max(40).default(25),
+  beforeId:z.coerce.number().int().min(-100000000).optional(),limit:z.coerce.number().int().min(1).max(40).default(25),
+  filter:z.enum(['all','unread','mentions','empty']).default('all'),
 })}),async(req,res)=>{
-  const query=getValidatedRequestPart<{beforeId?:number;limit:number}>(req,'query');
+  const query=getValidatedRequestPart<{beforeId?:number;limit:number;filter:'all'|'unread'|'mentions'|'empty'}>(req,'query');
   res.json({success:true,data:await service.inbox(actor(req),query)});
 });
 taskDiscussionsRouter.get('/unread',validateRequest({query:z.object({taskIds:z.string().max(1200)})}),async(req,res)=>{
@@ -134,4 +141,5 @@ taskDiscussionsRouter.get('/:taskId/live',validateRequest({params,query:scopeQue
   res.flushHeaders();res.write(': connected\n\n');
   subscribeToDiscussion(actor(req),scope,res);
 });
+
 

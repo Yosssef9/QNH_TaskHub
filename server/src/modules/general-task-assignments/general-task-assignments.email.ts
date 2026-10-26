@@ -31,6 +31,10 @@ interface EmailState {
   isCollaborative: boolean;
   collaborativeMainAssignedAtUtc: Date | null;
   collaborativeChildAssignedAtUtc: Date | null;
+  generalAssignedById: number | null;
+  meetingAssignedById: number | null;
+  collaborativeMainAssignedById: number | null;
+  collaborativeChildAssignedById: number | null;
 }
 
 function safePositiveId(value: unknown): number | null {
@@ -59,16 +63,20 @@ async function currentState(recipientId: number, taskId: number, subtaskId: numb
           AS effectiveSubtaskAssigneeId,
         CAST(CASE WHEN collaboration.task_id IS NULL THEN 0 ELSE 1 END AS BIT) AS isCollaborative,
         mainCurrent.assigned_at_utc AS collaborativeMainAssignedAtUtc,
-        childCurrent.assigned_at_utc AS collaborativeChildAssignedAtUtc
+        childCurrent.assigned_at_utc AS collaborativeChildAssignedAtUtc,
+        relation.assigned_by_user_id AS generalAssignedById,
+        meeting.assigned_by_user_id AS meetingAssignedById,
+        mainCurrent.assigned_by_user_id AS collaborativeMainAssignedById,
+        childCurrent.assigned_by_user_id AS collaborativeChildAssignedById
       FROM dbo.TM_tasks AS task
       LEFT JOIN dbo.TM_general_task_assignments AS relation ON relation.task_id = task.id
       LEFT JOIN dbo.TM_meeting_action_items AS meeting ON meeting.task_id = task.id
       LEFT JOIN dbo.TM_collaboration_tasks AS collaboration ON collaboration.task_id=task.id
-      OUTER APPLY (SELECT TOP (1) ca.assigned_at_utc
+      OUTER APPLY (SELECT TOP (1) ca.assigned_at_utc,ca.assigned_by_user_id
         FROM dbo.TM_collaboration_assignments ca
         WHERE ca.task_id=task.id AND ca.subtask_id IS NULL AND ca.assignee_user_id=@recipient
           AND ca.is_active=1 ORDER BY ca.id DESC) mainCurrent
-      OUTER APPLY (SELECT TOP (1) ca.assigned_at_utc
+      OUTER APPLY (SELECT TOP (1) ca.assigned_at_utc,ca.assigned_by_user_id
         FROM dbo.TM_collaboration_assignments ca
         WHERE ca.task_id=task.id AND ca.subtask_id=@subtaskId AND ca.assignee_user_id=@recipient
           AND ca.is_active=1 ORDER BY ca.id DESC) childCurrent
@@ -145,6 +153,18 @@ export async function buildGeneralAssignmentEmailPayload(
     if (event === "GENERAL_TASK_REOPENED" && state.status !== "TODO" && state.status !== "IN_PROGRESS") return null;
   }
 
+  let assignedByName: string | undefined;
+  if (event === 'GENERAL_TASK_ASSIGNED' || event === 'GENERAL_SUBTASK_ASSIGNED') {
+    const assigningUserId = state.isCollaborative
+      ? (isChild ? state.collaborativeChildAssignedById : state.collaborativeMainAssignedById)
+      : (isChild ? state.ownerUserId : state.generalAssignedById ?? state.meetingAssignedById ?? state.ownerUserId);
+    if (assigningUserId !== null) {
+      const pool=await getDatabasePool();
+      const actor=await pool.request().input('id',sql.Int,assigningUserId)
+        .query<{name:string}>(`SELECT COALESCE(NULLIF(LTRIM(RTRIM(USER_NAME)),N''),CONVERT(nvarchar(100),USER_CODE)) name FROM dbo.users WHERE USER_ID=@id;`);
+      assignedByName=actor.recordset[0]?.name;
+    }
+  }
   const isOwner = recipientUserId === state.ownerUserId;
   const href = isOwner
     ? `/lists/${state.listId}?taskId=${taskId}`
@@ -153,6 +173,7 @@ export async function buildGeneralAssignmentEmailPayload(
   return {
     event,
     taskTitle: state.title,
+    ...(assignedByName ? {assignedByName} : {}),
     ...(isChild ? { subtaskTitle: state.subtaskTitle } : {}),
     dueDate,
     href,
@@ -183,4 +204,5 @@ export async function refreshGeneralAssignmentEmailPayload(
   // Due-date updates can explicitly clear a due date. The null is intentional.
   return result;
 }
+
 

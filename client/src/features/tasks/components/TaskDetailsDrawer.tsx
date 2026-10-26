@@ -974,6 +974,11 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                         <CardTitle>{t('tasks.details.taskInformation')}</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-1">
+                        {query.data.createdBy ? <InfoRow
+                          icon={UserRound}
+                          label={t('tasks.details.createdBy')}
+                          value={<span>{query.data.createdBy.userName}{query.data.createdBy.userCode ? ` (${query.data.createdBy.userCode})` : ''}</span>}
+                        /> : null}
                         <InfoRow
                           icon={Flag}
                           label={t('tasks.priority')}
@@ -1174,5 +1179,6 @@ function InfoRow({
     </div>
   )
 }
+
 
 
