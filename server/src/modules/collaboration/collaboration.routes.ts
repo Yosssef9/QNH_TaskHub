@@ -62,6 +62,11 @@ collaborationRouter.post('/assignments/:assignmentId/files',validateRequest({par
     if(!req.file) throw new AppError({statusCode:400,code:'FILE_REQUIRED',message:'Choose one file.'});
     res.status(201).json({success:true,data:await service.upload(actor(req),assignmentId,req.file)});
   });
+collaborationRouter.delete('/files/:fileId',validateRequest({params:fileParams}),async(req,res)=>{
+  const {fileId}=getValidatedRequestPart<z.infer<typeof fileParams>>(req,'params');
+  await service.removeFile(actor(req),fileId);
+  res.status(204).send();
+});
 collaborationRouter.get('/files/:fileId/download',validateRequest({params:fileParams}),async(req,res)=>{
   const {fileId}=getValidatedRequestPart<z.infer<typeof fileParams>>(req,'params');
   const file=await service.download(actor(req),fileId);
@@ -83,3 +88,4 @@ collaborationRouter.get('/files/:fileId/preview',validateRequest({params:filePar
   res.setHeader('Cache-Control','private, no-store');
   res.send(file.buffer);
 });
+

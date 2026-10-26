@@ -5,6 +5,7 @@
 - General Tasks and Meeting Action Items can have 1–30 primary assignees. KPI tasks remain unchanged.
 - Tasks created with an `assigneeUserIds` array activate collaborative mode atomically with task creation. Existing single-user tasks can be explicitly converted by their owner in Task Details.
 - Each assigned person has a separate immutable work-update history, evidence attachments, individual TODO / IN_PROGRESS / DONE state, and completion/reopening history. Notes and files are optional.
+- Active assignees can remove **only evidence they personally uploaded**, in either the main task or their assigned subtasks. The creator may review all evidence but cannot delete another contributor's file through this action. The existing `TM_collaboration_files` deletion and audit fields are used: files disappear from ordinary views/download endpoints, deletion actor/time and FILE_REMOVED activity remain, and assignment state/completion remains unchanged. Removed assignees cannot delete old evidence.
 - The parent Task is DONE **only when all active main assignees** and all nondeleted subtasks are DONE; each subtask is DONE only when all active assignees for that child are DONE. Empty teams never satisfy completion.
 - Subtasks inherit the parent's currently active members by default. An explicit custom team does not change when the parent team is edited. Adding/removing members recalculates all affected status values.
 - The creator/Meeting organizer can view every individual's work and can reopen their submissions, but cannot complete a different person's assignment. A participant may submit/complete only their own assignment. Completed/reopened timestamps and removed-assignee work remain in history.
@@ -52,3 +53,4 @@ pnpm --dir client exec vitest run src/features/tasks/assignment/TaskAssigneeMult
 ## Recovery
 
 Use the patch tool's restore/backup for source files. Do not remove new database tables or undo recorded assignment history without a separately reviewed SQL rollback and a backup. A source-only rollback against a database with active collaborative rows requires pausing all workers and evaluating data compatibility first.
+

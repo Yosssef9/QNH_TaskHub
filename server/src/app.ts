@@ -6,6 +6,7 @@ import { env } from "./config/env.js";
 import { httpLogger } from "./config/http-logger.js";
 import { errorMiddleware } from "./middleware/error.middleware.js";
 import { notFoundMiddleware } from "./middleware/not-found.middleware.js";
+import { taskDiscussionsRouter } from "./modules/task-discussions/task-discussions.routes.js";
 import { accessRouter } from "./modules/access/access.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { calendarRouter } from "./modules/calendar/calendar.routes.js";
@@ -81,6 +82,7 @@ export function createApp(): express.Express {
   app.use("/api/calendar", calendarRouter);
   app.use("/api/search", searchRouter);
   app.use("/api/notifications", notificationsRouter);
+  app.use("/api/task-discussions", taskDiscussionsRouter);
   app.use("/api/meetings", meetingsRouter);
   app.use("/api/action-items", meetingActionItemsRouter);
   app.use("/api/general-assignments", generalTaskAssignmentsRouter);
@@ -108,3 +110,4 @@ export function createApp(): express.Express {
 }
 
 export const app = createApp();
+

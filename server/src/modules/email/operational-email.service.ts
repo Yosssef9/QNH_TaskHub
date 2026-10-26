@@ -1,3 +1,4 @@
+import { discussionEmailAllowed } from '../task-discussions/task-discussions.notifications.js';
 import { taskSharesRepository } from '../task-shares/task-shares.repository.js';
 import { logger } from "../../config/logger.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
@@ -77,6 +78,9 @@ function asEmailPreferenceEvent(type: NotificationType): EmailPreferenceEvent | 
       return null;
     case "MEETING_ACTION_ITEM_ASSIGNED":
     case "MEETING_ACTION_ITEM_COMPLETED":
+      return type;
+    case "TASK_DISCUSSION_MESSAGE":
+    case "TASK_DISCUSSION_MENTION":
       return type;
     case "TASK_SHARED":
     case "TASK_SHARE_UPDATED":
@@ -351,6 +355,12 @@ async function buildPayload(
         ? payload
         : null;
     }
+    case "TASK_DISCUSSION_MESSAGE":
+    case "TASK_DISCUSSION_MENTION": {
+      const messageId = Number(candidate.dedupeKey.split(':')[1]);
+      if (!Number.isSafeInteger(messageId) || !await discussionEmailAllowed(candidate.ownerUserId, messageId)) return null;
+      return {taskTitle: candidate.subjectTitle, href: notificationHref(candidate), messageId};
+    }
     case "TASK_SHARED":
     case "TASK_SHARE_UPDATED":
     case "TASK_SHARE_REVOKED": {
@@ -530,6 +540,11 @@ export const operationalEmailService = {
         ? { delivery, payload }
         : null;
     }
+    if (type === "TASK_DISCUSSION_MESSAGE" || type === "TASK_DISCUSSION_MENTION") {
+      const messageId=Number(payload.messageId);
+      return Number.isSafeInteger(messageId) && await discussionEmailAllowed(ownerUserId,messageId)
+        ? {delivery,payload} : null;
+    }
     if (isGeneralAssignmentMailEvent(type)) {
       const refreshed = await refreshGeneralAssignmentEmailPayload(ownerUserId, type, payload);
       return refreshed ? { delivery, payload: refreshed } : null;
@@ -588,6 +603,7 @@ export const operationalEmailService = {
     return processed;
   },
 };
+
 
 
 

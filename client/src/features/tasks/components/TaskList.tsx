@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query'
 import {
   CalendarDays,
   Check,
@@ -66,6 +67,10 @@ import type {
 } from '../types/task.types'
 import { TaskEditorDialog } from './TaskEditorDialog'
 import { TaskDetailsDrawer } from './TaskDetailsDrawer'
+import { discussionApi } from '../discussions/discussions.api'
+import { canShowOwnedTaskDiscussionShortcut } from '../discussions/discussion-card-eligibility'
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
+import { DiscussionShortcut } from '../discussions/DiscussionShortcut'
 import { TaskCollectionToolbar } from './TaskCollectionToolbar'
 import { TaskListSummary } from './TaskListSummary'
 import { TaskStatusIndicator } from './TaskStatusIndicator'
@@ -162,6 +167,7 @@ function TaskDate({ task }: { task: PersonalTask }) {
 
 export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
   const { t } = useTranslation()
+  const currentUser = useCurrentUser()
   const [searchParams, setSearchParams] = useSearchParams()
   const shouldReduceMotion = useReducedMotion()
   const [search, setSearch] = useState('')
@@ -261,6 +267,19 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
 
     return Array.from(grouped.values()).flat()
   }, [groupBy, query.data?.items])
+
+  const unreadTaskIds = displayedItems.filter(task=>task.kpiInstanceId === null).map(task=>task.id).slice(0,75)
+  const unreadIdKey = unreadTaskIds.join(',')
+  const unreadQuery=useQuery({queryKey:['discussions','cards',unreadIdKey],
+    queryFn:()=>discussionApi.unread(unreadTaskIds),
+    enabled:unreadTaskIds.length>0,refetchInterval:15000,staleTime:5000,
+  })
+  function openDiscussion(taskId:number){
+    const next=new URLSearchParams(searchParams)
+    next.set('taskId',String(taskId));next.set('discussion','1');next.delete('subtaskId')
+    setSearchParams(next)
+    setDetailsTaskId(taskId)
+  }
 
   const structuredFilterCount =
     Number(Boolean(status)) +
@@ -516,6 +535,7 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
     const next = new URLSearchParams(searchParams)
     next.delete('taskId')
     next.delete('subtaskId')
+    next.delete('discussion')
     setSearchParams(next, { replace: true })
   }
 
@@ -686,6 +706,7 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
             ...(tagIds.length?{tagIds:tagIds.join(',')}:{}),tagMatch,
             sortBy,sortDirection,page:1,pageSize:20}}
           onOpenTask={setDetailsTaskId}
+          onOpenDiscussion={openDiscussion}
           onEditTask={task=>{setEditing(task);setInitialGroupId(null);setEditorOpen(true)}}
           onNewTask={groupId=>{setEditing(null);setInitialGroupId(groupId);setEditorOpen(true)}}
         />
@@ -921,8 +942,14 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
                                   </div>
                                 </div>
 }
-                                actions={!task.isReadOnly ? (
-                                <div className="flex items-center gap-1 opacity-75 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+                                actions={task.kpiInstanceId === null || !task.isReadOnly ? (
+                                <div className="flex items-center gap-1">
+                                  <DiscussionShortcut
+                                    available={canShowOwnedTaskDiscussionShortcut(task, currentUser.data?.user.userId, unreadQuery.data)}
+                                    unread={unreadQuery.data?.[task.id] ?? 0}
+                                    onOpen={() => openDiscussion(task.id)}
+                                  />
+                                  {!task.isReadOnly&&<div className="flex items-center gap-1 opacity-75 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
                                   {task.status === 'TODO' && (
                                   <TaskActionButton
                                     label={t('tasks.start')}
@@ -987,6 +1014,7 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
                                 >
                                   <Trash2 className="size-4" />
                                   </TaskActionButton>
+                                  </div>}
                                 </div>
                               ) : null}
                               />
@@ -1089,3 +1117,4 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
     </div>
   )
 }
+

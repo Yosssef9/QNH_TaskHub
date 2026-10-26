@@ -49,6 +49,8 @@ const taskEvents: EmailPreferenceEvent[] = [
   'TASK_DUE_TODAY',
 ]
 const generalAssignmentEvents: EmailPreferenceEvent[] = [
+  'TASK_DISCUSSION_MESSAGE',
+  'TASK_DISCUSSION_MENTION',
   'GENERAL_TASK_ASSIGNED',
   'GENERAL_SUBTASK_ASSIGNED',
   'GENERAL_ASSIGNMENT_REMOVED',
@@ -494,6 +496,7 @@ function PreferenceGroup({
     </section>
   )
 }
+
 
 
 

@@ -25,6 +25,8 @@ export function useCollaborativeAssignments(taskId:number|null,enabled:boolean){
   const note=useCollaborationMutation(({assignmentId,note}:{assignmentId:number;note:string})=>collaborativeApi.addNote(assignmentId,note))
   const complete=useCollaborationMutation(({assignmentId,completed}:{assignmentId:number;completed:boolean})=>collaborativeApi.complete(assignmentId,completed))
   const upload=useCollaborationMutation(({assignmentId,file}:{assignmentId:number;file:File})=>collaborativeApi.upload(assignmentId,file))
-  return {query,team,childTeam,note,complete,upload}
+  const removeFile=useCollaborationMutation((id:string)=>collaborativeApi.removeFile(id))
+  return {query,team,childTeam,note,complete,upload,removeFile}
 }
+
 

@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, CheckCircle2, ChevronDown, Download, Eye, FileUp, LockKeyhole, Pencil, Plus, RotateCcw, UsersRound } from 'lucide-react'
+import { ArrowDown, ArrowUp, CheckCircle2, ChevronDown, Download, Eye, FileUp, LockKeyhole, Pencil, Plus, RotateCcw, Trash2, UsersRound } from 'lucide-react'
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/cn'
 import { AttachmentPreviewDialog } from '@/components/shared/AttachmentPreviewDialog'
+import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { attachmentPreviewKind } from '@/components/shared/attachment-preview'
 
 import type { EligibleTaskUser } from './general-assignment.api'
@@ -20,7 +21,7 @@ import { useCollaborativeAssignments } from './use-collaboration'
 import { collaborativeScopeProgress, myCollaborativeAssignment, visibleCollaborativeSubmissions } from './collaborative-workspace.policy'
 
 type Child = { id: number; title: string; description: string | null; priority: TaskPriority; dueDate: string | null; isCompleted: boolean }
-type Tab = 'overview' | 'subtasks' | 'team' | 'activity'
+type Tab = 'overview' | 'subtasks' | 'team' | 'activity' | 'discussion'
 interface Props {
   taskId: number
   actorId: number | null
@@ -31,6 +32,8 @@ interface Props {
   description: string | null
   overviewContent?: ReactNode
   activityContent?: ReactNode
+  discussionContent?: ReactNode
+  discussionUnread?: number
   canManageSubtasks: boolean
   onAddSubtask: () => void
   onEditSubtask: (childId: number) => void
@@ -74,6 +77,7 @@ function Submission({ row, view, actorId, owner, actions }: {
   const { t, i18n } = useTranslation()
   const [note, setNote] = useState('')
   const [previewFile, setPreviewFile] = useState<CollaborativeFile | null>(null)
+  const [deleteFile, setDeleteFile] = useState<CollaborativeFile | null>(null)
   const mine = actorId === row.userId
   const updates = view.notes.filter(item => item.assignmentId === row.id)
   const files = view.files.filter(file => file.assignmentId === row.id)
@@ -109,9 +113,23 @@ function Submission({ row, view, actorId, owner, actions }: {
           onClick={() => void collaborativeApi.download(file.id, file.originalFileName).catch(() => toast.error(t('tasks.collaboration.fileError')))}>
           <Download aria-hidden="true" className="size-4" />
         </Button>
+        {row.isActive && actorId === file.uploadedByUserId && mine ? <Button type="button" variant="ghost" size="icon"
+          className="text-destructive hover:text-destructive size-8 shrink-0"
+          aria-label={t('attachments.deleteFile', { name: file.originalFileName })}
+          onClick={() => setDeleteFile(file)}>
+          <Trash2 aria-hidden="true" className="size-4" />
+        </Button> : null}
       </div>)}
       <AttachmentPreviewDialog attachment={previewFile} onOpenChange={open => { if (!open) setPreviewFile(null) }}
         getPreview={collaborativeApi.preview} download={file => collaborativeApi.download(file.id, file.originalFileName)} />
+      <ConfirmModal open={deleteFile !== null} danger title={t('attachments.deleteTitle')}
+        message={t('attachments.deleteConfirm', { name: deleteFile?.originalFileName ?? '' })}
+        confirmText={t('common.delete')} cancelText={t('common.cancel')}
+        loading={actions.removeFile.isPending} onCancel={() => setDeleteFile(null)}
+        onConfirm={() => { if (deleteFile) actions.removeFile.mutate(deleteFile.id, {
+          onSuccess: () => { setDeleteFile(null); toast.success(t('attachments.deleted')) },
+          onError: () => toast.error(t('attachments.deleteFailed')),
+        }) }} />
     </div> : null}
     {mine && row.isActive ? <div className="space-y-3 border-t pt-3">
       <label htmlFor={`work-notes-${row.id}`} className="text-sm font-medium">{t('tasks.collaboration.myNotes')}</label>
@@ -207,14 +225,15 @@ function ManageTeamDialog({ scope, onClose, view, meetingId, actions }: {
 }
 
 export function CollaborativeAssignmentsPanel({ taskId, actorId, ownerId, meetingId,
-  children, enabled, description, overviewContent, activityContent, canManageSubtasks,
+  children, enabled, description, overviewContent, activityContent, discussionContent, discussionUnread=0, canManageSubtasks,
   onAddSubtask, onEditSubtask, onDeleteSubtask, onReorderSubtasks, reorderPending,
   subtaskContent, focusSubtaskId = null }: Props) {
   const { t, i18n } = useTranslation()
   const actions = useCollaborativeAssignments(taskId, enabled || actorId === ownerId)
   const view = actions.query.data
   const owner = Boolean(view?.canManage && actorId === ownerId)
-  const [tab, setTab] = useState<Tab>(focusSubtaskId === null ? 'overview' : 'subtasks')
+  const discussionRequested=typeof window!=='undefined' && new URLSearchParams(window.location.search).get('discussion')==='1'
+  const [tab, setTab] = useState<Tab>(discussionRequested?'discussion':focusSubtaskId === null ? 'overview' : 'subtasks')
   const [selectedChildId, setSelectedChildId] = useState<number | null>(focusSubtaskId)
   const [manageScope, setManageScope] = useState<number | null | undefined>(undefined)
   const [teamScope, setTeamScope] = useState<number | null>(null)
@@ -232,15 +251,16 @@ export function CollaborativeAssignmentsPanel({ taskId, actorId, ownerId, meetin
     { id: 'overview', label: t('tasks.workspace.overview') },
     { id: 'subtasks', label: t('tasks.details.subtasks') },
     ...(owner ? [{ id: 'team' as const, label: t('tasks.workspace.teamProgress') }] : []),
+    { id: 'discussion', label: `${t('discussions.title')}${discussionUnread>0?` (${discussionUnread})`:''}` },
     { id: 'activity', label: t('tasks.details.activity') },
   ]
   const focusedSubtaskAvailable = focusSubtaskId !== null && accessibleChildren.some(child => child.id === focusSubtaskId)
   useEffect(() => {
     if (focusedSubtaskAvailable) {
-      setTab('subtasks')
+      setTab(discussionRequested?'discussion':'subtasks')
       setSelectedChildId(focusSubtaskId)
     }
-  }, [focusSubtaskId, focusedSubtaskAvailable])
+  }, [focusSubtaskId, focusedSubtaskAvailable, discussionRequested])
   if (actions.query.isLoading) return <div className="text-muted-foreground p-5 text-sm">{t('common.loading')}</div>
   if (actions.query.isError) return <div className="text-destructive p-5 text-sm">{t('tasks.collaboration.loadFailed')}</div>
   if (!view || (!view.enabled && !owner)) return null
@@ -410,6 +430,7 @@ export function CollaborativeAssignmentsPanel({ taskId, actorId, ownerId, meetin
       </CardContent>
     </Card>}
 
+    {tab === 'discussion' && <div role="tabpanel">{discussionContent}</div>}
     {tab === 'activity' && <div role="tabpanel">{activityContent}</div>}
     <div className="text-muted-foreground flex items-start gap-2 px-2 text-xs">
       <LockKeyhole className="mt-0.5 size-4 shrink-0" />{t('tasks.collaboration.privateDescription')}
@@ -418,3 +439,4 @@ export function CollaborativeAssignmentsPanel({ taskId, actorId, ownerId, meetin
       view={view} meetingId={meetingId} actions={actions} />}
   </section>
 }
+

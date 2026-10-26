@@ -36,6 +36,13 @@ export function notificationHref(record: NotificationRecord): string {
   const meetingId = optionalId(record.meetingId);
   const meetingSeriesId = optionalId(record.meetingSeriesId);
 
+  if (record.notificationType === 'TASK_DISCUSSION_MESSAGE' || record.notificationType === 'TASK_DISCUSSION_MENTION') {
+    const params = new URLSearchParams({taskId:String(taskId??'')});
+    if (optionalId(record.subtaskId)!==null)params.set('subtaskId',String(record.subtaskId));
+    const messageId=Number(record.dedupeKey.split(':')[1]);
+    if(Number.isSafeInteger(messageId)&&messageId>0)params.set('messageId',String(messageId));
+    return taskId===null?'/discussions':`/discussions?${params.toString()}`;
+  }
   if (record.notificationType === 'TASK_SHARED' || record.notificationType === 'TASK_SHARE_UPDATED') {
     return taskId === null ? '/shared-tasks' : `/shared-tasks?taskId=${taskId}`;
   }
@@ -231,6 +238,8 @@ export const notificationsService = {
     return notificationsRepository.markAllRead(owner, kpiWorkCyclesAccess);
   },
 };
+
+
 
 
 

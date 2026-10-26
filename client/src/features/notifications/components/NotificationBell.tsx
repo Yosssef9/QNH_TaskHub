@@ -47,6 +47,8 @@ const notificationIcons: Record<NotificationType, LucideIcon> = {
   MEETING_START_REMINDER: Clock3,
   MEETING_ACTION_ITEM_ASSIGNED: CalendarClock,
   MEETING_ACTION_ITEM_COMPLETED: CheckCheck,
+  TASK_DISCUSSION_MESSAGE: CalendarClock,
+  TASK_DISCUSSION_MENTION: CalendarClock,
   TASK_SHARED: CalendarClock,
   TASK_SHARE_UPDATED: CalendarClock,
   TASK_SHARE_REVOKED: AlertTriangle,
@@ -82,6 +84,8 @@ const notificationTones: Record<NotificationType, string> = {
   MEETING_START_REMINDER: 'bg-warning/10 text-warning-foreground',
   MEETING_ACTION_ITEM_ASSIGNED: 'bg-primary/10 text-primary',
   MEETING_ACTION_ITEM_COMPLETED: 'bg-success/10 text-success',
+  TASK_DISCUSSION_MESSAGE: 'bg-primary/10 text-primary',
+  TASK_DISCUSSION_MENTION: 'bg-info/10 text-info-foreground',
   TASK_SHARED: 'bg-primary/10 text-primary',
   TASK_SHARE_UPDATED: 'bg-info/10 text-info-foreground',
   TASK_SHARE_REVOKED: 'bg-warning/10 text-warning-foreground',
@@ -362,6 +366,7 @@ function NotificationDetail({
 
   return null
 }
+
 
 
 

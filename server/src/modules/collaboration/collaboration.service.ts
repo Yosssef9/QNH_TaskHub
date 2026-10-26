@@ -11,7 +11,7 @@ import { generalTaskAssignmentsRepository } from '../general-task-assignments/ge
 import { notifyGeneralTask,notifyRemovedAssignment } from '../general-task-assignments/general-task-assignments.email-events.js';
 import { collaborationRepository as repo, type CollaborativeTaskRow,
   type CollaborativeAssignmentRow } from './collaboration.repository.js';
-import { normalizeCollaborators, reconcileInheritedTeam } from './collaboration.policy.js';
+import { canDeleteCollaborativeEvidence, normalizeCollaborators, reconcileInheritedTeam } from './collaboration.policy.js';
 
 const notFound = () => new AppError({statusCode:404,code:'COLLABORATION_NOT_FOUND',message:'Assignment not found.'});
 const denied = () => new AppError({statusCode:403,code:'COLLABORATION_FORBIDDEN',message:'You cannot access this assignment.'});
@@ -237,6 +237,25 @@ export const collaborationService={
       return {id};
     }catch(error){await removeStoredAttachment(key);throw error;}
   },
+  async removeFile(actorId:number,id:string){
+    const previous=await repo.file(id);
+    if (!previous || !canDeleteCollaborativeEvidence(actorId,previous)) throw notFound();
+    const context=await repo.task(previous.taskId);
+    if (!context?.isCollaborative) throw notFound();
+    const storageKey=await withTransaction(async transaction=>{
+      // Serialize with assignment changes and ensure a revoked assignee cannot delete old evidence.
+      await lockTask(actorId,previous.taskId,transaction);
+      const current=await repo.file(id,transaction);
+      if (!current || !canDeleteCollaborativeEvidence(actorId,current) ||
+          current.assignmentId!==previous.assignmentId)
+        throw notFound();
+      const changed=await repo.deleteOwnFile(id,actorId,transaction);
+      if (!changed) throw notFound();
+      await repo.event(current.assignmentId,actorId,'FILE_REMOVED',transaction,current.name);
+      return current.key;
+    });
+    await removeStoredAttachment(storageKey);
+  },
   async download(actorId:number,id:string){
     const file=await repo.file(id);
     if (!file) throw notFound();
@@ -250,3 +269,4 @@ export const collaborationService={
     return {name:recoverAttachmentFileName(file.name),mime:file.mime,buffer:await readAttachment(file.key)};
   },
 };
+

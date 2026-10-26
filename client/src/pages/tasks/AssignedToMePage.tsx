@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query'
 import { Circle } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useEffect, useMemo, useState } from 'react'
@@ -41,6 +42,8 @@ import type {
 import { TaskCollectionToolbar } from '@/features/tasks/components/TaskCollectionToolbar'
 import { TaskTypeFilterSelect } from '@/features/tasks/components/TaskTypeFilterSelect'
 import { TaskDetailsDrawer } from '@/features/tasks/components/TaskDetailsDrawer'
+import { discussionApi } from '@/features/tasks/discussions/discussions.api'
+import { DiscussionShortcut } from '@/features/tasks/discussions/DiscussionShortcut'
 import {
   TaskDueIndicator,
   TaskPriorityIndicator,
@@ -164,6 +167,21 @@ export function AssignedToMePage() {
     due, taskType,...(tagIds.length ? {tagIds:tagIds.join(',')} : {}),tagMatch, sortBy: sortBy === 'meeting' ? 'assignedAt' : sortBy,
     sortDirection,
   }, source !== 'MEETING')
+  const unreadIds = [...new Set([...(query.data?.items??[]).map(item=>item.taskId),
+    ...(generalQuery.data?.items??[]).map(item=>item.taskId)])].slice(0,75)
+  const unreadIdsKey=unreadIds.join(',')
+  const unreadQuery=useQuery({queryKey:['discussions','assigned-cards',unreadIdsKey],
+    queryFn:()=>discussionApi.unread(unreadIds),enabled:unreadIds.length>0,
+    refetchInterval:15000,staleTime:5000})
+  function openTaskDiscussion(id: number, subtaskId?: number) {
+    setTaskId(id)
+    const next = new URLSearchParams(searchParams)
+    next.set('taskId', String(id))
+    next.set('discussion', '1')
+    if (subtaskId) next.set('subtaskId', String(subtaskId))
+    else next.delete('subtaskId')
+    setSearchParams(next, { replace: true })
+  }
   const statusMutation = useChangeTaskStatus()
   const total = query.data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
@@ -234,6 +252,7 @@ export function AssignedToMePage() {
     const next = new URLSearchParams(searchParams)
     next.delete('taskId')
     next.delete('subtaskId')
+    next.delete('discussion')
     setSearchParams(next, { replace: true })
   }
 
@@ -604,6 +623,12 @@ export function AssignedToMePage() {
                               showMeeting
                               onOpenMeeting={() => navigate(`/meetings/${item.meetingId}`)}
                               showAssignedBy
+                              actionMenu={<DiscussionShortcut
+                                available={item.assigneeUserId === currentUser.data?.user.userId ||
+                                  item.teamRoster?.some(member => member.userId === currentUser.data?.user.userId) === true ||
+                                  Object.hasOwn(unreadQuery.data ?? {}, item.taskId)}
+                                unread={unreadQuery.data?.[item.taskId] ?? 0}
+                                onOpen={() => openTaskDiscussion(item.taskId)} />}
                             />
                           </motion.li>
                         ))}
@@ -689,6 +714,12 @@ export function AssignedToMePage() {
                     <span>{item.isMainAssignee ? t('tasks.assignment.mainAssignee') : t('tasks.assignment.subtaskAssignee')}</span>
                     <span>{t('tasks.assignment.progressCounts', {completed:item.subtaskCompleted,total:item.subtaskTotal})}</span>
                   </div>                    </>}
+                    actions={<DiscussionShortcut
+                      available={item.isMainAssignee || item.assignedSubtasks.length > 0 || item.teamTask === true}
+                      unread={unreadQuery.data?.[item.taskId] ?? 0}
+                      onOpen={() => openTaskDiscussion(item.taskId,
+                        !item.isMainAssignee ? item.assignedSubtasks[0]?.id : undefined)}
+                    />}
                   />
                 </div>
               </li>
@@ -708,10 +739,13 @@ export function AssignedToMePage() {
         </>}
       </div> : null}
 
-      <TaskDetailsDrawer taskId={taskId} onOpenChange={(open) => !open && closeTask()} />
+      <TaskDetailsDrawer taskId={taskId}
+        focusSubtaskId={Number(searchParams.get('subtaskId')) > 0 ? Number(searchParams.get('subtaskId')) : null}
+        onOpenChange={(open) => !open && closeTask()} />
     </div>
   )
 }
+
 
 
 

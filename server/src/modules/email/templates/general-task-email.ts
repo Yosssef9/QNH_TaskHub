@@ -13,6 +13,8 @@ const schema = z.object({
 });
 
 const WORDING: Record<string, { en: [string, string]; ar: [string, string] }> = {
+  TASK_DISCUSSION_MESSAGE: {en:['New task message','Someone posted in a task discussion.'],ar:['رسالة في نقاش المهمة','تمت إضافة رسالة جديدة إلى نقاش المهمة.']},
+  TASK_DISCUSSION_MENTION: {en:['You were mentioned in a task','A teammate mentioned you in a task discussion.'],ar:['تمت الإشارة إليك في مهمة','أشار إليك أحد الزملاء في نقاش المهمة.']},
   TASK_SHARED: {en:['Task shared with you','A task has been shared with you.'],ar:['تمت مشاركة مهمة معك','تمت مشاركة مهمة جديدة معك.']},
   TASK_SHARE_UPDATED: {en:['Task access updated','Your access to a shared task has changed.'],ar:['تحديث صلاحية المهمة','تم تغيير صلاحياتك للمهمة المشتركة.']},
   TASK_SHARE_REVOKED: {en:['Task access removed','Access to a previously shared task has been removed.'],ar:['إلغاء مشاركة المهمة','تم إلغاء صلاحية الوصول إلى مهمة مشتركة.']},
@@ -80,4 +82,5 @@ export function renderGeneralTaskEmail(
     (href ? `\n\n${href}` : "");
   return { subject, preheader: intro, html, text };
 }
+
 

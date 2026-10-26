@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { TaskCollectionToolbar, type TaskCollectionToolbarFilterChip } from '@/features/tasks/components/TaskCollectionToolbar'
 import { TaskCardLayout } from '@/features/tasks/components/TaskCardLayout'
 import { TaskDetailsDrawer } from '@/features/tasks/components/TaskDetailsDrawer'
+import { discussionApi } from '@/features/tasks/discussions/discussions.api'
+import { DiscussionShortcut } from '@/features/tasks/discussions/DiscussionShortcut'
 import { TaskPriorityIndicator, TaskDueIndicator } from '@/features/tasks/components/TaskSelectIndicators'
 import { TaskStatusIndicator } from '@/features/tasks/components/TaskStatusIndicator'
 import { TaskTypeFilterSelect } from '@/features/tasks/components/TaskTypeFilterSelect'
@@ -64,6 +66,23 @@ export function SharedTasksPage() {
     ...(tagIds.length ? { tagIds: tagIds.join(',') } : {}), tagMatch }
   const query = useQuery({ queryKey: ['task-shares', 'list', filters], queryFn: () => listSharedTasks(filters) })
   const peopleQuery = useQuery({ queryKey: ['task-shares', 'people', tab], queryFn: () => listSharePeople(tab) })
+  const discussionIds = (query.data?.items ?? []).map(task => task.taskId).slice(0, 75)
+  const discussionIdsKey = discussionIds.join(',')
+  const discussionQuery = useQuery({
+    queryKey: ['discussions', 'shared-cards', discussionIdsKey],
+    queryFn: () => discussionApi.unread(discussionIds),
+    enabled: discussionIds.length > 0, refetchInterval: 15000, staleTime: 5000,
+  })
+  function openTaskDiscussion(id: number) {
+    setDetailsId(id)
+    setParams(current => {
+      const next = new URLSearchParams(current)
+      next.set('taskId', String(id))
+      next.set('discussion', '1')
+      next.delete('subtaskId')
+      return next
+    })
+  }
   const people = peopleQuery.data ?? []
   const selectedPerson = people.find(person => person.userId === personId)
   const total = query.data?.total ?? 0
@@ -251,7 +270,13 @@ export function SharedTasksPage() {
                       : <>{task.permission === 'EDIT' ? <Pencil className="size-3.5"/> : <Eye className="size-3.5"/>}
                         {t(task.permission === 'EDIT' ? 'taskSharing.edit' : 'taskSharing.view')}</>}
                   </span></div>}
-                details={<p className="text-muted-foreground line-clamp-2 text-sm">{task.description}</p>}
+                details={<div className="space-y-2">
+                  <DiscussionShortcut
+                    available={Object.hasOwn(discussionQuery.data ?? {}, task.taskId)}
+                    unread={discussionQuery.data?.[task.taskId] ?? 0}
+                    onOpen={() => openTaskDiscussion(task.taskId)} />
+                  <p className="text-muted-foreground line-clamp-2 text-sm">{task.description}</p>
+                </div>}
                 metadata={<><TaskStatusIndicator status={task.status}/><TaskPriorityIndicator priority={task.priority} pill/>
                   {task.dueDate ? <span>{task.dueDate}</span> : null}</>}
                 actions={tab === 'by' ? <Button type="button" variant="outline" size="sm"
@@ -271,7 +296,7 @@ export function SharedTasksPage() {
         onPageSizeChange={next => {setPageSize(next);setPage(1)}} />
       <TaskDetailsDrawer taskId={detailsId} onOpenChange={open => { if (!open) {
         setDetailsId(null)
-        setParams(current => { const next = new URLSearchParams(current); next.delete('taskId'); return next })
+        setParams(current => { const next = new URLSearchParams(current); next.delete('taskId'); next.delete('discussion'); next.delete('subtaskId'); return next })
         void client.invalidateQueries({queryKey:['task-shares']})
       } }} />
       {editingTask ? <EditSharedTaskDialog task={editingTask} open onOpenChange={open => {if (!open) setEditingTask(null)}}/> : null}
@@ -279,3 +304,4 @@ export function SharedTasksPage() {
     </div>
   )
 }
+

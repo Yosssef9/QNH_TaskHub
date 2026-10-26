@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   canChangeOwnCompletion,
+  canDeleteCollaborativeEvidence,
   canReadContribution,
   canReopenAssignment,
   childMembershipChanges,
@@ -58,5 +59,19 @@ describe('Collaborative Task contribution privacy', () => {
     expect(canChangeOwnCompletion(573,573)).toBe(true);
     expect(canReopenAssignment(100,100,573)).toBe(true);
     expect(canReopenAssignment(750,100,573)).toBe(false);
+  });
+});
+
+
+describe('Collaborative evidence deletion ownership',()=>{
+  const evidence={assigneeUserId:573,uploadedByUserId:573,isActive:true};
+  it('allows the active original uploader of either a main or child assignment',()=>{
+    expect(canDeleteCollaborativeEvidence(573,evidence)).toBe(true);
+  });
+  it('blocks the creator, another assignee, and a revoked uploader',()=>{
+    expect(canDeleteCollaborativeEvidence(100,evidence)).toBe(false);
+    expect(canDeleteCollaborativeEvidence(750,evidence)).toBe(false);
+    expect(canDeleteCollaborativeEvidence(573,{...evidence,isActive:false})).toBe(false);
+    expect(canDeleteCollaborativeEvidence(573,{...evidence,uploadedByUserId:750})).toBe(false);
   });
 });

@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { move as moveSortable } from '@dnd-kit/helpers'
 import {
   Briefcase,
@@ -70,6 +70,9 @@ import { setTaskTags } from '../tags/tags.api'
 import { TaskTeamIndicator } from './TaskTeamIndicator'
 import { TaskActivityTimeline } from './TaskActivityTimeline'
 import { ShareTaskDialog } from '@/features/task-shares/ShareTaskDialog'
+import { TaskDiscussions } from '../discussions/TaskDiscussions'
+import { discussionApi } from '../discussions/discussions.api'
+import { DiscussionShortcut } from '../discussions/DiscussionShortcut'
 
 // Match the existing server-side tasks.policy transition graph. Backend is authoritative.
 const permittedTransitions: Record<TaskStatus, readonly TaskStatus[]> = {
@@ -154,6 +157,9 @@ function SortableSubtaskRow({
   focused,
   onDelete,
   onEdit,
+  onDiscussion,
+  discussionAvailable,
+  discussionUnread,
   onToggle,
   onUpload,
   onOpenAttachment,
@@ -180,6 +186,9 @@ function SortableSubtaskRow({
   focused: boolean
   onDelete: () => void
   onEdit: () => void
+  onDiscussion: () => void
+  discussionAvailable: boolean
+  discussionUnread: number
   onToggle: () => void
   onUpload: (file: File) => void
   onOpenAttachment: (attachment: TaskAttachment) => void
@@ -270,6 +279,8 @@ function SortableSubtaskRow({
             {item.description && <p className="text-muted-foreground mt-2 whitespace-pre-wrap break-words text-sm">{item.description}</p>}
           </div>
 
+          <DiscussionShortcut available={discussionAvailable}
+            unread={discussionUnread} onOpen={onDiscussion} />
           {canEditMetadata || canManage || canUpload ? (
             <div className="flex items-center gap-1 self-end opacity-75 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 sm:self-center">
               {canUpload ? <Tooltip>
@@ -369,6 +380,8 @@ function SortableSubtaskRow({
 
 export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange }: Props) {
   const [shareOpen,setShareOpen]=useState(false)
+  const [legacyTab,setLegacyTab]=useState<'overview'|'discussion'>('overview')
+  const [discussionSubtaskId,setDiscussionSubtaskId]=useState<number|null>(null)
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const tagQueryClient=useQueryClient()
@@ -392,6 +405,15 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
   const subtaskDraggingRef = useRef(false)
   const taskFileRef = useRef<HTMLInputElement>(null)
   const query = useTaskDetails(taskId)
+  const discussionCounts=useQuery({queryKey:['discussions',taskId,'scopes'],
+    queryFn:()=>discussionApi.scopes(taskId!),
+    enabled:taskId!==null && query.data?.task.kpiInstanceId===null,
+    refetchInterval:30000})
+  const unreadDiscussions=discussionCounts.data?.reduce((total,scope)=>total+scope.unread,0)??0
+  useEffect(()=>{
+    setDiscussionSubtaskId(null)
+    if(taskId!==null) setLegacyTab(new URLSearchParams(window.location.search).get('discussion')==='1'?'discussion':'overview')
+  },[taskId])
   const groupQuery=useTaskGroups(query.data?.capabilities.role==='OWNER' &&
     query.data.task.kpiInstanceId===null && query.data.task.meetingActionItem===null
       ? query.data.task.listId : null)
@@ -708,6 +730,8 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                           onDownload={item => void download(item)} onDelete={removeAttachment} />
                       </div>
                     }}
+                    discussionContent={<TaskDiscussions taskId={query.data.task.id} actorId={actorId} initialSubtaskId={focusSubtaskId} />}
+                    discussionUnread={unreadDiscussions}
                     activityContent={<TaskActivityTimeline activity={query.data.activity} subtasks={query.data.subtasks} />}
                     overviewContent={<Card>
                       <CardHeader className="flex-row items-center justify-between gap-3 pb-3">
@@ -734,7 +758,13 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                   />
                 ) : null}
 
-                {(!collaborationActive || (!isOwner && capabilities?.role !== 'ASSIGNEE')) && <div className="grid gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(19rem,0.75fr)]">
+                {(!collaborationActive || (!isOwner && capabilities?.role !== 'ASSIGNEE')) && <>
+                  {query.data.task.kpiInstanceId===null && <div className="bg-card mb-4 flex items-center gap-2 rounded-xl border p-2" role="tablist" aria-label={t('tasks.workspace.navigation')}>
+                    <Button type="button" variant={legacyTab==='overview'?'default':'ghost'} size="sm" role="tab" aria-selected={legacyTab==='overview'} onClick={()=>setLegacyTab('overview')}>{t('tasks.workspace.overview')}</Button>
+                    <Button type="button" variant={legacyTab==='discussion'?'default':'ghost'} size="sm" role="tab" aria-selected={legacyTab==='discussion'} onClick={()=>setLegacyTab('discussion')}>{t('discussions.title')}{unreadDiscussions>0?` (${unreadDiscussions})`:''}</Button>
+                  </div>}
+                  {legacyTab==='discussion'&&query.data.task.kpiInstanceId===null?<TaskDiscussions taskId={query.data.task.id} actorId={actorId} initialSubtaskId={discussionSubtaskId??focusSubtaskId} />:
+                  <div className="grid gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(19rem,0.75fr)]">
                   <main className="min-w-0 space-y-5">
                     {!collaborationActive && (canEditSummary || query.data.task.completionSummary) ? <Card>
                       <CardHeader className="pb-3"><CardTitle>{t('tasks.assignment.completionSummary')}</CardTitle></CardHeader>
@@ -869,6 +899,10 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                                     onOpenAttachment={setPreviewAttachment}
                                     onDownloadAttachment={(attachment) => void download(attachment)}
                                     onDeleteAttachment={removeAttachment}
+                                    discussionAvailable={Boolean(discussionCounts.data?.some(scope => scope.subtaskId === item.id)) &&
+                                      (item.assigneeUserId ?? effectiveMainAssignee) !== ownerId}
+                                    discussionUnread={discussionCounts.data?.find(scope => scope.subtaskId === item.id)?.unread ?? 0}
+                                    onDiscussion={()=>{setDiscussionSubtaskId(item.id);setLegacyTab('discussion')}}
                                     onEdit={() => {
                                       setEditingSubtask(item)
                                       setSubtaskEditorSession((current) => current + 1)
@@ -1043,7 +1077,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
 
                     <TaskActivityTimeline activity={query.data.activity} subtasks={query.data.subtasks} />
                   </aside>
-                </div>}
+                </div>}</>}
               </div>
             )
           )}
@@ -1140,4 +1174,5 @@ function InfoRow({
     </div>
   )
 }
+
 

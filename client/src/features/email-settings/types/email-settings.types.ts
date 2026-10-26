@@ -19,6 +19,8 @@ export const EMAIL_PREFERENCE_EVENTS = [
   'MEETING_SERIES_SCHEDULED',
   'MEETING_ACTION_ITEM_ASSIGNED',
   'MEETING_ACTION_ITEM_COMPLETED',
+  'TASK_DISCUSSION_MESSAGE',
+  'TASK_DISCUSSION_MENTION',
   'TASK_SHARED',
   'TASK_SHARE_UPDATED',
   'TASK_SHARE_REVOKED',
@@ -64,6 +66,7 @@ export interface UpdateEmailSettingsInput {
   activeEmailSource?: EmailAddressSource
   preferences?: EmailEventPreference[]
 }
+
 
 
 

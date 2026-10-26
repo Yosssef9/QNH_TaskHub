@@ -16,7 +16,7 @@ export function AppShell() {
   const desktopSidebar = useAutoExpandSidebar()
   const navigation = useNavigation()
   const location = useLocation()
-  const wideWorkspace = location.pathname === '/' || location.pathname === '/work-inbox'
+  const wideWorkspace = location.pathname === '/' || location.pathname === '/work-inbox' || location.pathname === '/discussions'
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const navigationPending = navigation.state !== 'idle'
 
@@ -92,3 +92,4 @@ export function AppShell() {
     </div>
   )
 }
+

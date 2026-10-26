@@ -1,4 +1,4 @@
-import { Building2, CalendarDays, CalendarRange, House, Inbox, Settings, ShieldCheck } from 'lucide-react'
+import { Building2, CalendarDays, CalendarRange, House, Inbox, MessageCircleMore, Settings, ShieldCheck } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { TaskHubRoleCode } from '@/features/auth/types/auth.types'
 
@@ -7,6 +7,7 @@ export interface NavigationItem {
   labelKey:
     | 'navigation.home'
     | 'navigation.workInbox'
+    | 'navigation.discussionsInbox'
     | 'navigation.calendar'
     | 'navigation.meetings'
     | 'navigation.settings'
@@ -29,6 +30,12 @@ export const navigationItems: readonly NavigationItem[] = [
     to: '/work-inbox',
     labelKey: 'navigation.workInbox',
     icon: Inbox,
+    end: true,
+  },
+  {
+    to: '/discussions',
+    labelKey: 'navigation.discussionsInbox',
+    icon: MessageCircleMore,
     end: true,
   },
   {
@@ -65,3 +72,4 @@ export const navigationItems: readonly NavigationItem[] = [
     requiredRole: 'ADMIN',
   },
 ]
+

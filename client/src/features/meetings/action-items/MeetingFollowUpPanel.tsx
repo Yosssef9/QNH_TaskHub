@@ -12,7 +12,8 @@ import {
   UserRound,
 } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
@@ -48,6 +49,8 @@ import {
 import type { MeetingDetail } from '@/features/meetings/types/meeting.types'
 import { TaskCollectionToolbar } from '@/features/tasks/components/TaskCollectionToolbar'
 import { TaskDetailsDrawer } from '@/features/tasks/components/TaskDetailsDrawer'
+import { discussionApi } from '@/features/tasks/discussions/discussions.api'
+import { DiscussionShortcut } from '@/features/tasks/discussions/DiscussionShortcut'
 import {
   TaskDueIndicator,
   TaskPriorityIndicator,
@@ -159,11 +162,13 @@ function ActionItemPreviewRow({
   showAssignee,
   onOpen,
   onEdit,
+  discussionShortcut,
 }: {
   item: MeetingActionItem
   showAssignee: boolean
   onOpen: () => void
   onEdit?: () => void
+  discussionShortcut?: ReactNode
 }) {
   const { i18n, t } = useTranslation()
   const dueDate = item.dueDate ? parseDateOnly(item.dueDate) : null
@@ -192,6 +197,7 @@ function ActionItemPreviewRow({
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {discussionShortcut}
           {onEdit ? (
             <Button
               type="button"
@@ -320,6 +326,19 @@ export function MeetingFollowUpPanel({
 
 
   const allItems = actionItems.data?.items ?? []
+  const discussionIds = allItems.map(item => item.taskId).slice(0, 75)
+  const discussionIdsKey = discussionIds.join(',')
+  const discussionQuery = useQuery({
+    queryKey: ['discussions', 'meeting-cards', discussionIdsKey],
+    queryFn: () => discussionApi.unread(discussionIds),
+    enabled: discussionIds.length > 0, refetchInterval: 15000, staleTime: 5000,
+  })
+  function openTaskDiscussion(id: number) {
+    const next = new URLSearchParams(searchParams)
+    next.set('discussion', '1')
+    setSearchParams(next, { replace: true })
+    setTaskId(id)
+  }
   useEffect(() => {
     const target = Number(searchParams.get('editTask'))
     if (!target || !actionItems.data) return
@@ -867,6 +886,10 @@ export function MeetingFollowUpPanel({
                         item={item}
                         showAssignee
                         onOpen={() => setTaskId(item.taskId)}
+                        discussionShortcut={<DiscussionShortcut
+                          available={Object.hasOwn(discussionQuery.data ?? {}, item.taskId)}
+                          unread={discussionQuery.data?.[item.taskId] ?? 0}
+                          onOpen={() => openTaskDiscussion(item.taskId)} />}
                         {...(currentUserId === item.assignedByUserId && item.status !== 'CANCELLED'
                           ? { onEdit: () => setEditItem(item) } : {})}
                       />
@@ -1123,6 +1146,10 @@ export function MeetingFollowUpPanel({
                                 statusPending={statusMutation.isPending}
                                 onStatusChange={(nextStatus) => changeStatus(item, nextStatus)}
                                 showAssignee
+                                discussionShortcut={<DiscussionShortcut
+                                  available={Object.hasOwn(discussionQuery.data ?? {}, item.taskId)}
+                                  unread={discussionQuery.data?.[item.taskId] ?? 0}
+                                  onOpen={() => openTaskDiscussion(item.taskId)} />}
                                 actionMenu={currentUserId === item.assignedByUserId && item.status !== 'CANCELLED' ? (
                                   <Button
                                     size="icon"
@@ -1211,10 +1238,16 @@ export function MeetingFollowUpPanel({
         initialAgendaItemId={createAgendaItemId}
       />
 
-      <TaskDetailsDrawer taskId={taskId} onOpenChange={(open) => !open && setTaskId(null)} />
+      <TaskDetailsDrawer taskId={taskId} onOpenChange={(open) => { if (!open) {
+        setTaskId(null)
+        const next = new URLSearchParams(searchParams)
+        next.delete('discussion')
+        setSearchParams(next, { replace: true })
+      } }} />
     </div>
   )
 }
+
 
 
 

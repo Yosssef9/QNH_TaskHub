@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import {
   AlertTriangle, ArrowLeft, ArrowRight, Bell, CalendarClock, CalendarDays,
   CalendarPlus2, ClipboardList, FolderOpen, Inbox, Plus, RefreshCw,
-  ShieldCheck, UsersRound,
+  ShieldCheck, UsersRound, MessageCircleMore,
   type LucideIcon,
 } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
@@ -26,6 +26,7 @@ import { MeetingEditorDialog } from '@/features/meetings/components/MeetingEdito
 import { useCoordinatorMeetingQueue, useCoordinatorReschedules, useMyMeetings, useMyMeetingRequests } from '@/features/meetings/hooks/use-meetings'
 import { useTimeFormatPreference } from '@/features/preferences/hooks/use-time-format'
 import { TaskEditorDialog } from '@/features/tasks/components/TaskEditorDialog'
+import { discussionApi } from '@/features/tasks/discussions/discussions.api'
 import { cn } from '@/lib/cn'
 import { formatRiyadhDateInput, formatTimeRange } from '@/lib/date-time'
 
@@ -45,6 +46,7 @@ export function HomePage() {
   const dashboard = useQuery({queryKey:['dashboard','work',BASE_FILTERS],queryFn:()=>getDashboardWork(BASE_FILTERS),placeholderData:keepPreviousData,staleTime:30_000,refetchInterval:60_000})
   const delegated = useQuery({queryKey:['dashboard','work','delegated-preview'],queryFn:()=>getDashboardWork({...BASE_FILTERS,tab:'delegated',pageSize:3}),staleTime:30_000,refetchInterval:60_000})
   const activity = useQuery({queryKey:['dashboard','activity'],queryFn:getDashboardActivity,staleTime:30_000,refetchInterval:60_000})
+  const discussionUnread = useQuery({queryKey:['discussions','inbox-total'],queryFn:discussionApi.unreadTotal,staleTime:15000,refetchInterval:30000})
   const meetings = useMyMeetings()
   const timeFormat = useTimeFormatPreference()
   const [createTaskOpen,setCreateTaskOpen] = useState(false)
@@ -70,7 +72,7 @@ export function HomePage() {
   ]
   function refreshDashboard() {
     void dashboard.refetch();void delegated.refetch();void activity.refetch();void meetings.refetch();
-    void lists.refetch();void listCounts.refetch()
+    void lists.refetch();void listCounts.refetch();void discussionUnread.refetch()
   }
 
   return <div className="w-full min-w-0 space-y-4 pb-10">
@@ -102,6 +104,17 @@ export function HomePage() {
     {/* RTL places the first column on the right: Meetings | Work Inbox | My Lists. */}
     <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,2.7fr)_minmax(0,1fr)] 2xl:grid-cols-[minmax(0,1fr)_minmax(0,3fr)_minmax(0,1fr)]">
       <aside className="order-3 min-w-0 space-y-4 xl:order-none">
+        <Link to="/discussions" className="bg-card hover:border-primary/40 focus-visible:ring-primary group flex items-center gap-3 rounded-xl border p-3 shadow-xs transition-all hover:shadow-sm focus-visible:ring-2 focus-visible:outline-none"
+          aria-label={i18n.language.startsWith('ar')?'فتح محادثاتي':'Open My Discussions'}>
+          <span className="bg-primary/10 text-primary grid size-10 shrink-0 place-items-center rounded-xl"><MessageCircleMore className="size-5"/></span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">{i18n.language.startsWith('ar')?'محادثاتي':'My Discussions'}</span>
+            <span className="text-muted-foreground mt-1 block text-xs">{i18n.language.startsWith('ar')?'مناقشات المهام والمهام الفرعية':'Task and subtask conversations'}</span>
+          </span>
+          {discussionUnread.isError?<span className="text-muted-foreground text-xs" aria-label={i18n.language.startsWith('ar')?'تعذّر تحميل الرسائل غير المقروءة':'Could not load unread count'}>—</span>:
+            (discussionUnread.data??0)>0?<span className="bg-primary text-primary-foreground min-w-6 rounded-full px-2 py-1 text-center text-xs font-bold tabular-nums" aria-label={i18n.language.startsWith('ar')?`${discussionUnread.data} رسائل غير مقروءة`:`${discussionUnread.data} unread messages`}>{(discussionUnread.data??0)>99?'99+':discussionUnread.data}</span>:null}
+          <Arrow className="text-muted-foreground size-4 shrink-0 transition-transform group-hover:translate-x-0.5"/>
+        </Link>
         <Card className="overflow-hidden">
           <PanelHeader title={t('workDashboard.meetings')} icon={CalendarDays} action={<Link to="/meetings" className="text-primary text-xs font-semibold hover:underline">{t('workDashboard.viewAll')}</Link>}/>
           <div className="divide-y px-3">
@@ -172,3 +185,4 @@ export function HomePage() {
 function PanelHeader({title,icon:Icon,action}:{title:string;icon:LucideIcon;action?:ReactNode}) {
   return <div className="flex items-center justify-between gap-2 border-b px-3 py-3"><h2 className="flex min-w-0 items-center gap-2 text-sm font-bold"><Icon className="text-primary size-4 shrink-0"/>{title}</h2>{action}</div>
 }
+

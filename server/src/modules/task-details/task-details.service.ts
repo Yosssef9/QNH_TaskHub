@@ -2,6 +2,7 @@ import path from "node:path";
 import { cleanUploadedAttachmentFileName } from "../../shared/utils/attachment-filename.js";
 
 import { withTransaction } from "../../database/transaction.js";
+import { sql } from "../../database/sql.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
 import { parsePositiveIntegerId } from "../../shared/utils/id.utils.js";
@@ -425,6 +426,13 @@ export const taskDetailsService = {
       );
       if (!task) throw notFound();
       assertTaskWritable(task);
+      const discussion = await transaction.request().input('discussionSubtaskId',sql.BigInt,subtaskId)
+        .query<{id:number}>(`SELECT TOP(1) 1 id FROM dbo.TM_task_discussion_messages
+          WHERE subtask_id=@discussionSubtaskId;`);
+      if (discussion.recordset.length) throw new AppError({
+        statusCode:409,code:'SUBTASK_DISCUSSION_EXISTS',
+        message:'This subtask has discussion history and cannot be deleted.',
+      });
       await taskDetailsRepository.deleteSubtask(transaction, access.ownerUserId, subtaskId);
       if (access.collaborationActive) {
         const members=await collaborationRepository.activeAssignments(Number(current.taskId),transaction);
@@ -691,3 +699,4 @@ export const taskDetailsService = {
     await removeStoredAttachment(record.storageKey);
   },
 };
+

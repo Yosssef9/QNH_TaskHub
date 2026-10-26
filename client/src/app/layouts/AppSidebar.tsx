@@ -1,4 +1,6 @@
 import { Loader2 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { discussionApi } from '@/features/tasks/discussions/discussions.api'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NavLink, useLocation } from 'react-router'
@@ -30,6 +32,7 @@ export function AppSidebar({ collapsed = false, onNavigate }: AppSidebarProps) {
   const isRtl = i18n.dir() === 'rtl'
   const { data } = useCurrentUser()
   const location = useLocation()
+  const unreadDiscussions=useQuery({queryKey:['discussions','inbox-total'],queryFn:discussionApi.unreadTotal,enabled:!!data?.user.userId,refetchInterval:30000})
   const [openSection, setOpenSection] = useState<
     'lists' | 'meetings' | 'workCycles' | 'kpis' | 'procurement' | null
   >(() =>
@@ -188,6 +191,9 @@ export function AppSidebar({ collapsed = false, onNavigate }: AppSidebarProps) {
                   >
                     {label}
                   </span>
+                  {item.to==='/discussions' && (unreadDiscussions.data??0)>0 && (
+                    <span aria-label={`${unreadDiscussions.data} unread discussions`} className="bg-primary text-primary-foreground ms-auto rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">{Number(unreadDiscussions.data)>99?'99+':unreadDiscussions.data}</span>
+                  )}
                 </>
               )}
             </NavLink>
@@ -268,5 +274,6 @@ export function AppSidebar({ collapsed = false, onNavigate }: AppSidebarProps) {
     </div>
   )
 }
+
 
 

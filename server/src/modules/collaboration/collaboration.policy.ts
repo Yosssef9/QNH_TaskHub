@@ -108,3 +108,13 @@ export function canChangeOwnCompletion(actorUserId: number, assigneeUserId: numb
 export function canReopenAssignment(actorUserId: number, ownerUserId: number, assigneeUserId: number): boolean {
   return actorUserId === ownerUserId || actorUserId === assigneeUserId;
 }
+
+
+/** Only the active assignment's original uploader may remove its private evidence.
+ * Task creators can review other people's evidence, but cannot delete it for them.
+ */
+export function canDeleteCollaborativeEvidence(actorId:number,file:{
+  assigneeUserId:number;uploadedByUserId:number;isActive:boolean;
+}):boolean {
+  return file.isActive && actorId===file.assigneeUserId && actorId===file.uploadedByUserId;
+}

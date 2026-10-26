@@ -297,7 +297,7 @@ export const collaborationRepository = {
       pool.request().input('taskId',sql.BigInt,taskId).input('actorId',sql.Int,actorId).input('ownerId',sql.Int,ownerId)
         .query(`SELECT f.id,f.assignment_id AS assignmentId,f.original_file_name AS originalFileName,
           f.size_bytes AS sizeBytes,f.mime_type AS mimeType, f.file_extension AS fileExtension,
-          f.uploaded_at_utc AS uploadedAtUtc
+          f.uploaded_by_user_id AS uploadedByUserId, f.uploaded_at_utc AS uploadedAtUtc
           FROM dbo.TM_collaboration_files f JOIN dbo.TM_collaboration_assignments a ON a.id=f.assignment_id
           WHERE a.task_id=@taskId AND f.deleted_at_utc IS NULL
             AND (@actorId=@ownerId OR a.is_active=1 AND a.assignee_user_id=@actorId)
@@ -327,18 +327,30 @@ export const collaborationRepository = {
       files:files.recordset.map(file=>({...file,originalFileName:recoverAttachmentFileName(file.originalFileName)})),
       modes:modes.recordset,progress:progress.recordset};
   },
-  async file(id:string):Promise<{id:string;taskId:number;assignmentId:number;assigneeUserId:number;ownerUserId:number;
-    key:string;name:string;mime:string;size:number;isActive:boolean}|null>{
-    const pool=await getDatabasePool();const result=await pool.request().input('id',sql.UniqueIdentifier,id)
+  async file(id:string,transaction?:DatabaseTransaction):Promise<{id:string;taskId:number;assignmentId:number;assigneeUserId:number;ownerUserId:number;
+    uploadedByUserId:number;key:string;name:string;mime:string;size:number;isActive:boolean}|null>{
+    const request=await requestFor(transaction);
+    const result=await request.input('id',sql.UniqueIdentifier,id)
       .query<{id:string;taskId:number;assignmentId:number;assigneeUserId:number;ownerUserId:number;
-        key:string;name:string;mime:string;size:number;isActive:boolean}>(`
+        uploadedByUserId:number;key:string;name:string;mime:string;size:number;isActive:boolean}>(`
       SELECT f.id,a.task_id AS taskId,a.id AS assignmentId,a.assignee_user_id AS assigneeUserId,
-        t.owner_user_id AS ownerUserId,f.storage_key AS [key],f.original_file_name AS name,
+        t.owner_user_id AS ownerUserId,f.uploaded_by_user_id AS uploadedByUserId,
+        f.storage_key AS [key],f.original_file_name AS name,
         f.mime_type AS mime,f.size_bytes AS size,a.is_active AS isActive
       FROM dbo.TM_collaboration_files f JOIN dbo.TM_collaboration_assignments a ON a.id=f.assignment_id
       JOIN dbo.TM_collaboration_tasks t ON t.task_id=a.task_id
       WHERE f.id=@id AND f.deleted_at_utc IS NULL;`);
     return result.recordset[0]??null;
+  },
+  async deleteOwnFile(id:string,actorId:number,transaction:DatabaseTransaction):Promise<boolean>{
+    const result=await transaction.request().input('id',sql.UniqueIdentifier,id)
+      .input('actorId',sql.Int,actorId).query(`
+        UPDATE f SET deleted_at_utc=SYSUTCDATETIME(),deleted_by_user_id=@actorId
+        FROM dbo.TM_collaboration_files f
+        JOIN dbo.TM_collaboration_assignments a ON a.id=f.assignment_id
+        WHERE f.id=@id AND f.uploaded_by_user_id=@actorId AND f.deleted_at_utc IS NULL
+          AND a.is_active=1 AND a.assignee_user_id=@actorId;`);
+    return result.rowsAffected[0]===1;
   },
   async attachFile(assignmentId:number,actorId:number,metadata:{name:string;key:string;mime:string;extension:string;size:number},transaction:DatabaseTransaction):Promise<string>{
     const result=await transaction.request().input('assignmentId',sql.BigInt,assignmentId)
@@ -352,3 +364,4 @@ export const collaborationRepository = {
     return result.recordset[0]!.id;
   },
 };
+

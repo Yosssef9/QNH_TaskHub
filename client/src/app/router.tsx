@@ -19,6 +19,7 @@ import { KpiTasksPage } from '@/pages/kpi-tasks/KpiTasksPage'
 import { ListPage } from '@/pages/lists/ListPage'
 import { SharedTasksPage } from '@/pages/tasks/SharedTasksPage'
 import { AssignedToMePage } from '@/pages/tasks/AssignedToMePage'
+import { MyDiscussionsPage } from '@/pages/tasks/MyDiscussionsPage'
 import { MeetingCoordinationPage } from '@/pages/meetings/MeetingCoordinationPage'
 import { MeetingDetailsPage } from '@/pages/meetings/MeetingDetailsPage'
 import { MeetingRequestsPage } from '@/pages/meetings/MeetingRequestsPage'
@@ -127,6 +128,7 @@ export const router = createBrowserRouter(
         },
 
         { path: 'assigned-to-me', element: <AssignedToMePage /> },
+        { path: 'discussions', element: <MyDiscussionsPage /> },
         { path: 'shared-tasks', element: <SharedTasksPage /> },
 
         {
@@ -305,3 +307,4 @@ export const router = createBrowserRouter(
     basename: routerBasename,
   },
 )
+

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import {
   ArrowDown, ArrowUp, CalendarDays, Check, ChevronRight,
@@ -17,6 +17,10 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { cn } from '@/lib/cn'
 import { getTasks } from '../api/tasks.api'
+import { discussionApi } from '../discussions/discussions.api'
+import { canShowOwnedTaskDiscussionShortcut } from '../discussions/discussion-card-eligibility'
+import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
+import { DiscussionShortcut } from '../discussions/DiscussionShortcut'
 import { useChangeTaskStatus } from '../hooks/use-tasks'
 import { TaskPriorityIndicator } from '../components/TaskSelectIndicators'
 import type { PersonalTask, TaskListFilters } from '../types/task.types'
@@ -75,6 +79,7 @@ type Props = {
   listId: number
   filters: TaskListFilters
   onOpenTask: (id: number) => void
+  onOpenDiscussion?: (id: number) => void
   onEditTask: (task: PersonalTask) => void
   onNewTask: (groupId: number | null) => void
 }
@@ -144,11 +149,12 @@ function Progress({ total, completed }: { total: number; completed: number }) {
   )
 }
 
-function GroupTasks({ listId, groupId, filters, onOpenTask, onEditTask, onMoveTask, onNewTask, selectedIds, onToggle, emptyIsGroup, hasChildren = false, knownCount }: {
+function GroupTasks({ listId, groupId, filters, onOpenTask, onOpenDiscussion, onEditTask, onMoveTask, onNewTask, selectedIds, onToggle, emptyIsGroup, hasChildren = false, knownCount }: {
   listId: number
   groupId: number | null
   filters: TaskListFilters
   onOpenTask: (id: number) => void
+  onOpenDiscussion?: (id: number) => void
   onEditTask: (task: PersonalTask) => void
   onMoveTask: (task: PersonalTask) => void
   onNewTask: (groupId: number | null) => void
@@ -159,6 +165,7 @@ function GroupTasks({ listId, groupId, filters, onOpenTask, onEditTask, onMoveTa
   knownCount?: number
 }) {
   const { t, i18n } = useTranslation()
+  const currentUser = useCurrentUser()
   const statusMutation = useChangeTaskStatus()
   const groupFilter = groupId === null ? 'UNGROUPED' : groupId
   const emptyFromCounts = knownCount === 0
@@ -171,6 +178,11 @@ function GroupTasks({ listId, groupId, filters, onOpenTask, onEditTask, onMoveTa
     getNextPageParam: (last, pages) => pages.reduce((count, page) => count + page.items.length, 0) < last.total ? pages.length + 1 : undefined,
   })
   const tasks = query.data?.pages.flatMap(page => page.items) ?? []
+  const discussionIds=tasks.filter(task=>task.kpiInstanceId===null).map(task=>task.id).slice(0,75)
+  const discussionKey=discussionIds.join(',')
+  const unreadQuery=useQuery({queryKey:['discussions','cards',discussionKey],
+    queryFn:()=>discussionApi.unread(discussionIds),enabled:discussionIds.length>0,
+    refetchInterval:15000,staleTime:5000})
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = query
   useEffect(() => {
     const element = nextPageAnchor.current
@@ -217,6 +229,8 @@ function GroupTasks({ listId, groupId, filters, onOpenTask, onEditTask, onMoveTa
                 </span>}
               </div>
             </button>
+            {onOpenDiscussion&&<DiscussionShortcut available={canShowOwnedTaskDiscussionShortcut(task, currentUser.data?.user.userId, unreadQuery.data)}
+              unread={unreadQuery.data?.[task.id]??0} onOpen={()=>onOpenDiscussion(task.id)}/>}
             <TaskActions task={task} onOpen={() => onOpenTask(task.id)} onEdit={() => onEditTask(task)}
               onMove={() => onMoveTask(task)} onToggleStatus={() => {
                 statusMutation.mutate({ taskId: task.id, status: task.status === 'DONE' ? 'TODO' : 'DONE' }, {
@@ -271,7 +285,7 @@ function GroupMenu({ canUp, canDown, onCreate, onNewTask, onRename, onMove, onRe
   </Popover>
 }
 
-export function TaskGroupsWorkspace({ listId, filters, onOpenTask, onEditTask, onNewTask }: Props) {
+export function TaskGroupsWorkspace({ listId, filters, onOpenTask, onOpenDiscussion, onEditTask, onNewTask }: Props) {
   const { t } = useTranslation()
   const reduceMotion = Boolean(useReducedMotion())
   const query = useTaskGroups(listId, filters)
@@ -464,7 +478,7 @@ export function TaskGroupsWorkspace({ listId, filters, onOpenTask, onEditTask, o
           </div>
           <AccordionPanel open={isOpen} reduceMotion={reduceMotion}
             className={cn('border-border/60 ms-4 border-s ps-2', row.depth === 0 && 'sm:ms-5 sm:ps-3')}>
-            <GroupTasks listId={listId} groupId={row.id} filters={filters} onOpenTask={onOpenTask}
+            <GroupTasks listId={listId} groupId={row.id} filters={filters} onOpenTask={onOpenTask} onOpenDiscussion={onOpenDiscussion}
               onEditTask={onEditTask} onMoveTask={beginMoveTask} onNewTask={onNewTask}
               selectedIds={selectedIds} onToggle={toggleTask} emptyIsGroup={true}
               hasChildren={Boolean(siblingsByParent.get(row.id)?.length)} knownCount={row.directTaskCount} />
@@ -489,7 +503,7 @@ export function TaskGroupsWorkspace({ listId, filters, onOpenTask, onEditTask, o
           </Button>
         </div>
         <AccordionPanel open={effectiveUngroupedOpen} reduceMotion={reduceMotion}>
-          <GroupTasks listId={listId} groupId={null} filters={filters} onOpenTask={onOpenTask}
+          <GroupTasks listId={listId} groupId={null} filters={filters} onOpenTask={onOpenTask} onOpenDiscussion={onOpenDiscussion}
             onEditTask={onEditTask} onMoveTask={beginMoveTask} onNewTask={onNewTask}
             selectedIds={selectedIds} onToggle={toggleTask} emptyIsGroup={false} knownCount={query.data?.ungroupedCount ?? 0} />
         </AccordionPanel>
@@ -555,3 +569,4 @@ export function TaskGroupsWorkspace({ listId, filters, onOpenTask, onEditTask, o
       }} />
   </section>
 }
+

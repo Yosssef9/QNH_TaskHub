@@ -28,6 +28,8 @@ export const OPERATIONAL_EMAIL_TEMPLATE_KEYS = [
   "GENERAL_SUBTASK_DUE_CHANGED",
   "GENERAL_TASK_COMPLETED",
   "GENERAL_TASK_REOPENED",
+  "TASK_DISCUSSION_MESSAGE",
+  "TASK_DISCUSSION_MENTION",
   "TASK_SHARED",
   "TASK_SHARE_UPDATED",
   "TASK_SHARE_REVOKED",
@@ -101,6 +103,7 @@ export interface EmailOutboxRecord {
   dedupeKey: string;
   attemptCount: number;
 }
+
 
 
 

@@ -27,6 +27,7 @@ interface MeetingActionTaskCardProps {
   showAssignee?: boolean
   showAssignedBy?: boolean
   actionMenu?: ReactNode
+  discussionShortcut?: ReactNode
 }
 
 function TaskDate({ item }: { item: MeetingActionItem }) {
@@ -59,6 +60,7 @@ export function MeetingActionTaskCard({
   showAssignee = false,
   showAssignedBy = false,
   actionMenu,
+  discussionShortcut,
 }: MeetingActionTaskCardProps) {
   const { t } = useTranslation()
   const completionIsUnavailable = !canChangeStatus || item.status === 'CANCELLED' || statusPending
@@ -242,10 +244,11 @@ export function MeetingActionTaskCard({
             <TaskDate item={item} />
           </span>
         </div>}
-        actions={actionMenu ?? null}
+        actions={discussionShortcut || actionMenu ? <>{discussionShortcut}{actionMenu}</> : null}
       />
     </div>
   )
 }
+
 
 
