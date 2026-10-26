@@ -740,13 +740,3 @@ export const notificationsRepository = {
     return result.rowsAffected[0] ?? 0;
   },
 };
-
-
-
-
-
-
-
-
-
-

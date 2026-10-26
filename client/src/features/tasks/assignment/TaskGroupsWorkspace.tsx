@@ -478,7 +478,7 @@ export function TaskGroupsWorkspace({ listId, filters, onOpenTask, onOpenDiscuss
           </div>
           <AccordionPanel open={isOpen} reduceMotion={reduceMotion}
             className={cn('border-border/60 ms-4 border-s ps-2', row.depth === 0 && 'sm:ms-5 sm:ps-3')}>
-            <GroupTasks listId={listId} groupId={row.id} filters={filters} onOpenTask={onOpenTask} onOpenDiscussion={onOpenDiscussion}
+            <GroupTasks listId={listId} groupId={row.id} filters={filters} onOpenTask={onOpenTask} {...(onOpenDiscussion===undefined?{}:{onOpenDiscussion})}
               onEditTask={onEditTask} onMoveTask={beginMoveTask} onNewTask={onNewTask}
               selectedIds={selectedIds} onToggle={toggleTask} emptyIsGroup={true}
               hasChildren={Boolean(siblingsByParent.get(row.id)?.length)} knownCount={row.directTaskCount} />
@@ -503,7 +503,7 @@ export function TaskGroupsWorkspace({ listId, filters, onOpenTask, onOpenDiscuss
           </Button>
         </div>
         <AccordionPanel open={effectiveUngroupedOpen} reduceMotion={reduceMotion}>
-          <GroupTasks listId={listId} groupId={null} filters={filters} onOpenTask={onOpenTask} onOpenDiscussion={onOpenDiscussion}
+          <GroupTasks listId={listId} groupId={null} filters={filters} onOpenTask={onOpenTask} {...(onOpenDiscussion===undefined?{}:{onOpenDiscussion})}
             onEditTask={onEditTask} onMoveTask={beginMoveTask} onNewTask={onNewTask}
             selectedIds={selectedIds} onToggle={toggleTask} emptyIsGroup={false} knownCount={query.data?.ungroupedCount ?? 0} />
         </AccordionPanel>
@@ -569,4 +569,3 @@ export function TaskGroupsWorkspace({ listId, filters, onOpenTask, onOpenDiscuss
       }} />
   </section>
 }
-

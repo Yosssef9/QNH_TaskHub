@@ -28,22 +28,16 @@ function actor(req:Request){const id=req.authContext?.user.userId;
   if(!id) throw new AppError({statusCode:401,code:'AUTH_REQUIRED',message:'Authentication required.'});
   return id;
 }
-export const taskDiscussionsRouter=Router();
+export const taskDiscussionsRouter: ReturnType<typeof Router> = Router();
 taskDiscussionsRouter.use(verifyPortalJwt,resolveTaskHubAccess);
-taskDiscussionsRouter.get('/inbox/mentions',validateRequest({query:z.object({
-  beforeId:z.coerce.number().int().positive().optional(),limit:z.coerce.number().int().min(1).max(40).default(25),
-})}),async(req,res)=>{
-  const query=getValidatedRequestPart<{beforeId?:number;limit:number}>(req,'query');
-  res.json({success:true,data:await service.mentionsInbox(actor(req),query)});
-});
 taskDiscussionsRouter.get('/inbox/unread-total',async(req,res)=>{
   res.json({success:true,data:{unread:await service.unreadTotal(actor(req))}});
 });
 taskDiscussionsRouter.get('/inbox',validateRequest({query:z.object({
-  beforeId:z.coerce.number().int().min(-100000000).optional(),limit:z.coerce.number().int().min(1).max(40).default(25),
-  filter:z.enum(['all','unread','mentions','empty']).default('all'),
+  beforeId:z.coerce.number().int().positive().optional(),limit:z.coerce.number().int().min(1).max(40).default(25),
+  filter:z.enum(['all','unread','mentions']).default('all'),
 })}),async(req,res)=>{
-  const query=getValidatedRequestPart<{beforeId?:number;limit:number;filter:'all'|'unread'|'mentions'|'empty'}>(req,'query');
+  const query=getValidatedRequestPart<{beforeId?:number;limit:number;filter:'all'|'unread'|'mentions'}>(req,'query');
   res.json({success:true,data:await service.inbox(actor(req),query)});
 });
 taskDiscussionsRouter.get('/unread',validateRequest({query:z.object({taskIds:z.string().max(1200)})}),async(req,res)=>{
@@ -81,7 +75,9 @@ taskDiscussionsRouter.post('/:taskId/messages',validateRequest({params,query:sco
   const {taskId}=getValidatedRequestPart<z.infer<typeof params>>(req,'params');
   const {subtaskId}=getValidatedRequestPart<z.infer<typeof scopeQuery>>(req,'query');
   const input=getValidatedRequestPart<z.infer<typeof sendSchema>>(req,'body');
-  const result=await service.send(actor(req),{taskId,subtaskId:subtaskId??null},input);
+  const sendInput={body:input.body,clientRequestId:input.clientRequestId,
+    ...(input.replyToMessageId===undefined?{}:{replyToMessageId:input.replyToMessageId})};
+  const result=await service.send(actor(req),{taskId,subtaskId:subtaskId??null},sendInput);
   res.status(201).json({success:true,data:result});
 });
 taskDiscussionsRouter.patch('/messages/:messageId',validateRequest({params:messageParams,body:editSchema}),async(req,res)=>{
@@ -141,5 +137,3 @@ taskDiscussionsRouter.get('/:taskId/live',validateRequest({params,query:scopeQue
   res.flushHeaders();res.write(': connected\n\n');
   subscribeToDiscussion(actor(req),scope,res);
 });
-
-

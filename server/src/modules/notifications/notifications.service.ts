@@ -1,5 +1,4 @@
 import { logger } from "../../config/logger.js";
-import { getDiscussionNotificationDetails, isDiscussionNotification } from "./notification-discussion.context.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
 import { getKpiPeriodBounds } from "../kpis/kpi-period.js";
@@ -40,9 +39,7 @@ export function notificationHref(record: NotificationRecord): string {
   if (record.notificationType === 'TASK_DISCUSSION_MESSAGE' || record.notificationType === 'TASK_DISCUSSION_MENTION') {
     const params = new URLSearchParams({taskId:String(taskId??'')});
     if (optionalId(record.subtaskId)!==null)params.set('subtaskId',String(record.subtaskId));
-    // Dedupe key was not projected in older notification reads; never crash the entire list.
-    const messageId = typeof record.dedupeKey === 'string'
-      ? Number(record.dedupeKey.split(':')[1]) : NaN;
+    const messageId = Number(record.dedupeKey?.split(':')[1]);
     if(Number.isSafeInteger(messageId)&&messageId>0)params.set('messageId',String(messageId));
     return taskId===null?'/discussions':`/discussions?${params.toString()}`;
   }
@@ -125,24 +122,19 @@ export function notificationHref(record: NotificationRecord): string {
   return cycleId === null ? "/work-cycles" : `/work-cycles/${cycleId}`;
 }
 
-function mapNotification(record: NotificationRecord, discussion?: NotificationItem["discussion"]): NotificationItem {
+function mapNotification(record: NotificationRecord): NotificationItem {
   return {
     id: Number(record.id),
     type: record.notificationType,
-    subjectTitle: isDiscussionNotification(record)
-      ? (discussion?.status === "active" || discussion?.status === "deleted" ? discussion.taskTitle ?? "Task discussion" : "Task discussion")
-      : record.subjectTitle,
-    contextTitle: isDiscussionNotification(record)
-      ? (discussion?.status === "active" || discussion?.status === "deleted" ? discussion.subtaskTitle ?? null : null)
-      : record.contextTitle,
+    subjectTitle: record.subjectTitle,
+    contextTitle: record.contextTitle,
     eventDate: record.eventDate?.toISOString().slice(0, 10) ?? null,
     actualValue: record.actualValue == null ? null : Number(record.actualValue),
     targetValue: record.targetValue == null ? null : Number(record.targetValue),
     measurementUnit: record.measurementUnit,
     readAtUtc: record.readAtUtc?.toISOString() ?? null,
     createdAtUtc: record.createdAtUtc.toISOString(),
-    href: isDiscussionNotification(record) && discussion?.status === "unavailable" ? "/discussions" : notificationHref(record),
-    ...(isDiscussionNotification(record) ? { discussion: discussion ?? { status: "unavailable" as const } } : {}),
+    href: notificationHref(record),
   };
 }
 
@@ -222,9 +214,8 @@ export const notificationsService = {
       notificationsRepository.unreadCount(owner, kpiWorkCyclesAccess),
     ]);
 
-    const discussionDetails = await getDiscussionNotificationDetails(owner, records);
     return {
-      items: records.map((record) => mapNotification(record, discussionDetails.get(Number(record.id)))),
+      items: records.map(mapNotification),
       unreadCount,
     };
   },
@@ -247,12 +238,3 @@ export const notificationsService = {
     return notificationsRepository.markAllRead(owner, kpiWorkCyclesAccess);
   },
 };
-
-
-
-
-
-
-
-
-
