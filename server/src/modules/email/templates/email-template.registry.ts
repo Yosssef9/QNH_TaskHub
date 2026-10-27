@@ -89,10 +89,13 @@ export function renderEmailTemplate(
     case "GENERAL_TASK_DUE_CHANGED":
     case "GENERAL_SUBTASK_DUE_CHANGED":
     case "GENERAL_TASK_COMPLETED":
+    case "TASK_WORK_NOTE_ADDED":
+    case "TASK_ATTACHMENT_ADDED":
     case "GENERAL_TASK_REOPENED":
       return renderGeneralTaskEmail(templateKey, payload, language, context);
   }
 }
+
 
 
 

@@ -57,6 +57,8 @@ const generalAssignmentEvents: EmailPreferenceEvent[] = [
   'GENERAL_TASK_DUE_CHANGED',
   'GENERAL_SUBTASK_DUE_CHANGED',
   'GENERAL_TASK_COMPLETED',
+  'TASK_WORK_NOTE_ADDED',
+  'TASK_ATTACHMENT_ADDED',
   'GENERAL_TASK_REOPENED',
 ]
 const cycleEvents: EmailPreferenceEvent[] = [
@@ -496,6 +498,7 @@ function PreferenceGroup({
     </section>
   )
 }
+
 
 
 

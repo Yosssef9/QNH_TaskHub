@@ -64,6 +64,11 @@ export function notificationHref(record: NotificationRecord): string {
       record.notificationType === "GENERAL_SUBTASK_DUE_CHANGED") {
     return taskId === null ? "/assigned-to-me" : `/assigned-to-me?taskId=${taskId}`;
   }
+  if (record.notificationType === "TASK_WORK_NOTE_ADDED" ||
+      record.notificationType === "TASK_ATTACHMENT_ADDED") {
+    return taskId === null ? "/" :
+      (listId === null ? "/assigned-to-me?taskId=" + taskId : `/lists/${listId}?taskId=${taskId}`);
+  }
   if (record.notificationType === "GENERAL_TASK_COMPLETED") {
     return taskId === null ? "/assigned-to-me" :
       (listId === null ? `/assigned-to-me?taskId=${taskId}` : `/lists/${listId}?taskId=${taskId}`);
@@ -238,3 +243,4 @@ export const notificationsService = {
     return notificationsRepository.markAllRead(owner, kpiWorkCyclesAccess);
   },
 };
+

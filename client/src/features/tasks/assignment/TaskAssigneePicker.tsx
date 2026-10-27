@@ -21,6 +21,7 @@ export function TaskAssigneePicker({
   inherit = false,
   meetingId = null,
   allowClear = true,
+  excludedUserIds = [],
 }: {
   value: number | null
   onChange: (value: number | null) => void
@@ -28,6 +29,7 @@ export function TaskAssigneePicker({
   inherit?: boolean
   meetingId?: number | null
   allowClear?: boolean
+  excludedUserIds?: number[]
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -37,11 +39,11 @@ export function TaskAssigneePicker({
   const generalQuery = useInfiniteEligibleTaskUsers(search, open && !isMeeting)
   const meetingQuery = useMeetingActionItemAssignees(meetingId, open && isMeeting)
   const generalUsers = useMemo(() => generalQuery.data?.pages.flatMap(page => page.items) ?? [], [generalQuery.data])
-  const available: DisplayUser[] = isMeeting
+  const available: DisplayUser[] = (isMeeting
     ? (meetingQuery.data ?? []).filter(
         (user) => user.eligible && matchesTaskAssigneeSearch(user, search),
       )
-    : generalUsers
+    : generalUsers).filter((user) => !excludedUserIds.includes(user.userId))
   function handleScroll(event: UIEvent<HTMLDivElement>) {
     if (isMeeting) return
     const element = event.currentTarget
@@ -133,4 +135,5 @@ export function TaskAssigneePicker({
     </Popover>
   )
 }
+
 

@@ -11,7 +11,7 @@ import { resolveTaskAccess } from "../meeting-action-items/meeting-action-items.
 import { meetingActionItemsRepository } from "../meeting-action-items/meeting-action-items.repository.js";
 import { generalTaskAssignmentsRepository } from "../general-task-assignments/general-task-assignments.repository.js";
 import { reconcileParentCompletion } from "../general-task-assignments/general-task-assignments.completion.js";
-import { notifyGeneralTask } from "../general-task-assignments/general-task-assignments.email-events.js";
+import { notifyGeneralTask, notifyTaskOwnerActivity } from "../general-task-assignments/general-task-assignments.email-events.js";
 import { collaborationRepository } from "../collaboration/collaboration.repository.js";
 import { canViewCollaborativeActivity } from "./task-activity-visibility.js";
 import { mapTask } from "../tasks/tasks.mapper.js";
@@ -77,11 +77,13 @@ export const taskDetailsService = {
     const resolved = await resolveTaskAccess(actorUserId, taskId);
     if (!resolved) throw notFound();
     const task = await assertTask(resolved.ownerUserId, taskId);
-    const [subtasks, attachments, activity, createdBy] = await Promise.all([
+    const [subtasks, attachments, activity, createdBy, workNoteEntries, completionSummaryEntries] = await Promise.all([
       taskDetailsRepository.listSubtasks(resolved.ownerUserId, taskId),
       taskDetailsRepository.listAttachments(resolved.ownerUserId, taskId),
       taskDetailsRepository.listActivity(resolved.ownerUserId, taskId),
       taskDetailsRepository.findCreator(resolved.ownerUserId, taskId),
+      generalTaskAssignmentsRepository.listWorkNoteEntries(resolved.ownerUserId, taskId),
+      generalTaskAssignmentsRepository.listCompletionSummaryEntries(resolved.ownerUserId, taskId),
     ]);
     const completed = subtasks.filter((item) => item.isCompleted).length;
     const externalShare = Boolean(resolved.sharedPermission && actorUserId !== resolved.ownerUserId);
@@ -127,12 +129,17 @@ export const taskDetailsService = {
         ...(resolved.capabilities.role === 'VIEWER' ? {teamRoster: []} : {}),
       },
       createdBy,
+      // Apply the same visibility as the legacy completion_summary field.
+      completionSummaryEntries: ((resolved.collaborationActive && isRestricted) || externalShare)
+        ? [] : completionSummaryEntries,
       collaborationActive: resolved.collaborationActive ?? false,
       ...(resolved.sharedPermission?{sharedPermission:resolved.sharedPermission}:{}),
       actionItem: resolved.context,
       generalAssignment: resolved.generalAssignment ?? null,
       capabilities: resolved.capabilities,
       subtasks: visibleSubtasks.map(subtask => ({...mapSubtask(subtask),
+        workNoteEntries: externalShare || (resolved.collaborationActive && isRestricted)
+          ? [] : workNoteEntries.filter(entry=>entry.subtaskId===Number(subtask.id)),
         ...(externalShare ? { assigneeUserId: null } : {}),
         ...(resolved.collaborationActive && isRestricted || externalShare ? {workNotes:null} : {})})),
       attachments: visibleAttachments.map(mapAttachment),
@@ -203,6 +210,12 @@ export const taskDetailsService = {
       const legacyAssignee = !access.collaborationActive
         ? (mode === 'CUSTOM' ? (selected[0] ?? null) : (input.assigneeUserId ?? null))
         : null;
+      if (!access.collaborationActive && !access.context && legacyAssignee === ownerUserId &&
+          access.generalAssignment?.assigneeUserId != null &&
+          access.generalAssignment.assigneeUserId !== ownerUserId) {
+        throw new AppError({statusCode:409,code:"SUBTASK_CREATOR_SELF_ASSIGNMENT",
+          message:"The task creator cannot assign a subtask to themselves while another user is responsible for the main task."});
+      }
       if (legacyAssignee !== null && (task.kpiInstanceId !== null ||
           !(access.context
             ? await meetingActionItemsRepository.eligibleAssignee(transaction,
@@ -602,6 +615,13 @@ export const taskDetailsService = {
           },
           actorUserId,
         );
+        if (actorUserId !== resolved.ownerUserId) {
+          await notifyTaskOwnerActivity(transaction, resolved.ownerUserId, actorUserId, {
+            type: "TASK_ATTACHMENT_ADDED", taskId: taskId!,
+            subtaskId: parent.subtaskId ?? null, listId: currentTask.listId,
+            taskTitle: currentTask.title,
+          });
+        }
         return created;
       });
       return mapAttachment(record);
@@ -701,5 +721,6 @@ export const taskDetailsService = {
     await removeStoredAttachment(record.storageKey);
   },
 };
+
 
 

@@ -23,6 +23,8 @@ export const NOTIFICATION_TYPES = [
   'GENERAL_TASK_ASSIGNED',
   'GENERAL_SUBTASK_ASSIGNED',
   'GENERAL_TASK_COMPLETED',
+  'TASK_WORK_NOTE_ADDED',
+  'TASK_ATTACHMENT_ADDED',
   'GENERAL_ASSIGNMENT_REMOVED',
   'GENERAL_TASK_DUE_CHANGED',
   'GENERAL_SUBTASK_DUE_CHANGED',
@@ -67,6 +69,7 @@ export interface NotificationListData {
   items: NotificationItem[]
   unreadCount: number
 }
+
 
 
 

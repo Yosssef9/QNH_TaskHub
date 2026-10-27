@@ -110,6 +110,15 @@ export interface SaveTaskInput {
   tagIds?: number[]
 }
 
+export interface SubtaskWorkNoteEntry {
+  id: number
+  subtaskId: number
+  authorUserId: number
+  authorName: string
+  content: string
+  createdAtUtc: string
+}
+
 export interface Subtask {
   id: number
   taskId: number
@@ -118,12 +127,21 @@ export interface Subtask {
   priority: TaskPriority
   assigneeUserId?: number | null
   workNotes?: string | null
+  workNoteEntries?: SubtaskWorkNoteEntry[]
   isCompleted: boolean
   dueDate: string | null
   displayOrder: number
   createdAtUtc: string
   updatedAtUtc: string | null
   completedAtUtc: string | null
+}
+
+export interface TaskCompletionSummaryEntry {
+  id: number
+  authorUserId: number
+  authorName: string
+  content: string
+  createdAtUtc: string
 }
 
 export interface TaskAttachment {
@@ -190,6 +208,7 @@ export interface GeneralAssignmentContext {
 }
 
 export interface TaskDetails {
+  completionSummaryEntries: TaskCompletionSummaryEntry[]
   createdBy?: {userId:number;userName:string;userCode:string|null}|null
   collaborationActive?: boolean
   sharedPermission?: "VIEW" | "EDIT"
@@ -202,4 +221,5 @@ export interface TaskDetails {
   activity: TaskActivity[]
   progress: { completed: number; total: number; percentage: number }
 }
+
 

@@ -1,4 +1,5 @@
 import { getDatabasePool, sql } from "../../database/sql.js";
+import { AppError } from "../../shared/errors/app-error.js";
 import type { DatabaseTransaction } from "../../database/types.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
 import { taskTagsSelectSql,taskTagsFilterSql } from "../tags/task-tags.sql.js";
@@ -141,18 +142,94 @@ export const generalTaskAssignmentsRepository = {
       incomplete: Number(result.recordset[0]?.incomplete ?? 0) };
   },
 
-  async saveWorkNotes(transaction: DatabaseTransaction, ownerUserId: number, subtaskId: number, notes: string | null) {
-    await transaction.request().input("ownerUserId", sql.Int, ownerUserId)
-      .input("subtaskId", sql.BigInt, subtaskId).input("notes", sql.NVarChar(4000), notes)
-      .query(`UPDATE dbo.TM_subtasks SET work_notes=@notes,updated_at_utc=SYSUTCDATETIME()
-        WHERE id=@subtaskId AND owner_user_id=@ownerUserId AND deleted_at_utc IS NULL;`);
+  // Historical TM_subtasks.work_notes is intentionally never updated again: its
+  // author cannot be reliably reconstructed after past reassignments.
+  async addWorkNote(transaction: DatabaseTransaction, ownerUserId: number, taskId: number,
+    subtaskId: number, authorUserId: number, content: string): Promise<number> {
+    const result = await transaction.request()
+      .input("ownerUserId", sql.Int, ownerUserId)
+      .input("taskId", sql.BigInt, taskId)
+      .input("subtaskId", sql.BigInt, subtaskId)
+      .input("authorUserId", sql.Int, authorUserId)
+      .input("content", sql.NVarChar(4000), content)
+      .query<{id:number|string}>(`INSERT dbo.TM_subtask_work_note_entries
+        (task_id, subtask_id, owner_user_id, author_user_id, content)
+        OUTPUT inserted.id VALUES(@taskId,@subtaskId,@ownerUserId,@authorUserId,@content);`);
+    return Number(result.recordset[0]?.id);
   },
 
-  async saveCompletionSummary(transaction: DatabaseTransaction, ownerUserId: number, taskId: number, summary: string | null) {
-    await transaction.request().input("ownerUserId", sql.Int, ownerUserId)
-      .input("taskId", sql.BigInt, taskId).input("summary", sql.NVarChar(sql.MAX), summary)
-      .query(`UPDATE dbo.TM_tasks SET completion_summary=@summary,updated_at_utc=SYSUTCDATETIME()
-        WHERE id=@taskId AND owner_user_id=@ownerUserId AND deleted_at_utc IS NULL;`);
+  async listWorkNoteEntries(ownerUserId: number, taskId: number) {
+    const pool = await getDatabasePool();
+    const result = await pool.request().input("ownerUserId", sql.Int, ownerUserId)
+      .input("taskId", sql.BigInt, taskId)
+      .query<{id:number|string;subtaskId:number|string;authorUserId:number;
+        authorName:string;content:string;createdAtUtc:Date}>(`
+        SELECT note.id, note.subtask_id AS subtaskId, note.author_user_id AS authorUserId,
+          COALESCE(author.USER_NAME, CONVERT(NVARCHAR(20), note.author_user_id)) AS authorName,
+          note.content, note.created_at_utc AS createdAtUtc
+        FROM dbo.TM_subtask_work_note_entries note
+        JOIN dbo.TM_subtasks child ON child.id=note.subtask_id AND child.task_id=@taskId
+          AND child.owner_user_id=@ownerUserId AND child.deleted_at_utc IS NULL
+        LEFT JOIN dbo.users author ON author.USER_ID=note.author_user_id
+        WHERE note.task_id=@taskId AND note.owner_user_id=@ownerUserId
+        ORDER BY note.created_at_utc ASC, note.id ASC;`);
+    return result.recordset.map(row=>({id:Number(row.id),subtaskId:Number(row.subtaskId),
+      authorUserId:row.authorUserId,authorName:row.authorName,content:row.content,
+      createdAtUtc:row.createdAtUtc.toISOString()}));
+  },
+
+  async ownerHasExplicitSubtaskAssignment(taskId: number, ownerUserId: number,
+    transaction: DatabaseTransaction): Promise<boolean> {
+    const result = await transaction.request().input("taskId",sql.BigInt,taskId)
+      .input("ownerUserId",sql.Int,ownerUserId).query<{id:number}>(`
+      SELECT TOP(1) 1 AS id FROM dbo.TM_subtasks WITH (UPDLOCK, HOLDLOCK)
+      WHERE task_id=@taskId AND owner_user_id=@ownerUserId
+        AND assignee_user_id=@ownerUserId AND deleted_at_utc IS NULL;`);
+    return result.recordset.length>0;
+  },
+
+  // Never modify TM_tasks.completion_summary: historical attribution cannot be
+  // verified after reassignment. Each new contribution gets its own immutable row.
+  async addCompletionSummaryEntry(transaction: DatabaseTransaction, ownerUserId: number,
+    taskId: number, authorUserId: number, content: string): Promise<number> {
+    const result = await transaction.request()
+      .input("ownerUserId", sql.Int, ownerUserId)
+      .input("taskId", sql.BigInt, taskId)
+      .input("authorUserId", sql.Int, authorUserId)
+      .input("content", sql.NVarChar(sql.MAX), content)
+      .query<{ id: number | string }>(`
+        INSERT dbo.TM_task_completion_summary_entries
+          (task_id, owner_user_id, author_user_id, content)
+        OUTPUT inserted.id
+        SELECT task.id, task.owner_user_id, @authorUserId, @content
+        FROM dbo.TM_tasks AS task
+        WHERE task.id=@taskId AND task.owner_user_id=@ownerUserId AND task.deleted_at_utc IS NULL;
+      `);
+    if (!result.recordset[0]) throw new AppError({ statusCode:404,
+      code:"TASK_NOT_FOUND", message:"Task not found." });
+    return Number(result.recordset[0].id);
+  },
+
+  async listCompletionSummaryEntries(ownerUserId: number, taskId: number) {
+    const pool = await getDatabasePool();
+    const result = await pool.request().input("ownerUserId", sql.Int, ownerUserId)
+      .input("taskId", sql.BigInt, taskId)
+      .query<{ id:number|string; authorUserId:number; authorName:string;
+        content:string; createdAtUtc:Date }>(`
+        SELECT entry.id, entry.author_user_id AS authorUserId,
+          COALESCE(author.USER_NAME, CONVERT(NVARCHAR(20), entry.author_user_id)) AS authorName,
+          entry.content, entry.created_at_utc AS createdAtUtc
+        FROM dbo.TM_task_completion_summary_entries AS entry
+        JOIN dbo.TM_tasks AS task ON task.id=entry.task_id
+          AND task.owner_user_id=@ownerUserId AND task.deleted_at_utc IS NULL
+        LEFT JOIN dbo.users AS author ON author.USER_ID=entry.author_user_id
+        WHERE entry.task_id=@taskId AND entry.owner_user_id=@ownerUserId
+        ORDER BY entry.created_at_utc ASC, entry.id ASC;
+      `);
+    return result.recordset.map(row => ({
+      id:Number(row.id), authorUserId:row.authorUserId, authorName:row.authorName,
+      content:row.content, createdAtUtc:row.createdAtUtc.toISOString(),
+    }));
   },
 };
 // SQL writes for automatic parent completion are centralized to preserve the
@@ -321,5 +398,6 @@ export async function findEligibleGeneralTaskUser(userId: number) {
     WHERE portal.USER_ID=@userId AND portal.IS_ACTIVE=1 AND access.is_active=1;`);
   return result.recordset[0] ?? null;
 }
+
 
 

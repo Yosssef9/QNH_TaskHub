@@ -5,10 +5,12 @@ import type { NotificationType } from "../notifications/notifications.types.js";
 export type GeneralAssignmentMailEvent = Extract<NotificationType,
   | "GENERAL_TASK_ASSIGNED" | "GENERAL_SUBTASK_ASSIGNED" | "GENERAL_ASSIGNMENT_REMOVED"
   | "GENERAL_TASK_DUE_CHANGED" | "GENERAL_SUBTASK_DUE_CHANGED"
-  | "GENERAL_TASK_COMPLETED" | "GENERAL_TASK_REOPENED">;
+  | "GENERAL_TASK_COMPLETED" | "GENERAL_TASK_REOPENED"
+  | "TASK_WORK_NOTE_ADDED" | "TASK_ATTACHMENT_ADDED">;
 
 export function isGeneralAssignmentMailEvent(type: NotificationType): type is GeneralAssignmentMailEvent {
-  return type === "GENERAL_TASK_ASSIGNED" || type === "GENERAL_SUBTASK_ASSIGNED" ||
+  return type === "TASK_WORK_NOTE_ADDED" || type === "TASK_ATTACHMENT_ADDED" ||
+    type === "GENERAL_TASK_ASSIGNED" || type === "GENERAL_SUBTASK_ASSIGNED" ||
     type === "GENERAL_ASSIGNMENT_REMOVED" || type === "GENERAL_TASK_DUE_CHANGED" ||
     type === "GENERAL_SUBTASK_DUE_CHANGED" || type === "GENERAL_TASK_COMPLETED" ||
     type === "GENERAL_TASK_REOPENED";
@@ -96,18 +98,49 @@ async function currentState(recipientId: number, taskId: number, subtaskId: numb
   return result.recordset[0] ?? null;
 }
 
-/**
- * Builds an authorized, minimal payload from *current* SQL Server state.
- * Called at queue time and again immediately before SMTP; a revoked assignee
- * never receives task or subtask contents from a stale queued job.
- */
+/** Always re-check owner status at queue AND delivery time. No private
+ * note text, evidence contents or filename is included in the email payload. */
+async function ownerActivityState(ownerId: number, taskId: number, subtaskId: number | null) {
+  const pool = await getDatabasePool();
+  const result = await pool.request()
+    .input("owner", sql.Int, ownerId).input("taskId", sql.BigInt, taskId)
+    .input("subtaskId", sql.BigInt, subtaskId)
+    .query<{ title: string; listId: number | string; subtaskTitle: string | null }>(`
+      SELECT task.title, task.list_id AS listId, child.title AS subtaskTitle
+      FROM dbo.TM_tasks AS task
+      JOIN dbo.TM_lists AS list ON list.id=task.list_id AND list.archived_at_utc IS NULL
+      JOIN dbo.TM_user_access AS access ON access.portal_user_id=@owner AND access.is_active=1
+      JOIN dbo.users AS portal ON portal.USER_ID=@owner AND portal.IS_ACTIVE=1
+      LEFT JOIN dbo.TM_subtasks AS child ON child.id=@subtaskId AND child.task_id=task.id
+        AND child.deleted_at_utc IS NULL
+      WHERE task.id=@taskId AND task.owner_user_id=@owner
+        AND task.deleted_at_utc IS NULL AND task.status<>'CANCELLED'
+        AND task.kpi_instance_id IS NULL
+        AND (@subtaskId IS NULL OR child.id IS NOT NULL);`);
+  return result.recordset[0] ?? null;
+}
+
+/** Build a minimal payload from current SQL Server state; rechecked at queue
+ * time and SMTP delivery. Revoked access never exposes task details. */
 export async function buildGeneralAssignmentEmailPayload(
   recipientUserId: number,
   event: GeneralAssignmentMailEvent,
-  input: Pick<NotificationEmailCandidate, "taskId" | "subtaskId" | "eventDate" | "createdAtUtc">,
+  input: Pick<NotificationEmailCandidate, "taskId" | "subtaskId" | "eventDate" | "createdAtUtc">
+    & { contextTitle?: string | null },
 ): Promise<Record<string, unknown> | null> {
   const taskId = safePositiveId(input.taskId);
   if (taskId === null) return null;
+  if (event === "TASK_WORK_NOTE_ADDED" || event === "TASK_ATTACHMENT_ADDED") {
+    const subtaskId = input.subtaskId === null ? null : safePositiveId(input.subtaskId);
+    if (input.subtaskId != null && subtaskId === null) return null;
+    const ownerTask = await ownerActivityState(recipientUserId, taskId, subtaskId);
+    if (!ownerTask) return null;
+    return { event, taskId, subtaskId, taskTitle: ownerTask.title,
+      ...(subtaskId !== null ? { subtaskTitle: ownerTask.subtaskTitle } : {}),
+      ...(typeof input.contextTitle === "string" && input.contextTitle.length <= 500
+        ? { activityActorName: input.contextTitle } : {}),
+      href: `/lists/${ownerTask.listId}?taskId=${taskId}` };
+  }
   const isChild = event === "GENERAL_SUBTASK_ASSIGNED" ||
     event === "GENERAL_SUBTASK_DUE_CHANGED" ||
     (event === "GENERAL_ASSIGNMENT_REMOVED" && input.subtaskId !== null);
@@ -200,9 +233,11 @@ export async function refreshGeneralAssignmentEmailPayload(
     subtaskId: safePositiveId(payload.subtaskId),
     eventDate: eventDay,
     createdAtUtc: eventTime ?? new Date(0),
+    contextTitle: typeof payload.activityActorName === "string" ? payload.activityActorName : null,
   });
   // Due-date updates can explicitly clear a due date. The null is intentional.
   return result;
 }
+
 
 

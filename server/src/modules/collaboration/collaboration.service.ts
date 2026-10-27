@@ -8,7 +8,7 @@ import { tasksRepository } from '../tasks/tasks.repository.js';
 import { storeAttachment, readAttachment, removeStoredAttachment } from '../task-details/attachment-storage.js';
 import { taskDetailsRepository } from '../task-details/task-details.repository.js';
 import { generalTaskAssignmentsRepository } from '../general-task-assignments/general-task-assignments.repository.js';
-import { notifyGeneralTask,notifyRemovedAssignment } from '../general-task-assignments/general-task-assignments.email-events.js';
+import { notifyGeneralTask,notifyRemovedAssignment,notifyTaskOwnerActivity } from '../general-task-assignments/general-task-assignments.email-events.js';
 import { collaborationRepository as repo, type CollaborativeTaskRow,
   type CollaborativeAssignmentRow } from './collaboration.repository.js';
 import { canDeleteCollaborativeEvidence, normalizeCollaborators, reconcileInheritedTeam } from './collaboration.policy.js';
@@ -185,10 +185,14 @@ export const collaborationService={
       const row=await repo.assignment(assignmentId,transaction);
       if (!row || row.assigneeUserId!==actorId) throw notFound();
       if (!row.isActive) throw inactive();
-      await lockTask(actorId,row.taskId,transaction);
+      const {context}=await lockTask(actorId,row.taskId,transaction);
       const fresh=await repo.assignment(assignmentId,transaction);
       if (!fresh?.isActive || fresh.assigneeUserId!==actorId) throw notFound();
       await repo.addNote(assignmentId,actorId,note,transaction);
+      if (note.trim()) await notifyTaskOwnerActivity(transaction,context.ownerUserId,actorId,{
+        type:'TASK_WORK_NOTE_ADDED',taskId:row.taskId,subtaskId:row.subtaskId,
+        listId:context.listId,taskTitle:context.title,
+      });
       await recalculate(row.taskId,actorId,transaction);
     });
     return {assignmentId};
@@ -228,11 +232,16 @@ export const collaborationService={
       const id=await withTransaction(async transaction=>{
         const current=await repo.assignment(assignmentId,transaction);
         if (!current || !current.isActive || current.assigneeUserId!==actorId) throw notFound();
-        await lockTask(actorId,current.taskId,transaction);
+        const {context}=await lockTask(actorId,current.taskId,transaction);
         const fresh=await repo.assignment(assignmentId,transaction);
         if (!fresh?.isActive || fresh.assigneeUserId!==actorId) throw notFound();
-        return repo.attachFile(assignmentId,actorId,{name,key,mime:file.mimetype||'application/octet-stream',
+        const fileId=await repo.attachFile(assignmentId,actorId,{name,key,mime:file.mimetype||'application/octet-stream',
           extension,size:file.size},transaction);
+        await notifyTaskOwnerActivity(transaction,context.ownerUserId,actorId,{
+          type:'TASK_ATTACHMENT_ADDED',taskId:current.taskId,subtaskId:current.subtaskId,
+          listId:context.listId,taskTitle:context.title,
+        });
+        return fileId;
       });
       return {id};
     }catch(error){await removeStoredAttachment(key);throw error;}
@@ -269,4 +278,5 @@ export const collaborationService={
     return {name:recoverAttachmentFileName(file.name),mime:file.mime,buffer:await readAttachment(file.key)};
   },
 };
+
 

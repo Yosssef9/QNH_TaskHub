@@ -40,15 +40,16 @@ export async function assignSubtask(input: {subtaskId: number; assigneeUserId: n
   await apiClient.put(`/general-assignments/subtask/${input.subtaskId}/assignee`, { assigneeUserId: input.assigneeUserId })
 }
 export async function saveWorkNotes(input: {subtaskId: number; workNotes: string | null}) {
-  await apiClient.patch(`/general-assignments/subtask/${input.subtaskId}/work-notes`, {workNotes: input.workNotes})
+  await apiClient.post(`/general-assignments/subtask/${input.subtaskId}/work-notes`, {workNotes: input.workNotes})
 }
 export async function saveCompletionSummary(input: {taskId: number; completionSummary: string | null}) {
-  await apiClient.patch(`/general-assignments/task/${input.taskId}/completion-summary`, {completionSummary:input.completionSummary})
+  await apiClient.post(`/general-assignments/task/${input.taskId}/completion-summary`, {completionSummary:input.completionSummary})
 }
 
 export async function getEligibleTaskUser(userId: number) {
   const result = await apiClient.get<ApiSuccessResponse<EligibleTaskUser>>(`/general-assignments/eligible-users/${userId}`)
   return result.data.data
 }
+
 
 

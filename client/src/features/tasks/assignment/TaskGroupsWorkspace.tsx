@@ -22,6 +22,7 @@ import { canShowOwnedTaskDiscussionShortcut } from '../discussions/discussion-ca
 import { useCurrentUser } from '@/features/auth/hooks/use-current-user'
 import { DiscussionShortcut } from '../discussions/DiscussionShortcut'
 import { useChangeTaskStatus } from '../hooks/use-tasks'
+import { taskStatusErrorKey, taskStatusToastId } from '../status/task-status-error'
 import { TaskPriorityIndicator } from '../components/TaskSelectIndicators'
 import type { PersonalTask, TaskListFilters } from '../types/task.types'
 import { useTaskGroupActions, useTaskGroups } from './use-task-groups'
@@ -235,7 +236,7 @@ function GroupTasks({ listId, groupId, filters, onOpenTask, onOpenDiscussion, on
               onMove={() => onMoveTask(task)} onToggleStatus={() => {
                 statusMutation.mutate({ taskId: task.id, status: task.status === 'DONE' ? 'TODO' : 'DONE' }, {
                   onSuccess: () => toast.success(t('tasks.statusUpdated')),
-                  onError: () => toast.error(t('tasks.errors.status')),
+                  onError: error => toast.error(t(taskStatusErrorKey(error)), { id: taskStatusToastId(task.id) }),
                 })
               }} />
           </div>
@@ -569,3 +570,4 @@ export function TaskGroupsWorkspace({ listId, filters, onOpenTask, onOpenDiscuss
       }} />
   </section>
 }
+

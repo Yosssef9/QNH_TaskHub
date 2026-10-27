@@ -48,3 +48,22 @@ Tests bundled: `server/tests/unit/general-task-email.test.ts`; these tests are m
 ## Rollback
 
 Restore project files with the user's patch-tool backup. Do not casually drop column/data or purge email outbox records as part of a source-only rollback. Pause the worker if source/schema versions diverge, and obtain a separate reviewed database rollback plan if needed.
+
+
+## Assignee work activity emails (migration 065)
+
+The task owner receives in-app/email notifications when another authorized assignee
+adds/updates nonempty subtask Work Notes, adds a collaborative assignment note,
+or uploads an attachment via the normal or collaborative task evidence endpoints.
+The `TASK_WORK_NOTE_ADDED` and `TASK_ATTACHMENT_ADDED` preferences default to
+**enabled** for new and existing users. Explicit user opt-outs remain respected.
+No mail is triggered by the task owner’s own action. Notification context stores
+only the actor display name, and notification types are localized in the UI.
+
+The notifications use the normal preference-aware outbox. The email payload is
+validated against the *current task owner/access/list/subtask* both before queueing
+and again before sending. The message gives a link to the owner’s task, but
+never includes private note content, filenames or file bytes. Discussion chat
+messages and completion summaries continue to use their own separate workflows.
+Run `065_add_task_work_activity_emails.sql` after earlier migrations before
+deploying the updated server.

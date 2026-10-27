@@ -45,6 +45,15 @@ export interface ActivityRecord {
   createdAtUtc: Date;
 }
 
+export interface SubtaskWorkNoteEntry {
+  id: number
+  subtaskId: number
+  authorUserId: number
+  authorName: string
+  content: string
+  createdAtUtc: string
+}
+
 export interface Subtask {
   id: number;
   taskId: number;
@@ -52,7 +61,8 @@ export interface Subtask {
   description: string | null;
   priority: "LOW" | "MEDIUM" | "HIGH";
   assigneeUserId?: number | null;
-  workNotes?: string | null;
+  workNotes?: string | null
+  workNoteEntries?: SubtaskWorkNoteEntry[];
   isCompleted: boolean;
   dueDate: string | null;
   displayOrder: number;
@@ -85,7 +95,16 @@ export interface TaskActivity {
   createdAtUtc: string;
 }
 
+export interface TaskCompletionSummaryEntry {
+  id: number;
+  authorUserId: number;
+  authorName: string;
+  content: string;
+  createdAtUtc: string;
+}
+
 export interface TaskDetails {
+  completionSummaryEntries: TaskCompletionSummaryEntry[];
   createdBy?: {userId:number;userName:string;userCode:string|null}|null;
   collaborationActive?: boolean;
   sharedPermission?: "VIEW" | "EDIT";
@@ -98,6 +117,7 @@ export interface TaskDetails {
   activity: TaskActivity[];
   progress: { completed: number; total: number; percentage: number };
 }
+
 
 
 

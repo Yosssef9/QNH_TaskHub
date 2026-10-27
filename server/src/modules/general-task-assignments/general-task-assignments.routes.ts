@@ -31,13 +31,25 @@ generalTaskAssignmentsRouter.put("/subtask/:subtaskId/assignee",
     const {assigneeUserId}=getValidatedRequestPart<{assigneeUserId:number|null}>(req,"body");
     res.json({success:true,data:await service.assignSubtask(actor(req),subtaskId,assigneeUserId)});
   });
+// Fail closed for stale clients trying to edit the historical shared text blob.
 generalTaskAssignmentsRouter.patch("/subtask/:subtaskId/work-notes",
+  validateRequest({params:generalSubtaskIdSchema,body:workNotesBodySchema}),async(_req,_res)=>{
+    throw new AppError({statusCode:409,code:"WORK_NOTES_UPGRADE_REQUIRED",
+      message:"Work Notes are now separate, author-attributed entries. Refresh TaskHub to add a new note."});
+  });
+generalTaskAssignmentsRouter.post("/subtask/:subtaskId/work-notes",
   validateRequest({params:generalSubtaskIdSchema,body:workNotesBodySchema}),async(req,res)=>{
     const {subtaskId}=getValidatedRequestPart<{subtaskId:number}>(req,"params");
     const {workNotes}=getValidatedRequestPart<{workNotes:string|null}>(req,"body");
     res.json({success:true,data:await service.saveWorkNotes(actor(req),subtaskId,workNotes)});
   });
+// Old clients must not silently replace a previous employee's shared summary.
 generalTaskAssignmentsRouter.patch("/task/:taskId/completion-summary",
+  validateRequest({params:generalTaskIdSchema,body:completionSummaryBodySchema}),async(_req,_res)=>{
+    throw new AppError({statusCode:409,code:"COMPLETION_SUMMARY_UPGRADE_REQUIRED",
+      message:"Completion Summaries are now author-attributed entries. Refresh TaskHub to add a new summary."});
+  });
+generalTaskAssignmentsRouter.post("/task/:taskId/completion-summary",
   validateRequest({params:generalTaskIdSchema,body:completionSummaryBodySchema}),async(req,res)=>{
     const {taskId}=getValidatedRequestPart<{taskId:number}>(req,"params");
     const {completionSummary}=getValidatedRequestPart<{completionSummary:string|null}>(req,"body");
@@ -80,5 +92,6 @@ generalTaskAssignmentsRouter.get('/eligible-users/:userId',
     if(!user) throw new AppError({statusCode:404,code:'TASK_ASSIGNEE_INVALID',message:'Assignee not found.'});
     res.json({success:true,data:user});
   });
+
 
 

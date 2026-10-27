@@ -81,7 +81,8 @@ const activeTaskContainer = `(
 export interface GeneralTaskNotificationInput {
   type: "TASK_SHARED" | "TASK_SHARE_UPDATED" | "TASK_SHARE_REVOKED" | "GENERAL_TASK_ASSIGNED" | "GENERAL_SUBTASK_ASSIGNED" | "GENERAL_TASK_COMPLETED"
     | "GENERAL_ASSIGNMENT_REMOVED" | "GENERAL_TASK_DUE_CHANGED"
-    | "GENERAL_SUBTASK_DUE_CHANGED" | "GENERAL_TASK_REOPENED" | "GENERAL_SUBTASK_COMPLETED";
+    | "GENERAL_SUBTASK_DUE_CHANGED" | "GENERAL_TASK_REOPENED" | "GENERAL_SUBTASK_COMPLETED"
+    | "TASK_WORK_NOTE_ADDED" | "TASK_ATTACHMENT_ADDED";
   dedupeKey: string;
   taskId: number;
   listId: number | null;
@@ -740,3 +741,4 @@ export const notificationsRepository = {
     return result.rowsAffected[0] ?? 0;
   },
 };
+

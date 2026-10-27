@@ -12,6 +12,7 @@ const schema = z.object({
   notice: z.string().optional(),
   assignedByName: z.string().optional(),
   senderName: z.string().optional(),
+  activityActorName: z.string().max(500).optional(),
   messagePreview: z.string().optional(),
 });
 
@@ -45,6 +46,14 @@ const WORDING: Record<string, { en: [string, string]; ar: [string, string] }> = 
     en: ["Main task completed", "The main task has been completed."],
     ar: ["اكتمال المهمة الرئيسية", "تم إنجاز المهمة الرئيسية."],
   },
+  TASK_WORK_NOTE_ADDED: {
+    en: ["Work note added", "An assignee added or updated a work note on your task."],
+    ar: ["إضافة ملاحظة عمل", "أضاف أحد المكلفين ملاحظة عمل أو عدّلها في مهمتك."],
+  },
+  TASK_ATTACHMENT_ADDED: {
+    en: ["Task attachment added", "A teammate uploaded an attachment to your task."],
+    ar: ["إضافة مرفق للمهمة", "قام أحد المشاركين برفع مرفق إلى مهمتك."],
+  },
   GENERAL_TASK_REOPENED: {
     en: ["Main task reopened", "The main task has been reopened and requires attention."],
     ar: ["إعادة فتح المهمة", "تمت إعادة فتح المهمة الرئيسية وهي تحتاج إلى المتابعة."],
@@ -65,6 +74,7 @@ export function renderGeneralTaskEmail(
   const removed = templateKey === "GENERAL_ASSIGNMENT_REMOVED" || templateKey === "TASK_SHARE_REVOKED";
   const title = removed ? heading : data.taskTitle ?? heading;
   const rows = removed ? [] : [
+    ...(data.activityActorName ? [{ label: ar ? "بواسطة" : "Updated by", value: data.activityActorName }] : []),
     ...(data.assignedByName ? [{ label: ar ? 'أسندها' : 'Assigned by', value: data.assignedByName }] : []),
     ...(templateKey==='TASK_DISCUSSION_MENTION'&&data.senderName ? [{label:ar?'أشار إليك':'Mentioned by',value:data.senderName}]:[]),
     ...(templateKey==='TASK_DISCUSSION_MENTION'&&data.messagePreview ? [{label:ar?'الرسالة':'Message',value:data.messagePreview}]:[]),
@@ -83,6 +93,7 @@ export function renderGeneralTaskEmail(
   });
   const subject = removed ? heading : `${heading} — ${title}`;
   const text = `QNH TaskHub\n\n${intro}\n${title}` +
+    (data.activityActorName && !removed ? `\n${data.activityActorName}` : "") +
     (data.assignedByName && !removed ? `
 ${ar ? 'أسندها' : 'Assigned by'}: ${data.assignedByName}` : '') +
     (templateKey==='TASK_DISCUSSION_MENTION'&&data.senderName ? `
@@ -94,6 +105,7 @@ ${ar?'الرسالة':'Message'}: ${data.messagePreview}`:'') +
     (href ? `\n\n${href}` : "");
   return { subject, preheader: intro, html, text };
 }
+
 
 
 

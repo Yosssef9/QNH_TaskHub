@@ -12,11 +12,13 @@ export type DiscussionMentionItem={messageId:number;taskId:number;subtaskId:numb
 export type DiscussionMentionsPage={mentions:DiscussionMentionItem[];nextCursor:number|null}
 export type DiscussionParticipant={userId:number;userCode:string;userName:string;role:'owner'|'participant';canView:boolean;canSend:boolean}
 export type DiscussionFile={id:string;name:string;mimeType:string;sizeBytes:number}
+export type DiscussionReadReceipt={userId:number;userName:string;read:boolean}
 export type DiscussionMessage={
   id:number;taskId:number;subtaskId:number|null;authorUserId:number;authorName:string;
   body:string|null;replyToMessageId:number|null;createdAtUtc:string;
   editedAtUtc:string|null;deletedAtUtc:string|null;files:DiscussionFile[];
   reactions:{emoji:string;count:number;reacted:boolean;users:{userId:number;userName:string}[]}[];readByCount:number;recipientCount:number;
+  readReceipts?:DiscussionReadReceipt[];
   mentions:{userId:number;userCode:string;userName:string}[];
 }
 function scopeParams(subtaskId:number|null){return subtaskId===null?{}:{subtaskId}}
@@ -73,5 +75,6 @@ export async function watchDiscussion(taskId:number,subtaskId:number|null,onEven
     }
   }finally{reader.releaseLock()}
 }
+
 
 

@@ -57,6 +57,7 @@ import {
 } from '@/features/tasks/components/TaskSelectIndicators'
 import { TaskStatusIndicator } from '@/features/tasks/components/TaskStatusIndicator'
 import { useChangeTaskStatus } from '@/features/tasks/hooks/use-tasks'
+import { taskStatusErrorKey, taskStatusToastId } from '@/features/tasks/status/task-status-error'
 import {
   TASK_DUE_FILTERS,
   TASK_PRIORITIES,
@@ -541,7 +542,7 @@ export function MeetingFollowUpPanel({
           toast.success(t('tasks.statusUpdated'))
           void actionItems.refetch()
         },
-        onError: () => toast.error(t('tasks.errors.status')),
+        onError: error => toast.error(t(taskStatusErrorKey(error)), { id: taskStatusToastId(item.taskId) }),
       },
     )
   }
@@ -1247,6 +1248,7 @@ export function MeetingFollowUpPanel({
     </div>
   )
 }
+
 
 
 

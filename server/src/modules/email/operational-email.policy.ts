@@ -46,6 +46,8 @@ export function notificationTypeForTemplate(
     case "GENERAL_TASK_DUE_CHANGED":
     case "GENERAL_SUBTASK_DUE_CHANGED":
     case "GENERAL_TASK_COMPLETED":
+    case "TASK_WORK_NOTE_ADDED":
+    case "TASK_ATTACHMENT_ADDED":
     case "GENERAL_TASK_REOPENED":
       return templateKey;
     // Reports are email-only jobs, handled by the report processor, not notification sync.
@@ -63,6 +65,7 @@ export function isContractNotificationType(
 ): type is "CONTRACT_EXPIRATION_REMINDER" | "CONTRACT_NOTICE_DEADLINE_REMINDER" {
   return type === "CONTRACT_EXPIRATION_REMINDER" || type === "CONTRACT_NOTICE_DEADLINE_REMINDER";
 }
+
 
 
 

@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { toApiClientError } from '@/lib/api-error'
 
 import { TaskAssigneeMultiPicker } from '../assignment/TaskAssigneeMultiPicker'
 import { TaskAssigneePicker } from '../assignment/TaskAssigneePicker'
@@ -27,6 +28,7 @@ interface Props {
   generalAssignmentEnabled?: boolean
   collaborationActive?: boolean
   meetingId?: number | null
+  excludedAssigneeIds?: number[]
 }
 
 export function SubtaskEditorDialog({
@@ -39,6 +41,7 @@ export function SubtaskEditorDialog({
   generalAssignmentEnabled = false,
   collaborationActive = false,
   meetingId = null,
+  excludedAssigneeIds = [],
 }: Props) {
   const { t } = useTranslation()
   // The parent mounts this dialog with a fresh key for every create/edit session.
@@ -67,7 +70,8 @@ export function SubtaskEditorDialog({
         toast.success(t(subtask ? 'tasks.details.subtaskUpdated' : 'tasks.details.subtaskCreated'))
         onOpenChange(false)
       },
-      onError: () => toast.error(t('tasks.details.errors.subtask')),
+      onError: (error: unknown) => toast.error(toApiClientError(error).code === 'SUBTASK_CREATOR_SELF_ASSIGNMENT'
+        ? t('tasks.assignment.creatorSelfBlocked') : t('tasks.details.errors.subtask')),
     }
     const fields = { title: cleanTitle, description: description.trim() || null, priority, dueDate }
     if (subtask) {
@@ -158,7 +162,7 @@ export function SubtaskEditorDialog({
           {!subtask && !collaborationActive && generalAssignmentEnabled ? (
             <div className="space-y-1.5">
               <label className="text-sm font-medium">{t('tasks.assignment.assignSubtask')}</label>
-              <TaskAssigneePicker value={assigneeUserId} onChange={setAssigneeUserId} inherit meetingId={meetingId} />
+              <TaskAssigneePicker value={assigneeUserId} onChange={setAssigneeUserId} inherit meetingId={meetingId} excludedUserIds={excludedAssigneeIds} />
             </div>
           ) : null}
         </div>
@@ -174,3 +178,4 @@ export function SubtaskEditorDialog({
     </Dialog>
   )
 }
+

@@ -46,6 +46,14 @@ beforeEach(async () => {
 afterEach(async () => { await i18n.changeLanguage('ar') })
 
 describe('TaskAssigneePicker identity details and search', () => {
+  it('does not offer a blocked creator as a subtask assignee', async () => {
+    const user = userEvent.setup()
+    render(<TaskAssigneePicker value={null} onChange={vi.fn()} excludedUserIds={[573]} />)
+    await user.click(screen.getByRole('button', { name: 'Assign to' }))
+    expect(screen.queryByRole('option', { name: /Yasser Hamza/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /Sami Mubarak/ })).toBeVisible()
+  })
+
   it('shows name, code, and email and keeps those fields after selection', async () => {
     const onChange = vi.fn()
     const user = userEvent.setup()
@@ -99,3 +107,4 @@ describe('TaskAssigneePicker identity details and search', () => {
     expect(onChange).toHaveBeenCalledWith(750)
   })
 })
+

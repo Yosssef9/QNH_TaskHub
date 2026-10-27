@@ -58,12 +58,13 @@ import {
   useUploadAttachment,
 } from '../hooks/use-tasks'
 import { TASK_STATUSES } from '../types/task.types'
-import type { Subtask, TaskAttachment, TaskStatus } from '../types/task.types'
+import type { Subtask, TaskAttachment, TaskStatus, TaskCompletionSummaryEntry } from '../types/task.types'
 import { AttachmentPreviewDialog } from './AttachmentPreviewDialog'
 import { SubtaskEditorDialog } from './SubtaskEditorDialog'
 import { TaskAttachmentList } from './TaskAttachmentList'
 import { TaskDueIndicator, TaskPriorityIndicator } from './TaskSelectIndicators'
 import { TaskStatusIndicator } from './TaskStatusIndicator'
+import { taskStatusErrorKey, taskStatusToastId } from '../status/task-status-error'
 import { TaskTags } from '../tags/TaskTags'
 import { TagPicker } from '../tags/TagPicker'
 import { setTaskTags } from '../tags/tags.api'
@@ -116,23 +117,88 @@ function getCurrentDateOnlyInAppTimeZone(): string {
   return `${values.year}-${values.month}-${values.day}`
 }
 
-function EditableWorkText({ initial, label, canEdit, pending, onSave, maxLength }: {
-  initial: string | null; label: string; canEdit: boolean; pending: boolean;
-  onSave: (text: string | null) => void; maxLength: number
+/** Completion Summary uses the same append-only authorship rule as subtask Work Notes.
+ * Legacy text stays visible but cannot be attributed safely after reassignment. */
+function CompletionSummaryHistory({ legacy, entries, canAdd, pending, onAdd }: {
+  legacy: string | null
+  entries: TaskCompletionSummaryEntry[]
+  canAdd: boolean
+  pending: boolean
+  onAdd: (text: string, onSuccess: () => void) => void
 }) {
-  const { t } = useTranslation()
-  const [value, setValue] = useState(initial ?? '')
-  useEffect(() => setValue(initial ?? ''), [initial])
-  if (!canEdit && !initial) return null
-  const dirty = value.trim() !== (initial ?? '').trim()
-  return <div className="space-y-2">
-    <label className="text-muted-foreground block text-xs font-semibold">{label}</label>
-    {canEdit ? <>
-      <Textarea rows={2} maxLength={maxLength} value={value} disabled={pending}
-        onChange={event => setValue(event.target.value)} aria-label={label} />
-      {dirty ? <div className="flex justify-end"><Button type="button" size="sm" disabled={pending}
-        onClick={() => onSave(value.trim() || null)}>{t('common.save')}</Button></div> : null}
-    </> : <p className="whitespace-pre-wrap break-words text-sm">{initial}</p>}
+  const { t, i18n } = useTranslation()
+  const [draft, setDraft] = useState('')
+  if (!legacy && !entries.length && !canAdd) return null
+  return <div className="space-y-3">
+    {legacy ? <div className="bg-muted/40 rounded-lg border p-3">
+      <p className="text-muted-foreground mb-1 text-xs">{t('tasks.assignment.legacySummary')}</p>
+      <p className="whitespace-pre-wrap break-words text-sm">{legacy}</p>
+    </div> : null}
+    {entries.map(entry => <div key={entry.id} className="rounded-lg border p-3">
+      <div className="text-muted-foreground mb-1 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <span className="text-foreground font-semibold">{entry.authorName}</span>
+        <time dateTime={entry.createdAtUtc}>{new Date(entry.createdAtUtc).toLocaleString(i18n.language)}</time>
+      </div>
+      <p className="whitespace-pre-wrap break-words text-sm">{entry.content}</p>
+    </div>)}
+    {canAdd ? <div className="space-y-2">
+      <Textarea rows={3} value={draft} maxLength={10000} disabled={pending}
+        placeholder={t('tasks.assignment.newSummaryPlaceholder')}
+        aria-label={t('tasks.assignment.newSummaryPlaceholder')}
+        onChange={event => setDraft(event.target.value)} />
+      <div className="flex justify-end">
+        <Button type="button" size="sm" disabled={pending || !draft.trim()}
+          onClick={() => {
+            const content = draft.trim()
+            if (!content) return
+            onAdd(content, () => setDraft(''))
+          }}>{t('tasks.assignment.addSummary')}</Button>
+      </div>
+      <p className="text-muted-foreground text-xs">{t('tasks.assignment.summaryImmutableHint')}</p>
+    </div> : null}
+  </div>
+}
+
+/** Work Notes are immutable individual entries. Historical shared text is archived
+ * without an author label because reassignment can invalidate attribution. */
+function SubtaskWorkNotes({ item, canAdd, pending, onAdd }: {
+  item: Subtask
+  canAdd: boolean
+  pending: boolean
+  onAdd: (value: string, onSuccess: () => void) => void
+}) {
+  const { t, i18n } = useTranslation()
+  const [draft, setDraft] = useState('')
+  const entries = item.workNoteEntries ?? []
+  if (!item.workNotes && !entries.length && !canAdd) return null
+  return <div className="border-border/80 space-y-3 border-t px-4 py-3">
+    <p className="text-muted-foreground text-xs font-semibold">{t('tasks.assignment.workNotes')}</p>
+    {item.workNotes ? <div className="bg-muted/40 rounded-lg border p-3">
+      <p className="text-muted-foreground mb-1 text-xs">{t('tasks.assignment.legacyNote')}</p>
+      <p className="whitespace-pre-wrap break-words text-sm">{item.workNotes}</p>
+    </div> : null}
+    {entries.map(entry => <div key={entry.id} className="rounded-lg border p-3">
+      <div className="text-muted-foreground mb-1 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <span className="text-foreground font-semibold">{entry.authorName}</span>
+        <time dateTime={entry.createdAtUtc}>{new Date(entry.createdAtUtc).toLocaleString(i18n.language)}</time>
+      </div>
+      <p className="whitespace-pre-wrap break-words text-sm">{entry.content}</p>
+    </div>)}
+    {canAdd ? <div className="space-y-2">
+      <Textarea rows={2} value={draft} maxLength={4000} disabled={pending}
+        placeholder={t('tasks.assignment.newNotePlaceholder')}
+        aria-label={t('tasks.assignment.newNotePlaceholder')}
+        onChange={event => setDraft(event.target.value)} />
+      <div className="flex justify-end">
+        <Button type="button" size="sm" disabled={pending || !draft.trim()}
+          onClick={() => {
+            const text = draft.trim()
+            if (!text) return
+            onAdd(text, () => setDraft(''))
+          }}>{t('tasks.assignment.addNote')}</Button>
+      </div>
+      <p className="text-muted-foreground text-xs">{t('tasks.assignment.noteImmutableHint')}</p>
+    </div> : null}
   </div>
 }
 
@@ -145,6 +211,7 @@ function SortableSubtaskRow({
   canEditMetadata,
   canAssign,
   meetingId,
+  excludedAssigneeIds,
   assigneePending,
   notesPending,
   onAssign,
@@ -174,10 +241,11 @@ function SortableSubtaskRow({
   canEditMetadata: boolean
   canAssign: boolean
   meetingId: number | null
+  excludedAssigneeIds: number[]
   assigneePending: boolean
   notesPending: boolean
   onAssign: (userId: number | null) => void
-  onSaveNotes: (value: string | null) => void
+  onSaveNotes: (value: string, onSuccess: () => void) => void
   canUpload: boolean
   canDeleteAttachment: (attachment: TaskAttachment) => boolean
   index: number
@@ -350,12 +418,11 @@ function SortableSubtaskRow({
         {canAssign ? <div className="border-border/80 bg-muted/25 border-t px-4 py-3 space-y-1.5">
           <label className="text-muted-foreground text-xs font-semibold">{t('tasks.assignment.assignSubtask')}</label>
           <TaskAssigneePicker value={item.assigneeUserId ?? null} onChange={onAssign}
-            inherit disabled={assigneePending} meetingId={meetingId} />
+            inherit disabled={assigneePending} meetingId={meetingId}
+            excludedUserIds={excludedAssigneeIds} />
         </div> : null}
-        {(item.workNotes || canEditNotes) ? <div className="border-border/80 border-t px-4 py-3">
-          <EditableWorkText initial={item.workNotes ?? null} label={t('tasks.assignment.workNotes')}
-            canEdit={canEditNotes} pending={notesPending} onSave={onSaveNotes} maxLength={4000}/>
-        </div> : null}
+        <SubtaskWorkNotes key={item.id} item={item} canAdd={canEditNotes}
+          pending={notesPending} onAdd={onSaveNotes} />
         {attachments.length > 0 ? (
           <div className="border-border/80 bg-muted/25 border-t px-4 py-3 sm:ps-[6.75rem]">
             <div className="mb-2 flex items-center gap-2 text-xs font-semibold">
@@ -527,11 +594,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
     }
     statusMutation.mutate({taskId, status:next}, {
       onSuccess: () => toast.success(t('tasks.statusUpdated')),
-      onError: error => {
-        const code = toApiClientError(error).code
-        toast.error(code === 'TASK_SUBTASKS_INCOMPLETE'
-          ? t('tasks.assignment.incompleteGeneric') : t('tasks.errors.status'))
-      },
+      onError: error => toast.error(t(taskStatusErrorKey(error)), { id: taskStatusToastId(taskId) }),
     })
   }
 
@@ -766,14 +829,15 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                   {legacyTab==='discussion'&&query.data.task.kpiInstanceId===null?<TaskDiscussions taskId={query.data.task.id} actorId={actorId} initialSubtaskId={discussionSubtaskId??focusSubtaskId} />:
                   <div className="grid gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(19rem,0.75fr)]">
                   <main className="min-w-0 space-y-5">
-                    {!collaborationActive && (canEditSummary || query.data.task.completionSummary) ? <Card>
+                    {!collaborationActive && (canEditSummary || query.data.task.completionSummary || query.data.completionSummaryEntries.length > 0) ? <Card>
                       <CardHeader className="pb-3"><CardTitle>{t('tasks.assignment.completionSummary')}</CardTitle></CardHeader>
                       <CardContent>
-                        <EditableWorkText key={`summary-${query.data.task.id}`} initial={query.data.task.completionSummary ?? null}
-                          label={t('tasks.assignment.completionSummary')} canEdit={canEditSummary}
-                          pending={saveSummary.isPending} maxLength={10000}
-                          onSave={value => saveSummary.mutate({taskId: query.data.task.id, completionSummary:value}, {
-                            onSuccess: () => toast.success(t('tasks.assignment.notesSaved')),
+                        <CompletionSummaryHistory key={`summary-${query.data.task.id}`}
+                          legacy={query.data.task.completionSummary ?? null}
+                          entries={query.data.completionSummaryEntries} canAdd={canEditSummary}
+                          pending={saveSummary.isPending}
+                          onAdd={(value, onSuccess) => saveSummary.mutate({taskId: query.data.task.id, completionSummary:value}, {
+                            onSuccess: () => { onSuccess(); toast.success(t('tasks.assignment.notesSaved')) },
                             onError: () => toast.error(t('tasks.assignment.saveFailed')),
                           })} />
                       </CardContent>
@@ -880,14 +944,17 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                                     canEditMetadata={canManageSubtasks}
                                     canAssign={supportsSubtaskAssignment && isOwner && canManageSubtasks}
                                     meetingId={query.data.actionItem?.meetingId ?? null}
+                                    excludedAssigneeIds={!query.data.actionItem && mainAssigneeId !== null &&
+                                      mainAssigneeId !== ownerId && ownerId !== null ? [ownerId] : []}
                                     assigneePending={assignChild.isPending}
                                     notesPending={saveNotes.isPending}
                                     onAssign={value => assignChild.mutate({subtaskId:item.id,assigneeUserId:value}, {
                                       onSuccess: () => toast.success(t('tasks.assignment.assignmentSaved')),
-                                      onError: () => toast.error(t('tasks.assignment.saveFailed')),
+                                      onError: error => toast.error(toApiClientError(error).code === 'SUBTASK_CREATOR_SELF_ASSIGNMENT'
+                                        ? t('tasks.assignment.creatorSelfBlocked') : t('tasks.assignment.saveFailed')),
                                     })}
-                                    onSaveNotes={value => saveNotes.mutate({subtaskId:item.id,workNotes:value}, {
-                                      onSuccess: () => toast.success(t('tasks.assignment.notesSaved')),
+                                    onSaveNotes={(value, onSuccess) => saveNotes.mutate({subtaskId:item.id,workNotes:value}, {
+                                      onSuccess: () => {onSuccess();toast.success(t('tasks.assignment.notesSaved'))},
                                       onError: () => toast.error(t('tasks.assignment.saveFailed')),
                                     })}
                                     canUpload={canUploadAttachments && !collaborationActive}
@@ -1010,7 +1077,8 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                           isOwner && !readOnly ? <TaskAssigneePicker value={mainAssigneeId} disabled={assignMain.isPending}
                             onChange={value => assignMain.mutate({taskId:query.data.task.id, assigneeUserId:value}, {
                               onSuccess: () => toast.success(t('tasks.assignment.assignmentSaved')),
-                              onError: () => toast.error(t('tasks.assignment.saveFailed')),
+                              onError: error => toast.error(toApiClientError(error).code === 'SUBTASK_OWNER_OVERRIDE_EXISTS'
+                                ? t('tasks.assignment.clearCreatorSubtasksFirst') : t('tasks.assignment.saveFailed')),
                             })} /> : <span>{mainAssigneeId === null ? t('tasks.assignment.unassigned') :
                               (mainAssigneeLookup.data?.userName ?? t('tasks.assignment.userCode', {code:mainAssigneeId}))}</span>
                         } /> : null}
@@ -1108,7 +1176,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
               if (!taskId) return
               statusMutation.mutate({taskId,status:'CANCELLED',cancellationReason:cancelReason.trim()}, {
                 onSuccess: () => { setCancelOpen(false); setCancelReason(''); toast.success(t('tasks.statusUpdated')) },
-                onError: () => toast.error(t('tasks.errors.status')),
+                onError: error => toast.error(t(taskStatusErrorKey(error)), { id: taskStatusToastId(taskId) }),
               })
             }}>{t('tasks.cancelTask')}</Button>
           </div>
@@ -1152,6 +1220,8 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
           dueDateRequired={subtaskDueDateRequired}
           generalAssignmentEnabled={supportsSubtaskAssignment}
           meetingId={query.data?.actionItem?.meetingId ?? null}
+          excludedAssigneeIds={!query.data?.actionItem && mainAssigneeId !== null &&
+            mainAssigneeId !== ownerId && ownerId !== null ? [ownerId] : []}
         />
       ) : null}
     </Dialog>
@@ -1179,6 +1249,7 @@ function InfoRow({
     </div>
   )
 }
+
 
 
 

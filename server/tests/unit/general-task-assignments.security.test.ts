@@ -38,6 +38,10 @@ function arrange() {
     {...attachmentRecord(),id:"00000000-0000-0000-0000-000000000003",taskId:TASK,subtaskId:null},
   ]);
   vi.spyOn(taskDetailsRepository, "findCreator").mockResolvedValue({userId:100,userName:"Task creator",userCode:"0100"});
+  vi.spyOn(generalTaskAssignmentsRepository, "listWorkNoteEntries").mockResolvedValue([
+    {id:20,subtaskId:VISIBLE,authorUserId:CHILD,authorName:'Child',content:'Visible work',createdAtUtc:'2026-10-27T07:00:00Z'},
+    {id:21,subtaskId:HIDDEN,authorUserId:OTHER,authorName:'Other',content:'Hidden work',createdAtUtc:'2026-10-27T07:05:00Z'},
+  ]);
   const activity=vi.spyOn(taskDetailsRepository,"listActivity").mockResolvedValue([
     {id:1,actorUserId:OTHER,actorName:"Other",activityType:"SUBTASK_UPDATED",
       eventDataJson:JSON.stringify({subtaskId:HIDDEN,title:"secret"}),createdAtUtc:new Date()},
@@ -60,6 +64,7 @@ describe("General task relationship-scoped visibility",()=>{
     assert.deepEqual(details.subtasks.map(item=>item.id),[VISIBLE]);
     assert.deepEqual(details.attachments.map(item=>item.subtaskId),[VISIBLE,null]);
     assert.deepEqual(details.activity.map(item=>item.activityType),["SUBTASK_COMPLETED","STATUS_CHANGED"]);
+    assert.deepEqual(details.subtasks[0]?.workNoteEntries?.map(note=>note.content),['Visible work']);
     assert.equal(details.capabilities.canEditDetails,false);
   });
 
@@ -113,4 +118,5 @@ describe("Automatic parent completion",()=>{
     assert.equal(counts.mock.calls.length,0);
   });
 });
+
 

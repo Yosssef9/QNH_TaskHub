@@ -92,6 +92,8 @@ function asEmailPreferenceEvent(type: NotificationType): EmailPreferenceEvent | 
     case "GENERAL_TASK_DUE_CHANGED":
     case "GENERAL_SUBTASK_DUE_CHANGED":
     case "GENERAL_TASK_COMPLETED":
+    case "TASK_WORK_NOTE_ADDED":
+    case "TASK_ATTACHMENT_ADDED":
     case "GENERAL_TASK_REOPENED":
       return type;
     default:
@@ -392,6 +394,8 @@ async function buildPayload(
     case "GENERAL_TASK_DUE_CHANGED":
     case "GENERAL_SUBTASK_DUE_CHANGED":
     case "GENERAL_TASK_COMPLETED":
+    case "TASK_WORK_NOTE_ADDED":
+    case "TASK_ATTACHMENT_ADDED":
     case "GENERAL_TASK_REOPENED":
       return buildGeneralAssignmentEmailPayload(candidate.ownerUserId, candidate.notificationType, candidate);
     default:
@@ -621,6 +625,7 @@ export const operationalEmailService = {
     return processed;
   },
 };
+
 
 
 

@@ -38,9 +38,12 @@ export const EMAIL_EVENT_DEFAULTS: Readonly<Record<EmailPreferenceEvent, boolean
   GENERAL_TASK_DUE_CHANGED: true,
   GENERAL_SUBTASK_DUE_CHANGED: true,
   GENERAL_TASK_COMPLETED: true,
+  TASK_WORK_NOTE_ADDED: true,
+  TASK_ATTACHMENT_ADDED: true,
   GENERAL_TASK_REOPENED: true,
 
 };
+
 
 
 

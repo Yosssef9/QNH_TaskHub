@@ -63,7 +63,7 @@ import {
 import type { TaskPriority, TaskStatus, TaskTypeFilter } from '@/features/tasks/types/task.types'
 import { parseDateOnly } from '@/lib/date-only'
 import { cn } from '@/lib/cn'
-import { toApiClientError } from '@/lib/api-error'
+import { taskStatusErrorKey, taskStatusToastId } from '@/features/tasks/status/task-status-error'
 
 const ALL = 'ALL'
 
@@ -261,7 +261,7 @@ export function AssignedToMePage() {
       { taskId: task.taskId, status: nextStatus },
       {
         onSuccess: () => toast.success(t('tasks.statusUpdated')),
-        onError: error => toast.error(toApiClientError(error).code === 'TASK_SUBTASKS_INCOMPLETE' ? t('tasks.assignment.incompleteGeneric') : t('tasks.errors.status')),
+        onError: error => toast.error(t(taskStatusErrorKey(error)), { id: taskStatusToastId(task.taskId) }),
       },
     )
   }
@@ -745,6 +745,7 @@ export function AssignedToMePage() {
     </div>
   )
 }
+
 
 
 

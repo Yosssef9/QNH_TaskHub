@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { AnimatePresence, motion } from 'motion/react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -19,6 +19,9 @@ import { useDialogFloatingContainer } from '@/components/ui/dialog'
 import { attachmentPreviewKind } from '@/components/shared/attachment-preview'
 import { discussionApi, watchDiscussion, type DiscussionFile, type DiscussionMessage } from './discussions.api'
 import { newActionCreationRequestId } from '@/features/meetings/action-items/creation-request-id'
+import { useClickOutside } from '@/hooks/use-click-outside'
+import { DiscussionParticipantsPopover } from './DiscussionParticipantsPopover'
+import { shouldShowDiscussionScrollButton, SCROLL_HIDE_DISTANCE } from './discussion-scroll-visibility'
 
 const REACTIONS = ['👍', '❤️', '😂', '🎉', '👏', '😮', '🙏', '✅'] as const
 const EMOJIS = [
@@ -37,12 +40,13 @@ const readTime=(iso:string,locale:string)=>new Date(iso).toLocaleTimeString(loca
 const readDay=(iso:string,locale:string)=>new Date(iso).toLocaleDateString(locale,{weekday:'short',day:'numeric',month:'short',year:'numeric'})
 const fileSize=(size:number)=>size>=1048576?`${(size/1048576).toFixed(1)} MB`:`${Math.max(1,Math.round(size/1024))} KB`
 
-export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=false,initialMessageId=null}:{taskId:number;actorId:number|null;initialSubtaskId?:number|null;inboxMode?:boolean;initialMessageId?:number|null}){
+export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=false,initialMessageId=null,initialParticipantCount}:{taskId:number;actorId:number|null;initialSubtaskId?:number|null;inboxMode?:boolean;initialMessageId?:number|null;initialParticipantCount?:number}){
   const {t,i18n}=useTranslation()
   const qc=useQueryClient()
   // Keep the full-screen view inside the active TaskHub dialog's focus/inert layer.
   const dialogContainer=useDialogFloatingContainer()
   const locale=i18n.language==='ar'?'ar-SA':'en-US'
+  const reduceMotion=useReducedMotion()
   const [selected,setSelected]=useState<number|null>(initialSubtaskId)
   const [fullScreen,setFullScreen]=useState(false)
   const [text,setText]=useState('')
@@ -66,7 +70,8 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
   const [searchOpen,setSearchOpen]=useState(false)
   const [searchText,setSearchText]=useState('')
   const [searchTerm,setSearchTerm]=useState('')
-  const [showNew,setShowNew]=useState(false)
+  const [newMessageCount,setNewMessageCount]=useState(0)
+  const [showScrollButton,setShowScrollButton]=useState(false)
   const [atBottom,setAtBottom]=useState(true)
   const [highlightId,setHighlightId]=useState<number|null>(null)
   const [highlightPhase,setHighlightPhase]=useState<'active'|'fading'|null>(null)
@@ -78,15 +83,29 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
   const fileRef=useRef<HTMLInputElement>(null)
   const composerRef=useRef<HTMLTextAreaElement>(null)
   const searchInputRef=useRef<HTMLInputElement>(null)
+  const searchAreaRef=useRef<HTMLDivElement>(null)
   const scrollRef=useRef<HTMLDivElement>(null)
   const lastSeenMessage=useRef<number|null>(null)
+  // Use separate show/hide thresholds so small scroll and layout movements cannot flicker the button.
+  const measureScroll=useCallback(()=>{
+    const el=scrollRef.current
+    if(!el)return
+    const distanceFromBottom=Math.max(0,el.scrollHeight-el.scrollTop-el.clientHeight)
+    setShowScrollButton(previous=>shouldShowDiscussionScrollButton(previous,distanceFromBottom))
+    const isAtBottom=distanceFromBottom<=SCROLL_HIDE_DISTANCE
+    setAtBottom(isAtBottom)
+    if(isAtBottom)setNewMessageCount(0)
+  },[])
   const [unreadBoundary,setUnreadBoundary]=useState<{taskId:number;scope:number|null;messageId:number}|null>(null)
   const scopes=useQuery({queryKey:['discussions',taskId,'scopes'],queryFn:()=>discussionApi.scopes(taskId),refetchInterval:30000})
   const canSee=useMemo(()=>scopes.data?.some(s=>s.subtaskId===selected)??false,[scopes.data,selected])
   const selectedScope=scopes.data?.find(s=>s.subtaskId===selected)
-  const members=useQuery({queryKey:['discussions',taskId,'members',selected],queryFn:()=>discussionApi.members(taskId,selected),enabled:canSee})
+  const members=useQuery({queryKey:['discussions',taskId,'members',selected],queryFn:()=>discussionApi.members(taskId,selected),enabled:canSee,staleTime:10000,refetchInterval:30000})
+  // Prefer the live ACL count; the inbox count avoids a misleading zero while members load.
+  const participantCount=members.data?.length??(inboxMode&&selected===initialSubtaskId?initialParticipantCount:undefined)
   const messagesKey=['discussions',taskId,'messages',selected] as const
   const msgs=useQuery({queryKey:messagesKey,queryFn:()=>discussionApi.messages(taskId,selected),enabled:canSee,refetchInterval:60000})
+  const closeSearch=useCallback(()=>{setSearchOpen(false);setSearchText('');setSearchTerm('')},[])
   const searchResults=useQuery({queryKey:['discussions',taskId,'search',selected,searchTerm],
     queryFn:()=>discussionApi.search(taskId,selected,searchTerm),enabled:canSee&&searchOpen&&searchTerm.length>=2})
   const displayed=useMemo(()=>[...older,...(msgs.data??[])]
@@ -123,7 +142,7 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
   }},[initialMessageId,canSee,msgs.isSuccess,taskId,selected])
   useEffect(()=>{const firstScope=scopes.data?.[0];if(firstScope&&!canSee)setSelected(firstScope.subtaskId)},[scopes.data,canSee])
   useEffect(()=>{setOlder([]);setSearchOpen(false);setSearchText('');setSearchTerm('');setTypingUsers([]);
-    setShowNew(false);setAtBottom(true);lastSeenMessage.current=null;
+    setNewMessageCount(0);setShowScrollButton(false);setAtBottom(true);lastSeenMessage.current=null;
     navigationToken.current+=1;setFocusTarget(null);setHighlightId(null);setHighlightPhase(null);
     setReply(null);setEditing(null);setText('');setPendingFile(null);
     setEmojiOpen(false);setMentionOpen(false);setActionMessage(null);setReactionMessage(null)},[taskId,selected])
@@ -132,15 +151,24 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
   },[selectedScope,canSee,unreadBoundary,taskId,selected])
   useEffect(()=>{const timer=window.setTimeout(()=>setSearchTerm(searchText.trim()),300);return ()=>window.clearTimeout(timer)},[searchText])
   useEffect(()=>{if(searchOpen){const frame=window.requestAnimationFrame(()=>searchInputRef.current?.focus());return()=>window.cancelAnimationFrame(frame)}},[searchOpen])
+  useClickOutside(searchAreaRef,closeSearch,searchOpen)
+  useEffect(()=>{if(!searchOpen)return
+    function onSearchEscape(event:KeyboardEvent){
+      if(event.key!=='Escape'||event.defaultPrevented)return
+      event.preventDefault();event.stopPropagation();closeSearch()
+    }
+    document.addEventListener('keydown',onSearchEscape)
+    return()=>document.removeEventListener('keydown',onSearchEscape)
+  },[searchOpen,closeSearch])
   useEffect(()=>{if(!fullScreen)return;const onKey=(event:KeyboardEvent)=>{
     if(event.key!=='Escape')return
     // Escape dismisses the active picker/confirmation before leaving full screen.
-    if(emojiOpen||mentionOpen||actionMessage!==null||reactionMessage!==null||deleteMessage||deleteFile||preview)return
+    if(searchOpen||emojiOpen||mentionOpen||actionMessage!==null||reactionMessage!==null||deleteMessage||deleteFile||preview)return
     setFullScreen(false)
   };
     document.addEventListener('keydown',onKey);const old=document.body.style.overflow;document.body.style.overflow='hidden';
     return ()=>{document.removeEventListener('keydown',onKey);document.body.style.overflow=old}},
-  [fullScreen,emojiOpen,mentionOpen,actionMessage,reactionMessage,deleteMessage,deleteFile,preview])
+  [fullScreen,searchOpen,emojiOpen,mentionOpen,actionMessage,reactionMessage,deleteMessage,deleteFile,preview])
 
   const update=useCallback(()=>{void qc.invalidateQueries({queryKey:['discussions',taskId]});void qc.invalidateQueries({queryKey:['discussions','cards']});void qc.invalidateQueries({queryKey:['discussions','assigned-cards']});void qc.invalidateQueries({queryKey:['discussions','meeting-cards']});void qc.invalidateQueries({queryKey:['discussions','shared-cards']});void qc.invalidateQueries({queryKey:['discussions','inbox']});void qc.invalidateQueries({queryKey:['discussions','inbox-total']})},[qc,taskId])
   useEffect(()=>{if(!canSee)return;const controller=new AbortController();let alive=true
@@ -162,11 +190,36 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
   useEffect(()=>{if(!newest||!canSee||!atBottom||document.visibilityState!=='visible')return;
     void discussionApi.read(taskId,selected,newest).then(()=>{void qc.invalidateQueries({queryKey:['discussions',taskId,'scopes']});void qc.invalidateQueries({queryKey:['discussions','inbox']});void qc.invalidateQueries({queryKey:['discussions','inbox-total']})}).catch(()=>{})
   },[newest,taskId,selected,canSee,atBottom,qc])
-  useEffect(()=>{if(newest===null)return;
-    if(lastSeenMessage.current===null){lastSeenMessage.current=newest;requestAnimationFrame(()=>scrollRef.current?.scrollTo({top:scrollRef.current.scrollHeight}));return}
-    if(newest>lastSeenMessage.current){if(atBottom){requestAnimationFrame(()=>scrollRef.current?.scrollTo({top:scrollRef.current.scrollHeight,behavior:'smooth'}))}
-      else setShowNew(true)}lastSeenMessage.current=newest
-  },[newest,atBottom])
+  useEffect(()=>{
+    if(newest===null)return
+    const previousNewest=lastSeenMessage.current
+    if(previousNewest===null){
+      lastSeenMessage.current=newest
+      const frame=requestAnimationFrame(()=>{
+        const el=scrollRef.current
+        if(el){el.scrollTop=el.scrollHeight;measureScroll()}
+      })
+      return()=>cancelAnimationFrame(frame)
+    }
+    if(newest>previousNewest){
+      if(atBottom){
+        const frame=requestAnimationFrame(()=>{
+          const el=scrollRef.current
+          if(el)el.scrollTo({top:el.scrollHeight,behavior:reduceMotion?'auto':'smooth'})
+        })
+        lastSeenMessage.current=newest
+        return()=>cancelAnimationFrame(frame)
+      }
+      const incoming=msgs.data?.filter(message=>message.id>previousNewest&&message.authorUserId!==actorId).length??0
+      if(incoming>0)setNewMessageCount(previous=>previous+incoming)
+    }
+    lastSeenMessage.current=newest
+  },[newest,atBottom,actorId,msgs.data,reduceMotion,measureScroll])
+  // The scroll height can change without a scroll event when messages load or the view expands.
+  useEffect(()=>{
+    const frame=requestAnimationFrame(measureScroll)
+    return()=>cancelAnimationFrame(frame)
+  },[displayed.length,taskId,selected,fullScreen,measureScroll])
 
   async function loadOlder(){const oldest=displayed[0]?.id;if(!oldest||loadingOlder)return
     setLoadingOlder(true);const el=scrollRef.current;const oldHeight=el?.scrollHeight??0
@@ -239,7 +292,6 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
     }
     if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();submit()}
   }
-  function closeSearch(){setSearchOpen(false);setSearchText('');setSearchTerm('')}
   async function jumpTo(id:number){
     const token=++navigationToken.current
     closeSearch()
@@ -257,11 +309,9 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
       setFocusTarget({id,token})
     }catch{if(navigationToken.current===token)toast.error(t('discussions.loadFailed'))}
   }
-  function onScroll(){const el=scrollRef.current;if(!el)return;const bottom=el.scrollHeight-el.scrollTop-el.clientHeight<100;
-    setAtBottom(bottom);if(bottom)setShowNew(false)}
   const emojiResults=EMOJIS.filter(item=>!emojiSearch.trim()||item[1].includes(emojiSearch.toLowerCase())||item[0].includes(emojiSearch))
   const discussion=(<TooltipProvider delayDuration={180}><section className={`bg-background text-foreground flex min-w-0 flex-col overflow-hidden ${fullScreen?'fixed inset-0 z-[70] h-dvh w-screen p-3 sm:p-6':inboxMode?'h-full min-h-0 rounded-xl border':'rounded-xl border'}`} aria-label={t('discussions.title')}
-    onKeyDownCapture={event=>{if(fullScreen&&event.key==='Escape'&&!emojiOpen&&!mentionOpen&&actionMessage===null&&reactionMessage===null&&!deleteMessage&&!deleteFile&&!preview){
+    onKeyDownCapture={event=>{if(fullScreen&&event.key==='Escape'&&!searchOpen&&!emojiOpen&&!mentionOpen&&actionMessage===null&&reactionMessage===null&&!deleteMessage&&!deleteFile&&!preview){
       event.stopPropagation();setFullScreen(false)
     }}}>
     {fullScreen&&<header className="mb-3 flex items-center justify-between gap-3 border-b pb-3">
@@ -285,13 +335,14 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
         <header className="relative z-20 flex flex-wrap items-center gap-3 border-b px-3 py-2.5 sm:px-4">
           <div className="bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-full"><Users className="size-4"/></div>
           <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-semibold">{selectedScope?.title||t('discussions.main')}</h3>
-            <p className="text-muted-foreground truncate text-xs">{t('discussions.scopeNotice')} · {members.data?.length??0} {t('discussions.members')}</p>
+            <p className="text-muted-foreground truncate text-xs">{t('discussions.scopeNotice')} · {participantCount??'…'} {t('discussions.members')}</p>
           </div>
-          <Button size="icon" variant="ghost" aria-label={t('discussions.search')} aria-expanded={searchOpen} onClick={()=>searchOpen?closeSearch():setSearchOpen(true)}><Search className="size-4"/></Button>
-          <Button size="icon" variant="ghost" aria-label={fullScreen?t('discussions.exitFullScreen'):t('discussions.fullScreen')}
-            onClick={()=>setFullScreen(v=>!v)}>{fullScreen?<Minimize2 className="size-4"/>:<Maximize2 className="size-4"/>}</Button>
-          <AnimatePresence initial={false}>
-            {searchOpen&&<motion.div key="discussion-search" initial={{opacity:0,y:-10,scale:0.985}} animate={{opacity:1,y:0,scale:1}}
+          {canSee&&<DiscussionParticipantsPopover taskId={taskId} subtaskId={selected}
+            {...(participantCount!==undefined?{count:participantCount}:{})} compact/>}
+          <div ref={searchAreaRef} className="flex shrink-0 items-center">
+            <Button size="icon" variant="ghost" aria-label={t('discussions.search')} aria-expanded={searchOpen} onClick={()=>searchOpen?closeSearch():setSearchOpen(true)}><Search className="size-4"/></Button>
+            <AnimatePresence initial={false}>
+              {searchOpen&&<motion.div key="discussion-search" initial={{opacity:0,y:-10,scale:0.985}} animate={{opacity:1,y:0,scale:1}}
               exit={{opacity:0,y:-10,scale:0.985}} transition={{duration:0.22,ease:[0.2,0.8,0.2,1]}}
               className="bg-card absolute inset-x-2 top-full z-30 mt-1 origin-top rounded-xl border p-3 shadow-xl sm:inset-x-4"
               role="search" onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();closeSearch()}}}>
@@ -310,10 +361,13 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
                   <span className="line-clamp-2 break-words">{r.body}</span></button>)}
               </div>}
             </motion.div>}
-          </AnimatePresence>
+            </AnimatePresence>
+          </div>
+          <Button size="icon" variant="ghost" aria-label={fullScreen?t('discussions.exitFullScreen'):t('discussions.fullScreen')}
+            onClick={()=>setFullScreen(v=>!v)}>{fullScreen?<Minimize2 className="size-4"/>:<Maximize2 className="size-4"/>}</Button>
         </header>
         <div className="relative min-h-0 flex-1">
-          <div ref={scrollRef} onScroll={onScroll} className="h-full space-y-3 overflow-y-auto overscroll-contain px-3 py-4 sm:px-5" aria-live="polite" aria-relevant="additions text">
+          <div ref={scrollRef} onScroll={measureScroll} className="h-full space-y-3 overflow-y-auto overscroll-contain px-3 py-4 sm:px-5" aria-live="polite" aria-relevant="additions text">
             {displayed.length>0&&<div className="flex justify-center"><Button size="sm" variant="ghost" disabled={loadingOlder} onClick={()=>void loadOlder()}>{loadingOlder?<LoaderCircle className="size-4 animate-spin"/>:null}{t('discussions.older')}</Button></div>}
             {msgs.data?.length===0&&<div className="text-muted-foreground flex h-48 flex-col items-center justify-center gap-2 text-center text-sm"><MessageCircle className="size-9 opacity-40"/>{t('discussions.empty')}</div>}
             {displayed.map((m,i)=>{
@@ -365,7 +419,23 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
                               {!reaction.users?.length&&<p className="text-muted-foreground p-2 text-xs">{locale==='ar-SA'?'لا توجد بيانات للمشاركين':'Participant details unavailable'}</p>}
                             </div>
                           </TooltipContent></Tooltip>)}
-                      {own&&m.readByCount>0&&<span className="text-muted-foreground inline-flex items-center gap-1 text-[10px]" title={t('discussions.readBy',{count:m.readByCount,total:m.recipientCount})}><CheckCheck className="size-3 text-primary"/>{m.readByCount}/{m.recipientCount}</span>}
+                      {own&&m.recipientCount>0&&<Tooltip>
+                        <TooltipTrigger asChild><button type="button" className="text-muted-foreground hover:text-primary focus-visible:ring-primary inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] focus-visible:outline-none focus-visible:ring-2"
+                          aria-label={t('discussions.readBy',{count:m.readByCount,total:m.recipientCount})}>
+                          <CheckCheck className={`size-3 ${m.readByCount>0?'text-primary':'text-muted-foreground'}`}/>{m.readByCount}/{m.recipientCount}
+                        </button></TooltipTrigger>
+                        <TooltipContent side="top" collisionPadding={12} sideOffset={10} className="z-[90] w-64 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-popover p-0 text-popover-foreground shadow-xl">
+                          <div className="border-b border-border/70 px-3 py-2.5 text-xs font-semibold">{t('discussions.readBy',{count:m.readByCount,total:m.recipientCount})}</div>
+                          <div className="max-h-60 space-y-0.5 overflow-y-auto p-1.5">
+                            {m.readReceipts?.map(person=><div key={person.userId} className="flex items-center gap-2 rounded-lg px-2 py-1.5">
+                              <span className="bg-primary/10 text-primary flex size-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold">{shortName(person.userName)}</span>
+                              <span className="min-w-0 flex-1 truncate text-xs font-medium" title={person.userName}>{person.userName}</span>
+                              <span className={`shrink-0 text-[10px] ${person.read?'text-emerald-600':'text-muted-foreground'}`}>{person.read?t('discussions.seen'):t('discussions.notSeen')}</span>
+                            </div>)}
+                            {!m.readReceipts&&<p className="text-muted-foreground p-2 text-xs">{t('discussions.receiptsUnavailable')}</p>}
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>}
                       <span className="flex-1"/>
                       {!m.deletedAtUtc&&<div className="flex items-center gap-0.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
                         <Popover open={reactionMessage===m.id} onOpenChange={open=>{setReactionMessage(open?m.id:null);if(open)setActionMessage(null)}}>
@@ -394,8 +464,38 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
               </div>
             })}
           </div>
-          {showNew&&<button type="button" className="bg-primary text-primary-foreground absolute bottom-3 start-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full px-3 py-2 text-xs shadow-lg" onClick={()=>{scrollRef.current?.scrollTo({top:scrollRef.current.scrollHeight,behavior:'smooth'});setShowNew(false);setAtBottom(true)}}>
-            <ArrowDown className="size-4"/>{t('discussions.newMessages')}</button>}
+          <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex justify-center px-3">
+            <AnimatePresence initial={false}>
+              {showScrollButton&&displayed.length>0&&<motion.button key="discussion-scroll-to-bottom" type="button" layout="size"
+                initial={reduceMotion?{opacity:0}:{opacity:0,y:9,scale:0.94}}
+                animate={{opacity:1,y:0,scale:1}}
+                exit={reduceMotion?{opacity:0}:{opacity:0,y:9,scale:0.94}}
+                transition={{duration:reduceMotion?0.1:0.2,ease:[0.22,1,0.36,1]}}
+                {...(!reduceMotion?{whileHover:{y:-2,scale:1.04},whileTap:{scale:0.97}}:{})}
+                className="bg-background/95 text-foreground hover:bg-accent hover:text-accent-foreground border-border/80 focus-visible:ring-primary/40 pointer-events-auto flex min-h-11 min-w-11 items-center justify-center gap-2 overflow-hidden rounded-full border px-3.5 py-2.5 shadow-md shadow-black/10 backdrop-blur-sm transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 dark:shadow-black/30"
+                aria-label={newMessageCount>0?`${newMessageCount} ${t('discussions.newMessages')}`:t('discussions.scrollToBottom')}
+                title={t('discussions.scrollToBottom')}
+                onClick={()=>{
+                  const el=scrollRef.current
+                  if(!el)return
+                  el.scrollTo({top:el.scrollHeight,behavior:reduceMotion?'auto':'smooth'})
+                  if(reduceMotion)measureScroll()
+                }}>
+                <ArrowDown className="size-[18px] shrink-0" aria-hidden="true"/>
+                <AnimatePresence initial={false}>
+                  {newMessageCount>0&&<motion.span key="new-message-label"
+                    initial={reduceMotion?{opacity:0}:{opacity:0,x:-6,maxWidth:0}}
+                    animate={{opacity:1,x:0,maxWidth:180}}
+                    exit={reduceMotion?{opacity:0}:{opacity:0,x:-6,maxWidth:0}}
+                    transition={{duration:reduceMotion?0.1:0.2}}
+                    className="flex items-center gap-1 whitespace-nowrap text-xs font-semibold">
+                    <span className="tabular-nums">{newMessageCount}</span>
+                    <span>{t('discussions.newMessages')}</span>
+                  </motion.span>}
+                </AnimatePresence>
+              </motion.button>}
+            </AnimatePresence>
+          </div>
         </div>
         {typingUsers.length>0&&<p className="text-muted-foreground px-4 py-1 text-xs">{typingUsers.map(id=>members.data?.find(m=>m.userId===id)?.userName||'…').join(', ')} {t('discussions.typing')}</p>}
         <div className="border-t px-3 py-2 sm:px-4">

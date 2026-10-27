@@ -7,11 +7,13 @@ import { taskDetailsRepository } from "../task-details/task-details.repository.j
 import { tasksRepository } from "../tasks/tasks.repository.js";
 import { assertTaskWritable } from "../tasks/tasks.policy.js";
 import { generalTaskAssignmentsRepository as repo } from "./general-task-assignments.repository.js";
-import { notifyGeneralTask, notifyRemovedAssignment } from "./general-task-assignments.email-events.js";
+import { notifyGeneralTask, notifyRemovedAssignment, notifyTaskOwnerActivity } from "./general-task-assignments.email-events.js";
 import { collaborationRepository } from "../collaboration/collaboration.repository.js";
 
 const missing = () => new AppError({statusCode:404,code:"TASK_NOT_FOUND",message:"Task not found."});
 const denied = () => new AppError({statusCode:403,code:"TASK_ASSIGNMENT_FORBIDDEN",message:"Only the creator may manage assignments."});
+export const creatorSelfAssignmentError = () => new AppError({statusCode:409,
+  code:"SUBTASK_CREATOR_SELF_ASSIGNMENT",message:"The task creator cannot assign a subtask to themselves while another user is responsible for the main task."});
 
 async function validateAssignee(userId: number, transaction: DatabaseTransaction) {
   if (!(await repo.isEligibleUser(userId, transaction))) {
@@ -33,6 +35,11 @@ export const generalTaskAssignmentsService = {
       if (assigneeUserId !== null) await validateAssignee(assigneeUserId, transaction);
       const prior = await repo.findContext(taskId, transaction);
       if (prior?.assigneeUserId === assigneeUserId) return;
+      if (assigneeUserId !== null && assigneeUserId !== actorUserId &&
+          await repo.ownerHasExplicitSubtaskAssignment(taskId, actorUserId, transaction)) {
+        throw new AppError({statusCode:409,code:"SUBTASK_OWNER_OVERRIDE_EXISTS",
+          message:"Remove existing creator self-assignments from subtasks before assigning the main task to another user."});
+      }
       await repo.ensureRelation(transaction, taskId, actorUserId, actorUserId, assigneeUserId, true);
       await tasksRepository.addActivity(transaction, actorUserId, taskId, "GENERAL_TASK_ASSIGNED",
         { previousAssigneeUserId: prior?.assigneeUserId ?? null, assigneeUserId }, actorUserId);
@@ -67,6 +74,11 @@ export const generalTaskAssignmentsService = {
           }
         } else await validateAssignee(assigneeUserId, transaction);
       }
+      if (!access.context && assigneeUserId === actorUserId &&
+          access.generalAssignment?.assigneeUserId != null &&
+          access.generalAssignment.assigneeUserId !== actorUserId) {
+        throw creatorSelfAssignmentError();
+      }
       const subtask = await taskDetailsRepository.findSubtask(actorUserId, subtaskId, transaction);
       if (!subtask) throw missing();
       const former = await repo.effectiveSubtaskAssignee(actorUserId, subtaskId, transaction);
@@ -100,11 +112,22 @@ export const generalTaskAssignmentsService = {
       const allowed = access.generalAssignment || access.context
         ? (await repo.effectiveSubtaskAssignee(access.ownerUserId, subtaskId, transaction)) === actorUserId
         : access.capabilities.canCompleteSubtasks;
-      if (!allowed) throw new AppError({statusCode:403,code:"WORK_NOTES_FORBIDDEN",message:"You cannot edit this subtask's Work Notes."});
-      if (!(await taskDetailsRepository.findSubtask(access.ownerUserId, subtaskId, transaction))) throw missing();
-      await repo.saveWorkNotes(transaction, access.ownerUserId, subtaskId, workNotes);
+      if (!allowed) throw new AppError({statusCode:403,code:"WORK_NOTES_FORBIDDEN",message:"Only the current subtask assignee can add Work Notes."});
+      const content = workNotes?.trim();
+      if (!content) throw new AppError({statusCode:400,code:"WORK_NOTE_EMPTY",
+        message:"Enter a Work Note before saving."});
+      const previous = await taskDetailsRepository.findSubtask(access.ownerUserId, subtaskId, transaction);
+      if (!previous) throw missing();
+      const noteId = await repo.addWorkNote(transaction, access.ownerUserId, link.taskId,
+        subtaskId, actorUserId, content);
       await tasksRepository.addActivity(transaction, access.ownerUserId, link.taskId,
-        "SUBTASK_WORK_NOTES_UPDATED", {subtaskId, subtaskTitle:(await taskDetailsRepository.findSubtask(access.ownerUserId,subtaskId,transaction))?.title??null}, actorUserId);
+        "SUBTASK_WORK_NOTES_UPDATED", {subtaskId, subtaskTitle:previous.title, noteId}, actorUserId);
+      if (actorUserId !== access.ownerUserId) {
+        await notifyTaskOwnerActivity(transaction, access.ownerUserId, actorUserId, {
+          type:"TASK_WORK_NOTE_ADDED",taskId:link.taskId,subtaskId,
+          listId:task.listId,taskTitle:task.title,
+        });
+      }
     });
     return {taskId:link.taskId,subtaskId};
   },
@@ -121,12 +144,18 @@ export const generalTaskAssignmentsService = {
       const allowed = access.generalAssignment
         ? (access.generalAssignment.assigneeUserId ?? access.ownerUserId) === actorUserId
         : (access.context ? access.context.assigneeUserId === actorUserId : access.capabilities.role === "OWNER");
-      if (!allowed) throw new AppError({statusCode:403,code:"COMPLETION_SUMMARY_FORBIDDEN",message:"You cannot edit this Completion Summary."});
-      await repo.saveCompletionSummary(transaction, access.ownerUserId, taskId, completionSummary);
+      if (!allowed) throw new AppError({statusCode:403,code:"COMPLETION_SUMMARY_FORBIDDEN",
+        message:"Only the current responsible assignee can add a Completion Summary."});
+      const content = completionSummary?.trim();
+      if (!content) throw new AppError({statusCode:400,code:"COMPLETION_SUMMARY_EMPTY",
+        message:"Enter a Completion Summary before saving."});
+      const entryId = await repo.addCompletionSummaryEntry(transaction, access.ownerUserId,
+        taskId, actorUserId, content);
       await tasksRepository.addActivity(transaction, access.ownerUserId, taskId,
-        "COMPLETION_SUMMARY_UPDATED", undefined, actorUserId);
+        "COMPLETION_SUMMARY_UPDATED", {entryId}, actorUserId);
     });
     return {taskId};
   },
 };
+
 

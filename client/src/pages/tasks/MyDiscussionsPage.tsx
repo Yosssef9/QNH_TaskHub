@@ -147,7 +147,7 @@ export function MyDiscussionsPage(){
             </div>
             <span className="min-w-0 flex-1 truncate text-end text-sm font-semibold" title={selectedTitle??undefined}>{selectedTitle??(ar?'مناقشة المهمة':'Task Discussion')}{selectedSubtaskTitle?` · ${selectedSubtaskTitle}`:''}</span>
           </div>
-          <TaskDiscussions key={`${selected.taskId}:${selected.subtaskId??'main'}`} taskId={selected.taskId} initialSubtaskId={selected.subtaskId} initialMessageId={filter==='mentions' && focusedMention?.taskId===selected.taskId && focusedMention?.subtaskId===selected.subtaskId ? focusedMention.messageId : safeIncomingTask===selected.taskId?safeIncomingMessage:null} actorId={user?.user.userId??null} inboxMode/>
+          <TaskDiscussions key={`${selected.taskId}:${selected.subtaskId??'main'}`} taskId={selected.taskId} initialSubtaskId={selected.subtaskId} initialMessageId={filter==='mentions' && focusedMention?.taskId===selected.taskId && focusedMention?.subtaskId===selected.subtaskId ? focusedMention.messageId : safeIncomingTask===selected.taskId?safeIncomingMessage:null} actorId={user?.user.userId??null} inboxMode {...(selectedItem?{initialParticipantCount:selectedItem.participantCount}:{})}/>
         </>:<div className="bg-card text-muted-foreground flex min-h-[28rem] flex-1 flex-col items-center justify-center gap-3 rounded-xl border text-sm"><MessageCircleMore className="size-12 opacity-30"/>{ar?'اختر محادثة من القائمة لبدء المتابعة':'Select a conversation to start'}</div>}
       </section>
     </div>

@@ -10,12 +10,14 @@ import { notifyDiscussionMembers, listDiscussionMembers } from './task-discussio
 import { logger } from '../../config/logger.js';
 import { discussionLikePattern, isDiscussionReaction } from './task-discussions.reactions.js';
 import { mentionedMemberIds } from './task-discussions.mentions.js';
+import { discussionReadReceipts, type DiscussionReadReceipt } from './task-discussions.read-receipts.js';
 
 export interface DiscussionMessage {
   id:number; taskId:number; subtaskId:number|null; authorUserId:number;
   authorName:string; body:string|null; replyToMessageId:number|null;
   createdAtUtc:string; editedAtUtc:string|null; deletedAtUtc:string|null;
   files:DiscussionFile[]; reactions:DiscussionReaction[]; readByCount:number; recipientCount:number;
+  readReceipts:DiscussionReadReceipt[];
   mentions:{userId:number;userCode:string;userName:string}[];
 }
 export interface DiscussionFile { id:string; name:string; mimeType:string; sizeBytes:number }
@@ -32,13 +34,15 @@ async function getMessageRow(messageId:number) {
   return result.recordset[0]??null;
 }
 
-function mapRow(row:any, files:DiscussionFile[],reactions:DiscussionReaction[]=[],readByCount=0,recipientCount=0,mentions:DiscussionMessage['mentions']=[]):DiscussionMessage {
+function mapRow(row:any, files:DiscussionFile[],reactions:DiscussionReaction[]=[],readReceipts:DiscussionReadReceipt[]=[],mentions:DiscussionMessage['mentions']=[],includeReaderNames=false):DiscussionMessage {
   return {id:Number(row.id),taskId:Number(row.taskId),subtaskId:row.subtaskId===null?null:Number(row.subtaskId),
     authorUserId:Number(row.authorUserId),authorName:row.authorName??'',
     body:row.deletedAtUtc?null:row.body, replyToMessageId:row.replyToMessageId===null?null:Number(row.replyToMessageId),
     createdAtUtc:new Date(row.createdAtUtc).toISOString(),
     editedAtUtc:row.editedAtUtc?new Date(row.editedAtUtc).toISOString():null,
-    deletedAtUtc:row.deletedAtUtc?new Date(row.deletedAtUtc).toISOString():null,files,reactions,readByCount,recipientCount,mentions};
+    deletedAtUtc:row.deletedAtUtc?new Date(row.deletedAtUtc).toISOString():null,files,reactions,
+    readByCount:readReceipts.filter(receipt=>receipt.read).length,recipientCount:readReceipts.length,
+    readReceipts:includeReaderNames?readReceipts:[],mentions};
 }
 
 export const taskDiscussionsService={
@@ -459,7 +463,7 @@ export const taskDiscussionsService={
       }
     }
     const reactionsByMessage=new Map<number,DiscussionReaction[]>();
-    const readersByMessage=new Map<number,number>();
+    const receiptsByMessage=new Map<number,DiscussionReadReceipt[]>();
     const allMembers=await listDiscussionMembers(userId,scope);
     if(rows.length){
       // Fetch reactor identities in one batch only after assertDiscussionAccess has
@@ -493,12 +497,12 @@ export const taskDiscussionsService={
              AND user_id IN (SELECT TRY_CAST(value AS int) FROM STRING_SPLIT(@ids,','));`);
         const readMap=new Map(readerRows.recordset.map(r=>[Number(r.userId),Number(r.lastRead)]));
         for(const row of rows){const id=Number(row.id);
-          readersByMessage.set(id,allMembers.filter(m=>m.userId!==Number(row.authorUserId) && (readMap.get(m.userId)??0)>=id).length);}
+          receiptsByMessage.set(id,discussionReadReceipts(allMembers,readMap,id,Number(row.authorUserId)));}
       }
     }
     return rows.map((row:any)=>mapRow(row,attachmentsByMessage.get(Number(row.id))??[],
-      reactionsByMessage.get(Number(row.id))??[],readersByMessage.get(Number(row.id))??0,
-      allMembers.filter(m=>m.userId!==Number(row.authorUserId)).length,mentionsByMessage.get(Number(row.id))??[]));
+      reactionsByMessage.get(Number(row.id))??[],receiptsByMessage.get(Number(row.id))??[],
+      mentionsByMessage.get(Number(row.id))??[],Number(row.authorUserId)===userId));
   },
   async search(userId:number,scope:DiscussionScope,query:string){
     await assertDiscussionAccess(userId,scope);
