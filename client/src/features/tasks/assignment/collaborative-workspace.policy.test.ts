@@ -9,7 +9,7 @@ const make = (id: number, subtaskId: number | null, state: CollaborativeMember['
 const view:CollaborativeView = {
   enabled:true,canManage:false,
   members:[make(1,null),make(2,null,'DONE'),make(1,11),make(2,11),make(3,12)],
-  notes:[{id:7,assignmentId:2,note:'Private',createdAtUtc:'2026-10-13T09:00:00Z'}],
+  notes:[{id:7,assignmentId:2,note:'Private',createdAtUtc:'2026-10-13T09:00:00Z',authorUserId:2,authorName:'User 2'}],
   files:[],modes:[],progress:[{scopeId:null,total:2,completed:1},{scopeId:11,total:2,completed:0}],
 }
 describe('collaborative task workspace',()=>{

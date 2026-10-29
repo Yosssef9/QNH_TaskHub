@@ -70,7 +70,7 @@ export function AttachmentPreviewDialog<T extends PreviewableAttachment>({ attac
   }
 
   return <Dialog open={attachment !== null} onOpenChange={onOpenChange}>
-    <DialogContent variant="modal" overlayClassName={elevated ? "z-[90]" : undefined}
+    <DialogContent variant="modal" {...(elevated ? { overlayClassName: "z-[90]" } : {})}
       className={`max-h-[94vh] w-[min(72rem,calc(100vw-2rem))] max-w-none p-0 ${elevated ? "z-[91]" : ""}`} closeLabel={t('common.close')}>
       <header className="border-b px-6 py-4 pe-14">
         <DialogTitle className="truncate text-lg" title={attachment?.originalFileName}>{attachment?.originalFileName || t('attachments.preview')}</DialogTitle>
