@@ -14,6 +14,8 @@ interface Props<T extends PreviewableAttachment> {
   onOpenChange: (open: boolean) => void
   getPreview: (id: string, signal: AbortSignal) => Promise<Blob>
   download: (attachment: T) => Promise<void>
+  /** Keep the modal above an immersive/full-screen discussion layer. */
+  elevated?: boolean
 }
 
 type PreviewState =
@@ -22,7 +24,7 @@ type PreviewState =
   | { id: string; status: 'ready'; url: string | null; text: string | null }
 
 /** One preview surface for task, meeting, contract and private assignment attachments. */
-export function AttachmentPreviewDialog<T extends PreviewableAttachment>({ attachment, onOpenChange, getPreview, download }: Props<T>) {
+export function AttachmentPreviewDialog<T extends PreviewableAttachment>({ attachment, onOpenChange, getPreview, download, elevated = false }: Props<T>) {
   const { t } = useTranslation()
   const [preview, setPreview] = useState<PreviewState | null>(null)
   const id = attachment?.id ?? null
@@ -40,6 +42,12 @@ export function AttachmentPreviewDialog<T extends PreviewableAttachment>({ attac
           const text = await blob.text()
           if (!controller.signal.aborted) setPreview({ id: attachment.id, status: 'ready', url: null, text })
         } else {
+          // A filename or declared MIME type alone must not allow arbitrary content
+          // into a browser's embedded document viewer.
+          if (kind === 'pdf' && await blob.slice(0, 5).text() !== '%PDF-') {
+            throw new Error('Invalid PDF preview content')
+          }
+          if (controller.signal.aborted) return
           // Force a known-safe media type instead of rendering the uploaded MIME header.
           objectUrl = URL.createObjectURL(new Blob([blob], { type: safePreviewMime(attachment, kind) }))
           if (!controller.signal.aborted) setPreview({ id: attachment.id, status: 'ready', url: objectUrl, text: null })
@@ -62,7 +70,8 @@ export function AttachmentPreviewDialog<T extends PreviewableAttachment>({ attac
   }
 
   return <Dialog open={attachment !== null} onOpenChange={onOpenChange}>
-    <DialogContent variant="modal" className="max-h-[94vh] w-[min(72rem,calc(100vw-2rem))] max-w-none p-0" closeLabel={t('common.close')}>
+    <DialogContent variant="modal" overlayClassName={elevated ? "z-[90]" : undefined}
+      className={`max-h-[94vh] w-[min(72rem,calc(100vw-2rem))] max-w-none p-0 ${elevated ? "z-[91]" : ""}`} closeLabel={t('common.close')}>
       <header className="border-b px-6 py-4 pe-14">
         <DialogTitle className="truncate text-lg" title={attachment?.originalFileName}>{attachment?.originalFileName || t('attachments.preview')}</DialogTitle>
         <DialogDescription className="text-muted-foreground mt-1">{t('attachments.previewDescription')}</DialogDescription>
@@ -75,7 +84,8 @@ export function AttachmentPreviewDialog<T extends PreviewableAttachment>({ attac
         </div> : !current || current.status === 'loading' ? <LoadingState />
           : current.status === 'failed' ? <p role="alert" className="text-destructive text-sm">{t('attachments.previewFailed')}</p>
           : kind === 'image' && current.url ? <img src={current.url} alt={attachment?.originalFileName ?? ''} className="max-h-[70vh] max-w-full rounded-lg object-contain" />
-          : kind === 'pdf' && current.url ? <iframe src={current.url} title={attachment?.originalFileName} sandbox="allow-scripts allow-downloads" className="h-[70vh] w-full rounded-lg border bg-white" />
+          : kind === 'pdf' && current.url ? <iframe src={current.url} title={attachment?.originalFileName}
+              className="h-[70vh] w-full rounded-lg border bg-white" />
           : kind === 'text' && current.text !== null ? <pre className="bg-background text-foreground h-[65vh] w-full overflow-auto rounded-lg border p-5 text-start text-sm whitespace-pre-wrap break-words">{current.text}</pre>
           : null}
       </div>

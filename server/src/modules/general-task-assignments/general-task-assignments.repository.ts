@@ -112,7 +112,13 @@ export const generalTaskAssignmentsRepository = {
       LEFT JOIN dbo.TM_general_task_assignments relation ON relation.task_id=task.id
       LEFT JOIN dbo.TM_meeting_action_items meeting ON meeting.task_id=task.id
       WHERE (relation.task_id IS NOT NULL OR meeting.task_id IS NOT NULL) AND task.id=@taskId AND task.deleted_at_utc IS NULL AND subtask.deleted_at_utc IS NULL
-        AND COALESCE(subtask.assignee_user_id,meeting.assignee_user_id,relation.assignee_user_id,task.owner_user_id)=@actorUserId;`);
+        AND (COALESCE(subtask.assignee_user_id,meeting.assignee_user_id,relation.assignee_user_id,task.owner_user_id)=@actorUserId
+        OR EXISTS(SELECT 1 FROM dbo.TM_task_proxies p WHERE p.task_id=task.id
+          AND p.revoked_at_utc IS NULL AND p.proxy_user_id=@actorUserId
+          AND ((p.subtask_id=subtask.id AND p.principal_user_id=
+              COALESCE(subtask.assignee_user_id,relation.assignee_user_id,task.owner_user_id))
+            OR (p.subtask_id IS NULL AND p.principal_user_id=relation.assignee_user_id
+            AND COALESCE(subtask.assignee_user_id,relation.assignee_user_id,task.owner_user_id)=p.principal_user_id)))) ;`);
     return result.recordset.map(row => Number(row.id));
   },
 
@@ -126,6 +132,12 @@ export const generalTaskAssignmentsRepository = {
       JOIN dbo.users portal ON portal.USER_ID=access.portal_user_id AND portal.IS_ACTIVE=1
       WHERE relation.task_id=@taskId AND task.deleted_at_utc IS NULL
         AND (relation.assignee_user_id=@actorUserId OR EXISTS(
+          SELECT 1 FROM dbo.TM_task_proxies p WHERE p.task_id=task.id AND p.proxy_user_id=@actorUserId
+            AND p.revoked_at_utc IS NULL
+            AND ((p.subtask_id IS NULL AND p.principal_user_id=relation.assignee_user_id)
+            OR EXISTS(SELECT 1 FROM dbo.TM_subtasks s WHERE s.task_id=task.id AND s.id=p.subtask_id
+              AND s.deleted_at_utc IS NULL AND COALESCE(s.assignee_user_id,relation.assignee_user_id,task.owner_user_id)=p.principal_user_id)))
+          OR EXISTS(
           SELECT 1 FROM dbo.TM_subtasks subtask
           WHERE subtask.task_id=task.id AND subtask.deleted_at_utc IS NULL
             AND COALESCE(subtask.assignee_user_id,relation.assignee_user_id,task.owner_user_id)=@actorUserId));`);
@@ -256,6 +268,7 @@ export interface GeneralAssignedTask {
   creatorUserId: number;
   creatorName: string;
   isMainAssignee: boolean;
+  isProxy: boolean;
   subtaskTotal: number;
   subtaskCompleted: number;
   assignedSubtasks: Array<{id:number;title:string;dueDate:string|null;isCompleted:boolean;workNotes:string|null}>;
@@ -284,20 +297,34 @@ export async function listGeneralAssignments(actorUserId: number, page: number, 
     JOIN dbo.users portal ON portal.USER_ID=access.portal_user_id AND portal.IS_ACTIVE=1
     WHERE task.deleted_at_utc IS NULL AND task.list_id IS NOT NULL
       AND task.owner_user_id<>@actor
-      AND ((collaboration.task_id IS NULL AND (rel.assignee_user_id=@actor OR EXISTS (
+      AND ((collaboration.task_id IS NULL AND (rel.assignee_user_id=@actor OR EXISTS(
+        SELECT 1 FROM dbo.TM_task_proxies p WHERE p.task_id=task.id AND p.proxy_user_id=@actor
+          AND p.revoked_at_utc IS NULL AND (
+            (p.subtask_id IS NULL AND p.principal_user_id=rel.assignee_user_id)
+            OR EXISTS(SELECT 1 FROM dbo.TM_subtasks c WHERE c.id=p.subtask_id
+              AND c.task_id=task.id AND c.deleted_at_utc IS NULL
+              AND COALESCE(c.assignee_user_id,rel.assignee_user_id,task.owner_user_id)=p.principal_user_id)))
+        OR EXISTS (
         SELECT 1 FROM dbo.TM_subtasks child WHERE child.task_id=task.id
           AND child.deleted_at_utc IS NULL AND
           COALESCE(child.assignee_user_id,rel.assignee_user_id,task.owner_user_id)=@actor)))
         OR (collaboration.task_id IS NOT NULL AND EXISTS(
           SELECT 1 FROM dbo.TM_collaboration_assignments a WHERE a.task_id=task.id
-            AND a.assignee_user_id=@actor AND a.is_active=1)))
+            AND (a.assignee_user_id=@actor OR a.proxy_user_id=@actor) AND a.is_active=1)))
       AND (@search IS NULL OR task.title LIKE @search OR EXISTS (
         SELECT 1 FROM dbo.TM_subtasks child
         WHERE child.task_id=task.id AND child.deleted_at_utc IS NULL
           AND ((collaboration.task_id IS NULL AND
-            COALESCE(child.assignee_user_id,rel.assignee_user_id,task.owner_user_id)=@actor)
+            (COALESCE(child.assignee_user_id,rel.assignee_user_id,task.owner_user_id)=@actor
+            OR EXISTS(SELECT 1 FROM dbo.TM_task_proxies p WHERE p.task_id=task.id
+              AND p.proxy_user_id=@actor AND p.revoked_at_utc IS NULL
+              AND ((p.subtask_id=child.id AND p.principal_user_id=
+                COALESCE(child.assignee_user_id,rel.assignee_user_id,task.owner_user_id)) OR (p.subtask_id IS NULL
+                AND p.principal_user_id=rel.assignee_user_id
+                AND COALESCE(child.assignee_user_id,rel.assignee_user_id,task.owner_user_id)=p.principal_user_id)))))
             OR (collaboration.task_id IS NOT NULL AND EXISTS(SELECT 1 FROM dbo.TM_collaboration_assignments a
-              WHERE a.subtask_id=child.id AND a.assignee_user_id=@actor AND a.is_active=1)))
+              WHERE a.task_id=task.id AND a.subtask_id=child.id AND
+                (a.assignee_user_id=@actor OR a.proxy_user_id=@actor) AND a.is_active=1)))
           AND child.title LIKE @search))
       AND (@status IS NULL OR task.status=@status)
       AND (@priority IS NULL OR task.priority=@priority)
@@ -327,7 +354,7 @@ export async function listGeneralAssignments(actorUserId: number, page: number, 
     .input("offset",sql.Int,(page-1)*pageSize).input("limit",sql.Int,pageSize)
     .query<{
       taskId:number|string;title:string;description:string|null;status:string;priority:string;
-      dueDate:Date|null;creatorUserId:number;creatorName:string;isMainAssignee:boolean;
+      dueDate:Date|null;creatorUserId:number;creatorName:string;isMainAssignee:boolean;isProxy:boolean;
       subtaskTotal:number;subtaskCompleted:number;assignedSubtasksJson:string|null;
       teamTask:boolean;teamMemberCount:number;mainAssigneeCount:number;mainCompletedCount:number;teamRosterJson:string|null;taskTagsJson:string|null
     }>(`SELECT task.id AS taskId,task.title,task.description,task.status,task.priority,
@@ -337,6 +364,16 @@ export async function listGeneralAssignments(actorUserId: number, page: number, 
         OR (collaboration.task_id IS NOT NULL AND EXISTS(SELECT 1 FROM dbo.TM_collaboration_assignments a
           WHERE a.task_id=task.id AND a.subtask_id IS NULL AND a.is_active=1 AND a.assignee_user_id=@actor))
         THEN 1 ELSE 0 END AS BIT) AS isMainAssignee,
+      CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.TM_task_proxies p
+        WHERE p.task_id=task.id AND p.proxy_user_id=@actor AND p.revoked_at_utc IS NULL
+          AND ((p.subtask_id IS NULL AND p.principal_user_id=rel.assignee_user_id)
+            OR EXISTS(SELECT 1 FROM dbo.TM_subtasks s WHERE s.id=p.subtask_id
+              AND s.task_id=task.id AND s.deleted_at_utc IS NULL AND
+              COALESCE(s.assignee_user_id,rel.assignee_user_id,task.owner_user_id)=p.principal_user_id)))
+        OR (collaboration.task_id IS NOT NULL AND EXISTS(
+          SELECT 1 FROM dbo.TM_collaboration_assignments a
+          WHERE a.task_id=task.id AND a.is_active=1 AND a.proxy_user_id=@actor))
+        THEN 1 ELSE 0 END AS BIT) AS isProxy,
       (SELECT COUNT(*) FROM dbo.TM_subtasks c WHERE c.task_id=task.id AND c.deleted_at_utc IS NULL) AS subtaskTotal,
       (SELECT COUNT(*) FROM dbo.TM_subtasks c WHERE c.task_id=task.id AND c.deleted_at_utc IS NULL
         AND c.is_completed=1) AS subtaskCompleted,
@@ -345,16 +382,23 @@ export async function listGeneralAssignments(actorUserId: number, page: number, 
         CASE WHEN collaboration.task_id IS NULL THEN s.work_notes ELSE NULL END AS workNotes
        FROM dbo.TM_subtasks s WHERE s.task_id=task.id AND s.deleted_at_utc IS NULL
        AND ((collaboration.task_id IS NULL AND
-         COALESCE(s.assignee_user_id,rel.assignee_user_id,task.owner_user_id)=@actor)
+         (COALESCE(s.assignee_user_id,rel.assignee_user_id,task.owner_user_id)=@actor
+         OR EXISTS(SELECT 1 FROM dbo.TM_task_proxies p WHERE p.task_id=task.id
+           AND p.proxy_user_id=@actor AND p.revoked_at_utc IS NULL
+           AND ((p.subtask_id=s.id AND p.principal_user_id=
+             COALESCE(s.assignee_user_id,rel.assignee_user_id,task.owner_user_id)) OR (p.subtask_id IS NULL
+             AND p.principal_user_id=rel.assignee_user_id
+             AND COALESCE(s.assignee_user_id,rel.assignee_user_id,task.owner_user_id)=p.principal_user_id)))))
          OR (collaboration.task_id IS NOT NULL AND EXISTS(SELECT 1 FROM dbo.TM_collaboration_assignments a
-           WHERE a.subtask_id=s.id AND a.assignee_user_id=@actor AND a.is_active=1)))
+           WHERE a.task_id=task.id AND a.subtask_id=s.id AND
+              (a.assignee_user_id=@actor OR a.proxy_user_id=@actor) AND a.is_active=1)))
        ORDER BY s.display_order,s.id FOR JSON PATH) AS assignedSubtasksJson
       ${sqlScope.replace('FROM dbo.TM_general_task_assignments rel','FROM dbo.TM_general_task_assignments rel\n      JOIN dbo.users creatorPortal ON creatorPortal.USER_ID=rel.owner_user_id')}
       ORDER BY ${orderBy} ${direction},task.id DESC OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;`);
   const items:GeneralAssignedTask[]=result.recordset.map(row=>({
     taskId:Number(row.taskId),title:row.title,description:row.description,status:row.status,
     priority:row.priority,dueDate:row.dueDate?.toISOString().slice(0,10)??null,
-    creatorUserId:row.creatorUserId,creatorName:row.creatorName,isMainAssignee:Boolean(row.isMainAssignee),
+    creatorUserId:row.creatorUserId,creatorName:row.creatorName,isMainAssignee:Boolean(row.isMainAssignee),isProxy:Boolean(row.isProxy),
     subtaskTotal:Number(row.subtaskTotal),subtaskCompleted:Number(row.subtaskCompleted),
     teamTask:Boolean(row.teamTask),teamMemberCount:Number(row.teamMemberCount),
     mainAssigneeCount:Number(row.mainAssigneeCount),mainCompletedCount:Number(row.mainCompletedCount),

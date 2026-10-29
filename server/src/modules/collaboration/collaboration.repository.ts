@@ -20,6 +20,7 @@ export interface CollaborativeAssignmentRow {
   taskId: number;
   subtaskId: number | null;
   assigneeUserId: number;
+  proxyUserId: number | null;
   state: 'TODO' | 'IN_PROGRESS' | 'DONE';
   isActive: boolean;
   assignmentOrigin: 'EXPLICIT' | 'INHERITED';
@@ -63,7 +64,7 @@ export const collaborationRepository = {
     const request=await requestFor(transaction);
     const result=await request.input('taskId',sql.BigInt,taskId).query<CollaborativeAssignmentRow>(`
       SELECT id,task_id AS taskId,subtask_id AS subtaskId,assignee_user_id AS assigneeUserId,
-        state,is_active AS isActive,assignment_origin AS assignmentOrigin,
+        proxy_user_id AS proxyUserId,state,is_active AS isActive,assignment_origin AS assignmentOrigin,
         completed_at_utc AS completedAtUtc,assigned_at_utc AS assignedAtUtc
       FROM dbo.TM_collaboration_assignments
       WHERE task_id=@taskId AND is_active=1 ORDER BY subtask_id,assignee_user_id;`);
@@ -74,7 +75,8 @@ export const collaborationRepository = {
     const request=await requestFor(transaction);
     const result=await request.input('taskId',sql.BigInt,taskId).input('actorId',sql.Int,actorId)
       .query<{id:number|string}>(`SELECT DISTINCT subtask_id id FROM dbo.TM_collaboration_assignments
-        WHERE task_id=@taskId AND assignee_user_id=@actorId AND is_active=1 AND subtask_id IS NOT NULL;`);
+        WHERE task_id=@taskId AND (assignee_user_id=@actorId OR proxy_user_id=@actorId)
+          AND is_active=1 AND subtask_id IS NOT NULL;`);
     return result.recordset.map(row=>Number(row.id));
   },
   async isAssigned(taskId:number,actorId:number,transaction?:DatabaseTransaction):Promise<boolean> {
@@ -83,7 +85,10 @@ export const collaborationRepository = {
       .query<{id:number}>(`SELECT TOP(1) 1 id FROM dbo.TM_collaboration_assignments assignee
         JOIN dbo.TM_user_access access ON access.portal_user_id=assignee.assignee_user_id AND access.is_active=1
         JOIN dbo.users portal ON portal.USER_ID=assignee.assignee_user_id AND portal.IS_ACTIVE=1
-        WHERE assignee.task_id=@taskId AND assignee.assignee_user_id=@actorId AND assignee.is_active=1
+        WHERE assignee.task_id=@taskId AND (assignee.assignee_user_id=@actorId OR
+            (assignee.proxy_user_id=@actorId AND NOT EXISTS(
+              SELECT 1 FROM dbo.TM_meeting_action_items mi WHERE mi.task_id=assignee.task_id)))
+          AND assignee.is_active=1
           AND (NOT EXISTS(SELECT 1 FROM dbo.TM_meeting_action_items mi WHERE mi.task_id=assignee.task_id)
             OR EXISTS(SELECT 1 FROM dbo.TM_meeting_action_items mi
               JOIN dbo.TM_meeting_attendees att ON att.meeting_id=mi.meeting_id
@@ -95,11 +100,25 @@ export const collaborationRepository = {
     const request=await requestFor(transaction);
     const result=await request.input('assignmentId',sql.BigInt,assignmentId).query<CollaborativeAssignmentRow>(`
       SELECT id,task_id AS taskId,subtask_id AS subtaskId,assignee_user_id AS assigneeUserId,
-        state,is_active AS isActive,assignment_origin AS assignmentOrigin,
+        proxy_user_id AS proxyUserId,state,is_active AS isActive,assignment_origin AS assignmentOrigin,
         completed_at_utc AS completedAtUtc,assigned_at_utc AS assignedAtUtc
       FROM dbo.TM_collaboration_assignments WHERE id=@assignmentId;`);
     const r=result.recordset[0];return r?{...r,id:Number(r.id),taskId:Number(r.taskId),
       subtaskId:r.subtaskId===null?null:Number(r.subtaskId),isActive:Boolean(r.isActive)}:null;
+  },
+  async setProxy(assignmentId:number,principalId:number,proxyId:number|null,
+      transaction:DatabaseTransaction):Promise<boolean>{
+    const current=await transaction.request().input('assignmentId',sql.BigInt,assignmentId)
+      .input('principalId',sql.Int,principalId).query<{proxyUserId:number|null}>(`
+      SELECT proxy_user_id AS proxyUserId FROM dbo.TM_collaboration_assignments WITH(UPDLOCK,HOLDLOCK)
+      WHERE id=@assignmentId AND assignee_user_id=@principalId AND is_active=1;`);
+    if(!current.recordset.length) return false;
+    if((current.recordset[0]!.proxyUserId??null)===proxyId)return false;
+    await transaction.request().input('assignmentId',sql.BigInt,assignmentId)
+      .input('proxyId',sql.Int,proxyId).query(`UPDATE dbo.TM_collaboration_assignments
+      SET proxy_user_id=@proxyId,proxy_assigned_at_utc=CASE WHEN @proxyId IS NULL
+        THEN NULL ELSE SYSUTCDATETIME() END WHERE id=@assignmentId AND is_active=1;`);
+    return true;
   },
   async activeUser(userId:number,transaction:DatabaseTransaction):Promise<boolean>{
     const result=await transaction.request().input('userId',sql.Int,userId).query<{id:number}>(`
@@ -164,6 +183,7 @@ export const collaborationRepository = {
   async revokeAssignment(assignmentId:number,actorId:number,transaction:DatabaseTransaction):Promise<void>{
     await transaction.request().input('id',sql.BigInt,assignmentId).input('actorId',sql.Int,actorId)
       .query(`UPDATE dbo.TM_collaboration_assignments SET is_active=0,
+        proxy_user_id=NULL,proxy_assigned_at_utc=NULL,
         revoked_at_utc=SYSUTCDATETIME(),revoked_by_user_id=@actorId
         WHERE id=@id AND is_active=1;`);
     await this.event(assignmentId,actorId,'REMOVED',transaction);
@@ -285,29 +305,40 @@ export const collaborationRepository = {
       pool.request().input('taskId',sql.BigInt,taskId).input('actorId',sql.Int,actorId).input('ownerId',sql.Int,ownerId)
         .query(`SELECT a.id,a.task_id AS taskId,a.subtask_id AS subtaskId,a.assignee_user_id AS userId,
           a.state,a.is_active AS isActive,a.completed_at_utc AS completedAtUtc,a.assigned_at_utc AS assignedAtUtc,
+          a.proxy_user_id AS proxyUserId,COALESCE(proxyPerson.USER_NAME,proxyPerson.USER_CODE) AS proxyName,
           p.USER_NAME AS userName,p.USER_CODE AS userCode,p.email
           FROM dbo.TM_collaboration_assignments a JOIN dbo.users p ON p.USER_ID=a.assignee_user_id
-          WHERE a.task_id=@taskId AND (@actorId=@ownerId OR a.is_active=1 AND a.assignee_user_id=@actorId)
+          LEFT JOIN dbo.users proxyPerson ON proxyPerson.USER_ID=a.proxy_user_id
+          WHERE a.task_id=@taskId AND (@actorId=@ownerId OR a.is_active=1 AND
+            (a.assignee_user_id=@actorId OR a.proxy_user_id=@actorId))
           ORDER BY a.subtask_id,a.id;`),
       pool.request().input('taskId',sql.BigInt,taskId).input('actorId',sql.Int,actorId).input('ownerId',sql.Int,ownerId)
-        .query(`SELECT e.id,e.assignment_id AS assignmentId,e.note,e.created_at_utc AS createdAtUtc
+        .query(`SELECT e.id,e.assignment_id AS assignmentId,e.note,e.created_at_utc AS createdAtUtc,
+          e.author_user_id AS authorUserId,author.USER_NAME AS authorName
           FROM dbo.TM_collaboration_work_entries e JOIN dbo.TM_collaboration_assignments a ON a.id=e.assignment_id
-          WHERE a.task_id=@taskId AND (@actorId=@ownerId OR a.is_active=1 AND a.assignee_user_id=@actorId)
+          LEFT JOIN dbo.users author ON author.USER_ID=e.author_user_id
+          WHERE a.task_id=@taskId AND (@actorId=@ownerId OR a.is_active=1 AND
+            (a.assignee_user_id=@actorId OR a.proxy_user_id=@actorId))
           ORDER BY e.created_at_utc,e.id;`),
       pool.request().input('taskId',sql.BigInt,taskId).input('actorId',sql.Int,actorId).input('ownerId',sql.Int,ownerId)
         .query(`SELECT f.id,f.assignment_id AS assignmentId,f.original_file_name AS originalFileName,
           f.size_bytes AS sizeBytes,f.mime_type AS mimeType, f.file_extension AS fileExtension,
-          f.uploaded_by_user_id AS uploadedByUserId, f.uploaded_at_utc AS uploadedAtUtc
+          f.uploaded_by_user_id AS uploadedByUserId,
+          COALESCE(uploader.USER_NAME,uploader.USER_CODE) AS uploadedByName,
+          f.uploaded_at_utc AS uploadedAtUtc
           FROM dbo.TM_collaboration_files f JOIN dbo.TM_collaboration_assignments a ON a.id=f.assignment_id
+          LEFT JOIN dbo.users uploader ON uploader.USER_ID=f.uploaded_by_user_id
           WHERE a.task_id=@taskId AND f.deleted_at_utc IS NULL
-            AND (@actorId=@ownerId OR a.is_active=1 AND a.assignee_user_id=@actorId)
+            AND (@actorId=@ownerId OR a.is_active=1 AND
+              (a.assignee_user_id=@actorId OR a.proxy_user_id=@actorId))
           ORDER BY f.uploaded_at_utc,f.id;`),
       pool.request().input('taskId',sql.BigInt,taskId).input('actorId',sql.Int,actorId).input('ownerId',sql.Int,ownerId)
         .query(`SELECT subtask_id AS subtaskId,assignment_mode AS mode
         FROM dbo.TM_collaboration_subtask_modes mode WHERE mode.task_id=@taskId
           AND (@actorId=@ownerId OR EXISTS (SELECT 1 FROM dbo.TM_collaboration_assignments assignment
             WHERE assignment.task_id=@taskId AND assignment.subtask_id=mode.subtask_id
-              AND assignment.assignee_user_id=@actorId AND assignment.is_active=1));`),
+              AND (assignment.assignee_user_id=@actorId OR assignment.proxy_user_id=@actorId)
+              AND assignment.is_active=1));`),
     ]);
     const progress=await pool.request().input('taskId',sql.BigInt,taskId)
       .input('actorId',sql.Int,actorId).input('ownerId',sql.Int,ownerId)
@@ -321,20 +352,21 @@ export const collaborationRepository = {
         AND (@actorId=@ownerId OR a.subtask_id IS NULL OR EXISTS(
           SELECT 1 FROM dbo.TM_collaboration_assignments member
           WHERE member.task_id=@taskId AND member.subtask_id=a.subtask_id
-            AND member.assignee_user_id=@actorId AND member.is_active=1))
+            AND (member.assignee_user_id=@actorId OR member.proxy_user_id=@actorId) AND member.is_active=1))
       GROUP BY a.subtask_id;`);
     return {members:members.recordset,notes:notes.recordset,
       files:files.recordset.map(file=>({...file,originalFileName:recoverAttachmentFileName(file.originalFileName)})),
       modes:modes.recordset,progress:progress.recordset};
   },
   async file(id:string,transaction?:DatabaseTransaction):Promise<{id:string;taskId:number;assignmentId:number;assigneeUserId:number;ownerUserId:number;
-    uploadedByUserId:number;key:string;name:string;mime:string;size:number;isActive:boolean}|null>{
+    uploadedByUserId:number;proxyUserId:number|null;key:string;name:string;mime:string;size:number;isActive:boolean}|null>{
     const request=await requestFor(transaction);
     const result=await request.input('id',sql.UniqueIdentifier,id)
       .query<{id:string;taskId:number;assignmentId:number;assigneeUserId:number;ownerUserId:number;
-        uploadedByUserId:number;key:string;name:string;mime:string;size:number;isActive:boolean}>(`
+        uploadedByUserId:number;proxyUserId:number|null;key:string;name:string;mime:string;size:number;isActive:boolean}>(`
       SELECT f.id,a.task_id AS taskId,a.id AS assignmentId,a.assignee_user_id AS assigneeUserId,
         t.owner_user_id AS ownerUserId,f.uploaded_by_user_id AS uploadedByUserId,
+        a.proxy_user_id AS proxyUserId,
         f.storage_key AS [key],f.original_file_name AS name,
         f.mime_type AS mime,f.size_bytes AS size,a.is_active AS isActive
       FROM dbo.TM_collaboration_files f JOIN dbo.TM_collaboration_assignments a ON a.id=f.assignment_id
@@ -349,7 +381,7 @@ export const collaborationRepository = {
         FROM dbo.TM_collaboration_files f
         JOIN dbo.TM_collaboration_assignments a ON a.id=f.assignment_id
         WHERE f.id=@id AND f.uploaded_by_user_id=@actorId AND f.deleted_at_utc IS NULL
-          AND a.is_active=1 AND a.assignee_user_id=@actorId;`);
+          AND a.is_active=1 AND (a.assignee_user_id=@actorId OR a.proxy_user_id=@actorId);`);
     return result.rowsAffected[0]===1;
   },
   async attachFile(assignmentId:number,actorId:number,metadata:{name:string;key:string;mime:string;extension:string;size:number},transaction:DatabaseTransaction):Promise<string>{

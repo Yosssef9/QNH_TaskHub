@@ -273,7 +273,8 @@ export function TaskEditorDialog({
         ...baseValues,
         dueDate: values.dueDate ?? null,
         tagIds,
-        ...(!task && assigneeUserIds.length ? {assigneeUserIds} : {}),
+        ...(!task && assigneeUserIds.length===1 ? {assigneeUserId:assigneeUserIds[0]!} : {}),
+        ...(!task && assigneeUserIds.length>1 ? {assigneeUserIds} : {}),
         ...(task && values.listId ? { listId: values.listId } : {}),
       }
     }

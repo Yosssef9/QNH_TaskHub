@@ -111,6 +111,8 @@ export interface TaskDetails {
   task: PersonalTask;
   actionItem: MeetingActionItemContext | null;
   generalAssignment?: import("../general-task-assignments/general-task-assignments.repository.js").GeneralAssignmentContext | null;
+  taskProxies?: import("../general-task-assignments/task-proxies.repository.js").TaskProxyGrant[];
+  proxyGrant?: import("../general-task-assignments/task-proxies.repository.js").TaskProxyGrant | null;
   capabilities: MeetingActionItemCapabilities;
   subtasks: Subtask[];
   attachments: Attachment[];

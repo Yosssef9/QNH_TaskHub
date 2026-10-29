@@ -1,7 +1,7 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   getEligibleTaskUsers, getEligibleTaskUser, getAssignedGeneralTasks, assignMainTask, assignSubtask,
-  saveWorkNotes, saveCompletionSummary,
+  saveWorkNotes, saveCompletionSummary, setTaskProxy,
 } from './general-assignment.api'
 import type { GeneralAssignedQuery } from './general-assignment.api'
 
@@ -48,3 +48,5 @@ export const useAssignSubtask = () => useAssignmentMutation(assignSubtask)
 export const useSaveWorkNotes = () => useAssignmentMutation(saveWorkNotes)
 export const useSaveCompletionSummary = () => useAssignmentMutation(saveCompletionSummary)
 
+
+export const useSetTaskProxy = () => useAssignmentMutation(setTaskProxy)

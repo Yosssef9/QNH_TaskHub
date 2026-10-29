@@ -6,6 +6,8 @@ export interface CollaborativeMember {
   taskId: number
   subtaskId: number | null
   userId: number
+  proxyUserId?: number | null
+  proxyName?: string | null
   userName: string
   userCode: string
   email: string | null
@@ -14,8 +16,8 @@ export interface CollaborativeMember {
   completedAtUtc: string | null
   assignedAtUtc: string
 }
-export interface CollaborativeNote {id:number;assignmentId:number;note:string;createdAtUtc:string}
-export interface CollaborativeFile {id:string;assignmentId:number;originalFileName:string;mimeType:string;fileExtension:string;sizeBytes:number;uploadedAtUtc:string;uploadedByUserId:number}
+export interface CollaborativeNote {id:number;assignmentId:number;note:string;createdAtUtc:string;authorUserId:number;authorName:string|null}
+export interface CollaborativeFile {id:string;assignmentId:number;originalFileName:string;mimeType:string;fileExtension:string;sizeBytes:number;uploadedAtUtc:string;uploadedByUserId:number;uploadedByName?:string|null}
 export interface CollaborativeMode {subtaskId:number;mode:'INHERIT'|'CUSTOM'}
 export interface CollaborativeProgress {scopeId:number|null;total:number;completed:number}
 export interface CollaborativeView {
@@ -37,6 +39,8 @@ export const collaborativeApi={
     `/collaboration/task/${taskId}/assignees`,{userIds})),
   setChildTeam:(taskId:number,subtaskId:number,mode:'INHERIT'|'CUSTOM',userIds:number[])=>result(
     apiClient.put<ApiSuccessResponse<CollaborativeView>>(`/collaboration/task/${taskId}/subtasks/${subtaskId}/assignees`,{mode,userIds})),
+  setProxy:(assignmentId:number,proxyUserId:number|null)=>result(apiClient.put<ApiSuccessResponse<{assignmentId:number;proxyUserId:number|null}>>(
+    `/collaboration/assignments/${assignmentId}/proxy`,{proxyUserId})),
   addNote:(assignmentId:number,note:string)=>result(apiClient.post<ApiSuccessResponse<{assignmentId:number}>>(
     `/collaboration/assignments/${assignmentId}/notes`,{note})),
   complete:(assignmentId:number,completed:boolean)=>result(apiClient.patch<ApiSuccessResponse<{assignmentId:number;completed:boolean}>>(

@@ -711,7 +711,7 @@ export function AssignedToMePage() {
                     metadata={<>
                       <TaskStatusIndicator status={item.status} pill />
                   <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                    <span>{item.isMainAssignee ? t('tasks.assignment.mainAssignee') : t('tasks.assignment.subtaskAssignee')}</span>
+                    <span>{item.isProxy ? t('tasks.proxy.badge') : item.isMainAssignee ? t('tasks.assignment.mainAssignee') : t('tasks.assignment.subtaskAssignee')}</span>
                     <span>{t('tasks.assignment.progressCounts', {completed:item.subtaskCompleted,total:item.subtaskTotal})}</span>
                   </div>                    </>}
                     actions={<DiscussionShortcut

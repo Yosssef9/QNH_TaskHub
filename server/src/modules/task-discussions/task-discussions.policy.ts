@@ -22,20 +22,33 @@ export async function assertDiscussionAccess(userId: number, scope: DiscussionSc
           WHERE st.task_id=t.id AND st.id=@subtaskId AND st.deleted_at_utc IS NULL) THEN 1 ELSE 0 END AS int) AS childExists,
         CAST(CASE WHEN EXISTS(SELECT 1 FROM dbo.TM_collaboration_tasks c WHERE c.task_id=t.id)
           THEN CASE WHEN EXISTS(SELECT 1 FROM dbo.TM_collaboration_assignments a
-              WHERE a.task_id=t.id AND a.assignee_user_id=@userId AND a.is_active=1
+              WHERE a.task_id=t.id AND (a.assignee_user_id=@userId OR
+                  (a.proxy_user_id=@userId AND NOT EXISTS(
+                    SELECT 1 FROM dbo.TM_meeting_action_items mi WHERE mi.task_id=t.id))) AND a.is_active=1
                 AND ((@subtaskId IS NULL AND a.subtask_id IS NULL)
                   OR (@subtaskId IS NOT NULL AND a.subtask_id=@subtaskId))) THEN 1 ELSE 0 END
           WHEN @subtaskId IS NULL THEN CASE WHEN EXISTS(
               SELECT 1 FROM dbo.TM_general_task_assignments g
                 WHERE g.task_id=t.id AND g.assignee_user_id=@userId)
               OR EXISTS(SELECT 1 FROM dbo.TM_meeting_action_items mi
-                WHERE mi.task_id=t.id AND mi.assignee_user_id=@userId) THEN 1 ELSE 0 END
+                WHERE mi.task_id=t.id AND mi.assignee_user_id=@userId)
+              OR EXISTS(SELECT 1 FROM dbo.TM_task_proxies p JOIN dbo.TM_general_task_assignments g
+                ON g.task_id=p.task_id WHERE p.task_id=t.id AND p.subtask_id IS NULL
+                AND p.revoked_at_utc IS NULL AND p.proxy_user_id=@userId
+                AND p.principal_user_id=g.assignee_user_id) THEN 1 ELSE 0 END
           ELSE CASE WHEN EXISTS(
               SELECT 1 FROM dbo.TM_subtasks st
               LEFT JOIN dbo.TM_general_task_assignments g ON g.task_id=t.id
               LEFT JOIN dbo.TM_meeting_action_items mi ON mi.task_id=t.id
               WHERE st.id=@subtaskId AND st.task_id=t.id AND st.deleted_at_utc IS NULL
-                AND COALESCE(st.assignee_user_id,g.assignee_user_id,mi.assignee_user_id)=@userId
+                AND (COALESCE(st.assignee_user_id,g.assignee_user_id,mi.assignee_user_id)=@userId
+                  OR EXISTS (SELECT 1 FROM dbo.TM_task_proxies p
+                    WHERE p.task_id=t.id AND p.proxy_user_id=@userId AND p.revoked_at_utc IS NULL
+                      AND ((p.subtask_id=st.id AND p.principal_user_id=
+                        COALESCE(st.assignee_user_id,g.assignee_user_id,t.owner_user_id)) OR (p.subtask_id IS NULL
+                        AND p.principal_user_id=g.assignee_user_id
+                        AND COALESCE(st.assignee_user_id,g.assignee_user_id,t.owner_user_id)=p.principal_user_id)))
+                  )
             ) THEN 1 ELSE 0 END END AS int) AS member
       FROM dbo.TM_tasks t WHERE t.id=@taskId AND t.deleted_at_utc IS NULL;
     `);

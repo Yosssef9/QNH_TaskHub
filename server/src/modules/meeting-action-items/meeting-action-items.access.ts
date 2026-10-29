@@ -10,6 +10,7 @@ import { generalTaskAssignmentsRepository } from "../general-task-assignments/ge
 import type { GeneralAssignmentContext } from "../general-task-assignments/general-task-assignments.repository.js";
 import { shareCapabilities } from '../task-shares/task-shares.policy.js';
 import { taskSharesRepository } from "../task-shares/task-shares.repository.js";
+import { taskProxiesRepository, type TaskProxyGrant } from "../general-task-assignments/task-proxies.repository.js";
 import { collaborationRepository } from "../collaboration/collaboration.repository.js";
 import { meetingActionItemsRepository } from "./meeting-action-items.repository.js";
 import type {
@@ -24,6 +25,7 @@ export interface ResolvedTaskAccess {
   generalAssignment?: GeneralAssignmentContext | null;
   sharedPermission?: "VIEW" | "EDIT";
   collaborationActive?: boolean;
+  proxyGrant?: TaskProxyGrant | null;
 }
 
 const normalOwnerCapabilities: MeetingActionItemCapabilities = {
@@ -183,6 +185,17 @@ export async function resolveTaskAccess(
       };
     }
     if (shareAccess) return shareAccess;
+    if (!includeDeleted) {
+      const proxies=await taskProxiesRepository.forActor(taskId,actorUserId,transaction);
+      const mainProxy=proxies.find(grant=>grant.subtaskId===null);
+      const childProxy=proxies.find(grant=>grant.subtaskId!==null);
+      if(mainProxy || childProxy) return {
+        ownerUserId:general.ownerUserId,context:null,generalAssignment:general,
+        proxyGrant:mainProxy??childProxy??null,
+        capabilities:{...actionAssigneeCapabilities,
+          canCompleteTask:Boolean(mainProxy),canChangeNonCompletionStatus:Boolean(mainProxy)},
+      };
+    }
     if (includeDeleted || !(await generalTaskAssignmentsRepository.hasAccessToTask(taskId, actorUserId, transaction))) {
       return null;
     }

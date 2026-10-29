@@ -14,9 +14,23 @@ async function fetchMembers(scope:DiscussionScope,senderId:number){
         UNION ALL SELECT a.assignee_user_id FROM dbo.TM_collaboration_assignments a
           WHERE a.task_id=t.id AND a.is_active=1 AND
             (a.subtask_id=@subtaskId OR (a.subtask_id IS NULL AND @subtaskId IS NULL))
+        UNION ALL SELECT a.proxy_user_id FROM dbo.TM_collaboration_assignments a
+          WHERE a.task_id=t.id AND a.is_active=1 AND a.proxy_user_id IS NOT NULL
+            AND NOT EXISTS(SELECT 1 FROM dbo.TM_meeting_action_items mi WHERE mi.task_id=t.id)
+            AND (a.subtask_id=@subtaskId OR (a.subtask_id IS NULL AND @subtaskId IS NULL))
         UNION ALL SELECT g.assignee_user_id FROM dbo.TM_general_task_assignments g
           WHERE g.task_id=t.id AND @subtaskId IS NULL AND
             NOT EXISTS(SELECT 1 FROM dbo.TM_collaboration_tasks c WHERE c.task_id=t.id)
+        UNION ALL SELECT p.proxy_user_id FROM dbo.TM_task_proxies p
+          JOIN dbo.TM_general_task_assignments g ON g.task_id=p.task_id
+          LEFT JOIN dbo.TM_subtasks child ON child.id=@subtaskId AND child.task_id=p.task_id AND child.deleted_at_utc IS NULL
+          WHERE p.task_id=t.id AND p.revoked_at_utc IS NULL
+            AND NOT EXISTS(SELECT 1 FROM dbo.TM_collaboration_tasks c WHERE c.task_id=t.id)
+            AND ((@subtaskId IS NULL AND p.subtask_id IS NULL AND p.principal_user_id=g.assignee_user_id)
+              OR (@subtaskId IS NOT NULL AND child.id IS NOT NULL AND
+                ((p.subtask_id=child.id AND p.principal_user_id=COALESCE(child.assignee_user_id,g.assignee_user_id,t.owner_user_id))
+                  OR (p.subtask_id IS NULL AND p.principal_user_id=g.assignee_user_id
+                    AND p.principal_user_id=COALESCE(child.assignee_user_id,g.assignee_user_id,t.owner_user_id)))))
         UNION ALL SELECT mi.assignee_user_id FROM dbo.TM_meeting_action_items mi
           WHERE mi.task_id=t.id AND @subtaskId IS NULL AND
             NOT EXISTS(SELECT 1 FROM dbo.TM_collaboration_tasks c WHERE c.task_id=t.id)

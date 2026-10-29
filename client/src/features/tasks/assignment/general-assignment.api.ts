@@ -12,7 +12,7 @@ export interface GeneralAssignedTask {
   taskId: number; title: string; description: string | null; status: TaskStatus; priority: TaskPriority
   dueDate: string | null; creatorUserId: number; creatorName: string; isMainAssignee: boolean
   subtaskTotal: number; subtaskCompleted: number; assignedSubtasks: GeneralAssignedSubtask[]
-  teamTask?: boolean;teamMemberCount?: number;mainAssigneeCount?: number;mainCompletedCount?: number
+  isProxy?: boolean;teamTask?: boolean;teamMemberCount?: number;mainAssigneeCount?: number;mainCompletedCount?: number
   tags?: TaskTag[]
   teamRoster?: Array<{userId:number;userName:string;userCode:string;email:string|null;mainAssignee:boolean}>
 }
@@ -53,3 +53,9 @@ export async function getEligibleTaskUser(userId: number) {
 
 
 
+
+export async function setTaskProxy(input:{taskId:number;subtaskId?:number|null;proxyUserId:number|null}){
+  const endpoint=input.subtaskId == null ? `/general-assignments/task/${input.taskId}/proxy`
+    : `/general-assignments/subtask/${input.subtaskId}/proxy`
+  await apiClient.put(endpoint,{proxyUserId:input.proxyUserId})
+}

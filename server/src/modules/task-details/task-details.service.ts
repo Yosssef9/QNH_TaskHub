@@ -9,6 +9,7 @@ import { parsePositiveIntegerId } from "../../shared/utils/id.utils.js";
 import { workCyclesService } from "../work-cycles/work-cycles.service.js";
 import { resolveTaskAccess } from "../meeting-action-items/meeting-action-items.access.js";
 import { meetingActionItemsRepository } from "../meeting-action-items/meeting-action-items.repository.js";
+import { taskProxiesRepository } from "../general-task-assignments/task-proxies.repository.js";
 import { generalTaskAssignmentsRepository } from "../general-task-assignments/general-task-assignments.repository.js";
 import { reconcileParentCompletion } from "../general-task-assignments/general-task-assignments.completion.js";
 import { notifyGeneralTask, notifyTaskOwnerActivity } from "../general-task-assignments/general-task-assignments.email-events.js";
@@ -95,11 +96,17 @@ export const taskDetailsService = {
     const visibleAttachments = externalShare
       ? attachments.filter(item=>item.subtaskId===null) : ownIds ? attachments.filter(item => item.subtaskId === null ||
       (!resolved.collaborationActive && ownIds.has(Number(item.subtaskId)))) : attachments;
+    const collaborativeProxiedScopes=resolved.collaborationActive && isRestricted
+      ? (await collaborationRepository.activeAssignments(taskId)).filter(member=>member.proxyUserId===actorUserId)
+      : [];
+    const proxyPrincipalIds=new Set(collaborativeProxiedScopes.map(member=>member.assigneeUserId));
+    const proxyMainPrincipalIds=new Set(collaborativeProxiedScopes
+      .filter(member=>member.subtaskId===null).map(member=>member.assigneeUserId));
     const visibleActivity = externalShare
       ? activity.filter(item=>['CREATED','STATUS_CHANGED','COLLAB_PARENT_STATUS_CHANGED','SUBTASK_CREATED',
           'SUBTASK_UPDATED','SUBTASK_DELETED'].includes(item.activityType))
       : resolved.collaborationActive && isRestricted
-      ? activity.filter(item => canViewCollaborativeActivity(item,actorUserId,ownIds ?? new Set<number>()))
+      ? activity.filter(item => canViewCollaborativeActivity(item,actorUserId,ownIds ?? new Set<number>(),proxyPrincipalIds,proxyMainPrincipalIds))
       : ownIds ? activity.filter(item => {
       // List/detail/change history about sibling subtasks is never returned to another executor.
       if (item.activityType === "SUBTASKS_REORDERED") return false;
@@ -119,6 +126,8 @@ export const taskDetailsService = {
       return ["STATUS_CHANGED","CREATED","COMPLETION_SUMMARY_UPDATED","GENERAL_TASK_ASSIGNED"].includes(item.activityType);
     }) : activity;
     const mappedTask = mapTask(task);
+    const currentProxies=(!resolved.collaborationActive && resolved.generalAssignment)
+      ? await taskProxiesRepository.grants(taskId) : [];
     return {
       task: {
         ...mappedTask,
@@ -136,6 +145,11 @@ export const taskDetailsService = {
       ...(resolved.sharedPermission?{sharedPermission:resolved.sharedPermission}:{}),
       actionItem: resolved.context,
       generalAssignment: resolved.generalAssignment ?? null,
+      taskProxies:currentProxies.filter(proxy=>
+        actorUserId===resolved.ownerUserId || proxy.proxyUserId===actorUserId ||
+        (proxy.subtaskId===null && resolved.generalAssignment?.assigneeUserId===actorUserId) ||
+        (proxy.subtaskId!==null && (ownIds?.has(proxy.subtaskId) || proxy.principalUserId===actorUserId))),
+      proxyGrant:resolved.proxyGrant ?? null,
       capabilities: resolved.capabilities,
       subtasks: visibleSubtasks.map(subtask => ({...mapSubtask(subtask),
         workNoteEntries: externalShare || (resolved.collaborationActive && isRestricted)
@@ -367,7 +381,8 @@ export const taskDetailsService = {
 
       if ((resolved.generalAssignment || resolved.context) &&
           (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
-            resolved.ownerUserId, subtaskId, transaction)) !== actorUserId) {
+            resolved.ownerUserId, subtaskId, transaction)) !== actorUserId &&
+          !(await taskProxiesRepository.isExecutor(accessRow.taskId,subtaskId,actorUserId,transaction))) {
         throw new AppError({statusCode:403,code:"SUBTASK_NOT_ASSIGNED_TO_YOU",
           message:"Only your assigned subtasks can be completed."});
       }
@@ -526,7 +541,8 @@ export const taskDetailsService = {
     if (preflight?.sharedPermission && parent.subtaskId != null &&
         (preflight.collaborationActive ||
           (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
-            preflight.ownerUserId,parent.subtaskId)) !== actorUserId)) {
+            preflight.ownerUserId,parent.subtaskId)) !== actorUserId &&
+          !(await taskProxiesRepository.isExecutor(taskId!,parent.subtaskId,actorUserId)))) {
       throw new AppError({statusCode:403,code:'PRIVATE_SUBTASK_UPLOAD_FORBIDDEN',
         message:'Shared access does not permit uploading to another person’s private subtask.'});
     }
@@ -539,8 +555,10 @@ export const taskDetailsService = {
     }
     if ((preflight.generalAssignment || preflight.context) && !preflight.sharedPermission && actorUserId !== preflight.ownerUserId) {
       const permitted = parent.subtaskId
-        ? (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(preflight.ownerUserId, parent.subtaskId)) === actorUserId
-        : (preflight.context?.assigneeUserId ?? preflight.generalAssignment?.assigneeUserId) === actorUserId;
+        ? ((await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(preflight.ownerUserId, parent.subtaskId)) === actorUserId ||
+          await taskProxiesRepository.isExecutor(taskId!,parent.subtaskId,actorUserId))
+        : ((preflight.context?.assigneeUserId ?? preflight.generalAssignment?.assigneeUserId) === actorUserId ||
+          await taskProxiesRepository.isExecutor(taskId!,null,actorUserId));
       if (!permitted) throw new AppError({statusCode:403,code:"ATTACHMENT_UPLOAD_FORBIDDEN",
         message:"Upload only to your own assigned work."});
     }
@@ -556,7 +574,8 @@ export const taskDetailsService = {
         if (resolved?.sharedPermission && parent.subtaskId != null &&
             (resolved.collaborationActive ||
               (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
-                resolved.ownerUserId,parent.subtaskId,transaction)) !== actorUserId)) {
+                resolved.ownerUserId,parent.subtaskId,transaction)) !== actorUserId &&
+              !(await taskProxiesRepository.isExecutor(taskId!,parent.subtaskId,actorUserId,transaction)))) {
           throw new AppError({statusCode:403,code:'PRIVATE_SUBTASK_UPLOAD_FORBIDDEN',
             message:'Shared access does not permit uploading to another person’s private subtask.'});
         }
@@ -569,9 +588,11 @@ export const taskDetailsService = {
         }
         if ((resolved.generalAssignment || resolved.context) && !resolved.sharedPermission && actorUserId !== resolved.ownerUserId) {
           const permitted = parent.subtaskId
-            ? (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
-                resolved.ownerUserId, parent.subtaskId, transaction)) === actorUserId
-            : (resolved.context?.assigneeUserId ?? resolved.generalAssignment?.assigneeUserId) === actorUserId;
+            ? ((await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
+                resolved.ownerUserId, parent.subtaskId, transaction)) === actorUserId ||
+              await taskProxiesRepository.isExecutor(taskId!,parent.subtaskId,actorUserId,transaction))
+            : ((resolved.context?.assigneeUserId ?? resolved.generalAssignment?.assigneeUserId) === actorUserId ||
+              await taskProxiesRepository.isExecutor(taskId!,null,actorUserId,transaction));
           if (!permitted) throw new AppError({statusCode:403,code:"ATTACHMENT_UPLOAD_FORBIDDEN",
             message:"Upload only to your own assigned work."});
         }
@@ -636,7 +657,8 @@ export const taskDetailsService = {
     if (resolved.sharedPermission && accessRow.subtaskId !== null) throw attachmentNotFound();
     if ((resolved.generalAssignment || resolved.context) && actorUserId !== resolved.ownerUserId &&
       accessRow.subtaskId !== null &&
-      (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(resolved.ownerUserId, accessRow.subtaskId)) !== actorUserId) {
+      (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(resolved.ownerUserId, accessRow.subtaskId)) !== actorUserId &&
+      !(await taskProxiesRepository.isExecutor(accessRow.taskId,accessRow.subtaskId,actorUserId))) {
       throw attachmentNotFound();
     }
     if (resolved.collaborationActive && actorUserId !== resolved.ownerUserId && accessRow.subtaskId!==null)
@@ -653,9 +675,11 @@ export const taskDetailsService = {
     if (!resolved) throw attachmentNotFound();
     if ((resolved.generalAssignment || resolved.context) && actorUserId !== resolved.ownerUserId &&
         (accessRow.subtaskId === null
-          ? (resolved.context?.assigneeUserId ?? resolved.generalAssignment?.assigneeUserId) !== actorUserId
-          : (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
-              resolved.ownerUserId, accessRow.subtaskId)) !== actorUserId)) {
+          ? ((resolved.context?.assigneeUserId ?? resolved.generalAssignment?.assigneeUserId) !== actorUserId &&
+              !(await taskProxiesRepository.isExecutor(accessRow.taskId,null,actorUserId)))
+          : ((await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
+              resolved.ownerUserId, accessRow.subtaskId)) !== actorUserId &&
+              !(await taskProxiesRepository.isExecutor(accessRow.taskId,accessRow.subtaskId,actorUserId))))) {
       throw attachmentNotFound();
     }
     if (resolved.collaborationActive && actorUserId!==resolved.ownerUserId) throw attachmentNotFound();
@@ -671,9 +695,11 @@ export const taskDetailsService = {
       if (!currentAccess) throw attachmentNotFound();
       if ((currentAccess.generalAssignment || currentAccess.context) && actorUserId !== currentAccess.ownerUserId &&
           (accessRow.subtaskId === null
-            ? (currentAccess.context?.assigneeUserId ?? currentAccess.generalAssignment?.assigneeUserId) !== actorUserId
-            : (await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
-                currentAccess.ownerUserId, accessRow.subtaskId, transaction)) !== actorUserId)) {
+            ? ((currentAccess.context?.assigneeUserId ?? currentAccess.generalAssignment?.assigneeUserId) !== actorUserId &&
+              !(await taskProxiesRepository.isExecutor(accessRow.taskId,null,actorUserId,transaction)))
+            : ((await generalTaskAssignmentsRepository.effectiveSubtaskAssignee(
+                currentAccess.ownerUserId, accessRow.subtaskId, transaction)) !== actorUserId &&
+              !(await taskProxiesRepository.isExecutor(accessRow.taskId,accessRow.subtaskId,actorUserId,transaction))))) {
         throw attachmentNotFound();
       }
       const canDelete = mayDeleteAttachment(

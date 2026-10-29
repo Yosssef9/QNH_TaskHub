@@ -4,6 +4,7 @@ import type { ComponentProps } from 'react'
 import { forwardRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { useDialogFloatingContainer } from '@/components/ui/dialog'
 import { cn } from '@/lib/cn'
 
 export function Select({ dir, ...props }: ComponentProps<typeof SelectPrimitive.Root>) {
@@ -38,8 +39,10 @@ SelectTrigger.displayName = 'SelectTrigger'
 export const SelectContent = forwardRef<
   HTMLDivElement,
   ComponentProps<typeof SelectPrimitive.Content>
->(({ children, className, position = 'popper', ...props }, ref) => (
-  <SelectPrimitive.Portal>
+>(function SelectContent({ children, className, position = 'popper', ...props }, ref) {
+  // Keep dropdowns inside an active modal's focus scope (including full-screen chat).
+  const dialogContainer = useDialogFloatingContainer()
+  return <SelectPrimitive.Portal container={dialogContainer ?? undefined}>
     <SelectPrimitive.Content
       ref={ref}
       position={position}
@@ -58,7 +61,7 @@ export const SelectContent = forwardRef<
       </SelectPrimitive.ScrollDownButton>
     </SelectPrimitive.Content>
   </SelectPrimitive.Portal>
-))
+})
 SelectContent.displayName = 'SelectContent'
 
 export const SelectItem = forwardRef<HTMLDivElement, ComponentProps<typeof SelectPrimitive.Item>>(

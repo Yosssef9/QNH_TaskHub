@@ -207,7 +207,19 @@ export interface GeneralAssignmentContext {
   rowVersion: string
 }
 
+export interface TaskProxyGrant {
+  id: number
+  taskId: number
+  subtaskId: number | null
+  principalUserId: number
+  proxyUserId: number
+  proxyName: string
+  proxyCode: string
+  appointedAtUtc: string
+}
 export interface TaskDetails {
+  taskProxies?: TaskProxyGrant[]
+  proxyGrant?: TaskProxyGrant | null
   completionSummaryEntries: TaskCompletionSummaryEntry[]
   createdBy?: {userId:number;userName:string;userCode:string|null}|null
   collaborationActive?: boolean

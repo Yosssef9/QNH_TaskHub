@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AtSign, CheckCheck, Download, Eye, FileText, Image as ImageIcon, LoaderCircle,
   Maximize2, Minimize2, MessageCircle, MoreHorizontal, Paperclip, Pencil,
-  Reply, Search, Send, Smile, Trash2, X, ArrowDown, Users,
+  Reply, Search, Send, Smile, Trash2, X, ArrowDown, Users, FolderOpen,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
@@ -21,6 +21,7 @@ import { discussionApi, watchDiscussion, type DiscussionFile, type DiscussionMes
 import { newActionCreationRequestId } from '@/features/meetings/action-items/creation-request-id'
 import { useClickOutside } from '@/hooks/use-click-outside'
 import { DiscussionParticipantsPopover } from './DiscussionParticipantsPopover'
+import { SharedDiscussionPanel } from './SharedDiscussionPanel'
 import { shouldShowDiscussionScrollButton, SCROLL_HIDE_DISTANCE } from './discussion-scroll-visibility'
 
 const REACTIONS = ['👍', '❤️', '😂', '🎉', '👏', '😮', '🙏', '✅'] as const
@@ -68,6 +69,7 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
   const [older,setOlder]=useState<DiscussionMessage[]>([])
   const [loadingOlder,setLoadingOlder]=useState(false)
   const [searchOpen,setSearchOpen]=useState(false)
+  const [sharedOpen,setSharedOpen]=useState(false)
   const [searchText,setSearchText]=useState('')
   const [searchTerm,setSearchTerm]=useState('')
   const [newMessageCount,setNewMessageCount]=useState(0)
@@ -84,6 +86,8 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
   const composerRef=useRef<HTMLTextAreaElement>(null)
   const searchInputRef=useRef<HTMLInputElement>(null)
   const searchAreaRef=useRef<HTMLDivElement>(null)
+  const sharedPanelRef=useRef<HTMLDivElement>(null)
+  const sharedToggleRef=useRef<HTMLButtonElement>(null)
   const scrollRef=useRef<HTMLDivElement>(null)
   const lastSeenMessage=useRef<number|null>(null)
   // Use separate show/hide thresholds so small scroll and layout movements cannot flicker the button.
@@ -141,7 +145,7 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
     initialMessageDone.current=initialMessageId;void jumpTo(initialMessageId)
   }},[initialMessageId,canSee,msgs.isSuccess,taskId,selected])
   useEffect(()=>{const firstScope=scopes.data?.[0];if(firstScope&&!canSee)setSelected(firstScope.subtaskId)},[scopes.data,canSee])
-  useEffect(()=>{setOlder([]);setSearchOpen(false);setSearchText('');setSearchTerm('');setTypingUsers([]);
+  useEffect(()=>{setOlder([]);setSharedOpen(false);setSearchOpen(false);setSearchText('');setSearchTerm('');setTypingUsers([]);
     setNewMessageCount(0);setShowScrollButton(false);setAtBottom(true);lastSeenMessage.current=null;
     navigationToken.current+=1;setFocusTarget(null);setHighlightId(null);setHighlightPhase(null);
     setReply(null);setEditing(null);setText('');setPendingFile(null);
@@ -152,6 +156,23 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
   useEffect(()=>{const timer=window.setTimeout(()=>setSearchTerm(searchText.trim()),300);return ()=>window.clearTimeout(timer)},[searchText])
   useEffect(()=>{if(searchOpen){const frame=window.requestAnimationFrame(()=>searchInputRef.current?.focus());return()=>window.cancelAnimationFrame(frame)}},[searchOpen])
   useClickOutside(searchAreaRef,closeSearch,searchOpen)
+  useEffect(()=>{if(!sharedOpen)return
+    function outside(event:PointerEvent){
+      if(!(event.target instanceof Node)||preview)return
+      // Radix Select portals its options outside the panel. Selecting a sort option
+      // must not be interpreted as clicking outside Shared Files & Links.
+      if(event.target instanceof Element&&event.target.closest('[data-shared-discussion-sort-menu]'))return
+      if(sharedPanelRef.current?.contains(event.target)||sharedToggleRef.current?.contains(event.target))return
+      setSharedOpen(false)
+    }
+    function escape(event:KeyboardEvent){
+      if(event.key!=='Escape'||event.defaultPrevented||preview)return
+      event.preventDefault();event.stopPropagation();setSharedOpen(false)
+    }
+    document.addEventListener('pointerdown',outside)
+    document.addEventListener('keydown',escape)
+    return()=>{document.removeEventListener('pointerdown',outside);document.removeEventListener('keydown',escape)}
+  },[sharedOpen,preview])
   useEffect(()=>{if(!searchOpen)return
     function onSearchEscape(event:KeyboardEvent){
       if(event.key!=='Escape'||event.defaultPrevented)return
@@ -163,12 +184,12 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
   useEffect(()=>{if(!fullScreen)return;const onKey=(event:KeyboardEvent)=>{
     if(event.key!=='Escape')return
     // Escape dismisses the active picker/confirmation before leaving full screen.
-    if(searchOpen||emojiOpen||mentionOpen||actionMessage!==null||reactionMessage!==null||deleteMessage||deleteFile||preview)return
+    if(searchOpen||sharedOpen||emojiOpen||mentionOpen||actionMessage!==null||reactionMessage!==null||deleteMessage||deleteFile||preview)return
     setFullScreen(false)
   };
     document.addEventListener('keydown',onKey);const old=document.body.style.overflow;document.body.style.overflow='hidden';
     return ()=>{document.removeEventListener('keydown',onKey);document.body.style.overflow=old}},
-  [fullScreen,searchOpen,emojiOpen,mentionOpen,actionMessage,reactionMessage,deleteMessage,deleteFile,preview])
+  [fullScreen,searchOpen,sharedOpen,emojiOpen,mentionOpen,actionMessage,reactionMessage,deleteMessage,deleteFile,preview])
 
   const update=useCallback(()=>{void qc.invalidateQueries({queryKey:['discussions',taskId]});void qc.invalidateQueries({queryKey:['discussions','cards']});void qc.invalidateQueries({queryKey:['discussions','assigned-cards']});void qc.invalidateQueries({queryKey:['discussions','meeting-cards']});void qc.invalidateQueries({queryKey:['discussions','shared-cards']});void qc.invalidateQueries({queryKey:['discussions','inbox']});void qc.invalidateQueries({queryKey:['discussions','inbox-total']})},[qc,taskId])
   useEffect(()=>{if(!canSee)return;const controller=new AbortController();let alive=true
@@ -311,7 +332,7 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
   }
   const emojiResults=EMOJIS.filter(item=>!emojiSearch.trim()||item[1].includes(emojiSearch.toLowerCase())||item[0].includes(emojiSearch))
   const discussion=(<TooltipProvider delayDuration={180}><section className={`bg-background text-foreground flex min-w-0 flex-col overflow-hidden ${fullScreen?'fixed inset-0 z-[70] h-dvh w-screen p-3 sm:p-6':inboxMode?'h-full min-h-0 rounded-xl border':'rounded-xl border'}`} aria-label={t('discussions.title')}
-    onKeyDownCapture={event=>{if(fullScreen&&event.key==='Escape'&&!searchOpen&&!emojiOpen&&!mentionOpen&&actionMessage===null&&reactionMessage===null&&!deleteMessage&&!deleteFile&&!preview){
+    onKeyDownCapture={event=>{if(fullScreen&&event.key==='Escape'&&!searchOpen&&!sharedOpen&&!emojiOpen&&!mentionOpen&&actionMessage===null&&reactionMessage===null&&!deleteMessage&&!deleteFile&&!preview){
       event.stopPropagation();setFullScreen(false)
     }}}>
     {fullScreen&&<header className="mb-3 flex items-center justify-between gap-3 border-b pb-3">
@@ -337,10 +358,13 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
           <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-semibold">{selectedScope?.title||t('discussions.main')}</h3>
             <p className="text-muted-foreground truncate text-xs">{t('discussions.scopeNotice')} · {participantCount??'…'} {t('discussions.members')}</p>
           </div>
+          {canSee&&<Button ref={sharedToggleRef} size="icon" variant="ghost" className={sharedOpen?'bg-muted text-foreground':''}
+            aria-label={t('discussions.sharedTitle')} title={t('discussions.sharedTitle')} aria-expanded={sharedOpen}
+            onClick={()=>{closeSearch();setSharedOpen(open=>!open)}}><FolderOpen className="size-4"/></Button>}
           {canSee&&<DiscussionParticipantsPopover taskId={taskId} subtaskId={selected}
             {...(participantCount!==undefined?{count:participantCount}:{})} compact/>}
           <div ref={searchAreaRef} className="flex shrink-0 items-center">
-            <Button size="icon" variant="ghost" aria-label={t('discussions.search')} aria-expanded={searchOpen} onClick={()=>searchOpen?closeSearch():setSearchOpen(true)}><Search className="size-4"/></Button>
+            <Button size="icon" variant="ghost" aria-label={t('discussions.search')} aria-expanded={searchOpen} onClick={()=>{setSharedOpen(false);searchOpen?closeSearch():setSearchOpen(true)}}><Search className="size-4"/></Button>
             <AnimatePresence initial={false}>
               {searchOpen&&<motion.div key="discussion-search" initial={{opacity:0,y:-10,scale:0.985}} animate={{opacity:1,y:0,scale:1}}
               exit={{opacity:0,y:-10,scale:0.985}} transition={{duration:0.22,ease:[0.2,0.8,0.2,1]}}
@@ -366,6 +390,8 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
           <Button size="icon" variant="ghost" aria-label={fullScreen?t('discussions.exitFullScreen'):t('discussions.fullScreen')}
             onClick={()=>setFullScreen(v=>!v)}>{fullScreen?<Minimize2 className="size-4"/>:<Maximize2 className="size-4"/>}</Button>
         </header>
+        <div className="relative flex min-h-0 flex-1">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="relative min-h-0 flex-1">
           <div ref={scrollRef} onScroll={measureScroll} className="h-full space-y-3 overflow-y-auto overscroll-contain px-3 py-4 sm:px-5" aria-live="polite" aria-relevant="additions text">
             {displayed.length>0&&<div className="flex justify-center"><Button size="sm" variant="ghost" disabled={loadingOlder} onClick={()=>void loadOlder()}>{loadingOlder?<LoaderCircle className="size-4 animate-spin"/>:null}{t('discussions.older')}</Button></div>}
@@ -529,13 +555,28 @@ export function TaskDiscussions({taskId,actorId,initialSubtaskId=null,inboxMode=
           </div>
           <p className="text-muted-foreground mt-1 text-[10px]">{t('discussions.sendHint')}</p>
         </div>
+          </div>
+          <AnimatePresence initial={false}>
+          {sharedOpen&&canSee&&<motion.div key="shared-discussion-panel" ref={sharedPanelRef}
+            initial={reduceMotion?{opacity:0}:{opacity:0,x:i18n.language==='ar'?-14:14}}
+            animate={{opacity:1,x:0}} exit={reduceMotion?{opacity:0}:{opacity:0,x:i18n.language==='ar'?-14:14}}
+            transition={{duration:reduceMotion?0.1:0.2,ease:[0.22,1,0.36,1]}}
+            className={`bg-card absolute inset-y-0 end-0 z-30 w-full max-w-[420px] overflow-hidden border-s shadow-xl ${fullScreen?'lg:static lg:w-[min(35%,420px)] lg:min-w-[310px] lg:shrink-0 lg:shadow-none':''}`}>
+            <SharedDiscussionPanel key={`${taskId}-${selected??'main'}`} taskId={taskId} subtaskId={selected}
+              onClose={()=>setSharedOpen(false)}
+              onJump={messageId=>{setSharedOpen(false);void jumpTo(messageId)}}
+              onPreview={file=>setPreview(fileForPreview(file))}
+              onDownload={file=>{void discussionApi.download(file).catch(()=>toast.error(t('attachments.downloadFailed')))}}/>
+          </motion.div>}
+          </AnimatePresence>
+        </div>
       </div>
     </div>
     <ConfirmModal open={deleteMessage!==null} title={t('discussions.delete')} message={t('discussions.deleteConfirm')} danger
       confirmText={t('common.delete')} cancelText={t('common.cancel')} loading={remove.isPending} onCancel={()=>setDeleteMessage(null)} onConfirm={()=>{if(deleteMessage)remove.mutate(deleteMessage.id)}}/>
     <ConfirmModal open={deleteFile!==null} title={t('attachments.deleteTitle')} message={t('attachments.deleteConfirm',{name:deleteFile?.name??''})} danger
       confirmText={t('common.delete')} cancelText={t('common.cancel')} loading={removeFile.isPending} onCancel={()=>setDeleteFile(null)} onConfirm={()=>{if(deleteFile)removeFile.mutate(deleteFile.id)}}/>
-    <AttachmentPreviewDialog attachment={preview} onOpenChange={open=>{if(!open)setPreview(null)}} getPreview={discussionApi.preview}
+    <AttachmentPreviewDialog attachment={preview} elevated={fullScreen} onOpenChange={open=>{if(!open)setPreview(null)}} getPreview={discussionApi.preview}
       download={async file=>discussionApi.download({id:file.id,name:file.originalFileName,mimeType:file.mimeType??'',sizeBytes:0})}/>
   </section></TooltipProvider>)
   // Portalling to body escapes the parent Radix Dialog's focus layer and hides the chat.

@@ -16,6 +16,7 @@ import type { EligibleTaskUser } from './general-assignment.api'
 import type { TaskPriority } from '../types/task.types'
 import { TaskPriorityIndicator } from '../components/TaskSelectIndicators'
 import { TaskAssigneeMultiPicker } from './TaskAssigneeMultiPicker'
+import { TaskAssigneePicker } from './TaskAssigneePicker'
 import { collaborativeApi, type CollaborativeFile, type CollaborativeMember, type CollaborativeView } from './collaboration.api'
 import { useCollaborativeAssignments } from './use-collaboration'
 import { collaborativeScopeProgress, myCollaborativeAssignment, visibleCollaborativeSubmissions } from './collaborative-workspace.policy'
@@ -67,18 +68,46 @@ function Progress({ total, completed, label }: { total: number; completed: numbe
   </div>
 }
 
-function Submission({ row, view, actorId, owner, actions }: {
+
+function CollaborativeProxyPicker({row,actorId,ownerId,actions}: {
+  row:CollaborativeMember;actorId:number|null;ownerId:number|null;
+  actions:ReturnType<typeof useCollaborativeAssignments>;
+}){
+  const {t}=useTranslation()
+  const [draft,setDraft]=useState<number|null>(row.proxyUserId??null)
+  useEffect(()=>setDraft(row.proxyUserId??null),[row.id,row.proxyUserId])
+  const canManage=actorId===row.userId && actorId!==ownerId
+  if(!canManage && !row.proxyUserId)return null
+  return <div className="bg-muted/20 space-y-2 rounded-lg border p-3">
+    <p className="text-sm font-semibold">{t('tasks.proxy.title')}</p>
+    {canManage ? <>
+      <TaskAssigneePicker value={draft} onChange={setDraft} disabled={actions.proxy.isPending}
+        excludedUserIds={[row.userId,...(ownerId!==null?[ownerId]:[])]}/>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-muted-foreground text-xs">{t('tasks.proxy.accountability')}</p>
+        <Button type="button" size="sm" disabled={actions.proxy.isPending || draft===(row.proxyUserId??null)}
+          onClick={()=>actions.proxy.mutate({assignmentId:row.id,proxyUserId:draft},{
+            onSuccess:()=>toast.success(t('tasks.proxy.saved')),
+            onError:()=>toast.error(t('tasks.proxy.failed')),
+          })}>{t('common.save')}</Button>
+      </div>
+    </> : <p className="text-sm">{row.proxyName}</p>}
+  </div>
+}
+
+function Submission({ row, view, actorId, owner, ownerId, actions }: {
   row: CollaborativeMember
   view: CollaborativeView
   actorId: number | null
   owner: boolean
+  ownerId:number|null
   actions: ReturnType<typeof useCollaborativeAssignments>
 }) {
   const { t, i18n } = useTranslation()
   const [note, setNote] = useState('')
   const [previewFile, setPreviewFile] = useState<CollaborativeFile | null>(null)
   const [deleteFile, setDeleteFile] = useState<CollaborativeFile | null>(null)
-  const mine = actorId === row.userId
+  const mine = actorId === row.userId || actorId === row.proxyUserId
   const updates = view.notes.filter(item => item.assignmentId === row.id)
   const files = view.files.filter(file => file.assignmentId === row.id)
   const canReopen = row.isActive && (mine || owner) && row.state === 'DONE'
@@ -89,21 +118,24 @@ function Submission({ row, view, actorId, owner, actions }: {
         <p className="font-semibold">{row.userName}</p>
         <p className="text-muted-foreground text-xs">{t('tasks.assignment.userCodeLabel', { code: row.userCode })}</p>
         {row.email ? <p className="text-muted-foreground break-all text-xs" dir="ltr">{row.email}</p> : null}
+        {actorId===row.proxyUserId && actorId!==row.userId ? <p className="text-primary mt-1 text-xs font-semibold">{t('tasks.proxy.badge')} · {row.userName}</p> : null}
       </div>
       <Status row={row} />
     </div>
+    <CollaborativeProxyPicker row={row} actorId={actorId} ownerId={ownerId} actions={actions}/>
     {updates.length ? <div className="space-y-2">
       <p className="text-muted-foreground text-xs font-semibold">{t('tasks.workspace.workUpdates')}</p>
       {updates.map(item => <div key={item.id} className="bg-muted/35 rounded-lg p-3">
         <p className="whitespace-pre-wrap break-words text-sm">{item.note}</p>
-        <p className="text-muted-foreground mt-2 text-xs">{row.userName} · {row.userCode} · {row.email ?? '—'} · {dateTime(item.createdAtUtc)}</p>
+        <p className="text-muted-foreground mt-2 text-xs">{item.authorName ?? `#${item.authorUserId}`} · {dateTime(item.createdAtUtc)}</p>
       </div>)}
     </div> : <p className="text-muted-foreground text-sm">{t('tasks.workspace.noUpdates')}</p>}
     {files.length ? <div className="space-y-1 border-t pt-3">
       <p className="text-muted-foreground text-xs font-semibold">{t('tasks.workspace.evidence')}</p>
       {files.map(file => <div key={file.id} className="hover:bg-muted/30 flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5">
         <FileUp aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
-        <span className="min-w-0 flex-1 truncate text-sm" title={file.originalFileName}>{file.originalFileName}</span>
+        <span className="min-w-0 flex-1"><span className="block truncate text-sm" title={file.originalFileName}>{file.originalFileName}</span>
+          <span className="text-muted-foreground block truncate text-xs">{file.uploadedByName ?? `#${file.uploadedByUserId}`}</span></span>
         {attachmentPreviewKind(file) !== 'unsupported' ? <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0"
           aria-label={t('attachments.previewFile', { name: file.originalFileName })} onClick={() => setPreviewFile(file)}>
           <Eye aria-hidden="true" className="size-4" />
@@ -303,7 +335,7 @@ export function CollaborativeAssignmentsPanel({ taskId, actorId, ownerId, meetin
         </Card>
         {myMain && view.enabled ? <Card>
           <CardHeader className="pb-2"><CardTitle>{t('tasks.workspace.myWork')}</CardTitle></CardHeader>
-          <CardContent><Submission row={myMain} view={view} actorId={actorId} owner={owner} actions={actions} /></CardContent>
+          <CardContent><Submission row={myMain} view={view} actorId={actorId} owner={owner} ownerId={ownerId} actions={actions} /></CardContent>
         </Card> : <Card><CardContent className="py-5 text-sm text-muted-foreground">
           {owner ? t('tasks.workspace.creatorHelp') : t('tasks.workspace.subtaskOnlyHelp')}
           {!owner && <div className="mt-3"><Button size="sm" variant="outline" onClick={() => setTab('subtasks')}>{t('tasks.workspace.openSubtasks')}</Button></div>}
@@ -392,7 +424,7 @@ export function CollaborativeAssignmentsPanel({ taskId, actorId, ownerId, meetin
             {canManageSubtasks && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => onDeleteSubtask(selectedChild.id)}>
               {t('tasks.details.deleteSubtask')}</Button>}
           </div>}
-          {myChild && view.enabled ? <Submission row={myChild} view={view} actorId={actorId} owner={owner} actions={actions} /> :
+          {myChild && view.enabled ? <Submission row={myChild} view={view} actorId={actorId} owner={owner} ownerId={ownerId} actions={actions} /> :
             <p className="text-muted-foreground text-sm">{owner ? t('tasks.workspace.creatorHelp') : t('tasks.workspace.noAssignment')}</p>}
           {subtaskContent?.(selectedChild.id)}
         </CardContent>
@@ -424,7 +456,7 @@ export function CollaborativeAssignmentsPanel({ taskId, actorId, ownerId, meetin
               <Status row={member} />
               <ChevronDown className={cn('text-muted-foreground size-4', expandedMemberId === member.id && 'rotate-180')} />
             </button>
-            {expandedMemberId === member.id && <div className="px-3 pb-3"><Submission row={member} view={view} actorId={actorId} owner={owner} actions={actions}/></div>}
+            {expandedMemberId === member.id && <div className="px-3 pb-3"><Submission row={member} view={view} actorId={actorId} owner={owner} ownerId={ownerId} actions={actions}/></div>}
           </div>)}
         </div>
       </CardContent>

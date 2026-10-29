@@ -21,6 +21,7 @@ const childAssignees = z.discriminatedUnion('mode', [
 ]);
 const note = z.object({note:z.string().trim().min(1).max(4000)});
 const completion = z.object({completed:z.boolean()});
+const proxyBody = z.object({proxyUserId:z.number().int().positive().nullable()});
 function actor(req:{authContext?:{user:{userId:number}}}) {
   const id=req.authContext?.user.userId;
   if(!id) throw new AppError({statusCode:401,code:'AUTH_REQUIRED',message:'Authentication required.'});
@@ -43,6 +44,12 @@ collaborationRouter.put('/task/:taskId/subtasks/:subtaskId/assignees',
     const {taskId,subtaskId}=getValidatedRequestPart<z.infer<typeof childParams>>(req,'params');
     const input=getValidatedRequestPart<z.infer<typeof childAssignees>>(req,'body');
     res.json({success:true,data:await service.setChildTeam(actor(req),taskId,subtaskId,input.mode,input.userIds??[])});
+  });
+collaborationRouter.put('/assignments/:assignmentId/proxy',
+  validateRequest({params:assignmentParams,body:proxyBody}),async(req,res)=>{
+    const {assignmentId}=getValidatedRequestPart<z.infer<typeof assignmentParams>>(req,'params');
+    const {proxyUserId}=getValidatedRequestPart<z.infer<typeof proxyBody>>(req,'body');
+    res.json({success:true,data:await service.setProxy(actor(req),assignmentId,proxyUserId)});
   });
 collaborationRouter.post('/assignments/:assignmentId/notes',
   validateRequest({params:assignmentParams,body:note}),async(req,res)=>{

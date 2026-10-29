@@ -1,4 +1,6 @@
 import { Router, type Router as ExpressRouter } from "express";
+import { z } from "zod";
+import { taskDetailsRepository } from "../task-details/task-details.repository.js";
 import { verifyPortalJwt } from "../../middleware/verifyPortalJwt.middleware.js";
 import { resolveTaskHubAccess } from "../../middleware/resolveTaskHubAccess.middleware.js";
 import { validateRequest } from "../../middleware/validate.middleware.js";
@@ -19,6 +21,21 @@ function actor(req: {authContext?:{user:{userId:number}}}): number {
   return id;
 }
 
+const taskProxyBodySchema=z.object({proxyUserId:z.number().int().positive().nullable()});
+generalTaskAssignmentsRouter.put('/task/:taskId/proxy',
+  validateRequest({params:generalTaskIdSchema,body:taskProxyBodySchema}),async(req,res)=>{
+    const {taskId}=getValidatedRequestPart<{taskId:number}>(req,'params');
+    const {proxyUserId}=getValidatedRequestPart<{proxyUserId:number|null}>(req,'body');
+    res.json({success:true,data:await service.setProxy(actor(req),taskId,null,proxyUserId)});
+  });
+generalTaskAssignmentsRouter.put('/subtask/:subtaskId/proxy',
+  validateRequest({params:generalSubtaskIdSchema,body:taskProxyBodySchema}),async(req,res)=>{
+    const {subtaskId}=getValidatedRequestPart<{subtaskId:number}>(req,'params');
+    const link=await taskDetailsRepository.findSubtaskAccess(subtaskId);
+    if(!link) throw new AppError({statusCode:404,code:'SUBTASK_NOT_FOUND',message:'Subtask not found.'});
+    const {proxyUserId}=getValidatedRequestPart<{proxyUserId:number|null}>(req,'body');
+    res.json({success:true,data:await service.setProxy(actor(req),link.taskId,subtaskId,proxyUserId)});
+  });
 generalTaskAssignmentsRouter.put("/task/:taskId/assignee",
   validateRequest({params:generalTaskIdSchema,body:generalAssignmentBodySchema}), async(req,res)=>{
     const {taskId}=getValidatedRequestPart<{taskId:number}>(req,"params");
@@ -57,7 +74,6 @@ generalTaskAssignmentsRouter.post("/task/:taskId/completion-summary",
   });
 
 // Actor-scoped lookup: do not expose all Portal accounts without active TaskHub access.
-import { z } from "zod";
 import { TASK_STATUSES, TASK_PRIORITIES } from "../tasks/tasks.constants.js";
 const searchSchema=z.object({search:z.string().trim().max(100).default(""),
   page:z.coerce.number().int().min(1).default(1),

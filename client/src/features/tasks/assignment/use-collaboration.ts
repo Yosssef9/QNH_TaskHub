@@ -22,11 +22,13 @@ export function useCollaborativeAssignments(taskId:number|null,enabled:boolean){
   const team=useCollaborationMutation(({userIds}:{userIds:number[]})=>collaborativeApi.setTeam(taskId!,userIds))
   const childTeam=useCollaborationMutation(({subtaskId,mode,userIds}:{subtaskId:number;mode:'INHERIT'|'CUSTOM';userIds:number[]})=>
     collaborativeApi.setChildTeam(taskId!,subtaskId,mode,userIds))
+  const proxy=useCollaborationMutation(({assignmentId,proxyUserId}:{assignmentId:number;proxyUserId:number|null})=>
+    collaborativeApi.setProxy(assignmentId,proxyUserId))
   const note=useCollaborationMutation(({assignmentId,note}:{assignmentId:number;note:string})=>collaborativeApi.addNote(assignmentId,note))
   const complete=useCollaborationMutation(({assignmentId,completed}:{assignmentId:number;completed:boolean})=>collaborativeApi.complete(assignmentId,completed))
   const upload=useCollaborationMutation(({assignmentId,file}:{assignmentId:number;file:File})=>collaborativeApi.upload(assignmentId,file))
   const removeFile=useCollaborationMutation((id:string)=>collaborativeApi.removeFile(id))
-  return {query,team,childTeam,note,complete,upload,removeFile}
+  return {query,team,childTeam,proxy,note,complete,upload,removeFile}
 }
 
 

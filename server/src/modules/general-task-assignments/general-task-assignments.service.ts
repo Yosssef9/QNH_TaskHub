@@ -1,4 +1,5 @@
 import { withTransaction } from "../../database/transaction.js";
+import { sql } from "../../database/sql.js";
 import type { DatabaseTransaction } from "../../database/types.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import { resolveTaskAccess } from "../meeting-action-items/meeting-action-items.access.js";
@@ -8,6 +9,7 @@ import { tasksRepository } from "../tasks/tasks.repository.js";
 import { assertTaskWritable } from "../tasks/tasks.policy.js";
 import { generalTaskAssignmentsRepository as repo } from "./general-task-assignments.repository.js";
 import { notifyGeneralTask, notifyRemovedAssignment, notifyTaskOwnerActivity } from "./general-task-assignments.email-events.js";
+import { taskProxiesRepository } from "./task-proxies.repository.js";
 import { collaborationRepository } from "../collaboration/collaboration.repository.js";
 
 const missing = () => new AppError({statusCode:404,code:"TASK_NOT_FOUND",message:"Task not found."});
@@ -21,7 +23,57 @@ async function validateAssignee(userId: number, transaction: DatabaseTransaction
   }
 }
 
+function nextAssigneeWillChange(previous:number|null,newExplicit:number|null,main:number|null,owner:number){
+  return previous!==(newExplicit??main??owner);
+}
+
 export const generalTaskAssignmentsService = {
+  async setProxy(actorUserId:number,taskId:number,subtaskId:number|null,proxyUserId:number|null){
+    await withTransaction(async transaction=>{
+      const access=await resolveTaskAccess(actorUserId,taskId,false,transaction);
+      if(!access || !access.generalAssignment || access.context || access.collaborationActive ||
+         access.ownerUserId===actorUserId) throw denied();
+      const task=await tasksRepository.findOwnedForUpdate(transaction,access.ownerUserId,taskId);
+      if(!task || task.kpiInstanceId!==null) throw missing();
+      assertTaskWritable(task);
+      let principal:number|null;
+      if(subtaskId===null) principal=access.generalAssignment.assigneeUserId;
+      else {
+        const child=await taskDetailsRepository.findSubtask(access.ownerUserId,subtaskId,transaction);
+        if(!child || Number(child.taskId)!==taskId) throw missing();
+        principal=await repo.effectiveSubtaskAssignee(access.ownerUserId,subtaskId,transaction);
+      }
+      if(principal!==actorUserId) throw new AppError({statusCode:403,
+        code:'TASK_PROXY_MANAGE_FORBIDDEN',message:'Only the responsible assignee can manage their task proxy.'});
+      if(proxyUserId!==null){
+        if(proxyUserId===actorUserId || proxyUserId===access.ownerUserId) throw new AppError({statusCode:400,
+          code:'TASK_PROXY_INVALID',message:'Choose a different employee, not yourself or the task creator.'});
+        await validateAssignee(proxyUserId,transaction);
+      }
+      const prior=(await taskProxiesRepository.grants(taskId,transaction)).find(g=>g.subtaskId===subtaskId);
+      const changed=await taskProxiesRepository.set(transaction,{
+        taskId,subtaskId,ownerId:access.ownerUserId,principalId:actorUserId,actorId:actorUserId,
+        proxyId:proxyUserId,
+      });
+      if(!changed)return;
+      await tasksRepository.addActivity(transaction,access.ownerUserId,taskId,
+        proxyUserId===null?'TASK_PROXY_REMOVED':'TASK_PROXY_ASSIGNED',{
+          subtaskId,principalUserId:actorUserId,proxyUserId,
+          previousProxyUserId:prior?.proxyUserId??null,
+        },actorUserId);
+      if(prior?.proxyUserId && prior.proxyUserId!==proxyUserId){
+        await notifyRemovedAssignment(transaction,actorUserId,prior.proxyUserId,taskId,subtaskId);
+      }
+      if(proxyUserId!==null){
+        await notifyGeneralTask(transaction,[proxyUserId],actorUserId,{
+          type:subtaskId===null?'GENERAL_TASK_ASSIGNED':'GENERAL_SUBTASK_ASSIGNED',
+          taskId,subtaskId,listId:null,subjectTitle:task.title,
+          contextTitle:'Authorized as a proxy for the responsible assignee',
+        });
+      }
+    });
+    return {taskId,subtaskId};
+  },
   async assignMain(actorUserId: number, taskId: number, assigneeUserId: number | null) {
     await withTransaction(async transaction => {
       const access = await resolveTaskAccess(actorUserId, taskId, false, transaction);
@@ -40,6 +92,14 @@ export const generalTaskAssignmentsService = {
         throw new AppError({statusCode:409,code:"SUBTASK_OWNER_OVERRIDE_EXISTS",
           message:"Remove existing creator self-assignments from subtasks before assigning the main task to another user."});
       }
+      await taskProxiesRepository.revoke(transaction,taskId,null,actorUserId);
+      // Inherited child assignments change when the main assignee changes.
+      // Revoke their proxies now, so switching the main assignee back cannot revive access.
+      await transaction.request().input('taskId',sql.BigInt,taskId).input('actor',sql.Int,actorUserId)
+        .query(`UPDATE p SET revoked_at_utc=SYSUTCDATETIME(),revoked_by_user_id=@actor
+          FROM dbo.TM_task_proxies p JOIN dbo.TM_subtasks s ON s.id=p.subtask_id
+          WHERE p.task_id=@taskId AND p.revoked_at_utc IS NULL
+            AND s.assignee_user_id IS NULL;`);
       await repo.ensureRelation(transaction, taskId, actorUserId, actorUserId, assigneeUserId, true);
       await tasksRepository.addActivity(transaction, actorUserId, taskId, "GENERAL_TASK_ASSIGNED",
         { previousAssigneeUserId: prior?.assigneeUserId ?? null, assigneeUserId }, actorUserId);
@@ -83,6 +143,8 @@ export const generalTaskAssignmentsService = {
       if (!subtask) throw missing();
       const former = await repo.effectiveSubtaskAssignee(actorUserId, subtaskId, transaction);
       if (!access.context) await repo.ensureRelation(transaction, link.taskId, actorUserId, actorUserId, null);
+      if (nextAssigneeWillChange(former,assigneeUserId,access.generalAssignment?.assigneeUserId??null,access.ownerUserId))
+        await taskProxiesRepository.revoke(transaction,link.taskId,subtaskId,actorUserId);
       await repo.setSubtaskAssignee(transaction, actorUserId, subtaskId, assigneeUserId);
       await tasksRepository.addActivity(transaction, actorUserId, link.taskId,
         "GENERAL_SUBTASK_ASSIGNED", {subtaskId, subtaskTitle:subtask.title, assigneeUserId}, actorUserId);
@@ -110,7 +172,8 @@ export const generalTaskAssignmentsService = {
       if (!task) throw missing();
       assertTaskWritable(task);
       const allowed = access.generalAssignment || access.context
-        ? (await repo.effectiveSubtaskAssignee(access.ownerUserId, subtaskId, transaction)) === actorUserId
+        ? ((await repo.effectiveSubtaskAssignee(access.ownerUserId, subtaskId, transaction)) === actorUserId ||
+          await taskProxiesRepository.isExecutor(link.taskId,subtaskId,actorUserId,transaction))
         : access.capabilities.canCompleteSubtasks;
       if (!allowed) throw new AppError({statusCode:403,code:"WORK_NOTES_FORBIDDEN",message:"Only the current subtask assignee can add Work Notes."});
       const content = workNotes?.trim();
@@ -142,7 +205,8 @@ export const generalTaskAssignmentsService = {
       if (!task) throw missing();
       assertTaskWritable(task);
       const allowed = access.generalAssignment
-        ? (access.generalAssignment.assigneeUserId ?? access.ownerUserId) === actorUserId
+        ? ((access.generalAssignment.assigneeUserId ?? access.ownerUserId) === actorUserId ||
+          await taskProxiesRepository.isExecutor(taskId,null,actorUserId,transaction))
         : (access.context ? access.context.assigneeUserId === actorUserId : access.capabilities.role === "OWNER");
       if (!allowed) throw new AppError({statusCode:403,code:"COMPLETION_SUMMARY_FORBIDDEN",
         message:"Only the current responsible assignee can add a Completion Summary."});

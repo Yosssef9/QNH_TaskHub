@@ -11,6 +11,8 @@ export function canViewCollaborativeActivity(
   event: TaskActivityVisibilityRecord,
   actorId: number,
   visibleChildIds: ReadonlySet<number>,
+  proxyPrincipalIds: ReadonlySet<number> = new Set<number>(),
+  proxyMainPrincipalIds: ReadonlySet<number> = new Set<number>(),
 ): boolean {
   if (event.activityType === 'CREATED' || event.activityType === 'STATUS_CHANGED' ||
       event.activityType === 'COLLAB_PARENT_STATUS_CHANGED' || event.activityType === 'COLLAB_ENABLED') return true;
@@ -28,8 +30,9 @@ export function canViewCollaborativeActivity(
       event.activityType === 'COLLAB_TEAM_MODE_CHANGED')
     return data.subtaskId !== null && data.subtaskId !== undefined &&
       visibleChildIds.has(Number(data.subtaskId));
-  if (data.assigneeUserId !== actorId) return false;
+  if (data.assigneeUserId !== actorId && !proxyPrincipalIds.has(Number(data.assigneeUserId))) return false;
   // Historical subtask events stay hidden once the user loses that subtask's access.
-  return data.subtaskId === null || (data.subtaskId !== undefined &&
-    visibleChildIds.has(Number(data.subtaskId)));
+  if (data.subtaskId === null) return data.assigneeUserId === actorId ||
+    proxyMainPrincipalIds.has(Number(data.assigneeUserId));
+  return data.subtaskId !== undefined && visibleChildIds.has(Number(data.subtaskId));
 }

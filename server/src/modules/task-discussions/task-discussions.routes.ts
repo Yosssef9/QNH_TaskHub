@@ -12,6 +12,7 @@ import { assertDiscussionAccess } from './task-discussions.policy.js';
 import { subscribeToDiscussion, publishDiscussionEvent } from './task-discussions.stream.js';
 import { listDiscussionMembers } from './task-discussions.notifications.js';
 import { DISCUSSION_REACTIONS } from './task-discussions.reactions.js';
+import { listSharedDiscussionItems } from './task-discussions.shared.js';
 
 const params=z.object({taskId:z.coerce.number().int().positive()});
 const messageParams=z.object({messageId:z.coerce.number().int().positive()});
@@ -67,6 +68,21 @@ taskDiscussionsRouter.get('/:taskId/messages',validateRequest({params,query:list
   const {taskId}=getValidatedRequestPart<z.infer<typeof params>>(req,'params');
   const {subtaskId,beforeId}=getValidatedRequestPart<z.infer<typeof listQuery>>(req,'query');
   res.json({success:true,data:await service.list(actor(req),{taskId,subtaskId:subtaskId??null},beforeId)});
+});
+// Index existing message attachments and web links in this *one* authorized discussion scope.
+taskDiscussionsRouter.get('/:taskId/shared',validateRequest({params,query:scopeQuery.extend({
+  tab:z.enum(['files','images','links']).default('files'),
+  sort:z.enum(['newest','oldest','name']).default('newest'),
+  q:z.string().trim().max(120).default(''),
+  offset:z.coerce.number().int().min(0).max(100000).default(0),
+  limit:z.coerce.number().int().min(1).max(40).default(24),
+})}),async(req,res)=>{
+  const {taskId}=getValidatedRequestPart<z.infer<typeof params>>(req,'params');
+  const query=getValidatedRequestPart<{
+    subtaskId?:number;tab:'files'|'images'|'links';sort:'newest'|'oldest'|'name';
+    q:string;offset:number;limit:number;
+  }>(req,'query');
+  res.json({success:true,data:await listSharedDiscussionItems(actor(req),{taskId,subtaskId:query.subtaskId??null},query)});
 });
 taskDiscussionsRouter.get('/:taskId/search',validateRequest({params,query:searchQuery}),async(req,res)=>{
   const {taskId}=getValidatedRequestPart<z.infer<typeof params>>(req,'params');

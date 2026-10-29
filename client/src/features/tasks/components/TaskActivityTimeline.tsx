@@ -73,6 +73,10 @@ export function TaskActivityTimeline({ activity, subtasks }: {
                 <p className="break-words font-semibold">{t(`tasks.details.activities.${item.activityType}`, {
                   defaultValue: item.activityType, assigneeName: detail.assigneeName ?? '',
                 })}</p>
+                {item.activityType==='STATUS_CHANGED' && typeof item.eventData?.proxyOfName==='string' ?
+                  <p className="text-muted-foreground text-xs">{t('tasks.proxy.completedByProxy', {
+                    actor:item.actorName,principal:item.eventData.proxyOfName,
+                  })}</p>:null}
                 {detail.subtaskTitle && <p className="break-words text-xs font-medium">{t('tasks.details.activitySubtask', {name:detail.subtaskTitle})}</p>}
                 {detail.fileName && <p className="text-muted-foreground break-all text-xs">{t('tasks.details.activityFile',{name:detail.fileName})}</p>}
                 {detail.from && detail.to && <p className="text-muted-foreground text-xs">

@@ -35,6 +35,8 @@ interface EmailState {
   collaborativeChildAssignedAtUtc: Date | null;
   generalAssignedById: number | null;
   meetingAssignedById: number | null;
+  proxyAssignedAtUtc: Date | null;
+  proxyAppointedById: number | null;
   collaborativeMainAssignedById: number | null;
   collaborativeChildAssignedById: number | null;
 }
@@ -68,25 +70,45 @@ async function currentState(recipientId: number, taskId: number, subtaskId: numb
         childCurrent.assigned_at_utc AS collaborativeChildAssignedAtUtc,
         relation.assigned_by_user_id AS generalAssignedById,
         meeting.assigned_by_user_id AS meetingAssignedById,
+        proxyCurrent.appointed_at_utc AS proxyAssignedAtUtc,
+        proxyCurrent.appointed_by_user_id AS proxyAppointedById,
         mainCurrent.assigned_by_user_id AS collaborativeMainAssignedById,
         childCurrent.assigned_by_user_id AS collaborativeChildAssignedById
       FROM dbo.TM_tasks AS task
       LEFT JOIN dbo.TM_general_task_assignments AS relation ON relation.task_id = task.id
       LEFT JOIN dbo.TM_meeting_action_items AS meeting ON meeting.task_id = task.id
       LEFT JOIN dbo.TM_collaboration_tasks AS collaboration ON collaboration.task_id=task.id
-      OUTER APPLY (SELECT TOP (1) ca.assigned_at_utc,ca.assigned_by_user_id
+      LEFT JOIN dbo.TM_subtasks AS child ON child.task_id = task.id
+        AND child.id = @subtaskId AND child.deleted_at_utc IS NULL
+      OUTER APPLY (SELECT TOP (1) proxy.appointed_at_utc,proxy.appointed_by_user_id
+        FROM dbo.TM_task_proxies proxy
+        WHERE proxy.task_id=task.id AND proxy.proxy_user_id=@recipient
+          AND proxy.revoked_at_utc IS NULL
+          AND ((@subtaskId IS NULL AND proxy.subtask_id IS NULL
+            AND proxy.principal_user_id=relation.assignee_user_id)
+            OR (@subtaskId IS NOT NULL AND child.id IS NOT NULL AND
+              ((proxy.subtask_id=child.id AND proxy.principal_user_id=
+                COALESCE(child.assignee_user_id,relation.assignee_user_id,task.owner_user_id))
+                OR (proxy.subtask_id IS NULL AND proxy.principal_user_id=relation.assignee_user_id
+                  AND proxy.principal_user_id=COALESCE(child.assignee_user_id,relation.assignee_user_id,task.owner_user_id)))))
+        ORDER BY proxy.id DESC) proxyCurrent
+      OUTER APPLY (SELECT TOP (1)
+          CASE WHEN ca.assignee_user_id=@recipient THEN ca.assigned_at_utc ELSE ca.proxy_assigned_at_utc END AS assigned_at_utc,
+          CASE WHEN ca.assignee_user_id=@recipient THEN ca.assigned_by_user_id ELSE ca.assignee_user_id END AS assigned_by_user_id
         FROM dbo.TM_collaboration_assignments ca
-        WHERE ca.task_id=task.id AND ca.subtask_id IS NULL AND ca.assignee_user_id=@recipient
+        WHERE ca.task_id=task.id AND ca.subtask_id IS NULL
+          AND (ca.assignee_user_id=@recipient OR ca.proxy_user_id=@recipient)
           AND ca.is_active=1 ORDER BY ca.id DESC) mainCurrent
-      OUTER APPLY (SELECT TOP (1) ca.assigned_at_utc,ca.assigned_by_user_id
+      OUTER APPLY (SELECT TOP (1)
+          CASE WHEN ca.assignee_user_id=@recipient THEN ca.assigned_at_utc ELSE ca.proxy_assigned_at_utc END AS assigned_at_utc,
+          CASE WHEN ca.assignee_user_id=@recipient THEN ca.assigned_by_user_id ELSE ca.assignee_user_id END AS assigned_by_user_id
         FROM dbo.TM_collaboration_assignments ca
-        WHERE ca.task_id=task.id AND ca.subtask_id=@subtaskId AND ca.assignee_user_id=@recipient
+        WHERE ca.task_id=task.id AND ca.subtask_id=@subtaskId
+          AND (ca.assignee_user_id=@recipient OR ca.proxy_user_id=@recipient)
           AND ca.is_active=1 ORDER BY ca.id DESC) childCurrent
       JOIN dbo.TM_lists AS list ON list.id = task.list_id AND list.archived_at_utc IS NULL
       JOIN dbo.TM_user_access AS access ON access.portal_user_id = @recipient AND access.is_active = 1
       JOIN dbo.users AS portal ON portal.USER_ID = access.portal_user_id AND portal.IS_ACTIVE = 1
-      LEFT JOIN dbo.TM_subtasks AS child ON child.task_id = task.id
-        AND child.id = @subtaskId AND child.deleted_at_utc IS NULL
       WHERE task.id = @taskId AND task.deleted_at_utc IS NULL
         AND task.kpi_instance_id IS NULL AND task.list_id IS NOT NULL
         AND (relation.task_id IS NOT NULL OR meeting.task_id IS NOT NULL)
@@ -151,8 +173,8 @@ export async function buildGeneralAssignmentEmailPayload(
 
   const assignedToThisUser = state.isCollaborative
     ? isChild ? state.collaborativeChildAssignedAtUtc !== null : state.collaborativeMainAssignedAtUtc !== null
-    : isChild ? state.effectiveSubtaskAssigneeId === recipientUserId
-      : state.mainAssigneeId === recipientUserId;
+    : isChild ? (state.effectiveSubtaskAssigneeId === recipientUserId || state.proxyAssignedAtUtc !== null)
+      : (state.mainAssigneeId === recipientUserId || state.proxyAssignedAtUtc !== null);
 
   if (event === "GENERAL_ASSIGNMENT_REMOVED") {
     if (assignedToThisUser) return null;
@@ -166,7 +188,9 @@ export async function buildGeneralAssignmentEmailPayload(
     // Drop obsolete assigned notices after an intervening reassignment.
     const recordedAt = input.createdAtUtc instanceof Date
       ? input.createdAtUtc.getTime() : Date.parse(String(input.createdAtUtc));
-    const changedAt = state.isCollaborative
+    const changedAt = !state.isCollaborative && state.proxyAssignedAtUtc !== null
+      ? state.proxyAssignedAtUtc.getTime()
+      : state.isCollaborative
       ? (isChild ? state.collaborativeChildAssignedAtUtc : state.collaborativeMainAssignedAtUtc)!.getTime()
       : isChild ? (state.subtaskAssignmentChangedAtUtc ?? state.assignedAtUtc).getTime()
         : state.assignedAtUtc.getTime();
@@ -188,7 +212,8 @@ export async function buildGeneralAssignmentEmailPayload(
 
   let assignedByName: string | undefined;
   if (event === 'GENERAL_TASK_ASSIGNED' || event === 'GENERAL_SUBTASK_ASSIGNED') {
-    const assigningUserId = state.isCollaborative
+    const assigningUserId = !state.isCollaborative && state.proxyAssignedAtUtc !== null
+      ? state.proxyAppointedById : state.isCollaborative
       ? (isChild ? state.collaborativeChildAssignedById : state.collaborativeMainAssignedById)
       : (isChild ? state.ownerUserId : state.generalAssignedById ?? state.meetingAssignedById ?? state.ownerUserId);
     if (assigningUserId !== null) {

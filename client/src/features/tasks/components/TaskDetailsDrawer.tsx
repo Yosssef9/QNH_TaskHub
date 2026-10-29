@@ -44,6 +44,7 @@ import { cn } from '@/lib/cn'
 
 import { downloadAttachment } from '../api/tasks.api'
 import { TaskAssigneePicker } from '../assignment/TaskAssigneePicker'
+import { TaskProxyControl } from './TaskProxyControl'
 import { TaskGroupSelect } from '../assignment/TaskGroupSelect'
 import { useTaskGroups,useTaskGroupActions } from '../assignment/use-task-groups'
 import { CollaborativeAssignmentsPanel } from '../assignment/CollaborativeAssignmentsPanel'
@@ -218,6 +219,7 @@ function SortableSubtaskRow({
   onSaveNotes,
   canUpload,
   canDeleteAttachment,
+  proxyControl,
   index,
   item,
   justMoved,
@@ -248,6 +250,7 @@ function SortableSubtaskRow({
   onSaveNotes: (value: string, onSuccess: () => void) => void
   canUpload: boolean
   canDeleteAttachment: (attachment: TaskAttachment) => boolean
+  proxyControl?: ReactNode
   index: number
   item: Subtask
   justMoved: boolean
@@ -421,6 +424,7 @@ function SortableSubtaskRow({
             inherit disabled={assigneePending} meetingId={meetingId}
             excludedUserIds={excludedAssigneeIds} />
         </div> : null}
+        {proxyControl ? <div className="border-t px-4 py-3">{proxyControl}</div> : null}
         <SubtaskWorkNotes key={item.id} item={item} canAdd={canEditNotes}
           pending={notesPending} onAdd={onSaveNotes} />
         {attachments.length > 0 ? (
@@ -529,7 +533,8 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
   const mainAssigneeLookup = useEligibleTaskUser(mainAssigneeId)
   const canEditSummary = !collaborationActive && !readOnly && Boolean(
     query.data?.actionItem ? actorId === query.data.actionItem.assigneeUserId :
-      query.data?.generalAssignment ? actorId === effectiveMainAssignee : capabilities?.role === 'OWNER'
+      query.data?.generalAssignment ? (actorId === effectiveMainAssignee && Boolean(capabilities?.canCompleteTask)) ||
+        (query.data.proxyGrant?.subtaskId===null && actorId===query.data.proxyGrant.proxyUserId) : capabilities?.role === 'OWNER' 
   )
   const canManageSubtasks = !readOnly && (capabilities?.canManageSubtasks ?? true)
   const canCreateSubtasks = canManageSubtasks && !query.data?.sharedPermission
@@ -540,6 +545,11 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
     if (readOnly || !capabilities) return !readOnly
     if (capabilities.canDeleteAnyAttachment) return true
     return capabilities.role === 'ASSIGNEE' && item.uploadedByUserId === actorId
+  }
+  const canProxyWorkOnSubtask = (child: Subtask): boolean => {
+    return Boolean(query.data?.taskProxies?.some(grant => actorId===grant.proxyUserId &&
+      (grant.subtaskId===child.id ||
+        (grant.subtaskId===null && grant.principalUserId===(child.assigneeUserId??effectiveMainAssignee)))))
   }
   const serverSubtasks = query.data?.subtasks ?? []
   const displayedSubtasks = sameSubtaskSet(orderedSubtasks, serverSubtasks)
@@ -829,6 +839,10 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                   {legacyTab==='discussion'&&query.data.task.kpiInstanceId===null?<TaskDiscussions taskId={query.data.task.id} actorId={actorId} initialSubtaskId={discussionSubtaskId??focusSubtaskId} />:
                   <div className="grid gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(19rem,0.75fr)]">
                   <main className="min-w-0 space-y-5">
+                    {isGeneralTask && !collaborationActive && mainAssigneeId!==null ?
+                      <TaskProxyControl taskId={query.data.task.id} principalUserId={mainAssigneeId}
+                        actorUserId={actorId} ownerUserId={ownerId}
+                        grant={query.data.taskProxies?.find(g=>g.subtaskId===null)??null}/>:null}
                     {!collaborationActive && (canEditSummary || query.data.task.completionSummary || query.data.completionSummaryEntries.length > 0) ? <Card>
                       <CardHeader className="pb-3"><CardTitle>{t('tasks.assignment.completionSummary')}</CardTitle></CardHeader>
                       <CardContent>
@@ -936,10 +950,10 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                                     index={index}
                                     attachments={subtaskAttachments.get(item.id) ?? []}
                                     dragDisabled={!canCreateSubtasks || reorderMutation.isPending}
-                                    canComplete={!collaborationActive && canCompleteSubtasks && (
-                                      actorId === (item.assigneeUserId ?? effectiveMainAssignee))}
-                                    canEditNotes={!collaborationActive && canCompleteSubtasks && (
-                                      actorId === (item.assigneeUserId ?? effectiveMainAssignee))}
+                                    canComplete={!collaborationActive && canCompleteSubtasks &&
+                                      (actorId === (item.assigneeUserId ?? effectiveMainAssignee) || canProxyWorkOnSubtask(item))}
+                                    canEditNotes={!collaborationActive && canCompleteSubtasks &&
+                                      (actorId === (item.assigneeUserId ?? effectiveMainAssignee) || canProxyWorkOnSubtask(item))}
                                     canManage={canCreateSubtasks}
                                     canEditMetadata={canManageSubtasks}
                                     canAssign={supportsSubtaskAssignment && isOwner && canManageSubtasks}
@@ -958,6 +972,11 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                                       onError: () => toast.error(t('tasks.assignment.saveFailed')),
                                     })}
                                     canUpload={canUploadAttachments && !collaborationActive}
+                                    proxyControl={isGeneralTask && !collaborationActive ?
+                                      <TaskProxyControl taskId={query.data.task.id} subtaskId={item.id}
+                                        principalUserId={item.assigneeUserId??effectiveMainAssignee}
+                                        actorUserId={actorId} ownerUserId={ownerId}
+                                        grant={query.data.taskProxies?.find(g=>g.subtaskId===item.id)??null}/> : null}
                                     canDeleteAttachment={canDeleteAttachment}
                                     justMoved={recentlyMovedSubtaskId === item.id}
                                     focused={focusSubtaskId === item.id}
@@ -1013,7 +1032,7 @@ export function TaskDetailsDrawer({ taskId, focusSubtaskId = null, onOpenChange 
                           <Button
                             size="sm"
                             variant="outline"
-                            disabled={!canUploadAttachments || Boolean((query.data.generalAssignment || query.data.actionItem) && actorId !== ownerId && effectiveMainAssignee !== actorId)}
+                            disabled={!canUploadAttachments || Boolean((query.data.generalAssignment || query.data.actionItem) && actorId !== ownerId && effectiveMainAssignee !== actorId && query.data.proxyGrant?.subtaskId!==null)}
                             onClick={() => taskFileRef.current?.click()}
                           >
                             <Paperclip className="size-4" />

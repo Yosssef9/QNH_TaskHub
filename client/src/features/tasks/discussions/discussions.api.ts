@@ -13,6 +13,13 @@ export type DiscussionMentionsPage={mentions:DiscussionMentionItem[];nextCursor:
 export type DiscussionParticipant={userId:number;userCode:string;userName:string;role:'owner'|'participant';canView:boolean;canSend:boolean}
 export type DiscussionFile={id:string;name:string;mimeType:string;sizeBytes:number}
 export type DiscussionReadReceipt={userId:number;userName:string;read:boolean}
+export type SharedDiscussionTab='files'|'images'|'links'
+export type SharedDiscussionSort='newest'|'oldest'|'name'
+export type SharedDiscussionItem={
+  kind:'file'|'image'|'link';messageId:number;authorName:string;createdAtUtc:string;
+  file?:DiscussionFile;url?:string;domain?:string;
+}
+export type SharedDiscussionPage={items:SharedDiscussionItem[];nextOffset:number|null}
 export type DiscussionMessage={
   id:number;taskId:number;subtaskId:number|null;authorUserId:number;authorName:string;
   body:string|null;replyToMessageId:number|null;createdAtUtc:string;
@@ -38,6 +45,11 @@ export const discussionApi={
   async members(taskId:number,subtaskId:number|null){const r=await apiClient.get<ApiSuccessResponse<DiscussionParticipant[]>>(`/task-discussions/${taskId}/members`,{params:scopeParams(subtaskId)});return r.data.data},
   async scopes(taskId:number){const r=await apiClient.get<ApiSuccessResponse<DiscussionScope[]>>(`/task-discussions/${taskId}/scopes`);return r.data.data},
   async messages(taskId:number,subtaskId:number|null,beforeId?:number){const r=await apiClient.get<ApiSuccessResponse<DiscussionMessage[]>>(`/task-discussions/${taskId}/messages`,{params:{...scopeParams(subtaskId),beforeId}});return r.data.data},
+  async shared(taskId:number,subtaskId:number|null,tab:SharedDiscussionTab,sort:SharedDiscussionSort,q:string,offset:number){
+    const r=await apiClient.get<ApiSuccessResponse<SharedDiscussionPage>>(`/task-discussions/${taskId}/shared`,
+      {params:{...scopeParams(subtaskId),tab,sort,q,offset,limit:24}});
+    return r.data.data;
+  },
   async search(taskId:number,subtaskId:number|null,q:string){
     const r=await apiClient.get<ApiSuccessResponse<{id:number;authorName:string;body:string;createdAtUtc:string}[]>>(`/task-discussions/${taskId}/search`,{params:{...scopeParams(subtaskId),q}});return r.data.data},
   async react(messageId:number,emoji:string,active:boolean){await apiClient.put(`/task-discussions/messages/${messageId}/reactions`,{emoji,active})},

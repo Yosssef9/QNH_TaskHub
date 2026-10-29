@@ -11,7 +11,7 @@ import { generalTaskAssignmentsRepository } from '../general-task-assignments/ge
 import { notifyGeneralTask,notifyRemovedAssignment,notifyTaskOwnerActivity } from '../general-task-assignments/general-task-assignments.email-events.js';
 import { collaborationRepository as repo, type CollaborativeTaskRow,
   type CollaborativeAssignmentRow } from './collaboration.repository.js';
-import { canDeleteCollaborativeEvidence, normalizeCollaborators, reconcileInheritedTeam } from './collaboration.policy.js';
+import { canDeleteCollaborativeEvidence, canExecuteCollaborativeAssignment, normalizeCollaborators, reconcileInheritedTeam } from './collaboration.policy.js';
 
 const notFound = () => new AppError({statusCode:404,code:'COLLABORATION_NOT_FOUND',message:'Assignment not found.'});
 const denied = () => new AppError({statusCode:403,code:'COLLABORATION_FORBIDDEN',message:'You cannot access this assignment.'});
@@ -140,6 +140,41 @@ export async function setCollaborativeMainTeamInTransaction(
 }
 
 export const collaborationService={
+  async setProxy(actorId:number,assignmentId:number,proxyId:number|null){
+    await withTransaction(async transaction=>{
+      const row=await repo.assignment(assignmentId,transaction);
+      if(!row || !row.isActive) throw notFound();
+      const context=await repo.task(row.taskId,transaction);
+      if(!context?.isCollaborative || context.meetingId!==null || context.kpiInstanceId!==null)
+        throw notFound();
+      await lockTask(actorId,row.taskId,transaction);
+      const current=await repo.assignment(assignmentId,transaction);
+      if(!current?.isActive || current.assigneeUserId!==actorId || actorId===context.ownerUserId)
+        throw denied();
+      if(proxyId!==null){
+        if(proxyId===actorId || proxyId===context.ownerUserId || !(await repo.activeUser(proxyId,transaction)))
+          throw new AppError({statusCode:400,code:'TASK_PROXY_INVALID',
+            message:'Choose an active employee other than yourself and the task creator.'});
+      }
+      const changed=await repo.setProxy(assignmentId,actorId,proxyId,transaction);
+      if(!changed)return;
+      await tasksRepository.addActivity(transaction,context.ownerUserId,row.taskId,
+        proxyId===null?'TASK_PROXY_REMOVED':'TASK_PROXY_ASSIGNED',
+        {assignmentId,subtaskId:row.subtaskId,principalUserId:actorId,
+          previousProxyUserId:current.proxyUserId,proxyUserId:proxyId},actorId);
+      if(current.proxyUserId && current.proxyUserId!==proxyId){
+        await notifyRemovedAssignment(transaction,actorId,current.proxyUserId,row.taskId,row.subtaskId);
+      }
+      if(proxyId!==null){
+        await notifyGeneralTask(transaction,[proxyId],actorId,{
+          type:row.subtaskId===null?'GENERAL_TASK_ASSIGNED':'GENERAL_SUBTASK_ASSIGNED',
+          taskId:row.taskId,subtaskId:row.subtaskId,listId:context.listId,
+          subjectTitle:context.title,contextTitle:'Authorized as proxy for a collaborative assignment',
+        });
+      }
+    });
+    return {assignmentId,proxyUserId:proxyId};
+  },
   async view(actorId:number,taskId:number){
     const task=await repo.task(taskId);
     if (!task || task.kpiInstanceId!==null) throw notFound();
@@ -183,11 +218,11 @@ export const collaborationService={
   async addNote(actorId:number,assignmentId:number,note:string){
     await withTransaction(async transaction=>{
       const row=await repo.assignment(assignmentId,transaction);
-      if (!row || row.assigneeUserId!==actorId) throw notFound();
+      if (!row || !canExecuteCollaborativeAssignment(row,actorId)) throw notFound();
       if (!row.isActive) throw inactive();
       const {context}=await lockTask(actorId,row.taskId,transaction);
       const fresh=await repo.assignment(assignmentId,transaction);
-      if (!fresh?.isActive || fresh.assigneeUserId!==actorId) throw notFound();
+      if (!fresh || !canExecuteCollaborativeAssignment(fresh,actorId)) throw notFound();
       await repo.addNote(assignmentId,actorId,note,transaction);
       if (note.trim()) await notifyTaskOwnerActivity(transaction,context.ownerUserId,actorId,{
         type:'TASK_WORK_NOTE_ADDED',taskId:row.taskId,subtaskId:row.subtaskId,
@@ -204,8 +239,8 @@ export const collaborationService={
       const {context}=await lockTask(actorId,row.taskId,transaction);
       const fresh=await repo.assignment(assignmentId,transaction);
       if (!fresh?.isActive) throw inactive();
-      if (completed && fresh.assigneeUserId!==actorId) throw denied();
-      if (!completed && actorId!==fresh.assigneeUserId && actorId!==context.ownerUserId) throw denied();
+      if (completed && !canExecuteCollaborativeAssignment(fresh,actorId)) throw denied();
+      if (!completed && !canExecuteCollaborativeAssignment(fresh,actorId) && actorId!==context.ownerUserId) throw denied();
       if ((fresh.state==='DONE')===completed) return;
       await repo.updateCompletion(assignmentId,completed,actorId,transaction);
       await recalculate(row.taskId,actorId,transaction);
@@ -221,7 +256,7 @@ export const collaborationService={
   },
   async upload(actorId:number,assignmentId:number,file:Express.Multer.File){
     const row=await repo.assignment(assignmentId);
-    if (!row || !row.isActive || row.assigneeUserId!==actorId) throw notFound();
+    if (!row || !canExecuteCollaborativeAssignment(row,actorId)) throw notFound();
     const task=await repo.task(row.taskId);
     if (!task?.isCollaborative || task.status==='CANCELLED') throw notFound();
     const name=cleanUploadedAttachmentFileName(file.originalname,255);
@@ -231,10 +266,10 @@ export const collaborationService={
     try {
       const id=await withTransaction(async transaction=>{
         const current=await repo.assignment(assignmentId,transaction);
-        if (!current || !current.isActive || current.assigneeUserId!==actorId) throw notFound();
+        if (!current || !canExecuteCollaborativeAssignment(current,actorId)) throw notFound();
         const {context}=await lockTask(actorId,current.taskId,transaction);
         const fresh=await repo.assignment(assignmentId,transaction);
-        if (!fresh?.isActive || fresh.assigneeUserId!==actorId) throw notFound();
+        if (!fresh || !canExecuteCollaborativeAssignment(fresh,actorId)) throw notFound();
         const fileId=await repo.attachFile(assignmentId,actorId,{name,key,mime:file.mimetype||'application/octet-stream',
           extension,size:file.size},transaction);
         await notifyTaskOwnerActivity(transaction,context.ownerUserId,actorId,{
@@ -248,7 +283,8 @@ export const collaborationService={
   },
   async removeFile(actorId:number,id:string){
     const previous=await repo.file(id);
-    if (!previous || !canDeleteCollaborativeEvidence(actorId,previous)) throw notFound();
+    if (!previous || !canDeleteCollaborativeEvidence(actorId,previous) ||
+        (actorId!==previous.assigneeUserId && actorId!==previous.proxyUserId)) throw notFound();
     const context=await repo.task(previous.taskId);
     if (!context?.isCollaborative) throw notFound();
     const storageKey=await withTransaction(async transaction=>{
@@ -256,6 +292,7 @@ export const collaborationService={
       await lockTask(actorId,previous.taskId,transaction);
       const current=await repo.file(id,transaction);
       if (!current || !canDeleteCollaborativeEvidence(actorId,current) ||
+          (actorId!==current.assigneeUserId && actorId!==current.proxyUserId) ||
           current.assignmentId!==previous.assignmentId)
         throw notFound();
       const changed=await repo.deleteOwnFile(id,actorId,transaction);
@@ -268,7 +305,8 @@ export const collaborationService={
   async download(actorId:number,id:string){
     const file=await repo.file(id);
     if (!file) throw notFound();
-    if (actorId!==file.ownerUserId && (actorId!==file.assigneeUserId || !file.isActive)) throw notFound();
+    if (actorId!==file.ownerUserId && (!file.isActive ||
+        (actorId!==file.assigneeUserId && actorId!==file.proxyUserId))) throw notFound();
     const context=await repo.task(file.taskId);
     if (!context || (context.meetingId!==null && actorId!==context.ownerUserId &&
         !(await withTransaction(transaction=>repo.meetingEligible(actorId,context.meetingId!,

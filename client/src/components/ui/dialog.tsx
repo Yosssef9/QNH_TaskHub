@@ -26,11 +26,12 @@ export function DialogClose(props: ComponentProps<typeof DialogPrimitive.Close>)
 interface DialogContentProps extends ComponentProps<typeof DialogPrimitive.Content> {
   closeLabel: string
   variant?: 'drawer' | 'modal' | 'page'
+  overlayClassName?: string
 }
 
 export const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
   function DialogContent(
-    { children, className, closeLabel, variant = 'drawer', ...props },
+    { children, className, closeLabel, overlayClassName, variant = 'drawer', ...props },
     forwardedRef,
   ) {
     const [floatingContainer, setFloatingContainer] = useState<HTMLDivElement | null>(null)
@@ -50,7 +51,7 @@ export const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
 
     return (
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="ui-overlay-motion fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-[2px]" />
+        <DialogPrimitive.Overlay className={cn("ui-overlay-motion fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-[2px]", overlayClassName)} />
         <DialogPrimitive.Content
           ref={setContentRef}
           className={cn(

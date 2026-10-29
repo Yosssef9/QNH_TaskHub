@@ -114,7 +114,15 @@ export function canReopenAssignment(actorUserId: number, ownerUserId: number, as
  * Task creators can review other people's evidence, but cannot delete it for them.
  */
 export function canDeleteCollaborativeEvidence(actorId:number,file:{
-  assigneeUserId:number;uploadedByUserId:number;isActive:boolean;
+  assigneeUserId:number;proxyUserId?:number|null;uploadedByUserId:number;isActive:boolean;
 }):boolean {
-  return file.isActive && actorId===file.assigneeUserId && actorId===file.uploadedByUserId;
+  return file.isActive && (actorId===file.assigneeUserId || actorId===file.proxyUserId) &&
+    actorId===file.uploadedByUserId;
+}
+
+/** A proxy executes the principal's own active assignment, never becoming a second assignee. */
+export function canExecuteCollaborativeAssignment(
+  row:{isActive:boolean;assigneeUserId:number;proxyUserId:number|null},actorId:number
+):boolean {
+  return row.isActive && (row.assigneeUserId===actorId || row.proxyUserId===actorId);
 }

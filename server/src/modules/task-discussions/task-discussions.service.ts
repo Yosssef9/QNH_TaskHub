@@ -93,19 +93,30 @@ export const taskDiscussionsService={
             AND (t.owner_user_id=@viewer
               OR (r.subtaskId IS NULL AND (
                 EXISTS(SELECT 1 FROM dbo.TM_collaboration_assignments a
-                  WHERE a.task_id=t.id AND a.subtask_id IS NULL AND a.assignee_user_id=@viewer AND a.is_active=1)
+                  WHERE a.task_id=t.id AND a.subtask_id IS NULL AND (a.assignee_user_id=@viewer OR a.proxy_user_id=@viewer) AND a.is_active=1)
                 OR (NOT EXISTS(SELECT 1 FROM dbo.TM_collaboration_tasks ct WHERE ct.task_id=t.id)
                   AND (EXISTS(SELECT 1 FROM dbo.TM_general_task_assignments g WHERE g.task_id=t.id AND g.assignee_user_id=@viewer)
-                    OR EXISTS(SELECT 1 FROM dbo.TM_meeting_action_items ma WHERE ma.task_id=t.id AND ma.assignee_user_id=@viewer)))))
+                    OR EXISTS(SELECT 1 FROM dbo.TM_meeting_action_items ma WHERE ma.task_id=t.id AND ma.assignee_user_id=@viewer)
+                    OR EXISTS(SELECT 1 FROM dbo.TM_task_proxies p
+                  JOIN dbo.TM_general_task_assignments g ON g.task_id=p.task_id
+                  WHERE p.task_id=t.id AND p.subtask_id IS NULL AND p.revoked_at_utc IS NULL
+                    AND p.proxy_user_id=@viewer AND p.principal_user_id=g.assignee_user_id)))))
               OR (r.subtaskId IS NOT NULL AND (
                 EXISTS(SELECT 1 FROM dbo.TM_collaboration_assignments a
-                  WHERE a.task_id=t.id AND a.subtask_id=r.subtaskId AND a.assignee_user_id=@viewer AND a.is_active=1)
+                  WHERE a.task_id=t.id AND a.subtask_id=r.subtaskId AND (a.assignee_user_id=@viewer OR a.proxy_user_id=@viewer) AND a.is_active=1)
                 OR (NOT EXISTS(SELECT 1 FROM dbo.TM_collaboration_tasks ct WHERE ct.task_id=t.id)
                   AND EXISTS(SELECT 1 FROM dbo.TM_subtasks st
                     LEFT JOIN dbo.TM_general_task_assignments g ON g.task_id=t.id
                     LEFT JOIN dbo.TM_meeting_action_items ma ON ma.task_id=t.id
                     WHERE st.id=r.subtaskId AND st.task_id=t.id AND st.deleted_at_utc IS NULL
-                      AND COALESCE(st.assignee_user_id,g.assignee_user_id,ma.assignee_user_id)=@viewer)))))
+                      AND COALESCE(st.assignee_user_id,g.assignee_user_id,ma.assignee_user_id)=@viewer)
+                  OR EXISTS(SELECT 1 FROM dbo.TM_task_proxies p
+                    JOIN dbo.TM_general_task_assignments g ON g.task_id=p.task_id
+                    JOIN dbo.TM_subtasks st ON st.task_id=p.task_id AND st.id=r.subtaskId AND st.deleted_at_utc IS NULL
+                    WHERE p.task_id=t.id AND p.revoked_at_utc IS NULL AND p.proxy_user_id=@viewer
+                      AND ((p.subtask_id=st.id AND p.principal_user_id=COALESCE(st.assignee_user_id,g.assignee_user_id,t.owner_user_id))
+                        OR (p.subtask_id IS NULL AND p.principal_user_id=g.assignee_user_id
+                          AND p.principal_user_id=COALESCE(st.assignee_user_id,g.assignee_user_id,t.owner_user_id))))))))
           ORDER BY r.lastMessageId DESC;`);
       let lastScanned:number|null=null;
       for(const row of result.recordset){
@@ -158,12 +169,16 @@ export const taskDiscussionsService={
           WHERE t.deleted_at_utc IS NULL AND t.kpi_instance_id IS NULL
             AND (t.owner_user_id=@viewer
               OR EXISTS(SELECT 1 FROM dbo.TM_collaboration_assignments a
-                WHERE a.task_id=t.id AND a.subtask_id IS NULL AND a.assignee_user_id=@viewer AND a.is_active=1)
+                WHERE a.task_id=t.id AND a.subtask_id IS NULL AND (a.assignee_user_id=@viewer OR a.proxy_user_id=@viewer) AND a.is_active=1)
               OR (NOT EXISTS(SELECT 1 FROM dbo.TM_collaboration_tasks ct WHERE ct.task_id=t.id)
                 AND (EXISTS(SELECT 1 FROM dbo.TM_general_task_assignments g
                       WHERE g.task_id=t.id AND g.assignee_user_id=@viewer)
                   OR EXISTS(SELECT 1 FROM dbo.TM_meeting_action_items ma
-                      WHERE ma.task_id=t.id AND ma.assignee_user_id=@viewer))))
+                      WHERE ma.task_id=t.id AND ma.assignee_user_id=@viewer)
+                  OR EXISTS(SELECT 1 FROM dbo.TM_task_proxies p
+                  JOIN dbo.TM_general_task_assignments g ON g.task_id=p.task_id
+                  WHERE p.task_id=t.id AND p.subtask_id IS NULL AND p.revoked_at_utc IS NULL
+                    AND p.proxy_user_id=@viewer AND p.principal_user_id=g.assignee_user_id))))
           UNION ALL
           SELECT t.id taskId,s.id subtaskId,t.title taskTitle,s.title subtaskTitle,t.owner_user_id ownerId
           FROM dbo.TM_subtasks s
@@ -171,13 +186,20 @@ export const taskDiscussionsService={
           WHERE s.deleted_at_utc IS NULL
             AND (t.owner_user_id=@viewer
               OR EXISTS(SELECT 1 FROM dbo.TM_collaboration_assignments a
-                WHERE a.task_id=t.id AND a.subtask_id=s.id AND a.assignee_user_id=@viewer AND a.is_active=1)
+                WHERE a.task_id=t.id AND a.subtask_id=s.id AND (a.assignee_user_id=@viewer OR a.proxy_user_id=@viewer) AND a.is_active=1)
               OR (NOT EXISTS(SELECT 1 FROM dbo.TM_collaboration_tasks ct WHERE ct.task_id=t.id)
                 AND EXISTS(SELECT 1 FROM dbo.TM_subtasks st
                   LEFT JOIN dbo.TM_general_task_assignments g ON g.task_id=t.id
                   LEFT JOIN dbo.TM_meeting_action_items ma ON ma.task_id=t.id
                   WHERE st.id=s.id AND st.task_id=t.id AND st.deleted_at_utc IS NULL
-                    AND COALESCE(st.assignee_user_id,g.assignee_user_id,ma.assignee_user_id)=@viewer)))
+                    AND COALESCE(st.assignee_user_id,g.assignee_user_id,ma.assignee_user_id)=@viewer)
+                OR EXISTS(SELECT 1 FROM dbo.TM_task_proxies p
+                    JOIN dbo.TM_general_task_assignments g ON g.task_id=p.task_id
+                    JOIN dbo.TM_subtasks st ON st.task_id=p.task_id AND st.id=s.id AND st.deleted_at_utc IS NULL
+                    WHERE p.task_id=t.id AND p.revoked_at_utc IS NULL AND p.proxy_user_id=@viewer
+                      AND ((p.subtask_id=st.id AND p.principal_user_id=COALESCE(st.assignee_user_id,g.assignee_user_id,t.owner_user_id))
+                        OR (p.subtask_id IS NULL AND p.principal_user_id=g.assignee_user_id
+                          AND p.principal_user_id=COALESCE(st.assignee_user_id,g.assignee_user_id,t.owner_user_id))))))
         )
         SELECT candidate.taskId,candidate.subtaskId,candidate.taskTitle,candidate.subtaskTitle
         FROM candidateScopes candidate
@@ -196,7 +218,9 @@ export const taskDiscussionsService={
                 EXISTS(SELECT 1 FROM dbo.TM_general_task_assignments g
                   WHERE g.task_id=candidate.taskId AND g.assignee_user_id<>candidate.ownerId)
                 OR EXISTS(SELECT 1 FROM dbo.TM_meeting_action_items ma
-                  WHERE ma.task_id=candidate.taskId AND ma.assignee_user_id<>candidate.ownerId)))
+                  WHERE ma.task_id=candidate.taskId AND ma.assignee_user_id<>candidate.ownerId)
+                OR EXISTS(SELECT 1 FROM dbo.TM_task_proxies p WHERE p.task_id=candidate.taskId
+                  AND p.subtask_id IS NULL AND p.revoked_at_utc IS NULL)))
               OR (candidate.subtaskId IS NOT NULL AND EXISTS(
                 SELECT 1 FROM dbo.TM_subtasks st
                 LEFT JOIN dbo.TM_general_task_assignments g ON g.task_id=st.task_id
@@ -283,18 +307,29 @@ export const taskDiscussionsService={
           AND (t.owner_user_id=@userId OR
             (EXISTS(SELECT 1 FROM dbo.TM_collaboration_tasks ct WHERE ct.task_id=t.id)
               AND EXISTS(SELECT 1 FROM dbo.TM_collaboration_assignments ca WHERE
-                ca.task_id=t.id AND ca.assignee_user_id=@userId AND ca.is_active=1 AND
+                ca.task_id=t.id AND (ca.assignee_user_id=@userId OR ca.proxy_user_id=@userId) AND ca.is_active=1 AND
                 (ca.subtask_id=m.subtask_id OR (ca.subtask_id IS NULL AND m.subtask_id IS NULL))))
             OR (NOT EXISTS(SELECT 1 FROM dbo.TM_collaboration_tasks ct WHERE ct.task_id=t.id)
               AND ((m.subtask_id IS NULL AND (
                 EXISTS(SELECT 1 FROM dbo.TM_general_task_assignments g WHERE g.task_id=t.id AND g.assignee_user_id=@userId)
-                OR EXISTS(SELECT 1 FROM dbo.TM_meeting_action_items mi WHERE mi.task_id=t.id AND mi.assignee_user_id=@userId)))
+                OR EXISTS(SELECT 1 FROM dbo.TM_meeting_action_items mi WHERE mi.task_id=t.id AND mi.assignee_user_id=@userId)
+                OR EXISTS(SELECT 1 FROM dbo.TM_task_proxies p
+                  JOIN dbo.TM_general_task_assignments g ON g.task_id=p.task_id
+                  WHERE p.task_id=t.id AND p.subtask_id IS NULL AND p.revoked_at_utc IS NULL
+                    AND p.proxy_user_id=@userId AND p.principal_user_id=g.assignee_user_id)))
               OR (m.subtask_id IS NOT NULL AND EXISTS(
                 SELECT 1 FROM dbo.TM_subtasks st
                 LEFT JOIN dbo.TM_general_task_assignments g ON g.task_id=t.id
                 LEFT JOIN dbo.TM_meeting_action_items mi ON mi.task_id=t.id
                 WHERE st.id=m.subtask_id AND st.task_id=t.id AND st.deleted_at_utc IS NULL AND
-                  COALESCE(st.assignee_user_id,g.assignee_user_id,mi.assignee_user_id)=@userId)))))
+                  COALESCE(st.assignee_user_id,g.assignee_user_id,mi.assignee_user_id)=@userId))
+                OR EXISTS(SELECT 1 FROM dbo.TM_task_proxies p
+                    JOIN dbo.TM_general_task_assignments g ON g.task_id=p.task_id
+                    JOIN dbo.TM_subtasks st ON st.task_id=p.task_id AND st.id=m.subtask_id AND st.deleted_at_utc IS NULL
+                    WHERE p.task_id=t.id AND p.revoked_at_utc IS NULL AND p.proxy_user_id=@userId
+                      AND ((p.subtask_id=st.id AND p.principal_user_id=COALESCE(st.assignee_user_id,g.assignee_user_id,t.owner_user_id))
+                        OR (p.subtask_id IS NULL AND p.principal_user_id=g.assignee_user_id
+                          AND p.principal_user_id=COALESCE(st.assignee_user_id,g.assignee_user_id,t.owner_user_id)))))))
 `);
     return Number(result.recordset[0]?.unread??0);
   },
@@ -326,18 +361,29 @@ export const taskDiscussionsService={
           AND (t.owner_user_id=@userId OR
             (EXISTS(SELECT 1 FROM dbo.TM_collaboration_tasks ct WHERE ct.task_id=t.id)
               AND EXISTS(SELECT 1 FROM dbo.TM_collaboration_assignments ca WHERE
-                ca.task_id=t.id AND ca.assignee_user_id=@userId AND ca.is_active=1 AND
+                ca.task_id=t.id AND (ca.assignee_user_id=@userId OR ca.proxy_user_id=@userId) AND ca.is_active=1 AND
                 (ca.subtask_id=m.subtask_id OR (ca.subtask_id IS NULL AND m.subtask_id IS NULL))))
             OR (NOT EXISTS(SELECT 1 FROM dbo.TM_collaboration_tasks ct WHERE ct.task_id=t.id)
               AND ((m.subtask_id IS NULL AND (
                 EXISTS(SELECT 1 FROM dbo.TM_general_task_assignments g WHERE g.task_id=t.id AND g.assignee_user_id=@userId)
-                OR EXISTS(SELECT 1 FROM dbo.TM_meeting_action_items mi WHERE mi.task_id=t.id AND mi.assignee_user_id=@userId)))
+                OR EXISTS(SELECT 1 FROM dbo.TM_meeting_action_items mi WHERE mi.task_id=t.id AND mi.assignee_user_id=@userId)
+                OR EXISTS(SELECT 1 FROM dbo.TM_task_proxies p
+                  JOIN dbo.TM_general_task_assignments g ON g.task_id=p.task_id
+                  WHERE p.task_id=t.id AND p.subtask_id IS NULL AND p.revoked_at_utc IS NULL
+                    AND p.proxy_user_id=@userId AND p.principal_user_id=g.assignee_user_id)))
               OR (m.subtask_id IS NOT NULL AND EXISTS(
                 SELECT 1 FROM dbo.TM_subtasks st
                 LEFT JOIN dbo.TM_general_task_assignments g ON g.task_id=t.id
                 LEFT JOIN dbo.TM_meeting_action_items mi ON mi.task_id=t.id
                 WHERE st.id=m.subtask_id AND st.task_id=t.id AND st.deleted_at_utc IS NULL AND
-                  COALESCE(st.assignee_user_id,g.assignee_user_id,mi.assignee_user_id)=@userId)))))
+                  COALESCE(st.assignee_user_id,g.assignee_user_id,mi.assignee_user_id)=@userId))
+                OR EXISTS(SELECT 1 FROM dbo.TM_task_proxies p
+                    JOIN dbo.TM_general_task_assignments g ON g.task_id=p.task_id
+                    JOIN dbo.TM_subtasks st ON st.task_id=p.task_id AND st.id=m.subtask_id AND st.deleted_at_utc IS NULL
+                    WHERE p.task_id=t.id AND p.revoked_at_utc IS NULL AND p.proxy_user_id=@userId
+                      AND ((p.subtask_id=st.id AND p.principal_user_id=COALESCE(st.assignee_user_id,g.assignee_user_id,t.owner_user_id))
+                        OR (p.subtask_id IS NULL AND p.principal_user_id=g.assignee_user_id
+                          AND p.principal_user_id=COALESCE(st.assignee_user_id,g.assignee_user_id,t.owner_user_id)))))))
         GROUP BY m.task_id;`);
     // Include eligible conversations with zero unread messages. This response is also
     // the authorization-aware source for displaying a shortcut on each task card.
@@ -366,14 +412,16 @@ export const taskDiscussionsService={
             ))
             OR (t.owner_user_id<>@userId AND (
               EXISTS(SELECT 1 FROM dbo.TM_collaboration_assignments ca
-                WHERE ca.task_id=t.id AND ca.is_active=1 AND ca.assignee_user_id=@userId)
+                WHERE ca.task_id=t.id AND ca.is_active=1 AND (ca.assignee_user_id=@userId OR ca.proxy_user_id=@userId))
               OR (NOT EXISTS(SELECT 1 FROM dbo.TM_collaboration_tasks ct WHERE ct.task_id=t.id)
                 AND (EXISTS(SELECT 1 FROM dbo.TM_general_task_assignments g
                        WHERE g.task_id=t.id AND g.assignee_user_id=@userId)
                   OR EXISTS(SELECT 1 FROM dbo.TM_meeting_action_items ma
                        WHERE ma.task_id=t.id AND ma.assignee_user_id=@userId)
                   OR EXISTS(SELECT 1 FROM dbo.TM_subtasks st
-                       WHERE st.task_id=t.id AND st.deleted_at_utc IS NULL AND st.assignee_user_id=@userId)))
+                       WHERE st.task_id=t.id AND st.deleted_at_utc IS NULL AND st.assignee_user_id=@userId)
+                  OR EXISTS(SELECT 1 FROM dbo.TM_task_proxies p WHERE p.task_id=t.id
+                       AND p.proxy_user_id=@userId AND p.revoked_at_utc IS NULL)))
             ))
           );`);
     const counts=new Map(result.recordset.map(row=>[Number(row.taskId),Number(row.unread)]));

@@ -136,7 +136,20 @@ export const tasksService = {
       if (input.assigneeUserIds?.length) {
         if (input.assigneeUserId != null) throw new AppError({statusCode:400,
           code:'COLLABORATION_ASSIGNMENT_CONFLICT',message:'Specify either assigneeUserIds or assigneeUserId.'});
-        await initializeCollaborativeTask(transaction,ownerUserId,createdId,input.assigneeUserIds);
+        // A single selected employee is a normal assignment. Reserve collaborative
+        // completion semantics for genuinely multi-person teams.
+        const uniqueAssignees=[...new Set(input.assigneeUserIds)];
+        if(uniqueAssignees.length===1){
+          const assignee=uniqueAssignees[0]!;
+          if(!(await generalTaskAssignmentsRepository.isEligibleUser(assignee,transaction)))
+            throw new AppError({statusCode:400,code:'TASK_ASSIGNEE_INVALID',message:'Select an active TaskHub user.'});
+          await generalTaskAssignmentsRepository.ensureRelation(transaction,createdId,ownerUserId,
+            ownerUserId,assignee,true);
+          await notifyGeneralTask(transaction,[assignee],ownerUserId,{
+            type:'GENERAL_TASK_ASSIGNED',taskId:createdId,listId,subjectTitle:input.title,
+            contextTitle:'Task assigned to you',
+          });
+        }else await initializeCollaborativeTask(transaction,ownerUserId,createdId,uniqueAssignees);
       } else if (input.assigneeUserId != null) {
         if (!(await generalTaskAssignmentsRepository.isEligibleUser(input.assigneeUserId, transaction))) {
           throw new AppError({statusCode:400,code:"TASK_ASSIGNEE_INVALID",message:"Select an active TaskHub user."});
@@ -416,12 +429,26 @@ export const tasksService = {
         input.status === "CANCELLED" ? (input.cancellationReason ?? null) : null,
       );
 
+      let proxyOfName:string|undefined;
+      let proxyActorName:string|undefined;
+      if(access.proxyGrant){
+        const proxyActors=await transaction.request()
+          .input('principal',sql.Int,access.proxyGrant.principalUserId)
+          .input('actor',sql.Int,actorUserId)
+          .query<{principalName:string|null;actorName:string|null}>(`
+            SELECT (SELECT TOP(1) COALESCE(USER_NAME,USER_CODE) FROM dbo.users WHERE USER_ID=@principal) principalName,
+                   (SELECT TOP(1) COALESCE(USER_NAME,USER_CODE) FROM dbo.users WHERE USER_ID=@actor) actorName;`);
+        proxyOfName=proxyActors.recordset[0]?.principalName??undefined;
+        proxyActorName=proxyActors.recordset[0]?.actorName??undefined;
+      }
       await tasksRepository.addActivity(
         transaction,
         ownerUserId,
         taskId,
         "STATUS_CHANGED",
-        { from: currentStatus, to: input.status },
+        { from: currentStatus, to: input.status,
+          ...(access.proxyGrant ? {proxyOfUserId:access.proxyGrant.principalUserId,proxyOfName,
+            proxyId:access.proxyGrant.id}: {}) },
         actorUserId,
       );
 
@@ -437,7 +464,9 @@ export const tasksService = {
           [ownerUserId, access.generalAssignment.assigneeUserId], actorUserId, {
             type: input.status === "DONE" ? "GENERAL_TASK_COMPLETED" : "GENERAL_TASK_REOPENED",
             taskId, listId: current.listId, taskOwnerUserId: ownerUserId, subjectTitle: current.title,
-            contextTitle: input.status === "DONE" ? "Main task completed" : "Main task reopened",
+            contextTitle: access.proxyGrant && proxyActorName && proxyOfName
+              ? `${proxyActorName} (${input.status === "DONE" ? "completed" : "reopened"} as proxy for ${proxyOfName})`
+              : input.status === "DONE" ? "Main task completed" : "Main task reopened",
           });
       }
       if (!access.collaborationActive && access.context && currentStatus === "DONE" && (input.status === "TODO" || input.status === "IN_PROGRESS")) {
