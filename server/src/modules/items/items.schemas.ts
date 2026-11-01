@@ -59,6 +59,7 @@ export const itemListQuerySchema = z.object({
 });
 
 export const annualPriceQuerySchema = z.object(itemFilters).omit({ period: true }).extend({
+  priceMethod: z.enum(['lowest', 'average', 'mode', 'median', 'weighted', 'latest']).default('lowest'),
   endingYear: z.coerce.number().int().refine(year => year === 2026 || year === 2027, "Ending year must be 2026 or 2027.").default(2026),
   savingsYears: z.preprocess(parseIds, z.array(z.coerce.number().int()).min(1).max(3)
     .refine(years => new Set(years).size === years.length, "Comparison years must be unique.").optional()),
@@ -120,3 +121,4 @@ export type ItemSupplierMatrixQueryInput = z.infer<typeof itemSupplierMatrixQuer
 export type ItemOverviewQueryInput = z.infer<typeof itemOverviewQuerySchema>;
 export type CreateItemBody = z.infer<typeof createItemBodySchema>;
 export type UpdateItemBody = z.infer<typeof updateItemBodySchema>;
+

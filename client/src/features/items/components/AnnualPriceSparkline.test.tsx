@@ -12,6 +12,7 @@ function purchases(costs: [number | null, number | null, number | null]): [Annua
     supplierName: null,
     transactionDate: null,
     invoiceNo: null,
+    breakdown: null,
   })) as [AnnualLowestPurchase, AnnualLowestPurchase, AnnualLowestPurchase]
 }
 
@@ -38,3 +39,4 @@ describe('annual price sparkline geometry', () => {
     expect(annualTrendPoints(purchases([null, 23, null])).map((point) => point.y)).toEqual([null, 36, null])
   })
 })
+

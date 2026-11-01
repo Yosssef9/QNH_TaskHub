@@ -15,13 +15,30 @@ export type ItemSortBy =
   | "suppliers"
   | "lastPurchase";
 export type SortDirection = "asc" | "desc";
+export type AnnualPriceMethod = 'lowest' | 'average' | 'mode' | 'median' | 'weighted' | 'latest'
+
 export type AnnualPriceSortBy = "performance" | "name" | "currentPrice" | "totalSavings" | "currentSupplier" | "previousChange";
 
 export interface AnnualPriceQuery extends Omit<ItemListQuery, "period" | "sortBy"> {
   endingYear: number;
+  priceMethod: AnnualPriceMethod;
   /** Purchase years whose savings comparisons contribute to totals. Unspecified means all three. */
   savingsYears?: number[] | undefined;
   sortBy: AnnualPriceSortBy;
+}
+
+export interface AnnualPriceBreakdown {
+  recordCount: number;
+  unitPriceSum: number | null;
+  minimumPrice: number | null;
+  maximumPrice: number | null;
+  distinctPriceCount: number;
+  modeFrequency: number | null;
+  medianLower: number | null;
+  medianUpper: number | null;
+  purchasedQuantity: number | null;
+  purchaseValue: number | null;
+  invalidQuantityCount: number;
 }
 
 export interface AnnualLowestPurchase {
@@ -32,6 +49,7 @@ export interface AnnualLowestPurchase {
   supplierName: string | null;
   transactionDate: string | null;
   invoiceNo: string | null;
+  breakdown: AnnualPriceBreakdown | null;
 }
 
 export interface AnnualSavingsYear {
@@ -59,6 +77,7 @@ export interface AnnualPriceItem {
 export interface AnnualPriceList {
   items: AnnualPriceItem[];
   endingYear: number;
+  priceMethod: AnnualPriceMethod;
   page: number;
   pageSize: number;
   total: number;
@@ -265,3 +284,4 @@ export interface ItemActivity {
   actorName: string;
   createdAtUtc: string;
 }
+

@@ -23,6 +23,19 @@ export function mapAnnualRecord(row: AnnualPriceRecord, endingYear: number): Ann
       supplierName: cost === null ? null : row[`year${index}SupplierName`],
       transactionDate: cost === null ? null : dateOrNull(row[`year${index}Date`]),
       invoiceNo: cost === null ? null : row[`year${index}Invoice`],
+      breakdown: row[`year${index}RecordCount`] === null ? null : {
+        recordCount: Number(row[`year${index}RecordCount`]),
+        unitPriceSum: numberOrNull(row[`year${index}UnitPriceSum`]),
+        minimumPrice: numberOrNull(row[`year${index}MinimumPrice`]),
+        maximumPrice: numberOrNull(row[`year${index}MaximumPrice`]),
+        distinctPriceCount: Number(row[`year${index}DistinctPriceCount`] ?? 0),
+        modeFrequency: numberOrNull(row[`year${index}ModeFrequency`]),
+        medianLower: numberOrNull(row[`year${index}MedianLower`]),
+        medianUpper: numberOrNull(row[`year${index}MedianUpper`]),
+        purchasedQuantity: numberOrNull(row[`year${index}PurchasedQuantity`]),
+        purchaseValue: numberOrNull(row[`year${index}PurchaseValue`]),
+        invalidQuantityCount: Number(row[`year${index}InvalidQuantityCount`] ?? 0),
+      },
     };
   }
   return {
@@ -57,6 +70,7 @@ export async function listAnnualPrices(query: AnnualPriceQuery): Promise<AnnualP
   return {
     items: result.records.map(row => mapAnnualRecord(row, query.endingYear)),
     endingYear: query.endingYear,
+    priceMethod: query.priceMethod,
     page: query.page,
     pageSize: query.pageSize,
     total: result.total,
@@ -66,3 +80,4 @@ export async function listAnnualPrices(query: AnnualPriceQuery): Promise<AnnualP
     savingsPartialItems: result.partial,
   };
 }
+

@@ -13,6 +13,15 @@ const sample: AnnualPriceRecord = {
   year1Date: new Date('2025-06-01T00:00:00.000Z'),
   year2Date: new Date('2026-06-01T00:00:00.000Z'),
   year0Invoice: 'A1', year1Invoice: 'B1', year2Invoice: 'C1',
+  year0RecordCount: 3, year0UnitPriceSum: 360, year0MinimumPrice: 80, year0MaximumPrice: 150,
+  year0DistinctPriceCount: 3, year0ModeFrequency: 1, year0MedianLower: 100, year0MedianUpper: 100,
+  year0PurchasedQuantity: 60, year0PurchaseValue: 7200, year0InvalidQuantityCount: 0,
+  year1RecordCount: 3, year1UnitPriceSum: 360, year1MinimumPrice: 80, year1MaximumPrice: 150,
+  year1DistinctPriceCount: 3, year1ModeFrequency: 1, year1MedianLower: 100, year1MedianUpper: 100,
+  year1PurchasedQuantity: 60, year1PurchaseValue: 7200, year1InvalidQuantityCount: 0,
+  year2RecordCount: 3, year2UnitPriceSum: 360, year2MinimumPrice: 80, year2MaximumPrice: 150,
+  year2DistinctPriceCount: 3, year2ModeFrequency: 1, year2MedianLower: 100, year2MedianUpper: 100,
+  year2PurchasedQuantity: 60, year2PurchaseValue: 7200, year2InvalidQuantityCount: 0,
   previousChangePercent: -16.6667, latestChangePercent: -20,
   year0Benchmark: 130, year1Benchmark: 120, year2Benchmark: 100,
   year0Quantity: 60, year1Quantity: 50, year2Quantity: 80,
@@ -92,3 +101,4 @@ describe('annual price savings API mapping', () => {
   });
 
 });
+

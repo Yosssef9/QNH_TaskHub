@@ -29,6 +29,39 @@ export interface AnnualPriceRecord {
   year0Invoice: string | null;
   year1Invoice: string | null;
   year2Invoice: string | null;
+  year0RecordCount: number | string | null;
+  year0UnitPriceSum: number | string | null;
+  year0MinimumPrice: number | string | null;
+  year0MaximumPrice: number | string | null;
+  year0DistinctPriceCount: number | string | null;
+  year0ModeFrequency: number | string | null;
+  year0MedianLower: number | string | null;
+  year0MedianUpper: number | string | null;
+  year0PurchasedQuantity: number | string | null;
+  year0PurchaseValue: number | string | null;
+  year0InvalidQuantityCount: number | string | null;
+  year1RecordCount: number | string | null;
+  year1UnitPriceSum: number | string | null;
+  year1MinimumPrice: number | string | null;
+  year1MaximumPrice: number | string | null;
+  year1DistinctPriceCount: number | string | null;
+  year1ModeFrequency: number | string | null;
+  year1MedianLower: number | string | null;
+  year1MedianUpper: number | string | null;
+  year1PurchasedQuantity: number | string | null;
+  year1PurchaseValue: number | string | null;
+  year1InvalidQuantityCount: number | string | null;
+  year2RecordCount: number | string | null;
+  year2UnitPriceSum: number | string | null;
+  year2MinimumPrice: number | string | null;
+  year2MaximumPrice: number | string | null;
+  year2DistinctPriceCount: number | string | null;
+  year2ModeFrequency: number | string | null;
+  year2MedianLower: number | string | null;
+  year2MedianUpper: number | string | null;
+  year2PurchasedQuantity: number | string | null;
+  year2PurchaseValue: number | string | null;
+  year2InvalidQuantityCount: number | string | null;
   previousChangePercent: number | string | null;
   latestChangePercent: number | string | null;
   year0Benchmark: number | string | null;
@@ -86,6 +119,7 @@ export async function queryAnnualPrices(query: AnnualPriceQuery): Promise<{ reco
   const bind = (request: import("mssql").Request, page = query.page): import("mssql").Request => {
     bindListFilters(request, { ...query, period: "ALL", sortBy: "name" });
     request
+      .input("priceMethod", sql.VarChar(12), query.priceMethod)
       .input("year0", sql.Int, query.endingYear - 2)
       .input("year1", sql.Int, query.endingYear - 1)
       .input("year2", sql.Int, query.endingYear)
@@ -167,23 +201,77 @@ export async function queryAnnualPrices(query: AnnualPriceQuery): Promise<{ reco
        AND ISNULL(n.currencyCode, N'') = ISNULL(s.currencyCode, N'')
        AND ISNULL(n.unitName, N'') = ISNULL(s.unitName, N'')
     ),
-    ranked AS (
-      SELECT *, YEAR(transactionDate) AS purchaseYear,
-        ROW_NUMBER() OVER (
-          PARTITION BY itemId, YEAR(transactionDate)
-          ORDER BY unitCost ASC, transactionDate DESC, confirmDate DESC, invoiceNo DESC, sourceRowId DESC, supplierId ASC
-        ) AS priceRank
-      FROM scoped
+    yearly_prices AS (
+      SELECT s.*, YEAR(s.transactionDate) AS purchaseYear
+      FROM scoped s
     ),
-    winners AS (SELECT * FROM ranked WHERE priceRank = 1),
-    financial_by_year AS (
-      SELECT itemId, YEAR(transactionDate) AS purchaseYear,
+    annual_statistics AS (
+      SELECT itemId, purchaseYear,
         COUNT_BIG(1) AS transactionCount,
+        SUM(CONVERT(DECIMAL(28,6), unitCost)) AS unitPriceSum,
+        MIN(unitCost) AS minimumPrice,
+        MAX(unitCost) AS maximumPrice,
+        COUNT(DISTINCT unitCost) AS distinctPriceCount,
         SUM(CASE WHEN quantity IS NULL OR quantity <= 0 THEN 1 ELSE 0 END) AS invalidQuantityCount,
         SUM(CASE WHEN quantity > 0 THEN CONVERT(DECIMAL(28,6), quantity) ELSE CONVERT(DECIMAL(28,6), 0) END) AS purchasedQuantity,
         SUM(CASE WHEN quantity > 0 THEN CONVERT(DECIMAL(28,6), quantity * unitCost) ELSE CONVERT(DECIMAL(28,6), 0) END) AS actualSpending
-      FROM scoped
-      GROUP BY itemId, YEAR(transactionDate)
+      FROM yearly_prices
+      GROUP BY itemId, purchaseYear
+    ),
+    ranked AS (
+      SELECT p.*,
+        ROW_NUMBER() OVER (PARTITION BY itemId, purchaseYear
+          ORDER BY unitCost ASC, transactionDate DESC, confirmDate DESC, invoiceNo DESC, sourceRowId DESC, supplierId ASC) AS lowestRank,
+        ROW_NUMBER() OVER (PARTITION BY itemId, purchaseYear
+          ORDER BY transactionDate DESC, confirmDate DESC, invoiceNo DESC, sourceRowId DESC, supplierId ASC) AS latestRank,
+        COUNT_BIG(1) OVER (PARTITION BY itemId, purchaseYear) AS medianCount
+      FROM yearly_prices p
+    ),
+    median_prices AS (
+      SELECT itemId, purchaseYear,
+        AVG(CONVERT(DECIMAL(28,6),unitCost)) AS medianCost,
+        MIN(unitCost) AS medianLower,
+        MAX(unitCost) AS medianUpper
+      FROM ranked
+      WHERE lowestRank IN ((medianCount + 1) / 2, (medianCount + 2) / 2)
+      GROUP BY itemId, purchaseYear
+    ),
+    frequency AS (
+      SELECT itemId, purchaseYear, unitCost,
+        COUNT_BIG(1) AS occurrences,
+        MAX(transactionDate) AS lastOccurrence
+      FROM yearly_prices
+      GROUP BY itemId, purchaseYear, unitCost
+    ),
+    mode_ranked AS (
+      SELECT *, ROW_NUMBER() OVER (
+        PARTITION BY itemId, purchaseYear
+        ORDER BY occurrences DESC, lastOccurrence DESC, unitCost ASC
+      ) AS frequencyRank
+      FROM frequency
+    ),
+    annual_price_values AS (
+      SELECT st.itemId, st.purchaseYear, st.transactionCount, st.invalidQuantityCount,
+        st.purchasedQuantity, st.actualSpending,
+        st.unitPriceSum, st.minimumPrice, st.maximumPrice, st.distinctPriceCount,
+        med.medianLower, med.medianUpper, md.occurrences AS modeFrequency,
+        CONVERT(DECIMAL(19,6), CASE @priceMethod
+          WHEN 'lowest' THEN chosen.unitCost
+          WHEN 'latest' THEN chosen.unitCost
+          WHEN 'average' THEN st.unitPriceSum / NULLIF(st.transactionCount, 0)
+          WHEN 'median' THEN med.medianCost
+          WHEN 'mode' THEN md.unitCost
+          WHEN 'weighted' THEN CASE WHEN st.invalidQuantityCount = 0 AND st.purchasedQuantity > 0
+            THEN st.actualSpending / NULLIF(st.purchasedQuantity,0) ELSE NULL END
+        END) AS unitCost,
+        chosen.supplierId, chosen.supplierCode, chosen.supplierName,
+        chosen.transactionDate, chosen.invoiceNo
+      FROM annual_statistics st
+      LEFT JOIN ranked chosen ON chosen.itemId = st.itemId AND chosen.purchaseYear = st.purchaseYear
+        AND ((@priceMethod = 'lowest' AND chosen.lowestRank = 1)
+          OR (@priceMethod = 'latest' AND chosen.latestRank = 1))
+      LEFT JOIN median_prices med ON med.itemId = st.itemId AND med.purchaseYear = st.purchaseYear
+      LEFT JOIN mode_ranked md ON md.itemId = st.itemId AND md.purchaseYear = st.purchaseYear AND md.frequencyRank = 1
     ),
     annual_values AS (
       SELECT
@@ -195,6 +283,17 @@ export async function queryAnnualPrices(query: AnnualPriceQuery): Promise<{ reco
         y0.supplierName AS year0SupplierName, y1.supplierName AS year1SupplierName, y2.supplierName AS year2SupplierName,
         y0.transactionDate AS year0Date, y1.transactionDate AS year1Date, y2.transactionDate AS year2Date,
         y0.invoiceNo AS year0Invoice, y1.invoiceNo AS year1Invoice, y2.invoiceNo AS year2Invoice,
+        y0.transactionCount AS year0RecordCount, y1.transactionCount AS year1RecordCount, y2.transactionCount AS year2RecordCount,
+        y0.unitPriceSum AS year0UnitPriceSum, y1.unitPriceSum AS year1UnitPriceSum, y2.unitPriceSum AS year2UnitPriceSum,
+        y0.minimumPrice AS year0MinimumPrice, y1.minimumPrice AS year1MinimumPrice, y2.minimumPrice AS year2MinimumPrice,
+        y0.maximumPrice AS year0MaximumPrice, y1.maximumPrice AS year1MaximumPrice, y2.maximumPrice AS year2MaximumPrice,
+        y0.distinctPriceCount AS year0DistinctPriceCount, y1.distinctPriceCount AS year1DistinctPriceCount, y2.distinctPriceCount AS year2DistinctPriceCount,
+        y0.modeFrequency AS year0ModeFrequency, y1.modeFrequency AS year1ModeFrequency, y2.modeFrequency AS year2ModeFrequency,
+        y0.medianLower AS year0MedianLower, y1.medianLower AS year1MedianLower, y2.medianLower AS year2MedianLower,
+        y0.medianUpper AS year0MedianUpper, y1.medianUpper AS year1MedianUpper, y2.medianUpper AS year2MedianUpper,
+        y0.purchasedQuantity AS year0PurchasedQuantity, y1.purchasedQuantity AS year1PurchasedQuantity, y2.purchasedQuantity AS year2PurchasedQuantity,
+        y0.actualSpending AS year0PurchaseValue, y1.actualSpending AS year1PurchaseValue, y2.actualSpending AS year2PurchaseValue,
+        y0.invalidQuantityCount AS year0InvalidQuantityCount, y1.invalidQuantityCount AS year1InvalidQuantityCount, y2.invalidQuantityCount AS year2InvalidQuantityCount,
         CASE WHEN s.currencyCode IS NOT NULL AND s.unitName IS NOT NULL AND y0.unitCost > 0 AND y1.unitCost IS NOT NULL
           THEN CONVERT(DECIMAL(19,4), ((y1.unitCost - y0.unitCost) * 100.0) / NULLIF(y0.unitCost, 0))
           ELSE NULL END AS previousChangePercent,
@@ -202,39 +301,36 @@ export async function queryAnnualPrices(query: AnnualPriceQuery): Promise<{ reco
           THEN CONVERT(DECIMAL(19,4), ((y2.unitCost - y1.unitCost) * 100.0) / NULLIF(y1.unitCost, 0))
           ELSE NULL END AS latestChangePercent,
         b0.unitCost AS year0Benchmark, y0.unitCost AS year1Benchmark, y1.unitCost AS year2Benchmark,
-        f0.purchasedQuantity AS year0Quantity, f1.purchasedQuantity AS year1Quantity, f2.purchasedQuantity AS year2Quantity,
-        f0.actualSpending AS year0ActualCost, f1.actualSpending AS year1ActualCost, f2.actualSpending AS year2ActualCost,
+        y0.purchasedQuantity AS year0Quantity, y1.purchasedQuantity AS year1Quantity, y2.purchasedQuantity AS year2Quantity,
+        y0.actualSpending AS year0ActualCost, y1.actualSpending AS year1ActualCost, y2.actualSpending AS year2ActualCost,
         -- Each year stands alone: a missing benchmark in another year must
         -- not invalidate a comparable purchase year.
         -- Count purchase years INSIDE the selected three-year window.
         -- A previous-year benchmark outside that window never counts as a purchase year.
-        (CASE WHEN f0.transactionCount > 0 AND f0.invalidQuantityCount = 0 AND f0.purchasedQuantity > 0 THEN 1 ELSE 0 END
-         + CASE WHEN f1.transactionCount > 0 AND f1.invalidQuantityCount = 0 AND f1.purchasedQuantity > 0 THEN 1 ELSE 0 END
-         + CASE WHEN f2.transactionCount > 0 AND f2.invalidQuantityCount = 0 AND f2.purchasedQuantity > 0 THEN 1 ELSE 0 END) AS purchaseYearCount,
+        (CASE WHEN y0.transactionCount > 0 AND y0.invalidQuantityCount = 0 AND y0.purchasedQuantity > 0 THEN 1 ELSE 0 END
+         + CASE WHEN y1.transactionCount > 0 AND y1.invalidQuantityCount = 0 AND y1.purchasedQuantity > 0 THEN 1 ELSE 0 END
+         + CASE WHEN y2.transactionCount > 0 AND y2.invalidQuantityCount = 0 AND y2.purchasedQuantity > 0 THEN 1 ELSE 0 END) AS purchaseYearCount,
         CASE WHEN s.currencyCode = N'SAR' AND NULLIF(s.unitName, N'') IS NOT NULL
             AND b0.unitCost > 0
-            AND f0.transactionCount > 0 AND f0.invalidQuantityCount = 0
-          THEN CONVERT(DECIMAL(28,4), b0.unitCost * f0.purchasedQuantity - f0.actualSpending)
+            AND y0.transactionCount > 0 AND y0.invalidQuantityCount = 0
+          THEN CONVERT(DECIMAL(28,4), b0.unitCost * y0.purchasedQuantity - y0.actualSpending)
           ELSE NULL END AS year0Savings,
         CASE WHEN s.currencyCode = N'SAR' AND NULLIF(s.unitName, N'') IS NOT NULL
             AND y0.unitCost > 0
-            AND f1.transactionCount > 0 AND f1.invalidQuantityCount = 0
-          THEN CONVERT(DECIMAL(28,4), y0.unitCost * f1.purchasedQuantity - f1.actualSpending)
+            AND y1.transactionCount > 0 AND y1.invalidQuantityCount = 0
+          THEN CONVERT(DECIMAL(28,4), y0.unitCost * y1.purchasedQuantity - y1.actualSpending)
           ELSE NULL END AS year1Savings,
         CASE WHEN s.currencyCode = N'SAR' AND NULLIF(s.unitName, N'') IS NOT NULL
             AND y1.unitCost > 0
-            AND f2.transactionCount > 0 AND f2.invalidQuantityCount = 0
-          THEN CONVERT(DECIMAL(28,4), y1.unitCost * f2.purchasedQuantity - f2.actualSpending)
+            AND y2.transactionCount > 0 AND y2.invalidQuantityCount = 0
+          THEN CONVERT(DECIMAL(28,4), y1.unitCost * y2.purchasedQuantity - y2.actualSpending)
           ELSE NULL END AS year2Savings
       FROM filtered_items fi
       LEFT JOIN newest_scope s ON s.itemId = fi.id AND s.scopeRank = 1
-      LEFT JOIN winners b0 ON b0.itemId = fi.id AND b0.purchaseYear = @year0 - 1
-      LEFT JOIN financial_by_year f0 ON f0.itemId = fi.id AND f0.purchaseYear = @year0
-      LEFT JOIN financial_by_year f1 ON f1.itemId = fi.id AND f1.purchaseYear = @year1
-      LEFT JOIN financial_by_year f2 ON f2.itemId = fi.id AND f2.purchaseYear = @year2
-      LEFT JOIN winners y0 ON y0.itemId = fi.id AND y0.purchaseYear = @year0
-      LEFT JOIN winners y1 ON y1.itemId = fi.id AND y1.purchaseYear = @year1
-      LEFT JOIN winners y2 ON y2.itemId = fi.id AND y2.purchaseYear = @year2
+      LEFT JOIN annual_price_values b0 ON b0.itemId = fi.id AND b0.purchaseYear = @year0 - 1
+      LEFT JOIN annual_price_values y0 ON y0.itemId = fi.id AND y0.purchaseYear = @year0
+      LEFT JOIN annual_price_values y1 ON y1.itemId = fi.id AND y1.purchaseYear = @year1
+      LEFT JOIN annual_price_values y2 ON y2.itemId = fi.id AND y2.purchaseYear = @year2
     ),
     annual_rows AS (
       SELECT *,
@@ -285,3 +381,4 @@ export async function queryAnnualPrices(query: AnnualPriceQuery): Promise<{ reco
     partial: Number(first?.summaryPartial ?? 0),
   };
 }
+
