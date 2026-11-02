@@ -198,6 +198,28 @@ export const enTranslation = {
     reactionFailed: 'Could not save reaction',
     newMessages: 'New messages',
     sendHint: 'Enter to send · Shift+Enter for new line',
+    // Discussion read receipts, scroll controls, and shared-content drawer.
+    seen: 'Seen',
+    notSeen: 'Not seen',
+    receiptsUnavailable: 'Read receipts are unavailable for this message.',
+    scrollToBottom: 'Jump to latest messages',
+    sharedTitle: 'Shared files and links',
+    sharedSearch: 'Search files, images, and links…',
+    sharedFiles: 'Files',
+    sharedImages: 'Images',
+    sharedLinks: 'Links',
+    sharedSort: 'Sort shared items',
+    sharedNewest: 'Newest first',
+    sharedOldest: 'Oldest first',
+    sharedName: 'Name (A–Z)',
+    sharedLoading: 'Loading shared items…',
+    sharedLoadFailed: 'Could not load shared items.',
+    sharedEmpty: 'No shared files, images, or links yet.',
+    sharedNoMatches: 'No shared items match your search.',
+    sharedViewChat: 'View in discussion',
+    sharedOpenLink: 'Open link',
+    sharedMore: 'Load more',
+    sharedMoreHint: 'More shared items are available.',
   },
   taskSharing: {
     title: 'Shared Tasks', received: 'Shared With Me', sent: 'Shared by Me', share: 'Share',
@@ -3564,6 +3586,14 @@ export const enTranslation = {
     },
   },
   tasks: {
+    proxy: {
+      title: 'Task proxy',
+      accountability: 'The original assignee remains responsible for this work.',
+      saved: 'Proxy assignment saved.',
+      failed: 'Could not update the proxy assignment.',
+      badge: 'Acting as proxy',
+      completedByProxy: '{{actor}} completed this on behalf of {{principal}}.',
+    },
     workspace: {
       navigation: 'Task workspace',
       overview: 'Overview',
@@ -4387,6 +4417,7 @@ export const enTranslation = {
     backHome: 'Back to home',
   },
 } as const
+
 
 
 

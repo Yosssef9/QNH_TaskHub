@@ -198,6 +198,28 @@ export const arTranslation = {
     reactionFailed: 'تعذّر تحديث التفاعل',
     newMessages: 'رسائل جديدة',
     sendHint: 'Enter للإرسال · Shift+Enter لسطر جديد',
+    // إشعارات القراءة وأدوات الانتقال والمحتوى المشترك في المناقشات.
+    seen: 'تمت القراءة',
+    notSeen: 'لم تُقرأ',
+    receiptsUnavailable: 'تفاصيل قراءة هذه الرسالة غير متاحة.',
+    scrollToBottom: 'الانتقال إلى أحدث الرسائل',
+    sharedTitle: 'الملفات والروابط المشتركة',
+    sharedSearch: 'البحث في الملفات والصور والروابط…',
+    sharedFiles: 'الملفات',
+    sharedImages: 'الصور',
+    sharedLinks: 'الروابط',
+    sharedSort: 'ترتيب العناصر المشتركة',
+    sharedNewest: 'الأحدث أولاً',
+    sharedOldest: 'الأقدم أولاً',
+    sharedName: 'حسب الاسم أبجديًا',
+    sharedLoading: 'جارٍ تحميل العناصر المشتركة…',
+    sharedLoadFailed: 'تعذر تحميل العناصر المشتركة.',
+    sharedEmpty: 'لا توجد ملفات أو صور أو روابط مشتركة بعد.',
+    sharedNoMatches: 'لا توجد عناصر مشتركة تطابق البحث.',
+    sharedViewChat: 'عرض في المناقشة',
+    sharedOpenLink: 'فتح الرابط',
+    sharedMore: 'تحميل المزيد',
+    sharedMoreHint: 'توجد عناصر مشتركة إضافية.',
   },
   taskSharing: {
     title: 'المهام المشتركة', received: 'مشاركة معي', sent: 'مشاركة بواسطتي', share: 'مشاركة',
@@ -3500,6 +3522,14 @@ export const arTranslation = {
     },
   },
   tasks: {
+    proxy: {
+      title: 'المفوّض بالنيابة',
+      accountability: 'يبقى المكلّف الأصلي مسؤولاً عن هذا العمل.',
+      saved: 'تم حفظ التفويض.',
+      failed: 'تعذر تحديث التفويض.',
+      badge: 'ينفّذ بالنيابة',
+      completedByProxy: 'أكمل {{actor}} هذا العمل نيابةً عن {{principal}}.',
+    },
     workspace: {
       navigation: 'مساحة عمل المهمة',
       overview: 'نظرة عامة',
@@ -4313,6 +4343,7 @@ export const arTranslation = {
     backHome: 'العودة إلى الرئيسية',
   },
 } as const
+
 
 
 
