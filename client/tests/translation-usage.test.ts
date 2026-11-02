@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url'
 import * as ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 
-import { arTranslation } from './locales/ar/translation'
-import { enTranslation } from './locales/en/translation'
+import { arTranslation } from '../src/i18n/locales/ar/translation'
+import { enTranslation } from '../src/i18n/locales/en/translation'
 
 /** Check source-level translation references; variable-built keys need dedicated coverage. */
 function translationKeys(value: unknown, prefix = ''): string[] {
@@ -27,7 +27,7 @@ function allSourceFiles(directory: string): string[] {
 }
 
 function staticTranslationReferences(): Set<string> {
-  const sourceDirectory = fileURLToPath(new URL('../', import.meta.url))
+  const sourceDirectory = fileURLToPath(new URL('../src/', import.meta.url))
   const references = new Set<string>()
 
   for (const file of allSourceFiles(sourceDirectory)) {
