@@ -38,6 +38,7 @@ function invalidateActionItemQueries(queryClient: ReturnType<typeof useQueryClie
     queryClient.invalidateQueries({ queryKey: ['meetings', 'detail', meetingId] }),
     queryClient.invalidateQueries({ queryKey: ['meetings', 'edit-dependencies', meetingId] }),
     queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+    queryClient.invalidateQueries({ queryKey: ['expected-finishes'] }),
     queryClient.invalidateQueries({ queryKey: ['task-details'] }),
     queryClient.invalidateQueries({ queryKey: ['assigned-action-items'] }),
     queryClient.invalidateQueries({ queryKey: ['notifications'] }),
@@ -84,4 +85,5 @@ export function useAssignedMeetingActionItems(query: AssignedMeetingActionItemsQ
     placeholderData: (previous) => previous,
   })
 }
+
 

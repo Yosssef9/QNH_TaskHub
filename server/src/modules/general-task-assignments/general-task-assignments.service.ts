@@ -1,4 +1,5 @@
 import { withTransaction } from "../../database/transaction.js";
+import { assertMayAssignOthers } from "../task-assignments/task-assign-others.permission.js";
 import { sql } from "../../database/sql.js";
 import type { DatabaseTransaction } from "../../database/types.js";
 import { AppError } from "../../shared/errors/app-error.js";
@@ -87,6 +88,7 @@ export const generalTaskAssignmentsService = {
       if (assigneeUserId !== null) await validateAssignee(assigneeUserId, transaction);
       const prior = await repo.findContext(taskId, transaction);
       if (prior?.assigneeUserId === assigneeUserId) return;
+      await assertMayAssignOthers(actorUserId, [prior?.assigneeUserId, assigneeUserId], transaction);
       if (assigneeUserId !== null && assigneeUserId !== actorUserId &&
           await repo.ownerHasExplicitSubtaskAssignment(taskId, actorUserId, transaction)) {
         throw new AppError({statusCode:409,code:"SUBTASK_OWNER_OVERRIDE_EXISTS",
@@ -100,6 +102,17 @@ export const generalTaskAssignmentsService = {
           FROM dbo.TM_task_proxies p JOIN dbo.TM_subtasks s ON s.id=p.subtask_id
           WHERE p.task_id=@taskId AND p.revoked_at_utc IS NULL
             AND s.assignee_user_id IS NULL;`);
+      // Preserve former employee estimates as immutable history. Inherited child
+      // estimates belong to that assignment episode and must not resurface later.
+      await transaction.request().input('taskId',sql.BigInt,taskId)
+        .input('former',sql.Int,prior?.assigneeUserId??null).query(`
+          UPDATE estimate SET is_active=0,updated_at_utc=SYSUTCDATETIME()
+          FROM dbo.TM_assignment_expected_finishes estimate
+          WHERE estimate.task_id=@taskId AND estimate.is_active=1
+            AND estimate.collaboration_assignment_id IS NULL AND estimate.assignee_user_id=@former
+            AND (estimate.subtask_id IS NULL OR EXISTS (
+              SELECT 1 FROM dbo.TM_subtasks s WHERE s.id=estimate.subtask_id
+                AND s.assignee_user_id IS NULL));`);
       await repo.ensureRelation(transaction, taskId, actorUserId, actorUserId, assigneeUserId, true);
       await tasksRepository.addActivity(transaction, actorUserId, taskId, "GENERAL_TASK_ASSIGNED",
         { previousAssigneeUserId: prior?.assigneeUserId ?? null, assigneeUserId }, actorUserId);
@@ -142,6 +155,7 @@ export const generalTaskAssignmentsService = {
       const subtask = await taskDetailsRepository.findSubtask(actorUserId, subtaskId, transaction);
       if (!subtask) throw missing();
       const former = await repo.effectiveSubtaskAssignee(actorUserId, subtaskId, transaction);
+      if (!access.context) await assertMayAssignOthers(actorUserId, [former, assigneeUserId], transaction);
       if (!access.context) await repo.ensureRelation(transaction, link.taskId, actorUserId, actorUserId, null);
       if (nextAssigneeWillChange(former,assigneeUserId,access.generalAssignment?.assigneeUserId??null,access.ownerUserId))
         await taskProxiesRepository.revoke(transaction,link.taskId,subtaskId,actorUserId);
@@ -150,6 +164,12 @@ export const generalTaskAssignmentsService = {
         "GENERAL_SUBTASK_ASSIGNED", {subtaskId, subtaskTitle:subtask.title, assigneeUserId}, actorUserId);
       const next = await repo.effectiveSubtaskAssignee(actorUserId, subtaskId, transaction);
       if (next !== former) {
+        await transaction.request().input('taskId',sql.BigInt,link.taskId)
+          .input('subtaskId',sql.BigInt,subtaskId).input('former',sql.Int,former)
+          .query(`UPDATE dbo.TM_assignment_expected_finishes
+            SET is_active=0,updated_at_utc=SYSUTCDATETIME()
+            WHERE task_id=@taskId AND subtask_id=@subtaskId AND assignee_user_id=@former
+              AND collaboration_assignment_id IS NULL AND is_active=1;`);
         await notifyRemovedAssignment(transaction, actorUserId, former, link.taskId, subtaskId);
         await notifyGeneralTask(transaction, [next], actorUserId, {
           type: "GENERAL_SUBTASK_ASSIGNED", taskId: link.taskId, listId: access.context ? null : task.listId,
@@ -195,6 +215,74 @@ export const generalTaskAssignmentsService = {
     return {taskId:link.taskId,subtaskId};
   },
 
+  async reviseWorkNote(actorUserId:number,subtaskId:number,noteId:number,version:number,
+    action:'EDIT'|'DELETE',content:string|null){
+    const link=await taskDetailsRepository.findSubtaskAccess(subtaskId);
+    if(!link) throw missing();
+    if(action==='EDIT' && (!content?.trim() || content.trim().length>4000))
+      throw new AppError({statusCode:400,code:'WORK_NOTE_INVALID',message:'Enter a valid Work Note.'});
+    try {
+      await withTransaction(async transaction=>{
+        const access=await resolveTaskAccess(actorUserId,link.taskId,false,transaction);
+        if(!access || access.collaborationActive) throw missing();
+        const task=await tasksRepository.findOwnedForUpdate(transaction,access.ownerUserId,link.taskId);
+        if(!task) throw missing();
+        assertTaskWritable(task);
+        const allowed=access.generalAssignment || access.context
+          ? ((await repo.effectiveSubtaskAssignee(access.ownerUserId,subtaskId,transaction))===actorUserId ||
+              await taskProxiesRepository.isExecutor(link.taskId,subtaskId,actorUserId,transaction))
+          : access.capabilities.canCompleteSubtasks;
+        if(!allowed) throw new AppError({statusCode:403,code:'WORK_NOTES_FORBIDDEN',message:'Not authorized to edit this Work Note.'});
+        const child=await taskDetailsRepository.findSubtask(access.ownerUserId,subtaskId,transaction);
+        if(!child) throw missing();
+        const changed=await repo.reviseWorkNote(transaction,actorUserId,subtaskId,noteId,version,action,content?.trim()??null);
+        if(!changed) throw new AppError({statusCode:404,code:'WORK_NOTE_NOT_FOUND',message:'Work Note not found.'});
+        await tasksRepository.addActivity(transaction,access.ownerUserId,link.taskId,
+          action==='EDIT'?'SUBTASK_WORK_NOTE_EDITED':'SUBTASK_WORK_NOTE_DELETED',
+          {subtaskId,subtaskTitle:child.title,noteId},actorUserId);
+      });
+    } catch(error){
+      if(error instanceof Error && error.message==='WORK_NOTE_CONFLICT')
+        throw new AppError({statusCode:409,code:'WORK_NOTE_CONFLICT',message:'This note changed. Refresh and try again.'});
+      throw error;
+    }
+    return {taskId:link.taskId,subtaskId,noteId};
+  },
+  async reviseCompletionSummary(actorUserId: number, taskId: number, entryId: number,
+    version: number, action: 'EDIT' | 'DELETE', content: string | null) {
+    if (action === 'EDIT' && (!content?.trim() || content.trim().length > 10000))
+      throw new AppError({statusCode:400,code:'COMPLETION_SUMMARY_INVALID',message:'Enter a valid Completion Summary.'});
+    try {
+      await withTransaction(async transaction => {
+        const access = await resolveTaskAccess(actorUserId, taskId, false, transaction);
+        if (!access) throw missing();
+        if (access.collaborationActive) throw new AppError({statusCode:409,
+          code:'COLLABORATION_PRIVATE_NOTES',message:'Use individual assignment notes.'});
+        const task = await tasksRepository.findOwnedForUpdate(transaction, access.ownerUserId, taskId);
+        if (!task) throw missing();
+        assertTaskWritable(task);
+        const allowed = access.generalAssignment
+          ? ((access.generalAssignment.assigneeUserId ?? access.ownerUserId) === actorUserId ||
+            await taskProxiesRepository.isExecutor(taskId,null,actorUserId,transaction))
+          : (access.context ? access.context.assigneeUserId === actorUserId : access.capabilities.role === 'OWNER');
+        if (!allowed) throw new AppError({statusCode:403,code:'COMPLETION_SUMMARY_FORBIDDEN',
+          message:'Only the current responsible employee can correct their own Completion Summary.'});
+        const revised = await repo.reviseCompletionSummaryEntry(transaction, access.ownerUserId,
+          taskId, entryId, actorUserId, version, action, content?.trim()??null);
+        if (!revised) throw new AppError({statusCode:404,code:'COMPLETION_SUMMARY_NOT_FOUND',
+          message:'Completion Summary was not found or is not yours.'});
+        await tasksRepository.addActivity(transaction, access.ownerUserId, taskId,
+          action === 'EDIT' ? 'COMPLETION_SUMMARY_EDITED' : 'COMPLETION_SUMMARY_DELETED',
+          {entryId, changes:[{field:'completionSummary',from:revised.previousContent,to:revised.newContent}]}, actorUserId);
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === 'COMPLETION_SUMMARY_CONFLICT')
+        throw new AppError({statusCode:409,code:'COMPLETION_SUMMARY_CONFLICT',
+          message:'This summary changed. Refresh and try again.'});
+      throw error;
+    }
+    return {taskId,entryId};
+  },
   async saveCompletionSummary(actorUserId: number, taskId: number, completionSummary: string | null) {
     await withTransaction(async transaction => {
       const access = await resolveTaskAccess(actorUserId, taskId, false, transaction);
@@ -221,5 +309,6 @@ export const generalTaskAssignmentsService = {
     return {taskId};
   },
 };
+
 
 

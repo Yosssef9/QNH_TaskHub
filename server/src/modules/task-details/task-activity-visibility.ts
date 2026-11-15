@@ -7,13 +7,40 @@ export interface TaskActivityVisibilityRecord {
   eventDataJson: string | null;
 }
 
+/** Estimate changes are private to the employee whose estimate changed, or
+ * to the task owner (owner is handled by the Task Details service). Visibility
+ * also requires a currently active assignment for the same task/subtask scope.
+ * Missing or malformed event identities must never expose history to a peer.
+ */
+export function canViewExpectedFinishActivity(
+  event: TaskActivityVisibilityRecord,
+  actorId: number,
+  visibleChildIds: ReadonlySet<number>,
+  hasMainAssignment: boolean,
+): boolean {
+  if (event.activityType !== 'EXPECTED_FINISH_CHANGED' || !event.eventDataJson) return false;
+  let payload: Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse(event.eventDataJson);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+    payload = parsed as Record<string, unknown>;
+  } catch { return false; }
+  if (typeof payload.assigneeUserId !== 'number' || payload.assigneeUserId !== actorId) return false;
+  if (payload.subtaskId === null) return hasMainAssignment;
+  if (typeof payload.subtaskId !== 'number' || !Number.isSafeInteger(payload.subtaskId)) return false;
+  return visibleChildIds.has(payload.subtaskId);
+}
+
 export function canViewCollaborativeActivity(
   event: TaskActivityVisibilityRecord,
   actorId: number,
   visibleChildIds: ReadonlySet<number>,
   proxyPrincipalIds: ReadonlySet<number> = new Set<number>(),
   proxyMainPrincipalIds: ReadonlySet<number> = new Set<number>(),
+  hasMainAssignment = false,
 ): boolean {
+  if (event.activityType === 'EXPECTED_FINISH_CHANGED')
+    return canViewExpectedFinishActivity(event, actorId, visibleChildIds, hasMainAssignment);
   if (event.activityType === 'CREATED' || event.activityType === 'STATUS_CHANGED' ||
       event.activityType === 'COLLAB_PARENT_STATUS_CHANGED' || event.activityType === 'COLLAB_ENABLED') return true;
   const childMetadataEvent = ['SUBTASK_CREATED','SUBTASK_UPDATED','SUBTASK_DELETED',
@@ -36,3 +63,4 @@ export function canViewCollaborativeActivity(
     proxyMainPrincipalIds.has(Number(data.assigneeUserId));
   return data.subtaskId !== undefined && visibleChildIds.has(Number(data.subtaskId));
 }
+

@@ -140,6 +140,11 @@ export const collaborationRepository = {
     await transaction.request().input('taskId',sql.BigInt,taskId).input('ownerId',sql.Int,ownerId)
       .query(`INSERT INTO dbo.TM_collaboration_tasks(task_id,owner_user_id,activated_by_user_id)
         VALUES(@taskId,@ownerId,@ownerId);`);
+    // The legacy general-task assignment episode ends at activation.
+    await transaction.request().input('taskId',sql.BigInt,taskId)
+      .query(`UPDATE dbo.TM_assignment_expected_finishes
+        SET is_active=0,updated_at_utc=SYSUTCDATETIME()
+        WHERE task_id=@taskId AND is_active=1 AND collaboration_assignment_id IS NULL;`);
   },
   async childModes(taskId:number,transaction:DatabaseTransaction):Promise<Array<{subtaskId:number;mode:'INHERIT'|'CUSTOM'; legacyAssigneeUserId:number|null;isCompleted:boolean}>> {
     const result=await transaction.request().input('taskId',sql.BigInt,taskId).query<{
@@ -186,9 +191,13 @@ export const collaborationRepository = {
         proxy_user_id=NULL,proxy_assigned_at_utc=NULL,
         revoked_at_utc=SYSUTCDATETIME(),revoked_by_user_id=@actorId
         WHERE id=@id AND is_active=1;`);
+    await transaction.request().input('id',sql.BigInt,assignmentId)
+      .query(`UPDATE dbo.TM_assignment_expected_finishes
+        SET is_active=0,updated_at_utc=SYSUTCDATETIME()
+        WHERE collaboration_assignment_id=@id AND is_active=1;`);
     await this.event(assignmentId,actorId,'REMOVED',transaction);
   },
-  async event(assignmentId:number,actorId:number,type:'ASSIGNED'|'REMOVED'|'STARTED'|'COMPLETED'|'REOPENED'|'NOTE_ADDED'|'FILE_ADDED'|'FILE_REMOVED',transaction:DatabaseTransaction,fileName:string|null=null):Promise<void>{
+  async event(assignmentId:number,actorId:number,type:'ASSIGNED'|'REMOVED'|'STARTED'|'COMPLETED'|'REOPENED'|'NOTE_ADDED'|'NOTE_EDITED'|'NOTE_DELETED'|'FILE_ADDED'|'FILE_REMOVED',transaction:DatabaseTransaction,fileName:string|null=null):Promise<void>{
     // Write both the detailed collaboration audit and the existing Task Activity timeline
     // in the SAME transaction. Never include note bodies or file storage keys in the
     // shared event payload. Names are snapshots, so later subtask renames do not rewrite history.
@@ -229,6 +238,35 @@ export const collaborationRepository = {
         UPDATE dbo.TM_collaboration_assignments SET state='IN_PROGRESS'
         WHERE id=@assignmentId AND is_active=1 AND state='TODO';`);
     await this.event(assignmentId,actorId,'NOTE_ADDED',transaction);
+  },
+  async reviseNote(noteId:number,assignmentId:number,actorId:number,version:number,
+      action:'EDIT'|'DELETE',content:string|null,transaction:DatabaseTransaction):Promise<boolean>{
+    const row=await transaction.request().input('noteId',sql.BigInt,noteId)
+      .input('assignmentId',sql.BigInt,assignmentId).input('actorId',sql.Int,actorId)
+      .query<{note:string;version:number}>(`SELECT note,edit_version AS version
+        FROM dbo.TM_collaboration_work_entries WITH(UPDLOCK,HOLDLOCK)
+        WHERE id=@noteId AND assignment_id=@assignmentId AND author_user_id=@actorId
+          AND deleted_at_utc IS NULL;`);
+    const current=row.recordset[0];
+    if(!current)return false;
+    if(Number(current.version)!==version)throw new Error('WORK_NOTE_CONFLICT');
+    await transaction.request().input('noteId',sql.BigInt,noteId)
+      .input('actorId',sql.Int,actorId).input('content',sql.NVarChar(4000),content)
+      .input('action',sql.VarChar(10),action)
+      .query(`INSERT dbo.TM_work_note_revisions
+          (source_type,note_id,task_id,subtask_id,actor_user_id,action_type,previous_content,new_content)
+        SELECT 'COLLABORATIVE',e.id,a.task_id,a.subtask_id,@actorId,@action,e.note,
+          CASE WHEN @action='EDIT' THEN @content ELSE NULL END
+        FROM dbo.TM_collaboration_work_entries e
+        JOIN dbo.TM_collaboration_assignments a ON a.id=e.assignment_id
+        WHERE e.id=@noteId;
+        UPDATE dbo.TM_collaboration_work_entries SET
+          note=CASE WHEN @action='EDIT' THEN @content ELSE note END,
+          edited_at_utc=CASE WHEN @action='EDIT' THEN SYSUTCDATETIME() ELSE edited_at_utc END,
+          deleted_at_utc=CASE WHEN @action='DELETE' THEN SYSUTCDATETIME() ELSE NULL END,
+          edit_version=edit_version+1 WHERE id=@noteId;`);
+    await this.event(assignmentId,actorId,action==='EDIT'?'NOTE_EDITED':'NOTE_DELETED',transaction);
+    return true;
   },
   async updateCompletion(assignmentId:number,completed:boolean,actorId:number,transaction:DatabaseTransaction):Promise<void>{
     await transaction.request().input('id',sql.BigInt,assignmentId).input('completed',sql.Bit,completed)
@@ -313,11 +351,12 @@ export const collaborationRepository = {
             (a.assignee_user_id=@actorId OR a.proxy_user_id=@actorId))
           ORDER BY a.subtask_id,a.id;`),
       pool.request().input('taskId',sql.BigInt,taskId).input('actorId',sql.Int,actorId).input('ownerId',sql.Int,ownerId)
-        .query(`SELECT e.id,e.assignment_id AS assignmentId,e.note,e.created_at_utc AS createdAtUtc,
+        .query(`SELECT e.id,e.assignment_id AS assignmentId,e.note,e.created_at_utc AS createdAtUtc,e.edited_at_utc AS editedAtUtc,e.edit_version AS editVersion,
           e.author_user_id AS authorUserId,author.USER_NAME AS authorName
           FROM dbo.TM_collaboration_work_entries e JOIN dbo.TM_collaboration_assignments a ON a.id=e.assignment_id
           LEFT JOIN dbo.users author ON author.USER_ID=e.author_user_id
-          WHERE a.task_id=@taskId AND (@actorId=@ownerId OR a.is_active=1 AND
+          WHERE a.task_id=@taskId AND e.deleted_at_utc IS NULL
+            AND (@actorId=@ownerId OR a.is_active=1 AND
             (a.assignee_user_id=@actorId OR a.proxy_user_id=@actorId))
           ORDER BY e.created_at_utc,e.id;`),
       pool.request().input('taskId',sql.BigInt,taskId).input('actorId',sql.Int,actorId).input('ownerId',sql.Int,ownerId)
@@ -354,9 +393,22 @@ export const collaborationRepository = {
           WHERE member.task_id=@taskId AND member.subtask_id=a.subtask_id
             AND (member.assignee_user_id=@actorId OR member.proxy_user_id=@actorId) AND member.is_active=1))
       GROUP BY a.subtask_id;`);
-    return {members:members.recordset,notes:notes.recordset,
-      files:files.recordset.map(file=>({...file,originalFileName:recoverAttachmentFileName(file.originalFileName)})),
-      modes:modes.recordset,progress:progress.recordset};
+    // SQL Server BIGINT identifiers may arrive as strings. Normalize the view at the
+    // API boundary so subtask membership/progress matches the numeric task IDs.
+    return {
+      members:members.recordset.map(member=>({...member,
+        id:Number(member.id),taskId:Number(member.taskId),
+        subtaskId:member.subtaskId===null?null:Number(member.subtaskId),
+        isActive:Boolean(member.isActive)})),
+      notes:notes.recordset.map(note=>({...note,
+        id:Number(note.id),assignmentId:Number(note.assignmentId)})),
+      files:files.recordset.map(file=>({...file,
+        assignmentId:Number(file.assignmentId),sizeBytes:Number(file.sizeBytes),
+        originalFileName:recoverAttachmentFileName(file.originalFileName)})),
+      modes:modes.recordset.map(mode=>({...mode,subtaskId:Number(mode.subtaskId)})),
+      progress:progress.recordset.map(item=>({...item,
+        scopeId:item.scopeId===null?null:Number(item.scopeId)})),
+    };
   },
   async file(id:string,transaction?:DatabaseTransaction):Promise<{id:string;taskId:number;assignmentId:number;assigneeUserId:number;ownerUserId:number;
     uploadedByUserId:number;proxyUserId:number|null;key:string;name:string;mime:string;size:number;isActive:boolean}|null>{
@@ -396,4 +448,5 @@ export const collaborationRepository = {
     return result.recordset[0]!.id;
   },
 };
+
 

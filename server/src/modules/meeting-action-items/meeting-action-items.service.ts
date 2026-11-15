@@ -342,6 +342,17 @@ export const meetingActionItemsService = {
       );
       if (!nextVersion) throw new AppError({statusCode:409,code:'STALE_MEETING_ACTION_ITEM',
         message:'Another user has changed this Action Item. Reload and try again.'});
+      if (relation.assigneeUserId !== nextPrimary) {
+        await transaction.request().input('taskId',sql.BigInt,taskId)
+          .input('former',sql.Int,relation.assigneeUserId)
+          .query(`UPDATE estimate SET is_active=0,updated_at_utc=SYSUTCDATETIME()
+            FROM dbo.TM_assignment_expected_finishes estimate
+            WHERE estimate.task_id=@taskId AND estimate.assignee_user_id=@former
+              AND estimate.collaboration_assignment_id IS NULL AND estimate.is_active=1
+              AND (estimate.subtask_id IS NULL OR EXISTS(
+                SELECT 1 FROM dbo.TM_subtasks s WHERE s.id=estimate.subtask_id
+                  AND s.assignee_user_id IS NULL));`);
+      }
       if (changes.length) {
         await tasksRepository.update(transaction,actorUserId,taskId,{
           listId:task.listId,groupId:task.groupId ?? null,title:input.title,
@@ -438,6 +449,15 @@ export const meetingActionItemsService = {
           message: "This Action Item was changed by another user. Refresh and try again.",
         });
       }
+      await transaction.request().input('taskId',sql.BigInt,taskId)
+        .input('former',sql.Int,relation.assigneeUserId)
+        .query(`UPDATE estimate SET is_active=0,updated_at_utc=SYSUTCDATETIME()
+          FROM dbo.TM_assignment_expected_finishes estimate
+          WHERE estimate.task_id=@taskId AND estimate.assignee_user_id=@former
+            AND estimate.collaboration_assignment_id IS NULL AND estimate.is_active=1
+            AND (estimate.subtask_id IS NULL OR EXISTS(
+              SELECT 1 FROM dbo.TM_subtasks s WHERE s.id=estimate.subtask_id
+                AND s.assignee_user_id IS NULL));`);
 
       await tasksRepository.addActivity(
         transaction,
@@ -524,6 +544,7 @@ export const meetingActionItemsService = {
     return { ...result, page: query.page, pageSize: query.pageSize };
   },
 };
+
 
 
 

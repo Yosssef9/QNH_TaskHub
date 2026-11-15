@@ -20,10 +20,11 @@ but not a version of the text for each mutation.
 3. Existing `TM_subtasks.work_notes` is **preserved untouched** and displayed
    in the child as a read-only legacy note, marked **author unverified**. No
    guessing of historical authors.
-4. New notes are **append-only** rows in `TM_subtask_work_note_entries`, with
-   the authenticated actor's `author_user_id`, an immutable timestamp, and
-   content. The service does not permit editing or deleting these entries.
-   The creator can read authorized subtask notes but cannot impersonate authors.
+4. New notes are author-attributed rows in `TM_subtask_work_note_entries`.
+   Since migration **072**, the original author (while still an authorized executor)
+   can edit or soft-delete their own entry with confirmation. The original text,
+   revised text, actor and timestamp are retained in `TM_work_note_revisions`.
+   The creator may read authorized notes but cannot edit a different author's entry. Legacy `TM_subtasks.work_notes` stays read-only.
 5. Current authorized child executors add a note through
    `POST /api/general-assignments/subtask/:subtaskId/work-notes` with body
    `{ "workNotes": "..." }`. The old `PATCH` returns 409 to prevent stale clients
@@ -31,8 +32,9 @@ but not a version of the text for each mutation.
 6. Reassignments do not remove notes or history. Former assignees lose ordinary
    task access through the existing task policy, not their attribution.
 7. Meeting, KPI, and collaborative-assignment workflows retain their existing
-   selection/assignment policies. Meeting subtasks use the same append-only
-   Work Notes behavior without the General Task creator restriction.
+   selection/assignment policies. Meeting and personal task subtask Work Notes
+   use the same author-owned corrections. Collaborative assignment notes use
+   their separate `TM_collaboration_work_entries` table, also amended by 072.
 8. Existing task activity records include the actual actor. New note activity
    adds the corresponding `noteId`, and the existing task-activity email event
    continues to notify the task creator when another assignee adds notes.
@@ -60,3 +62,8 @@ TypeScript/TSX parsing, structural source checks, ZIP manifest and archive
 integrity checks are performed in the preparation environment. Project builds,
 SQL Server execution, mail delivery, and browser/end-to-end tests require the
 local project dependencies and QNHDB and are not claimed here.
+
+
+## Amendment — 072
+
+After backing up QNHDB, apply `server/database/migrations/072_work_note_edit_delete_audit.sql` before deploying the edited frontend and backend. Authored entries gain Edit/Delete with confirmation; only the author with current task access may mutate them. Deleted entries are hidden from ordinary views, with original content retained in `TM_work_note_revisions`. Task activity records edit/delete events without exposing private note text. Previous migrations and legacy content are unchanged.

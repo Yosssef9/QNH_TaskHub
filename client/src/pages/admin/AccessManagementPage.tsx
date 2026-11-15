@@ -63,6 +63,7 @@ export function AccessManagementPage() {
   const [procurementFilter, setProcurementFilter] = useState<AccessPermissionFilter>('ALL')
   const [kpiWorkCyclesFilter, setKpiWorkCyclesFilter] = useState<AccessKpiWorkCyclesFilter>('ALL')
   const [meetingFilter, setMeetingFilter] = useState<AccessMeetingFilter>('ALL')
+  const [taskAssignmentFilter, setTaskAssignmentFilter] = useState<AccessPermissionFilter>('ALL')
   const [sortBy, setSortBy] = useState<AccessSortBy>('userName')
   const [sortDirection, setSortDirection] = useState<AccessSortDirection>('asc')
   const [selectedUser, setSelectedUser] = useState<AccessUser | null>(null)
@@ -75,6 +76,7 @@ export function AccessManagementPage() {
     procurement: procurementFilter,
     kpiWorkCycles: kpiWorkCyclesFilter,
     meetings: meetingFilter,
+    taskAssignment: taskAssignmentFilter,
     sortBy,
     sortDirection,
     page,
@@ -97,7 +99,8 @@ export function AccessManagementPage() {
     statusFilter !== 'ALL' ||
     procurementFilter !== 'ALL' ||
     kpiWorkCyclesFilter !== 'ALL' ||
-    meetingFilter !== 'ALL'
+    meetingFilter !== 'ALL' ||
+    taskAssignmentFilter !== 'ALL'
 
   function changeSearch(value: string) {
     setSearch(value)
@@ -115,6 +118,7 @@ export function AccessManagementPage() {
     setProcurementFilter('ALL')
     setKpiWorkCyclesFilter('ALL')
     setMeetingFilter('ALL')
+    setTaskAssignmentFilter('ALL')
     setPage(1)
   }
 
@@ -157,7 +161,7 @@ export function AccessManagementPage() {
         </div>
 
         <div className="bg-muted/20 border-b p-4 sm:p-5">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[repeat(5,minmax(0,1fr))_auto] xl:items-end">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[repeat(6,minmax(0,1fr))_auto] xl:items-end">
             <FilterSelect
               label={t('access.filters.role')}
               value={roleFilter}
@@ -195,6 +199,14 @@ export function AccessManagementPage() {
               value={kpiWorkCyclesFilter}
               onValueChange={(value) => changeFilter(setKpiWorkCyclesFilter, value)}
             >
+              <SelectItem value="ALL">{t('access.filters.all')}</SelectItem>
+              <SelectItem value="WITH_ACCESS">{t('access.filters.hasAccess')}</SelectItem>
+              <SelectItem value="WITHOUT_ACCESS">{t('access.filters.noAccess')}</SelectItem>
+            </FilterSelect>
+
+            <FilterSelect label={t('access.filters.taskAssignment')}
+              value={taskAssignmentFilter}
+              onValueChange={(value) => changeFilter(setTaskAssignmentFilter, value)}>
               <SelectItem value="ALL">{t('access.filters.all')}</SelectItem>
               <SelectItem value="WITH_ACCESS">{t('access.filters.hasAccess')}</SelectItem>
               <SelectItem value="WITHOUT_ACCESS">{t('access.filters.noAccess')}</SelectItem>
@@ -274,3 +286,4 @@ export function AccessManagementPage() {
     </div>
   )
 }
+

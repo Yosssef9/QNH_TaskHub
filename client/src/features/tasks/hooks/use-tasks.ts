@@ -77,6 +77,7 @@ function useTaskMutation<TVariables>(mutationFn: (variables: TVariables) => Prom
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: taskQueryRoot }),
+        queryClient.invalidateQueries({ queryKey: ['expected-finishes'] }),
         queryClient.invalidateQueries({queryKey:['task-groups']}),
         queryClient.invalidateQueries({ queryKey: ['kpis'] }),
         queryClient.invalidateQueries({ queryKey: ['work-cycles'] }),
@@ -181,3 +182,4 @@ export function useUploadAttachment() {
 export function useDeleteAttachment() {
   return useTaskMutation(deleteAttachment)
 }
+

@@ -57,7 +57,11 @@ function mapPermission(record: AccessPermissionRecord): AccessPermission {
     record.permissionCode === "ACCESS" &&
     record.resourceOwnerUserId === null;
 
-  if (!procurementPermission && !kpiPermission) {
+  const taskAssignmentPermission = record.moduleCode === "TASK_MANAGEMENT" &&
+    record.entityCode === "TASK_ASSIGNMENTS" && record.permissionCode === "TASK_ASSIGN_OTHERS" &&
+    record.resourceOwnerUserId === null;
+
+  if (!procurementPermission && !kpiPermission && !taskAssignmentPermission) {
     throw new Error("TaskHub access permission contains an unsupported code combination.");
   }
 
@@ -419,12 +423,24 @@ export async function saveContractDelegation(
   });
 }
 
+export async function saveTaskAssignOthersAccess(transaction: DatabaseTransaction, input: {
+  actorUserId: number; granteeUserId: number; enabled: boolean;
+}): Promise<void> {
+  await setPermission(transaction, {
+    actorUserId: input.actorUserId, granteeUserId: input.granteeUserId,
+    moduleCode: 'TASK_MANAGEMENT', entityCode: 'TASK_ASSIGNMENTS',
+    permissionCode: 'TASK_ASSIGN_OTHERS', resourceOwnerUserId: null, enabled: input.enabled,
+  });
+}
+
 export const accessPermissionsRepository = {
   listUserPermissions,
   saveProcurementAccess,
   saveKpiWorkCyclesAccess,
+  saveTaskAssignOthersAccess,
   listContractAccessScopes,
   getContractAccessAdminData,
   saveContractDelegation,
 };
+
 

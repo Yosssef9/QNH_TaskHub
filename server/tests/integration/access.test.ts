@@ -63,6 +63,7 @@ describe("TaskHub access administration", () => {
         procurement: "ALL",
         kpiWorkCycles: "ALL",
         meetings: "ALL",
+        taskAssignment: "ALL",
         sortBy: "userName",
         sortDirection: "asc",
         page: 1,
@@ -93,6 +94,7 @@ describe("TaskHub access administration", () => {
       procurement: "WITH_ACCESS",
       kpiWorkCycles: "WITHOUT_ACCESS",
       meetings: "ORGANIZER",
+      taskAssignment: "ALL",
       sortBy: "userCode",
       sortDirection: "desc",
       page: 2,
@@ -126,6 +128,7 @@ describe("TaskHub access administration", () => {
     expect(updateUserAccess).not.toHaveBeenCalled();
   });
 });
+
 
 
 

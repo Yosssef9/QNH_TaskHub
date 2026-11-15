@@ -26,6 +26,7 @@ export async function updateAccessUser(input: UpdateAccessInput): Promise<Access
       isActive: input.isActive,
       procurementAccess: input.procurementAccess,
       kpiWorkCyclesAccess: input.kpiWorkCyclesAccess,
+      taskAssignOthers: input.taskAssignOthers,
       meetingRoomOrganizeEnabled: input.meetingRoomOrganizeEnabled,
       meetingZoomOrganizeEnabled: input.meetingZoomOrganizeEnabled,
       meetingCoordinateEnabled: input.meetingCoordinateEnabled,
@@ -51,5 +52,6 @@ export async function updateContractDelegation(
   )
   return response.data.data
 }
+
 
 

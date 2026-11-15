@@ -42,8 +42,25 @@ export async function assignSubtask(input: {subtaskId: number; assigneeUserId: n
 export async function saveWorkNotes(input: {subtaskId: number; workNotes: string | null}) {
   await apiClient.post(`/general-assignments/subtask/${input.subtaskId}/work-notes`, {workNotes: input.workNotes})
 }
+export async function editWorkNote(input:{subtaskId:number;noteId:number;editVersion:number;workNotes:string}) {
+  await apiClient.put(`/general-assignments/subtask/${input.subtaskId}/work-notes/${input.noteId}`,
+    {editVersion:input.editVersion,workNotes:input.workNotes})
+}
+export async function deleteWorkNote(input:{subtaskId:number;noteId:number;editVersion:number}) {
+  await apiClient.delete(`/general-assignments/subtask/${input.subtaskId}/work-notes/${input.noteId}`,
+    {data:{editVersion:input.editVersion}})
+}
 export async function saveCompletionSummary(input: {taskId: number; completionSummary: string | null}) {
   await apiClient.post(`/general-assignments/task/${input.taskId}/completion-summary`, {completionSummary:input.completionSummary})
+}
+
+export async function editCompletionSummary(input:{taskId:number;entryId:number;editVersion:number;completionSummary:string}) {
+  await apiClient.put(`/general-assignments/task/${input.taskId}/completion-summary/${input.entryId}`,
+    {editVersion:input.editVersion,completionSummary:input.completionSummary})
+}
+export async function deleteCompletionSummary(input:{taskId:number;entryId:number;editVersion:number}) {
+  await apiClient.delete(`/general-assignments/task/${input.taskId}/completion-summary/${input.entryId}`,
+    {data:{editVersion:input.editVersion}})
 }
 
 export async function getEligibleTaskUser(userId: number) {
@@ -59,3 +76,4 @@ export async function setTaskProxy(input:{taskId:number;subtaskId?:number|null;p
     : `/general-assignments/subtask/${input.subtaskId}/proxy`
   await apiClient.put(endpoint,{proxyUserId:input.proxyUserId})
 }
+

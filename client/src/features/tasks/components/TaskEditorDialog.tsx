@@ -35,6 +35,7 @@ import {
   useUpdateTask,
 } from '../hooks/use-tasks'
 import { TASK_PRIORITIES } from '../types/task.types'
+import { toApiClientError } from '@/lib/api-error'
 import type { PersonalTask, SaveTaskInput } from '../types/task.types'
 import { TaskPriorityIndicator } from './TaskSelectIndicators'
 import { getTodayInRiyadh, isInvalidNormalTaskStartDate } from './task-start-date'
@@ -285,7 +286,7 @@ export function TaskEditorDialog({
         onSaved?.()
         onOpenChange(false)
       },
-      onError: () => toast.error(t('tasks.errors.save')),
+      onError: (error: unknown) => toast.error(t(toApiClientError(error).code === 'TASK_ASSIGN_OTHERS_REQUIRED' ? 'tasks.assignment.permissionRequired' : 'tasks.errors.save')),
     }
 
     if (task) updateMutation.mutate({ taskId: task.id, values: taskValues }, options)
@@ -647,6 +648,7 @@ export function TaskEditorDialog({
     </Dialog>
   )
 }
+
 
 
 

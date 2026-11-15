@@ -14,6 +14,9 @@ const { infiniteState, fetchNextPage } = vi.hoisted(() => ({
   fetchNextPage: vi.fn(),
   infiniteState: { hasNextPage: true, fetching: false, error: false },
 }))
+vi.mock('./use-task-assignment-permission', () => ({
+  useTaskAssignmentPermission: () => ({currentUserId: 573, canAssignOthers: true}),
+}))
 vi.mock('./use-general-assignment', () => ({
   useInfiniteEligibleTaskUsers: (search: string) => ({
     data: { pages: [{ items: search ? people.filter(p => p.userName.toLowerCase().includes(search.toLowerCase())) : people }] },
@@ -83,3 +86,4 @@ describe('Collaborative multi-assignee picker', () => {
     expect(screen.queryByRole('button', { name: /Inactive/ })).not.toBeInTheDocument()
   })
 })
+

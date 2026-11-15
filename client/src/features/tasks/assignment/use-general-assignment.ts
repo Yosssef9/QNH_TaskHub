@@ -1,7 +1,7 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   getEligibleTaskUsers, getEligibleTaskUser, getAssignedGeneralTasks, assignMainTask, assignSubtask,
-  saveWorkNotes, saveCompletionSummary, setTaskProxy,
+  saveWorkNotes, editWorkNote, deleteWorkNote, saveCompletionSummary, editCompletionSummary, deleteCompletionSummary, setTaskProxy,
 } from './general-assignment.api'
 import type { GeneralAssignedQuery } from './general-assignment.api'
 
@@ -36,6 +36,7 @@ function useAssignmentMutation<T>(fn: (arg: T) => Promise<unknown>) {
   return useMutation({mutationFn: fn, onSuccess: async () => {
     await Promise.all([
       client.invalidateQueries({queryKey: ['tasks']}),
+      client.invalidateQueries({queryKey: ['expected-finishes']}),
       client.invalidateQueries({queryKey: generalAssignmentsRoot}),
       client.invalidateQueries({queryKey: ['assigned-action-items']}),
       client.invalidateQueries({queryKey: ['notifications']}),
@@ -46,7 +47,12 @@ function useAssignmentMutation<T>(fn: (arg: T) => Promise<unknown>) {
 export const useAssignMainTask = () => useAssignmentMutation(assignMainTask)
 export const useAssignSubtask = () => useAssignmentMutation(assignSubtask)
 export const useSaveWorkNotes = () => useAssignmentMutation(saveWorkNotes)
+export const useEditWorkNote = () => useAssignmentMutation(editWorkNote)
+export const useDeleteWorkNote = () => useAssignmentMutation(deleteWorkNote)
 export const useSaveCompletionSummary = () => useAssignmentMutation(saveCompletionSummary)
+export const useEditCompletionSummary = () => useAssignmentMutation(editCompletionSummary)
+export const useDeleteCompletionSummary = () => useAssignmentMutation(deleteCompletionSummary)
 
 
 export const useSetTaskProxy = () => useAssignmentMutation(setTaskProxy)
+

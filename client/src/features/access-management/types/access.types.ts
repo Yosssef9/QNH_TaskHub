@@ -19,6 +19,7 @@ export type AccessSortBy =
   | 'procurement'
   | 'kpiWorkCycles'
   | 'meetings'
+  | 'taskAssignment'
   | 'status'
 export type AccessSortDirection = 'asc' | 'desc'
 
@@ -32,6 +33,7 @@ export interface AccessUser {
   accessIsActive: boolean
   procurementAccess: ProcurementAccessState
   kpiWorkCyclesAccess: boolean
+  taskAssignOthers: boolean
   meetingOrganizeEnabled?: boolean
   meetingRoomOrganizeEnabled?: boolean
   meetingZoomOrganizeEnabled?: boolean
@@ -52,6 +54,7 @@ export interface AccessListQuery {
   procurement: AccessPermissionFilter
   kpiWorkCycles: AccessKpiWorkCyclesFilter
   meetings: AccessMeetingFilter
+  taskAssignment: AccessPermissionFilter
   sortBy: AccessSortBy
   sortDirection: AccessSortDirection
   page: number
@@ -64,6 +67,7 @@ export interface UpdateAccessInput {
   isActive: boolean
   procurementAccess: ProcurementAccessState
   kpiWorkCyclesAccess: boolean
+  taskAssignOthers: boolean
   meetingOrganizeEnabled?: boolean
   meetingRoomOrganizeEnabled: boolean
   meetingZoomOrganizeEnabled: boolean
@@ -99,4 +103,5 @@ export interface UpdateContractDelegationInput {
   view: boolean
   manageAttachments: boolean
 }
+
 

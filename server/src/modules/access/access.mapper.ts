@@ -15,6 +15,7 @@ export interface AccessUserRecord {
   suppliersAccess: boolean | null;
   priceQuotesAccess: boolean | null;
   kpiWorkCyclesAccess: boolean | null;
+  taskAssignOthers: boolean | null;
   meetingOrganizeEnabled?: boolean | null;
   meetingRoomOrganizeEnabled?: boolean | null;
   meetingZoomOrganizeEnabled?: boolean | null;
@@ -46,11 +47,13 @@ export function mapAccessUser(record: AccessUserRecord): AccessUser {
       priceQuotes: record.priceQuotesAccess ?? false,
     },
     kpiWorkCyclesAccess: record.kpiWorkCyclesAccess ?? false,
+    taskAssignOthers: record.roleCode === "ADMIN" ? true : (record.taskAssignOthers ?? false),
     meetingOrganizeEnabled: record.meetingOrganizeEnabled ?? false,
     meetingRoomOrganizeEnabled: record.meetingRoomOrganizeEnabled ?? false,
     meetingZoomOrganizeEnabled: record.meetingZoomOrganizeEnabled ?? false,
     meetingCoordinateEnabled: record.meetingCoordinateEnabled ?? false,
   };
 }
+
 
 

@@ -20,6 +20,9 @@ const childAssignees = z.discriminatedUnion('mode', [
   z.object({mode:z.literal('CUSTOM'),userIds:z.array(z.number().int().positive()).min(1).max(30)}),
 ]);
 const note = z.object({note:z.string().trim().min(1).max(4000)});
+const noteParams=assignmentParams.extend({noteId:z.coerce.number().int().positive()});
+const reviseNoteBody=z.object({note:z.string().trim().min(1).max(4000),editVersion:z.number().int().min(0)}).strict();
+const deleteNoteBody=z.object({editVersion:z.number().int().min(0)}).strict();
 const completion = z.object({completed:z.boolean()});
 const proxyBody = z.object({proxyUserId:z.number().int().positive().nullable()});
 function actor(req:{authContext?:{user:{userId:number}}}) {
@@ -56,6 +59,18 @@ collaborationRouter.post('/assignments/:assignmentId/notes',
     const {assignmentId}=getValidatedRequestPart<z.infer<typeof assignmentParams>>(req,'params');
     const {note:message}=getValidatedRequestPart<z.infer<typeof note>>(req,'body');
     res.status(201).json({success:true,data:await service.addNote(actor(req),assignmentId,message)});
+  });
+collaborationRouter.put('/assignments/:assignmentId/notes/:noteId',
+  validateRequest({params:noteParams,body:reviseNoteBody}),async(req,res)=>{
+    const {assignmentId,noteId}=getValidatedRequestPart<z.infer<typeof noteParams>>(req,'params');
+    const {note,editVersion}=getValidatedRequestPart<z.infer<typeof reviseNoteBody>>(req,'body');
+    res.json({success:true,data:await service.reviseNote(actor(req),assignmentId,noteId,editVersion,'EDIT',note)});
+  });
+collaborationRouter.delete('/assignments/:assignmentId/notes/:noteId',
+  validateRequest({params:noteParams,body:deleteNoteBody}),async(req,res)=>{
+    const {assignmentId,noteId}=getValidatedRequestPart<z.infer<typeof noteParams>>(req,'params');
+    const {editVersion}=getValidatedRequestPart<z.infer<typeof deleteNoteBody>>(req,'body');
+    res.json({success:true,data:await service.reviseNote(actor(req),assignmentId,noteId,editVersion,'DELETE',null)});
   });
 collaborationRouter.patch('/assignments/:assignmentId/completion',
   validateRequest({params:assignmentParams,body:completion}),async(req,res)=>{
@@ -95,4 +110,5 @@ collaborationRouter.get('/files/:fileId/preview',validateRequest({params:filePar
   res.setHeader('Cache-Control','private, no-store');
   res.send(file.buffer);
 });
+
 

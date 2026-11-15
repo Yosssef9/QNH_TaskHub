@@ -1,5 +1,6 @@
 import { tagsService } from "../tags/tags.service.js";
 import { withTransaction } from "../../database/transaction.js";
+import { assertMayAssignOthers } from "../task-assignments/task-assign-others.permission.js";
 import { sql } from "../../database/sql.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
@@ -124,6 +125,10 @@ export const tasksService = {
           .query(`SELECT TOP (1) id FROM dbo.TM_task_groups WHERE id=@group AND list_id=@list AND owner_user_id=@owner`);
         if (!matches.recordset.length) throw new AppError({statusCode:400,code:'TASK_GROUP_INVALID',message:'Selected group is not in this List.'});
       }
+      // Permission is checked inside the same transaction before any task or assignment is saved.
+      await assertMayAssignOthers(ownerUserId, [
+        input.assigneeUserId, ...(input.assigneeUserIds ?? []),
+      ], transaction);
       const createdId = await tasksRepository.create(transaction, ownerUserId, listId, input);
       if (!createdId) {
         throw new AppError({
@@ -603,6 +608,7 @@ export const tasksService = {
     return loadTask(ownerUserId, taskId);
   },
 };
+
 
 
 

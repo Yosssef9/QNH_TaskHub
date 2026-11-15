@@ -52,6 +52,8 @@ export interface SubtaskWorkNoteEntry {
   authorName: string
   content: string
   createdAtUtc: string
+  editedAtUtc: string | null
+  editVersion: number
 }
 
 export interface Subtask {
@@ -97,6 +99,8 @@ export interface TaskActivity {
 
 export interface TaskCompletionSummaryEntry {
   id: number;
+  editVersion: number;
+  editedAtUtc: string | null;
   authorUserId: number;
   authorName: string;
   content: string;
@@ -119,6 +123,7 @@ export interface TaskDetails {
   activity: TaskActivity[];
   progress: { completed: number; total: number; percentage: number };
 }
+
 
 
 

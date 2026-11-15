@@ -864,7 +864,7 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
                               </Tooltip>}
                                 title={<div className="space-y-1"><p className={cn('break-words text-start text-base font-semibold transition-colors duration-200', task.status === 'DONE' && 'text-foreground/85')}>
   {task.title}
-</p>{task.groupId != null && groupPaths.has(task.groupId) ? <p className="text-muted-foreground truncate text-xs" title={groupPaths.get(task.groupId)}>{groupPaths.get(task.groupId)}</p> : null}</div>}
+</p>{task.groupId != null && groupPaths.has(task.groupId) ? <p className="bg-primary/5 text-foreground/85 border-primary/15 inline-block max-w-full truncate rounded-md border px-2 py-0.5 text-sm font-semibold" title={groupPaths.get(task.groupId)}>{groupPaths.get(task.groupId)}</p> : null}</div>}
                                 tags={task.kpiInstanceId === null && task.tags?.length ? <TaskTags tags={task.tags} /> : null}
                                 details={<>{task.kpiInstanceId === null ? <TaskTeamIndicator
                                   className="" summary={task}
@@ -1118,6 +1118,7 @@ export function TaskList({ listId, lists, instance, cycle, cycles }: Props) {
     </div>
   )
 }
+
 
 
 

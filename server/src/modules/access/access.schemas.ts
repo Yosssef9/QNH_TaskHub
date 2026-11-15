@@ -7,8 +7,9 @@ export const accessListQuerySchema = z.object({
   procurement: z.enum(["ALL", "WITH_ACCESS", "WITHOUT_ACCESS"]).default("ALL"),
   kpiWorkCycles: z.enum(["ALL", "WITH_ACCESS", "WITHOUT_ACCESS"]).default("ALL"),
   meetings: z.enum(["ALL", "ORGANIZER", "COORDINATOR", "BOTH", "NONE"]).default("ALL"),
+  taskAssignment: z.enum(["ALL", "WITH_ACCESS", "WITHOUT_ACCESS"]).default("ALL"),
   sortBy: z
-    .enum(["userName", "userCode", "role", "procurement", "kpiWorkCycles", "meetings", "status"])
+    .enum(["userName", "userCode", "role", "procurement", "kpiWorkCycles", "meetings", "taskAssignment", "status"])
     .default("userName"),
   sortDirection: z.enum(["asc", "desc"]).default("asc"),
   page: z.coerce.number().int().positive().default(1),
@@ -31,6 +32,7 @@ export const updateAccessBodySchema = z.object({
   isActive: z.boolean(),
   procurementAccess: procurementAccessSchema,
   kpiWorkCyclesAccess: z.boolean(),
+  taskAssignOthers: z.boolean().optional(),
   meetingOrganizeEnabled: z.boolean().optional(),
   meetingRoomOrganizeEnabled: z.boolean().optional(),
   meetingZoomOrganizeEnabled: z.boolean().optional(),
@@ -65,4 +67,5 @@ export type AccessListQueryInput = z.infer<typeof accessListQuerySchema>;
 export type AccessUserParams = z.infer<typeof accessUserParamsSchema>;
 export type UpdateAccessBody = z.infer<typeof updateAccessBodySchema>;
 export type ContractDelegationBody = z.infer<typeof contractDelegationBodySchema>;
+
 

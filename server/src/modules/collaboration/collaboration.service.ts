@@ -11,6 +11,7 @@ import { generalTaskAssignmentsRepository } from '../general-task-assignments/ge
 import { notifyGeneralTask,notifyRemovedAssignment,notifyTaskOwnerActivity } from '../general-task-assignments/general-task-assignments.email-events.js';
 import { collaborationRepository as repo, type CollaborativeTaskRow,
   type CollaborativeAssignmentRow } from './collaboration.repository.js';
+import { assertMayAssignOthers } from '../task-assignments/task-assign-others.permission.js';
 import { canDeleteCollaborativeEvidence, canExecuteCollaborativeAssignment, normalizeCollaborators, reconcileInheritedTeam } from './collaboration.policy.js';
 
 const notFound = () => new AppError({statusCode:404,code:'COLLABORATION_NOT_FOUND',message:'Assignment not found.'});
@@ -89,6 +90,7 @@ export async function initializeCollaborativeTask(
   const context=await repo.task(taskId,transaction);
   if (!context || context.ownerUserId!==ownerId || context.kpiInstanceId!==null || context.isCollaborative) throw notFound();
   await validateTeam(context,selected,transaction);
+  if (context.meetingId===null) await assertMayAssignOthers(ownerId, selected, transaction);
   if (context.meetingId===null) await generalTaskAssignmentsRepository.ensureRelation(
     transaction,taskId,ownerId,ownerId,null);
   await repo.activate(taskId,ownerId,transaction);
@@ -114,6 +116,12 @@ export async function setCollaborativeMainTeamInTransaction(
 
       const {context,task}=await lockTask(actorId,taskId,transaction,true);
       await validateTeam(context,selected,transaction);
+      if (context.meetingId===null) {
+        const previous = await repo.activeAssignments(taskId,transaction);
+        await assertMayAssignOthers(actorId, [
+          ...selected, ...previous.filter(member => member.subtaskId === null).map(member => member.assigneeUserId),
+        ], transaction);
+      }
       if (!context.isCollaborative && task.status==='DONE') throw new AppError({statusCode:409,
         code:'COLLABORATION_COMPLETED_TASK',
         message:'Reopen the completed Task before converting it to collaborative assignments.'});
@@ -199,6 +207,9 @@ export const collaborationService={
       const old=await repo.activeAssignments(taskId,transaction);
       const main=old.filter(a=>a.subtaskId===null).map(a=>a.assigneeUserId);
       const desired=mode==='INHERIT'?main:selected;
+      if (context.meetingId===null) await assertMayAssignOthers(actorId,
+        [...desired, ...old.filter(member => member.subtaskId === subtaskId)
+          .map(member => member.assigneeUserId)], transaction);
       if (desired.length===0 || desired.length>30) throw new AppError({statusCode:400,
         code:'COLLABORATION_TEAM_SIZE',message:'Subtasks need at least one eligible assignee.'});
       await validateTeam(context,desired,transaction);
@@ -231,6 +242,27 @@ export const collaborationService={
       await recalculate(row.taskId,actorId,transaction);
     });
     return {assignmentId};
+  },
+  async reviseNote(actorId:number,assignmentId:number,noteId:number,version:number,
+    action:'EDIT'|'DELETE',content:string|null){
+    if(action==='EDIT' && (!content?.trim() || content.trim().length>4000))
+      throw new AppError({statusCode:400,code:'WORK_NOTE_INVALID',message:'Enter a valid Work Note.'});
+    try {
+      await withTransaction(async transaction=>{
+        const assignment=await repo.assignment(assignmentId,transaction);
+        if(!assignment || !assignment.isActive || !canExecuteCollaborativeAssignment(assignment,actorId)) throw notFound();
+        await lockTask(actorId,assignment.taskId,transaction);
+        const fresh=await repo.assignment(assignmentId,transaction);
+        if(!fresh || !fresh.isActive || !canExecuteCollaborativeAssignment(fresh,actorId)) throw notFound();
+        const edited=await repo.reviseNote(noteId,assignmentId,actorId,version,action,content?.trim()??null,transaction);
+        if(!edited) throw notFound();
+      });
+    } catch(error){
+      if(error instanceof Error && error.message==='WORK_NOTE_CONFLICT')
+        throw new AppError({statusCode:409,code:'WORK_NOTE_CONFLICT',message:'This note changed. Refresh and try again.'});
+      throw error;
+    }
+    return {assignmentId,noteId};
   },
   async complete(actorId:number,assignmentId:number,completed:boolean){
     await withTransaction(async transaction=>{
@@ -316,5 +348,6 @@ export const collaborationService={
     return {name:recoverAttachmentFileName(file.name),mime:file.mime,buffer:await readAttachment(file.key)};
   },
 };
+
 
 

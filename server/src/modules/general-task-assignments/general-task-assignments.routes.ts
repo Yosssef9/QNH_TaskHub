@@ -60,6 +60,21 @@ generalTaskAssignmentsRouter.post("/subtask/:subtaskId/work-notes",
     const {workNotes}=getValidatedRequestPart<{workNotes:string|null}>(req,"body");
     res.json({success:true,data:await service.saveWorkNotes(actor(req),subtaskId,workNotes)});
   });
+const workNoteParams=generalSubtaskIdSchema.extend({noteId:z.coerce.number().int().positive()});
+const workNoteEditBody=z.object({workNotes:z.string().trim().min(1).max(4000),editVersion:z.number().int().min(0)}).strict();
+const workNoteDeleteBody=z.object({editVersion:z.number().int().min(0)}).strict();
+generalTaskAssignmentsRouter.put('/subtask/:subtaskId/work-notes/:noteId',
+  validateRequest({params:workNoteParams,body:workNoteEditBody}),async(req,res)=>{
+    const {subtaskId,noteId}=getValidatedRequestPart<z.infer<typeof workNoteParams>>(req,'params');
+    const {workNotes,editVersion}=getValidatedRequestPart<z.infer<typeof workNoteEditBody>>(req,'body');
+    res.json({success:true,data:await service.reviseWorkNote(actor(req),subtaskId,noteId,editVersion,'EDIT',workNotes)});
+  });
+generalTaskAssignmentsRouter.delete('/subtask/:subtaskId/work-notes/:noteId',
+  validateRequest({params:workNoteParams,body:workNoteDeleteBody}),async(req,res)=>{
+    const {subtaskId,noteId}=getValidatedRequestPart<z.infer<typeof workNoteParams>>(req,'params');
+    const {editVersion}=getValidatedRequestPart<z.infer<typeof workNoteDeleteBody>>(req,'body');
+    res.json({success:true,data:await service.reviseWorkNote(actor(req),subtaskId,noteId,editVersion,'DELETE',null)});
+  });
 // Old clients must not silently replace a previous employee's shared summary.
 generalTaskAssignmentsRouter.patch("/task/:taskId/completion-summary",
   validateRequest({params:generalTaskIdSchema,body:completionSummaryBodySchema}),async(_req,_res)=>{
@@ -71,6 +86,22 @@ generalTaskAssignmentsRouter.post("/task/:taskId/completion-summary",
     const {taskId}=getValidatedRequestPart<{taskId:number}>(req,"params");
     const {completionSummary}=getValidatedRequestPart<{completionSummary:string|null}>(req,"body");
     res.json({success:true,data:await service.saveCompletionSummary(actor(req),taskId,completionSummary)});
+  });
+
+const completionSummaryParams=generalTaskIdSchema.extend({entryId:z.coerce.number().int().positive()});
+const completionSummaryEditBody=z.object({completionSummary:z.string().trim().min(1).max(10000),editVersion:z.number().int().min(0)}).strict();
+const completionSummaryDeleteBody=z.object({editVersion:z.number().int().min(0)}).strict();
+generalTaskAssignmentsRouter.put('/task/:taskId/completion-summary/:entryId',
+  validateRequest({params:completionSummaryParams,body:completionSummaryEditBody}),async(req,res)=>{
+    const {taskId,entryId}=getValidatedRequestPart<z.infer<typeof completionSummaryParams>>(req,'params');
+    const {completionSummary,editVersion}=getValidatedRequestPart<z.infer<typeof completionSummaryEditBody>>(req,'body');
+    res.json({success:true,data:await service.reviseCompletionSummary(actor(req),taskId,entryId,editVersion,'EDIT',completionSummary)});
+  });
+generalTaskAssignmentsRouter.delete('/task/:taskId/completion-summary/:entryId',
+  validateRequest({params:completionSummaryParams,body:completionSummaryDeleteBody}),async(req,res)=>{
+    const {taskId,entryId}=getValidatedRequestPart<z.infer<typeof completionSummaryParams>>(req,'params');
+    const {editVersion}=getValidatedRequestPart<z.infer<typeof completionSummaryDeleteBody>>(req,'body');
+    res.json({success:true,data:await service.reviseCompletionSummary(actor(req),taskId,entryId,editVersion,'DELETE',null)});
   });
 
 // Actor-scoped lookup: do not expose all Portal accounts without active TaskHub access.
@@ -108,6 +139,7 @@ generalTaskAssignmentsRouter.get('/eligible-users/:userId',
     if(!user) throw new AppError({statusCode:404,code:'TASK_ASSIGNEE_INVALID',message:'Assignee not found.'});
     res.json({success:true,data:user});
   });
+
 
 
 

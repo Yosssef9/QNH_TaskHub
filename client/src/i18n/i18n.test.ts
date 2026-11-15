@@ -58,3 +58,25 @@ describe('application language', () => {
   })
 })
 
+
+
+describe('expected finish and completion summary translation coverage', () => {
+  it('localizes every new label, action and activity event in both languages', () => {
+    const keys = [
+      'expectedFinish.ownerDueDate', 'expectedFinish.label', 'expectedFinish.notSet',
+      'expectedFinish.edit','expectedFinish.clear','expectedFinish.afterDeadline',
+      'expectedFinish.saved','expectedFinish.saveFailed','expectedFinish.loadFailed',
+      'tasks.summaryActions.edit','tasks.summaryActions.delete',
+      'tasks.summaryActions.editTitle','tasks.summaryActions.deleteTitle',
+      'tasks.summaryActions.editConfirm','tasks.summaryActions.deleteConfirm',
+      'tasks.summaryActions.saved','tasks.summaryActions.deleted',
+      'tasks.details.activities.COMPLETION_SUMMARY_EDITED',
+      'tasks.details.activities.COMPLETION_SUMMARY_DELETED',
+      'tasks.details.activityFields.completionSummary',
+    ];
+    for (const translation of [arTranslation,enTranslation]) {
+      const known=new Set(leafKeys(translation));
+      for (const key of keys) expect(known.has(key),key).toBe(true);
+    }
+  });
+});

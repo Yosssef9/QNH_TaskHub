@@ -49,6 +49,7 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
     user.procurementAccess,
   )
   const [kpiWorkCyclesAccess, setKpiWorkCyclesAccess] = useState(user.kpiWorkCyclesAccess)
+  const [taskAssignOthers, setTaskAssignOthers] = useState(user.roleCode !== 'ADMIN' && (user.taskAssignOthers ?? false))
   const [meetingRoomOrganizeEnabled, setMeetingRoomOrganizeEnabled] = useState(
     user.meetingRoomOrganizeEnabled ?? user.meetingOrganizeEnabled ?? false,
   )
@@ -71,6 +72,7 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
         isActive,
         procurementAccess,
         kpiWorkCyclesAccess,
+        taskAssignOthers: roleCode === 'ADMIN' ? true : taskAssignOthers,
         meetingRoomOrganizeEnabled,
         meetingZoomOrganizeEnabled,
         meetingCoordinateEnabled,
@@ -116,7 +118,11 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
             </label>
             <Select
               value={roleCode}
-              onValueChange={(value) => setRoleCode(value as TaskHubRoleCode)}
+              onValueChange={(value) => {
+                const nextRole = value as TaskHubRoleCode
+                if (roleCode === 'ADMIN' && nextRole === 'USER') setTaskAssignOthers(false)
+                setRoleCode(nextRole)
+              }}
             >
               <SelectTrigger id="access-role" aria-label={t('access.role')}>
                 <SelectValue>
@@ -198,6 +204,20 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
 
           <div className="space-y-3 rounded-lg border p-4">
             <div>
+              <p className="text-sm font-medium">{t('access.taskAssignOthers')}</p>
+              <p className="text-muted-foreground mt-1 text-xs leading-5">{t('access.taskAssignOthersDescription')}</p>
+            </div>
+            <div className="bg-muted/60 flex items-center justify-between gap-4 rounded-lg border p-3">
+              <span className="text-sm font-medium">{t('access.taskAssignOthers')}</span>
+              <Switch checked={roleCode === 'ADMIN' || taskAssignOthers}
+                disabled={roleCode === 'ADMIN'}
+                aria-label={t('access.taskAssignOthers')}
+                onCheckedChange={setTaskAssignOthers} />
+            </div>
+          </div>
+
+          <div className="space-y-3 rounded-lg border p-4">
+            <div>
               <p className="text-sm font-medium">{t('access.meetingPermissions')}</p>
               <p className="text-muted-foreground mt-1 text-xs leading-5">
                 {t('access.meetingPermissionsDescription')}
@@ -261,5 +281,6 @@ function AccessEditorDialogContent({ onClose, open, user }: AccessEditorDialogCo
     </Dialog>
   )
 }
+
 
 

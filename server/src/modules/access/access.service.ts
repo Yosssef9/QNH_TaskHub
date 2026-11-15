@@ -107,6 +107,12 @@ export const accessService: AccessService = {
         enabled: input.kpiWorkCyclesAccess,
       });
 
+      await accessPermissionsRepository.saveTaskAssignOthersAccess(transaction, {
+        actorUserId, granteeUserId: input.userId,
+        enabled: input.isActive && input.roleCode !== 'ADMIN' &&
+          (input.taskAssignOthers ?? currentAccess?.taskAssignOthers ?? false),
+      });
+
       await accessRepository.saveMeetingPermissions(transaction, {
         actorUserId,
         targetUserId: input.userId,
@@ -183,5 +189,6 @@ export const accessService: AccessService = {
     return accessPermissionsRepository.getContractAccessAdminData();
   },
 };
+
 
 

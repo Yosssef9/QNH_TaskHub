@@ -96,3 +96,52 @@ describe('Completion Summary authorship and reassignment integrity', () => {
     assert.equal(insert.mock.calls.length, 0);
   });
 });
+
+
+describe('Completion Summary author-only corrections', () => {
+  it('edits an authored entry and records previous and new content', async () => {
+    const { activity } = setup();
+    const revision = vi.spyOn(repo, 'reviseCompletionSummaryEntry').mockResolvedValue({
+      previousContent: 'Original report', newContent: 'Corrected report',
+    });
+    await generalTaskAssignmentsService.reviseCompletionSummary(FIRST_ASSIGNEE, TASK, 55, 0, 'EDIT', 'Corrected report');
+    assert.deepEqual(revision.mock.calls[0]?.slice(1), [OWNER, TASK, 55, FIRST_ASSIGNEE, 0, 'EDIT', 'Corrected report']);
+    assert.equal(activity.mock.calls[0]?.[3], 'COMPLETION_SUMMARY_EDITED');
+    assert.deepEqual(activity.mock.calls[0]?.[4], {entryId:55,
+      changes:[{field:'completionSummary',from:'Original report',to:'Corrected report'}]});
+  });
+
+  it('soft-deletes an authored entry and keeps old content in the audit record', async () => {
+    const { activity } = setup();
+    vi.spyOn(repo, 'reviseCompletionSummaryEntry').mockResolvedValue({
+      previousContent: 'Original report', newContent: null,
+    });
+    await generalTaskAssignmentsService.reviseCompletionSummary(FIRST_ASSIGNEE, TASK, 55, 1, 'DELETE', null);
+    assert.equal(activity.mock.calls[0]?.[3], 'COMPLETION_SUMMARY_DELETED');
+    assert.deepEqual(activity.mock.calls[0]?.[4], {entryId:55,
+      changes:[{field:'completionSummary',from:'Original report',to:null}]});
+  });
+
+  it('rejects the creator editing someone else’s summary', async () => {
+    setup();
+    const revision=vi.spyOn(repo,'reviseCompletionSummaryEntry').mockResolvedValue(null);
+    await assert.rejects(generalTaskAssignmentsService.reviseCompletionSummary(OWNER,TASK,55,0,'EDIT','Other text'),
+      {statusCode:403,code:'COMPLETION_SUMMARY_FORBIDDEN'});
+    assert.equal(revision.mock.calls.length,0);
+  });
+
+  it('rejects old assignees after reassignment', async () => {
+    setup(SECOND_ASSIGNEE);
+    const revision=vi.spyOn(repo,'reviseCompletionSummaryEntry').mockResolvedValue(null);
+    await assert.rejects(generalTaskAssignmentsService.reviseCompletionSummary(FIRST_ASSIGNEE,TASK,55,0,'DELETE',null),
+      {statusCode:403,code:'COMPLETION_SUMMARY_FORBIDDEN'});
+    assert.equal(revision.mock.calls.length,0);
+  });
+
+  it('returns not found when the selected summary belongs to another author', async () => {
+    setup();
+    vi.spyOn(repo,'reviseCompletionSummaryEntry').mockResolvedValue(null);
+    await assert.rejects(generalTaskAssignmentsService.reviseCompletionSummary(FIRST_ASSIGNEE,TASK,55,0,'EDIT','A new text'),
+      {statusCode:404,code:'COMPLETION_SUMMARY_NOT_FOUND'});
+  });
+});

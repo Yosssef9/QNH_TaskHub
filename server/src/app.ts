@@ -29,6 +29,7 @@ import { notificationsRouter } from "./modules/notifications/notifications.route
 import { meetingActionItemsRouter } from "./modules/meeting-action-items/meeting-action-items.routes.js";
 import { generalTaskAssignmentsRouter } from "./modules/general-task-assignments/general-task-assignments.routes.js";
 import { collaborationRouter } from "./modules/collaboration/collaboration.routes.js";
+import { expectedFinishesRouter } from "./modules/expected-finishes/expected-finishes.routes.js";
 import {
   meetingRoomsAdminRouter,
   meetingsRouter,
@@ -87,6 +88,7 @@ export function createApp(): express.Express {
   app.use("/api/action-items", meetingActionItemsRouter);
   app.use("/api/general-assignments", generalTaskAssignmentsRouter);
   app.use("/api/collaboration", collaborationRouter);
+  app.use("/api/expected-finishes", expectedFinishesRouter);
   app.use("/api/email-settings", emailSettingsRouter);
   app.use("/api/lists", taskGroupsListRouter, listTasksRouter, listsRouter);
   app.use("/api/kpis", kpisRouter);
@@ -110,4 +112,5 @@ export function createApp(): express.Express {
 }
 
 export const app = createApp();
+
 

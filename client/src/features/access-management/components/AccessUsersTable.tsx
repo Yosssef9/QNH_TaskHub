@@ -96,6 +96,14 @@ export function AccessUsersTable({
               className="px-5"
             />
             <SortableHeader
+              label={t('access.taskAssignOthers')}
+              column="taskAssignment"
+              sortColumn={sortBy}
+              sortDirection={sortDirection}
+              onSort={onSort}
+              className="px-5"
+            />
+            <SortableHeader
               label={t('access.status')}
               column="status"
               sortColumn={sortBy}
@@ -183,6 +191,11 @@ export function AccessUsersTable({
                   </div>
                 </td>
                 <td className="px-5 py-4">
+                  <Badge variant={user.taskAssignOthers && user.accessIsActive ? 'success' : 'secondary'}>
+                    {t(user.taskAssignOthers && user.accessIsActive ? 'access.allowed' : 'access.denied')}
+                  </Badge>
+                </td>
+                <td className="px-5 py-4">
                   <Badge variant={user.accessIsActive ? 'success' : 'secondary'}>
                     {t(
                       user.roleCode === null
@@ -212,4 +225,5 @@ export function AccessUsersTable({
     </div>
   )
 }
+
 

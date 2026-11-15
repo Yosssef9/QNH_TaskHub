@@ -22,7 +22,7 @@ interface CountRecord {
 
 function permissionExistsExpression(
   alias: string,
-  moduleCode: "PROCUREMENT" | "KPI_MANAGEMENT",
+  moduleCode: "PROCUREMENT" | "KPI_MANAGEMENT" | "TASK_MANAGEMENT",
   entityCode: string | null = null,
 ): string {
   const entityPredicate =
@@ -62,6 +62,24 @@ function kpiWorkCyclesPermissionColumn(alias: string): string {
     CAST(${kpiWorkCyclesHasAccessExpression(alias)} AS BIT) AS kpiWorkCyclesAccess`;
 }
 
+function taskAssignmentExpression(alias: string, accessAlias: string): string {
+  return `CASE WHEN ${accessAlias}.is_active = 1 AND (
+    ${accessAlias}.role_code = 'ADMIN' OR EXISTS (
+      SELECT 1 FROM dbo.TM_access_permissions AS permission
+      WHERE permission.grantee_user_id = ${alias}.USER_ID
+        AND permission.module_code = 'TASK_MANAGEMENT'
+        AND permission.entity_code = 'TASK_ASSIGNMENTS'
+        AND permission.permission_code = 'TASK_ASSIGN_OTHERS'
+        AND permission.resource_owner_user_id IS NULL
+        AND permission.is_active = 1
+    )
+  ) THEN 1 ELSE 0 END`;
+}
+
+function taskAssignmentColumn(alias: string, accessAlias: string): string {
+  return `CAST(${taskAssignmentExpression(alias, accessAlias)} AS BIT) AS taskAssignOthers`;
+}
+
 function meetingPermissionExistsExpression(
   alias: string,
   permissionCode: "MEETING_ORGANIZE_ROOM" | "MEETING_ORGANIZE_ZOOM" | "MEETING_COORDINATE",
@@ -91,6 +109,7 @@ function accessFilterClause(alias: string, accessAlias: string): string {
   const zoomOrganizer = meetingPermissionExistsExpression(alias, "MEETING_ORGANIZE_ZOOM");
   const organizer = `((${roomOrganizer}) OR (${zoomOrganizer}))`;
   const coordinator = meetingPermissionExistsExpression(alias, "MEETING_COORDINATE");
+  const taskAssignment = taskAssignmentExpression(alias, accessAlias);
 
   return `
     AND (
@@ -113,6 +132,11 @@ function accessFilterClause(alias: string, accessAlias: string): string {
       @kpiWorkCyclesFilter = 'ALL'
       OR (@kpiWorkCyclesFilter = 'WITH_ACCESS' AND (${kpiWorkCyclesAccess}) = 1)
       OR (@kpiWorkCyclesFilter = 'WITHOUT_ACCESS' AND (${kpiWorkCyclesAccess}) = 0)
+    )
+    AND (
+      @taskAssignmentFilter = 'ALL'
+      OR (@taskAssignmentFilter = 'WITH_ACCESS' AND (${taskAssignment}) = 1)
+      OR (@taskAssignmentFilter = 'WITHOUT_ACCESS' AND (${taskAssignment}) = 0)
     )
     AND (
       @meetingFilter = 'ALL'
@@ -139,6 +163,8 @@ function accessSortExpression(sortBy: AccessSortBy, alias: string, accessAlias: 
         + CASE WHEN ${meetingPermissionExistsExpression(alias, "MEETING_ORGANIZE_ZOOM")} THEN 2 ELSE 0 END
         + CASE WHEN ${meetingPermissionExistsExpression(alias, "MEETING_COORDINATE")} THEN 4 ELSE 0 END
       )`;
+    case "taskAssignment":
+      return taskAssignmentExpression(alias, accessAlias);
     case "status":
       return `CASE WHEN ${accessAlias}.portal_user_id IS NULL THEN 0 WHEN ${accessAlias}.is_active = 0 THEN 1 ELSE 2 END`;
     case "userName":
@@ -164,6 +190,7 @@ export async function listAccessUsers(query: AccessListQuery): Promise<AccessUse
       .input("procurementFilter", sql.VarChar(20), query.procurement)
       .input("kpiWorkCyclesFilter", sql.VarChar(20), query.kpiWorkCycles)
       .input("meetingFilter", sql.VarChar(20), query.meetings)
+      .input("taskAssignmentFilter", sql.VarChar(20), query.taskAssignment)
       .input("offset", sql.Int, offset)
       .input("pageSize", sql.Int, query.pageSize);
 
@@ -179,6 +206,7 @@ export async function listAccessUsers(query: AccessListQuery): Promise<AccessUse
         access.is_active AS accessIsActive,
         ${procurementPermissionColumns("portal")},
         ${kpiWorkCyclesPermissionColumn("portal")},
+        ${taskAssignmentColumn("portal", "access")},
         ${meetingPermissionColumns("portal")}
       FROM dbo.users AS portal
       LEFT JOIN dbo.TM_user_access AS access ON access.portal_user_id = portal.USER_ID
@@ -224,6 +252,7 @@ export async function findAccessUserById(userId: number): Promise<AccessUserReco
       access.is_active AS accessIsActive,
       ${procurementPermissionColumns("portal")},
       ${kpiWorkCyclesPermissionColumn("portal")},
+      ${taskAssignmentColumn("portal", "access")},
       ${meetingPermissionColumns("portal")}
     FROM dbo.users AS portal
     LEFT JOIN dbo.TM_user_access AS access ON access.portal_user_id = portal.USER_ID
@@ -259,6 +288,13 @@ export async function findCurrentAccessForUpdate(
     SELECT
       role_code AS roleCode,
       CAST(is_active AS BIT) AS isActive,
+      CAST(CASE WHEN EXISTS (
+        SELECT 1 FROM dbo.TM_access_permissions AS p
+        WHERE p.grantee_user_id = access.portal_user_id
+          AND p.module_code='TASK_MANAGEMENT' AND p.entity_code='TASK_ASSIGNMENTS'
+          AND p.permission_code='TASK_ASSIGN_OTHERS'
+          AND p.resource_owner_user_id IS NULL AND p.is_active=1
+      ) THEN 1 ELSE 0 END AS BIT) AS taskAssignOthers,
       CAST(CASE WHEN EXISTS (
         SELECT 1 FROM dbo.TM_meeting_user_permissions AS permission
         WHERE permission.portal_user_id = access.portal_user_id
@@ -474,4 +510,5 @@ export const accessRepository = {
   ensureContractSettingsInTransaction,
   findDelegationParticipantForUpdate,
 };
+
 

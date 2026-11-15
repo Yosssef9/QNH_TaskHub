@@ -170,24 +170,51 @@ export const generalTaskAssignmentsRepository = {
     return Number(result.recordset[0]?.id);
   },
 
+  async reviseWorkNote(transaction:DatabaseTransaction,actorUserId:number,subtaskId:number,
+    noteId:number,version:number,action:'EDIT'|'DELETE',content:string|null):Promise<boolean>{
+    const existing=await transaction.request().input('noteId',sql.BigInt,noteId)
+      .input('subtaskId',sql.BigInt,subtaskId).input('actorUserId',sql.Int,actorUserId)
+      .query<{content:string;version:number}>(`SELECT content,edit_version AS version
+        FROM dbo.TM_subtask_work_note_entries WITH(UPDLOCK,HOLDLOCK)
+        WHERE id=@noteId AND subtask_id=@subtaskId AND author_user_id=@actorUserId AND deleted_at_utc IS NULL;`);
+    const row=existing.recordset[0];
+    if(!row)return false;
+    if(Number(row.version)!==version)throw new Error('WORK_NOTE_CONFLICT');
+    await transaction.request().input('noteId',sql.BigInt,noteId).input('actorUserId',sql.Int,actorUserId)
+      .input('action',sql.VarChar(10),action).input('content',sql.NVarChar(4000),content)
+      .query(`INSERT dbo.TM_work_note_revisions
+        (source_type,note_id,task_id,subtask_id,actor_user_id,action_type,previous_content,new_content)
+        SELECT 'SUBTASK',id,task_id,subtask_id,@actorUserId,@action,content,
+          CASE WHEN @action='EDIT' THEN @content ELSE NULL END
+        FROM dbo.TM_subtask_work_note_entries WHERE id=@noteId;
+        UPDATE dbo.TM_subtask_work_note_entries SET
+          content=CASE WHEN @action='EDIT' THEN @content ELSE content END,
+          edited_at_utc=CASE WHEN @action='EDIT' THEN SYSUTCDATETIME() ELSE edited_at_utc END,
+          deleted_at_utc=CASE WHEN @action='DELETE' THEN SYSUTCDATETIME() ELSE NULL END,
+          edit_version=edit_version+1 WHERE id=@noteId;`);
+    return true;
+  },
   async listWorkNoteEntries(ownerUserId: number, taskId: number) {
     const pool = await getDatabasePool();
     const result = await pool.request().input("ownerUserId", sql.Int, ownerUserId)
       .input("taskId", sql.BigInt, taskId)
       .query<{id:number|string;subtaskId:number|string;authorUserId:number;
-        authorName:string;content:string;createdAtUtc:Date}>(`
+        authorName:string;content:string;createdAtUtc:Date;editedAtUtc:Date|null;editVersion:number}>(`
         SELECT note.id, note.subtask_id AS subtaskId, note.author_user_id AS authorUserId,
           COALESCE(author.USER_NAME, CONVERT(NVARCHAR(20), note.author_user_id)) AS authorName,
-          note.content, note.created_at_utc AS createdAtUtc
+          note.content, note.created_at_utc AS createdAtUtc,
+          note.edited_at_utc AS editedAtUtc, note.edit_version AS editVersion
         FROM dbo.TM_subtask_work_note_entries note
         JOIN dbo.TM_subtasks child ON child.id=note.subtask_id AND child.task_id=@taskId
           AND child.owner_user_id=@ownerUserId AND child.deleted_at_utc IS NULL
         LEFT JOIN dbo.users author ON author.USER_ID=note.author_user_id
         WHERE note.task_id=@taskId AND note.owner_user_id=@ownerUserId
+          AND note.deleted_at_utc IS NULL
         ORDER BY note.created_at_utc ASC, note.id ASC;`);
     return result.recordset.map(row=>({id:Number(row.id),subtaskId:Number(row.subtaskId),
       authorUserId:row.authorUserId,authorName:row.authorName,content:row.content,
-      createdAtUtc:row.createdAtUtc.toISOString()}));
+      createdAtUtc:row.createdAtUtc.toISOString(),
+      editedAtUtc:row.editedAtUtc?.toISOString()??null,editVersion:Number(row.editVersion)}));
   },
 
   async ownerHasExplicitSubtaskAssignment(taskId: number, ownerUserId: number,
@@ -222,25 +249,60 @@ export const generalTaskAssignmentsRepository = {
     return Number(result.recordset[0].id);
   },
 
+  async reviseCompletionSummaryEntry(transaction: DatabaseTransaction, ownerUserId: number,
+    taskId: number, entryId: number, actorUserId: number, version: number,
+    action: 'EDIT' | 'DELETE', content: string | null): Promise<{previousContent: string; newContent: string | null} | null> {
+    const request = transaction.request();
+    const existing = await request.input('ownerUserId', sql.Int, ownerUserId)
+      .input('taskId', sql.BigInt, taskId).input('entryId', sql.BigInt, entryId)
+      .input('actorUserId', sql.Int, actorUserId)
+      .query<{content:string;editVersion:number}>(`
+        SELECT content, edit_version AS editVersion FROM dbo.TM_task_completion_summary_entries WITH(UPDLOCK,HOLDLOCK)
+        WHERE id=@entryId AND task_id=@taskId AND owner_user_id=@ownerUserId
+          AND author_user_id=@actorUserId AND deleted_at_utc IS NULL;`);
+    const row = existing.recordset[0];
+    if (!row) return null;
+    if (Number(row.editVersion) !== version) throw new Error('COMPLETION_SUMMARY_CONFLICT');
+    const next = action === 'EDIT' ? content : null;
+    await transaction.request().input('entryId',sql.BigInt,entryId)
+      .input('actorUserId',sql.Int,actorUserId).input('action',sql.VarChar(10),action)
+      .input('content',sql.NVarChar(sql.MAX),next)
+      .query(`
+        INSERT dbo.TM_completion_summary_revisions
+          (entry_id,task_id,actor_user_id,action_type,previous_content,new_content)
+        SELECT id,task_id,@actorUserId,@action,content,@content
+        FROM dbo.TM_task_completion_summary_entries WHERE id=@entryId;
+        UPDATE dbo.TM_task_completion_summary_entries SET
+          content=CASE WHEN @action='EDIT' THEN @content ELSE content END,
+          edited_at_utc=CASE WHEN @action='EDIT' THEN SYSUTCDATETIME() ELSE edited_at_utc END,
+          deleted_at_utc=CASE WHEN @action='DELETE' THEN SYSUTCDATETIME() ELSE NULL END,
+          edit_version=edit_version+1
+        WHERE id=@entryId;`);
+    return {previousContent:row.content,newContent:next};
+  },
+
   async listCompletionSummaryEntries(ownerUserId: number, taskId: number) {
     const pool = await getDatabasePool();
     const result = await pool.request().input("ownerUserId", sql.Int, ownerUserId)
       .input("taskId", sql.BigInt, taskId)
       .query<{ id:number|string; authorUserId:number; authorName:string;
-        content:string; createdAtUtc:Date }>(`
+        content:string; createdAtUtc:Date;editedAtUtc:Date|null;editVersion:number }>(`
         SELECT entry.id, entry.author_user_id AS authorUserId,
           COALESCE(author.USER_NAME, CONVERT(NVARCHAR(20), entry.author_user_id)) AS authorName,
-          entry.content, entry.created_at_utc AS createdAtUtc
+          entry.content, entry.created_at_utc AS createdAtUtc,
+          entry.edited_at_utc AS editedAtUtc, entry.edit_version AS editVersion
         FROM dbo.TM_task_completion_summary_entries AS entry
         JOIN dbo.TM_tasks AS task ON task.id=entry.task_id
           AND task.owner_user_id=@ownerUserId AND task.deleted_at_utc IS NULL
         LEFT JOIN dbo.users AS author ON author.USER_ID=entry.author_user_id
         WHERE entry.task_id=@taskId AND entry.owner_user_id=@ownerUserId
+          AND entry.deleted_at_utc IS NULL
         ORDER BY entry.created_at_utc ASC, entry.id ASC;
       `);
     return result.recordset.map(row => ({
       id:Number(row.id), authorUserId:row.authorUserId, authorName:row.authorName,
       content:row.content, createdAtUtc:row.createdAtUtc.toISOString(),
+      editedAtUtc:row.editedAtUtc?.toISOString()??null,editVersion:Number(row.editVersion),
     }));
   },
 };
@@ -442,6 +504,7 @@ export async function findEligibleGeneralTaskUser(userId: number) {
     WHERE portal.USER_ID=@userId AND portal.IS_ACTIVE=1 AND access.is_active=1;`);
   return result.recordset[0] ?? null;
 }
+
 
 
 

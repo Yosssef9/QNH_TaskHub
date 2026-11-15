@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUp, CheckCircle2, ChevronDown, Download, Eye, FileUp, LockKeyhole, Pencil, Plus, RotateCcw, Trash2, UsersRound } from 'lucide-react'
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
@@ -8,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/cn'
+import { toApiClientError } from '@/lib/api-error'
 import { AttachmentPreviewDialog } from '@/components/shared/AttachmentPreviewDialog'
 import { ConfirmModal } from '@/components/shared/ConfirmModal'
 import { attachmentPreviewKind } from '@/components/shared/attachment-preview'
@@ -15,6 +17,7 @@ import { attachmentPreviewKind } from '@/components/shared/attachment-preview'
 import type { EligibleTaskUser } from './general-assignment.api'
 import type { TaskPriority } from '../types/task.types'
 import { TaskPriorityIndicator } from '../components/TaskSelectIndicators'
+import { WorkNoteEntryActions } from '../components/WorkNoteEntryActions'
 import { TaskAssigneeMultiPicker } from './TaskAssigneeMultiPicker'
 import { TaskAssigneePicker } from './TaskAssigneePicker'
 import { collaborativeApi, type CollaborativeFile, type CollaborativeMember, type CollaborativeView } from './collaboration.api'
@@ -32,6 +35,8 @@ interface Props {
   enabled: boolean
   description: string | null
   overviewContent?: ReactNode
+  taskInformationContent?: ReactNode
+  expectedFinishContent?: (subtaskId: number) => ReactNode
   activityContent?: ReactNode
   discussionContent?: ReactNode
   discussionUnread?: number
@@ -81,7 +86,7 @@ function CollaborativeProxyPicker({row,actorId,ownerId,actions}: {
   return <div className="bg-muted/20 space-y-2 rounded-lg border p-3">
     <p className="text-sm font-semibold">{t('tasks.proxy.title')}</p>
     {canManage ? <>
-      <TaskAssigneePicker value={draft} onChange={setDraft} disabled={actions.proxy.isPending}
+      <TaskAssigneePicker isProxy value={draft} onChange={setDraft} disabled={actions.proxy.isPending}
         excludedUserIds={[row.userId,...(ownerId!==null?[ownerId]:[])]}/>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-muted-foreground text-xs">{t('tasks.proxy.accountability')}</p>
@@ -126,8 +131,18 @@ function Submission({ row, view, actorId, owner, ownerId, actions }: {
     {updates.length ? <div className="space-y-2">
       <p className="text-muted-foreground text-xs font-semibold">{t('tasks.workspace.workUpdates')}</p>
       {updates.map(item => <div key={item.id} className="bg-muted/35 rounded-lg p-3">
-        <p className="whitespace-pre-wrap break-words text-sm">{item.note}</p>
-        <p className="text-muted-foreground mt-2 text-xs">{item.authorName ?? `#${item.authorUserId}`} · {dateTime(item.createdAtUtc)}</p>
+        <div className="flex items-start justify-between gap-2">
+          <p className="min-w-0 whitespace-pre-wrap break-words text-sm">{item.note}</p>
+          {row.isActive && mine && actorId === item.authorUserId ?
+            <WorkNoteEntryActions content={item.note} editVersion={item.editVersion}
+              disabled={actions.editNote.isPending || actions.deleteNote.isPending}
+              onEdit={(text,editVersion,done) => actions.editNote.mutate({assignmentId:row.id,noteId:item.id,editVersion,note:text},{
+                onSuccess:done,onError:()=>toast.error(t('tasks.workNoteActions.failed'))})}
+              onDelete={(editVersion,done) => actions.deleteNote.mutate({assignmentId:row.id,noteId:item.id,editVersion},{
+                onSuccess:done,onError:()=>toast.error(t('tasks.workNoteActions.failed'))})} /> : null}
+        </div>
+        <p className="text-muted-foreground mt-2 text-xs">{item.authorName ?? `#${item.authorUserId}`} · {dateTime(item.createdAtUtc)}
+          {item.editedAtUtc ? ` · ${t('tasks.workNoteActions.edited')}` : ''}</p>
       </div>)}
     </div> : <p className="text-muted-foreground text-sm">{t('tasks.workspace.noUpdates')}</p>}
     {files.length ? <div className="space-y-1 border-t pt-3">
@@ -220,7 +235,8 @@ function ManageTeamDialog({ scope, onClose, view, meetingId, actions }: {
   const pending = actions.team.isPending || actions.childTeam.isPending
   function save() {
     const options = { onSuccess: () => { toast.success(t('tasks.assignment.assignmentSaved')); onClose() },
-      onError: () => toast.error(t('tasks.collaboration.saveFailed')) }
+      onError: (error: unknown) => toast.error(t(toApiClientError(error).code === 'TASK_ASSIGN_OTHERS_REQUIRED'
+        ? 'tasks.assignment.permissionRequired' : 'tasks.collaboration.saveFailed')) }
     if (scope === null) actions.team.mutate({ userIds: users }, options)
     else if (scope !== undefined) actions.childTeam.mutate({ subtaskId: scope, mode, userIds: mode === 'CUSTOM' ? users : [] }, options)
   }
@@ -257,16 +273,18 @@ function ManageTeamDialog({ scope, onClose, view, meetingId, actions }: {
 }
 
 export function CollaborativeAssignmentsPanel({ taskId, actorId, ownerId, meetingId,
-  children, enabled, description, overviewContent, activityContent, discussionContent, discussionUnread=0, canManageSubtasks,
+  children, enabled, description, overviewContent, taskInformationContent, expectedFinishContent,
+  activityContent, discussionContent, discussionUnread=0, canManageSubtasks,
   onAddSubtask, onEditSubtask, onDeleteSubtask, onReorderSubtasks, reorderPending,
   subtaskContent, focusSubtaskId = null }: Props) {
   const { t, i18n } = useTranslation()
+  const reduceMotion = useReducedMotion()
   const actions = useCollaborativeAssignments(taskId, enabled || actorId === ownerId)
   const view = actions.query.data
   const owner = Boolean(view?.canManage && actorId === ownerId)
   const discussionRequested=typeof window!=='undefined' && new URLSearchParams(window.location.search).get('discussion')==='1'
   const [tab, setTab] = useState<Tab>(discussionRequested?'discussion':focusSubtaskId === null ? 'overview' : 'subtasks')
-  const [selectedChildId, setSelectedChildId] = useState<number | null>(focusSubtaskId)
+  const [expandedChildIds, setExpandedChildIds] = useState<number[]>(focusSubtaskId===null?[]:[focusSubtaskId])
   const [manageScope, setManageScope] = useState<number | null | undefined>(undefined)
   const [teamScope, setTeamScope] = useState<number | null>(null)
   const [expandedMemberId, setExpandedMemberId] = useState<number | null>(null)
@@ -275,10 +293,6 @@ export function CollaborativeAssignmentsPanel({ taskId, actorId, ownerId, meetin
   const myMain = myCollaborativeAssignment(view?.members ?? [], actorId, null)
   const mainProgress = view ? collaborativeScopeProgress(view, null) : null
   const accessibleChildren = children
-  const selectedChild = accessibleChildren.find(child => child.id === selectedChildId)
-  const childMembers = selectedChild ? view?.members.filter(member => member.subtaskId === selectedChild.id && member.isActive) ?? [] : []
-  const childProgress = selectedChild ? view?.progress.find(progress => progress.scopeId === selectedChild.id) : null
-  const myChild = selectedChild ? myCollaborativeAssignment(view?.members ?? [], actorId, selectedChild.id) : undefined
   const availableTabs: { id: Tab; label: string }[] = [
     { id: 'overview', label: t('tasks.workspace.overview') },
     { id: 'subtasks', label: t('tasks.details.subtasks') },
@@ -290,7 +304,7 @@ export function CollaborativeAssignmentsPanel({ taskId, actorId, ownerId, meetin
   useEffect(() => {
     if (focusedSubtaskAvailable) {
       setTab(discussionRequested?'discussion':'subtasks')
-      setSelectedChildId(focusSubtaskId)
+      setExpandedChildIds(current=>current.includes(focusSubtaskId!)?current:[...current,focusSubtaskId!])
     }
   }, [focusSubtaskId, focusedSubtaskAvailable, discussionRequested])
   if (actions.query.isLoading) return <div className="text-muted-foreground p-5 text-sm">{t('common.loading')}</div>
@@ -343,6 +357,7 @@ export function CollaborativeAssignmentsPanel({ taskId, actorId, ownerId, meetin
         {overviewContent}
       </div>
       <aside className="min-w-0 space-y-5">
+        {taskInformationContent}
         <Card><CardHeader className="pb-3"><CardTitle>{t('tasks.workspace.teamSummary')}</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <Progress total={mainProgress?.total ?? main.length} completed={mainProgress?.completed ?? 0} label={t('tasks.workspace.mainAssignments')} />
@@ -364,71 +379,88 @@ export function CollaborativeAssignmentsPanel({ taskId, actorId, ownerId, meetin
 
     {tab === 'subtasks' && <div role="tabpanel" className="space-y-4">
       <Card>
-        <CardHeader className="flex-row items-center justify-between gap-3 pb-3">
+        <CardHeader className="flex-row flex-wrap items-center justify-between gap-3 pb-3">
           <div><CardTitle>{t('tasks.details.subtasks')}</CardTitle>
             <p className="text-muted-foreground mt-1 text-xs">{t('tasks.details.subtaskCount', { count: accessibleChildren.length })}</p></div>
-          {owner && canManageSubtasks && <Button size="sm" onClick={onAddSubtask}><Plus className="size-4" />{t('tasks.details.add')}</Button>}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" disabled={!accessibleChildren.length}
+              onClick={() => setExpandedChildIds(accessibleChildren.map(child=>child.id))}>
+              {t('tasks.details.expandAllSubtasks')}
+            </Button>
+            <Button variant="outline" size="sm" disabled={!expandedChildIds.length}
+              onClick={() => setExpandedChildIds([])}>{t('tasks.details.collapseAllSubtasks')}</Button>
+            {owner && canManageSubtasks && <Button size="sm" onClick={onAddSubtask}><Plus className="size-4" />{t('tasks.details.add')}</Button>}
+          </div>
         </CardHeader>
-        <CardContent className="space-y-1">
+        <CardContent className="space-y-2">
           {!accessibleChildren.length && <p className="text-muted-foreground py-6 text-center text-sm">{t('tasks.assignment.noAssignedSubtasks')}</p>}
           {accessibleChildren.map((child, index) => {
-            const progress = collaborativeScopeProgress(view, child.id)
-            const selected = selectedChildId === child.id
-            return <div key={child.id} className={cn('flex items-center gap-1 rounded-lg border-b last:border-b-0', selected && 'bg-primary/5')}>
-              <button type="button" id={`subtask-${child.id}`} onClick={() => setSelectedChildId(selected ? null : child.id)}
-                aria-expanded={selected} className="hover:bg-muted/50 flex min-w-0 flex-1 items-center gap-3 rounded-lg p-3 text-start">
-                <CheckCircle2 className={cn('size-5 shrink-0', child.isCompleted ? 'text-success' : 'text-muted-foreground/50')} />
-                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{child.title}</span>
-                  <span className="mt-1 block"><TaskPriorityIndicator priority={child.priority} /></span>
-                  <span className="text-muted-foreground mt-1 block text-xs">{progress.completed}/{progress.total} · {child.dueDate ? new Date(`${child.dueDate}T12:00:00`).toLocaleDateString(i18n.language) : t('tasks.details.notSet')}</span></span>
-                {child.isCompleted && <span className="text-success text-xs font-semibold">{t('tasks.collaboration.done')}</span>}
-                <ChevronDown className={cn('text-muted-foreground size-4 shrink-0 transition-transform', selected && 'rotate-180')} />
-              </button>
-              {owner && canManageSubtasks && <div className="flex shrink-0 flex-col pe-2">
-                <Button type="button" variant="ghost" size="icon" className="size-7"
-                  aria-label={t('tasks.workspace.moveUp', {name:child.title})} disabled={reorderPending || index === 0}
-                  onClick={() => { const order=accessibleChildren.map(item=>item.id); [order[index-1],order[index]]=[order[index]!,order[index-1]!]; onReorderSubtasks(order) }}>
-                  <ArrowUp className="size-3.5" />
-                </Button>
-                <Button type="button" variant="ghost" size="icon" className="size-7"
-                  aria-label={t('tasks.workspace.moveDown', {name:child.title})} disabled={reorderPending || index === accessibleChildren.length-1}
-                  onClick={() => { const order=accessibleChildren.map(item=>item.id); [order[index],order[index+1]]=[order[index+1]!,order[index]!]; onReorderSubtasks(order) }}>
-                  <ArrowDown className="size-3.5" />
-                </Button>
-              </div>}
+            const progress=collaborativeScopeProgress(view,child.id)
+            const expanded=expandedChildIds.includes(child.id)
+            const members=view.members.filter(member=>member.subtaskId===child.id && member.isActive)
+            const myChild=myCollaborativeAssignment(view.members,actorId,child.id)
+            const dueDate=child.dueDate ? new Date(`${child.dueDate}T12:00:00`).toLocaleDateString(i18n.language) : t('tasks.details.notSet')
+            return <div key={child.id} id={`subtask-${child.id}`} className="overflow-hidden rounded-xl border">
+              <div className={cn('flex items-center gap-1',expanded && 'bg-muted/30')}>
+                <button type="button" onClick={()=>setExpandedChildIds(current=>current.includes(child.id)?current.filter(id=>id!==child.id):[...current,child.id])}
+                  aria-expanded={expanded} aria-label={t(expanded?'tasks.details.hideSubtask':'tasks.details.showSubtask')}
+                  className="hover:bg-muted/50 flex min-w-0 flex-1 items-center gap-3 p-3 text-start">
+                  <CheckCircle2 className={cn('size-5 shrink-0', child.isCompleted ? 'text-success' : 'text-muted-foreground/50')} />
+                  <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{child.title}</span>
+                    <span className="mt-1 block"><TaskPriorityIndicator priority={child.priority} /></span>
+                    <span className="text-muted-foreground mt-1 block text-xs">{progress.completed}/{progress.total} · {dueDate}</span></span>
+                  <ChevronDown className={cn('text-muted-foreground size-4 shrink-0 transition-transform', expanded && 'rotate-180')} />
+                </button>
+                {owner && canManageSubtasks && <div className="flex shrink-0 flex-col pe-2">
+                  <Button type="button" variant="ghost" size="icon" className="size-7"
+                    aria-label={t('tasks.workspace.moveUp', {name:child.title})} disabled={reorderPending || index===0}
+                    onClick={()=>{const order=accessibleChildren.map(item=>item.id);[order[index-1],order[index]]=[order[index]!,order[index-1]!];onReorderSubtasks(order)}}>
+                    <ArrowUp className="size-3.5" />
+                  </Button>
+                  <Button type="button" variant="ghost" size="icon" className="size-7"
+                    aria-label={t('tasks.workspace.moveDown', {name:child.title})} disabled={reorderPending || index===accessibleChildren.length-1}
+                    onClick={()=>{const order=accessibleChildren.map(item=>item.id);[order[index],order[index+1]]=[order[index+1]!,order[index]!];onReorderSubtasks(order)}}>
+                    <ArrowDown className="size-3.5" />
+                  </Button>
+                </div>}
+              </div>
+              <AnimatePresence initial={false}>
+              {expanded && <motion.div className="overflow-hidden border-t"
+                initial={reduceMotion ? false : {height:0,opacity:0}} animate={{height:'auto',opacity:1}}
+                exit={reduceMotion ? undefined : {height:0,opacity:0}}
+                transition={{duration:reduceMotion ? 0 : 0.22,ease:[0.22,1,0.36,1]}}>
+                <div className="space-y-4 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0"><p className="font-semibold">{child.title}</p>
+                    <p className="text-muted-foreground mt-1 text-xs">{t('tasks.workspace.subtaskDetails')}</p></div>
+                  {owner && canManageSubtasks && <Button size="sm" variant="outline" onClick={()=>onEditSubtask(child.id)}>
+                    <Pencil className="size-4" />{t('tasks.details.editSubtask')}</Button>}
+                </div>
+                <div className="space-y-2 text-sm">
+                  <TaskPriorityIndicator priority={child.priority} pill />
+                  <p className="text-muted-foreground text-xs">{t('expectedFinish.ownerDueDate')}: <span className="text-foreground font-medium">{dueDate}</span></p>
+                  {expectedFinishContent?.(child.id)}
+                </div>
+                {child.description && <p className="whitespace-pre-wrap break-words text-sm">{child.description}</p>}
+                <Progress total={progress.total ?? members.length} completed={progress.completed ?? 0} label={t('tasks.workspace.mainAssignments')} />
+                {owner && <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={()=>setManageScope(child.id)}>
+                    <UsersRound className="size-4" />{t('tasks.workspace.manageAssignees')}</Button>
+                  <Button size="sm" variant="outline" onClick={()=>{setTeamScope(child.id);setExpandedMemberId(null);setTab('team')}}>
+                    {t('tasks.workspace.reviewContributions')}</Button>
+                  {canManageSubtasks && <Button size="sm" variant="ghost" className="text-destructive" onClick={()=>onDeleteSubtask(child.id)}>
+                    {t('tasks.details.deleteSubtask')}</Button>}
+                </div>}
+                {myChild && view.enabled ? <Submission row={myChild} view={view} actorId={actorId} owner={owner} ownerId={ownerId} actions={actions} /> :
+                  <p className="text-muted-foreground text-sm">{owner ? t('tasks.workspace.creatorHelp') : t('tasks.workspace.noAssignment')}</p>}
+                {subtaskContent?.(child.id)}
+                </div>
+              </motion.div>}
+              </AnimatePresence>
             </div>
           })}
         </CardContent>
       </Card>
-      {selectedChild && <Card>
-        <CardHeader className="flex-row items-start justify-between gap-3 pb-3">
-          <div className="min-w-0"><CardTitle>{selectedChild.title}</CardTitle>
-            <p className="text-muted-foreground mt-1 text-xs">{t('tasks.workspace.subtaskDetails')}</p></div>
-          {owner && canManageSubtasks && <Button size="sm" variant="outline" onClick={() => onEditSubtask(selectedChild.id)}>
-            <Pencil className="size-4" />{t('tasks.details.editSubtask')}
-          </Button>}
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-center gap-3 text-sm">
-            <TaskPriorityIndicator priority={selectedChild.priority} pill />
-            {selectedChild.dueDate && <span className="text-muted-foreground">{t('tasks.dueDate')}: {new Date(`${selectedChild.dueDate}T12:00:00`).toLocaleDateString(i18n.language)}</span>}
-          </div>
-          {selectedChild.description && <p className="whitespace-pre-wrap break-words text-sm">{selectedChild.description}</p>}
-          <Progress total={childProgress?.total ?? childMembers.length} completed={childProgress?.completed ?? 0} label={t('tasks.workspace.mainAssignments')} />
-          {owner && <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={() => setManageScope(selectedChild.id)}>
-              <UsersRound className="size-4" />{t('tasks.workspace.manageAssignees')}</Button>
-            <Button size="sm" variant="outline" onClick={() => {setTeamScope(selectedChild.id);setExpandedMemberId(null);setTab('team')}}>
-              {t('tasks.workspace.reviewContributions')}
-            </Button>
-            {canManageSubtasks && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => onDeleteSubtask(selectedChild.id)}>
-              {t('tasks.details.deleteSubtask')}</Button>}
-          </div>}
-          {myChild && view.enabled ? <Submission row={myChild} view={view} actorId={actorId} owner={owner} ownerId={ownerId} actions={actions} /> :
-            <p className="text-muted-foreground text-sm">{owner ? t('tasks.workspace.creatorHelp') : t('tasks.workspace.noAssignment')}</p>}
-          {subtaskContent?.(selectedChild.id)}
-        </CardContent>
-      </Card>}
     </div>}
 
     {tab === 'team' && owner && <Card role="tabpanel">
@@ -471,4 +503,5 @@ export function CollaborativeAssignmentsPanel({ taskId, actorId, ownerId, meetin
       view={view} meetingId={meetingId} actions={actions} />}
   </section>
 }
+
 

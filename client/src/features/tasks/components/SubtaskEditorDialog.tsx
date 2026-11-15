@@ -70,7 +70,8 @@ export function SubtaskEditorDialog({
         toast.success(t(subtask ? 'tasks.details.subtaskUpdated' : 'tasks.details.subtaskCreated'))
         onOpenChange(false)
       },
-      onError: (error: unknown) => toast.error(toApiClientError(error).code === 'SUBTASK_CREATOR_SELF_ASSIGNMENT'
+      onError: (error: unknown) => toast.error(toApiClientError(error).code === 'TASK_ASSIGN_OTHERS_REQUIRED'
+        ? t('tasks.assignment.permissionRequired') : toApiClientError(error).code === 'SUBTASK_CREATOR_SELF_ASSIGNMENT'
         ? t('tasks.assignment.creatorSelfBlocked') : t('tasks.details.errors.subtask')),
     }
     const fields = { title: cleanTitle, description: description.trim() || null, priority, dueDate }
@@ -178,4 +179,5 @@ export function SubtaskEditorDialog({
     </Dialog>
   )
 }
+
 

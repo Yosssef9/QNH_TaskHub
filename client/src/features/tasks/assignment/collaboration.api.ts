@@ -16,7 +16,7 @@ export interface CollaborativeMember {
   completedAtUtc: string | null
   assignedAtUtc: string
 }
-export interface CollaborativeNote {id:number;assignmentId:number;note:string;createdAtUtc:string;authorUserId:number;authorName:string|null}
+export interface CollaborativeNote {id:number;assignmentId:number;note:string;createdAtUtc:string;editedAtUtc:string|null;editVersion:number;authorUserId:number;authorName:string|null}
 export interface CollaborativeFile {id:string;assignmentId:number;originalFileName:string;mimeType:string;fileExtension:string;sizeBytes:number;uploadedAtUtc:string;uploadedByUserId:number;uploadedByName?:string|null}
 export interface CollaborativeMode {subtaskId:number;mode:'INHERIT'|'CUSTOM'}
 export interface CollaborativeProgress {scopeId:number|null;total:number;completed:number}
@@ -43,6 +43,12 @@ export const collaborativeApi={
     `/collaboration/assignments/${assignmentId}/proxy`,{proxyUserId})),
   addNote:(assignmentId:number,note:string)=>result(apiClient.post<ApiSuccessResponse<{assignmentId:number}>>(
     `/collaboration/assignments/${assignmentId}/notes`,{note})),
+  editNote:(assignmentId:number,noteId:number,editVersion:number,note:string)=>result(
+    apiClient.put<ApiSuccessResponse<{assignmentId:number;noteId:number}>>(
+      `/collaboration/assignments/${assignmentId}/notes/${noteId}`,{note,editVersion})),
+  deleteNote:(assignmentId:number,noteId:number,editVersion:number)=>result(
+    apiClient.delete<ApiSuccessResponse<{assignmentId:number;noteId:number}>>(
+      `/collaboration/assignments/${assignmentId}/notes/${noteId}`,{data:{editVersion}})),
   complete:(assignmentId:number,completed:boolean)=>result(apiClient.patch<ApiSuccessResponse<{assignmentId:number;completed:boolean}>>(
     `/collaboration/assignments/${assignmentId}/completion`,{completed})),
   upload:(assignmentId:number,file:File)=>{
@@ -61,4 +67,5 @@ export const collaborativeApi={
     finally{URL.revokeObjectURL(url)}
   },
 }
+
 

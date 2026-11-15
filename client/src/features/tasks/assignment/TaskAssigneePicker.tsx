@@ -1,5 +1,6 @@
 import { Check, ChevronsUpDown, Loader2, Search, UserRound, X } from 'lucide-react'
 import { useMemo, useState, type UIEvent } from 'react'
+import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
@@ -9,6 +10,7 @@ import { useMeetingActionItemAssignees } from '@/features/meetings/action-items/
 
 import type { EligibleTaskUser } from './general-assignment.api'
 import { matchesTaskAssigneeSearch } from './task-assignee-search'
+import { useTaskAssignmentPermission } from './use-task-assignment-permission'
 import { useInfiniteEligibleTaskUsers, useEligibleTaskUser } from './use-general-assignment'
 
 type DisplayUser = Pick<EligibleTaskUser, 'userId' | 'userName' | 'userCode' | 'email'>
@@ -21,6 +23,7 @@ export function TaskAssigneePicker({
   inherit = false,
   meetingId = null,
   allowClear = true,
+  isProxy = false,
   excludedUserIds = [],
 }: {
   value: number | null
@@ -29,9 +32,12 @@ export function TaskAssigneePicker({
   inherit?: boolean
   meetingId?: number | null
   allowClear?: boolean
+  isProxy?: boolean
   excludedUserIds?: number[]
 }) {
   const { t } = useTranslation()
+  const {canAssignOthers, currentUserId} = useTaskAssignmentPermission()
+  const limited = meetingId === null && !isProxy && !canAssignOthers;
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [selectedUser, setSelectedUser] = useState<DisplayUser | null>(null)
@@ -59,6 +65,14 @@ export function TaskAssigneePicker({
   const isLoading = isMeeting ? meetingQuery.isLoading : generalQuery.isPending
   const isError = isMeeting ? meetingQuery.isError : generalQuery.isError
 
+  function attemptChange(next: number | null) {
+    if (limited && ((next !== null && next !== currentUserId) ||
+      (value !== null && value !== currentUserId))) {
+      toast.error(t('tasks.assignment.permissionRequired'))
+      return
+    }
+    onChange(next)
+  }
   const noSelectionLabel = t(inherit ? 'tasks.assignment.inherit' : 'tasks.assignment.unassigned')
 
   return (
@@ -88,6 +102,7 @@ export function TaskAssigneePicker({
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-[min(27rem,calc(100vw-2rem))] space-y-2 p-2">
+        {limited && <p className="text-destructive px-2 text-xs" role="note">{t('tasks.assignment.permissionRequired')}</p>}
         <div className="relative">
           <Search className="text-muted-foreground absolute top-2.5 start-2.5 size-4" />
           <Input autoFocus value={search} onChange={(event) => setSearch(event.target.value)}
@@ -99,7 +114,7 @@ export function TaskAssigneePicker({
           {allowClear ? (
             <button type="button" role="option" aria-selected={value === null}
               className="hover:bg-muted focus-visible:bg-muted flex w-full items-center justify-between rounded-md px-3 py-2 text-start text-sm"
-              onClick={() => { onChange(null); setSelectedUser(null); setOpen(false) }}>
+              onClick={() => { attemptChange(null); setSelectedUser(null); setOpen(false) }}>
               <span className="flex items-center gap-2"><X className="size-4" /> {noSelectionLabel}</span>
               {value === null ? <Check className="size-4" /> : null}
             </button>
@@ -107,7 +122,7 @@ export function TaskAssigneePicker({
           {available.map((user) => (
             <button type="button" key={user.userId} role="option" aria-selected={value === user.userId}
               className="hover:bg-muted focus-visible:bg-muted flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-start text-sm"
-              onClick={() => { onChange(user.userId); setSelectedUser(user); setOpen(false) }}>
+              onClick={() => { attemptChange(user.userId); setSelectedUser(user); setOpen(false) }}>
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium">{user.userName}</span>
                 <span className="text-muted-foreground block truncate text-xs">
@@ -135,5 +150,6 @@ export function TaskAssigneePicker({
     </Popover>
   )
 }
+
 
 

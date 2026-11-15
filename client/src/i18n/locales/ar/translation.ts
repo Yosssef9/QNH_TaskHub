@@ -1,4 +1,10 @@
 export const arTranslation = {
+  expectedFinish: {
+    ownerDueDate: 'الموعد النهائي المحدد من صاحب المهمة', label: 'تاريخ الإنجاز المتوقع', notSet: 'غير محدد',
+    afterDeadline: 'تاريخ الإنجاز المتوقع بعد الموعد النهائي',
+    edit: 'تعديل تاريخ الإنجاز المتوقع', clear: 'مسح التاريخ', saved: 'تم حفظ تاريخ الإنجاز المتوقع.',
+    saveFailed: 'تعذر حفظ تاريخ الإنجاز المتوقع.', loadFailed: 'تعذر تحميل تواريخ الإنجاز المتوقعة.',
+  },
   taskGroups: {
     markComplete: 'إكمال المهمة', reopenTask: 'إعادة فتح المهمة',
     topLevel: 'مجموعة رئيسية', nestedLevel: 'المستوى {{level}}',
@@ -755,6 +761,11 @@ export const arTranslation = {
     clear: 'مسح',
   },
   access: {
+    taskAssignOthers: 'إسناد المهام للآخرين',
+    taskAssignOthersDescription: 'السماح لهذا الموظف بإسناد المهام والمهام الفرعية للآخرين وإدارة فرق العمل. إضافة المفوّض متاحة للجميع.',
+    allowed: 'مسموح',
+    denied: 'غير مسموح',
+
     eyebrow: 'الإدارة',
     title: 'إدارة الوصول',
     description: 'امنح أو أوقف صلاحية دخول منصة المهام وحدد دور المستخدم وصلاحيات الموديولات.',
@@ -836,6 +847,7 @@ export const arTranslation = {
     meetingCoordinatorDescription:
       'يمكنه اعتماد وتنسيق اجتماعات القاعات. جدولة Zoom تحتاج صلاحية منظم Zoom بشكل مستقل.',
     filters: {
+      taskAssignment: 'إسناد المهام',
       all: 'الكل',
       role: 'الدور',
       status: 'الحالة',
@@ -3522,6 +3534,22 @@ export const arTranslation = {
     },
   },
   tasks: {
+    summaryActions: {
+      edit: 'تعديل الملخص', delete: 'حذف الملخص',
+      editTitle: 'تأكيد تعديل ملخص الإنجاز', deleteTitle: 'تأكيد حذف ملخص الإنجاز',
+      editConfirm: 'هل تريد حفظ التعديل؟ سيبقى النص السابق محفوظاً في سجل التعديلات.',
+      deleteConfirm: 'هل تريد إزالة هذا الملخص من القائمة؟ سيبقى النص الأصلي محفوظاً في سجل التعديلات.',
+      saveEdit: 'حفظ التعديل', saved: 'تم تعديل ملخص الإنجاز.', deleted: 'تم حذف ملخص الإنجاز.',
+      failed: 'تعذر تعديل ملخص الإنجاز.', edited: 'تم التعديل',
+    },
+    workNoteActions: {
+      edit: 'تعديل الملاحظة', delete: 'حذف الملاحظة',
+      editTitle: 'تأكيد تعديل ملاحظة التنفيذ', deleteTitle: 'تأكيد حذف ملاحظة التنفيذ',
+      editConfirm: 'هل تريد حفظ التعديل؟ سيبقى النص السابق محفوظاً في سجل التعديلات.',
+      deleteConfirm: 'هل تريد إخفاء هذه الملاحظة من القائمة؟ سيبقى النص الأصلي محفوظاً في سجل التعديلات.',
+      saveEdit: 'حفظ التعديل', saved: 'تم تحديث ملاحظة التنفيذ.', deleted: 'تم حذف ملاحظة التنفيذ.', failed: 'تعذر تحديث ملاحظة التنفيذ.',
+      edited: 'تم التعديل', auditHint: 'يمكن لكاتب الملاحظة تعديلها أو حذفها مع الاحتفاظ بسجل التغييرات.',
+    },
     proxy: {
       title: 'المفوّض بالنيابة',
       accountability: 'يبقى المكلّف الأصلي مسؤولاً عن هذا العمل.',
@@ -3612,6 +3640,7 @@ export const arTranslation = {
       inProgress: 'قيد التنفيذ',
     },
     assignment: {
+      permissionRequired: 'ليس لديك صلاحية إسناد المهام إلى موظفين آخرين. يرجى التواصل مع مسؤول TaskHub.',
       assignTo: 'إسناد إلى',
       assignSubtask: 'مسؤول المهمة الفرعية',
       searchUsers: 'ابحث بالاسم أو رمز المستخدم أو البريد الإلكتروني…',
@@ -3631,7 +3660,7 @@ export const arTranslation = {
       legacySummary: "ملخص إنجاز سابق",
       newSummaryPlaceholder: "اكتب ملخص الإنجاز الجديد…",
       addSummary: "إضافة ملخص الإنجاز",
-      summaryImmutableHint: "يُحفظ كل ملخص باسم كاتبه وتاريخ إضافته، ولا يمكن تعديل الملخصات السابقة أو حذفها.",
+      summaryImmutableHint: 'يمكن للكاتب تعديل ملخصاته أو حذفها، مع الاحتفاظ بجميع التغييرات في سجل النشاط.',
       legacyNote: "ملاحظات تنفيذ سابقة",
       newNotePlaceholder: "اكتب ملاحظة تنفيذ جديدة…",
       addNote: "إضافة ملاحظة",
@@ -3848,6 +3877,10 @@ export const arTranslation = {
       subtaskTitle: 'عنوان المهمة الفرعية',
       editSubtask: 'تعديل المهمة الفرعية',
       subtaskCount_zero: 'لا توجد مهام فرعية',
+      expandAllSubtasks: 'توسيع الكل',
+      collapseAllSubtasks: 'طي الكل',
+      showSubtask: 'عرض تفاصيل المهمة الفرعية',
+      hideSubtask: 'إخفاء تفاصيل المهمة الفرعية',
       subtaskCount_one: 'مهمة فرعية واحدة',
       subtaskCount_two: 'مهمتان فرعيتان',
       subtaskCount_few: '{{count}} مهام فرعية',
@@ -3884,6 +3917,7 @@ export const arTranslation = {
       attachmentRemoved: 'تم حذف المرفق.',
       activity: 'سجل النشاط',
       activityFields: {
+        completionSummary: 'ملخص الإنجاز',
         title: 'العنوان',
         description: 'الوصف',
         priority: 'الأولوية',
@@ -3902,6 +3936,10 @@ export const arTranslation = {
         COLLAB_COMPLETED: 'أكمل {{assigneeName}} تكليفه',
         COLLAB_REOPENED: 'أُعيد فتح تكليف {{assigneeName}}',
         COLLAB_NOTE_ADDED: 'أضاف {{assigneeName}} ملاحظات التنفيذ',
+        COLLAB_NOTE_EDITED: 'عدل {{assigneeName}} ملاحظة تنفيذ',
+        COLLAB_NOTE_DELETED: 'حذف {{assigneeName}} ملاحظة تنفيذ',
+        SUBTASK_WORK_NOTE_EDITED: 'تم تعديل ملاحظة تنفيذ المهمة الفرعية',
+        SUBTASK_WORK_NOTE_DELETED: 'تم حذف ملاحظة تنفيذ المهمة الفرعية',
         COLLAB_FILE_ADDED: 'رفع {{assigneeName}} مرفقاً',
         COLLAB_FILE_REMOVED: 'حذف {{assigneeName}} مرفقاً',
         COLLAB_SUBTASK_COMPLETED: 'اكتملت المهمة الفرعية تلقائياً',
@@ -3909,6 +3947,8 @@ export const arTranslation = {
         COLLAB_PARENT_STATUS_CHANGED: 'تم تحديث حالة المهمة تلقائياً',
         COLLAB_TEAM_MODE_CHANGED: 'تم تغيير وضع إسناد المهمة الفرعية',
         SUBTASK_WORK_NOTES_UPDATED: 'تم تحديث ملاحظات تنفيذ المهمة الفرعية',
+        COMPLETION_SUMMARY_EDITED: 'تم تعديل ملخص الإنجاز',
+        COMPLETION_SUMMARY_DELETED: 'تم حذف ملخص الإنجاز',
         COMPLETION_SUMMARY_UPDATED: 'تم تحديث ملخص الإنجاز',
         TASK_SHARED: 'تمت مشاركة المهمة',
         TASK_SHARE_UPDATED: 'تم تعديل صلاحية المشاركة',

@@ -7,6 +7,7 @@ function useCollaborationMutation<T>(fn:(input:T)=>Promise<unknown>){
   return useMutation({mutationFn:fn,onSuccess:async()=>{
     await Promise.all([
       client.invalidateQueries({queryKey:root}),
+      client.invalidateQueries({queryKey:['expected-finishes']}),
       client.invalidateQueries({queryKey:['tasks']}),
       client.invalidateQueries({queryKey:['calendar']}),
       client.invalidateQueries({queryKey:['general-assignments']}),
@@ -25,10 +26,15 @@ export function useCollaborativeAssignments(taskId:number|null,enabled:boolean){
   const proxy=useCollaborationMutation(({assignmentId,proxyUserId}:{assignmentId:number;proxyUserId:number|null})=>
     collaborativeApi.setProxy(assignmentId,proxyUserId))
   const note=useCollaborationMutation(({assignmentId,note}:{assignmentId:number;note:string})=>collaborativeApi.addNote(assignmentId,note))
+  const editNote=useCollaborationMutation(({assignmentId,noteId,editVersion,note}:{assignmentId:number;noteId:number;editVersion:number;note:string})=>
+    collaborativeApi.editNote(assignmentId,noteId,editVersion,note))
+  const deleteNote=useCollaborationMutation(({assignmentId,noteId,editVersion}:{assignmentId:number;noteId:number;editVersion:number})=>
+    collaborativeApi.deleteNote(assignmentId,noteId,editVersion))
   const complete=useCollaborationMutation(({assignmentId,completed}:{assignmentId:number;completed:boolean})=>collaborativeApi.complete(assignmentId,completed))
   const upload=useCollaborationMutation(({assignmentId,file}:{assignmentId:number;file:File})=>collaborativeApi.upload(assignmentId,file))
   const removeFile=useCollaborationMutation((id:string)=>collaborativeApi.removeFile(id))
-  return {query,team,childTeam,proxy,note,complete,upload,removeFile}
+  return {query,team,childTeam,proxy,note,editNote,deleteNote,complete,upload,removeFile}
 }
+
 
 

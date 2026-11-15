@@ -1,4 +1,10 @@
 export const enTranslation = {
+  expectedFinish: {
+    ownerDueDate: "Owner's Due Date", label: 'Expected Finish Date', notSet: 'Not set',
+    afterDeadline: 'Expected finish is after the official due date',
+    edit: 'Edit expected finish date', clear: 'Clear date', saved: 'Expected finish date saved.',
+    saveFailed: 'Could not save expected finish date.', loadFailed: 'Could not load expected finish dates.',
+  },
   taskGroups: {
     markComplete: 'Mark complete', reopenTask: 'Reopen task',
     topLevel: 'Top-level group', nestedLevel: 'Level {{level}}',
@@ -768,6 +774,11 @@ export const enTranslation = {
     clear: 'Clear',
   },
   access: {
+    taskAssignOthers: 'Assign tasks to others',
+    taskAssignOthersDescription: 'Allow this employee to assign or reassign tasks and subtasks, and manage collaborative teams. Proxies remain available to everyone.',
+    allowed: 'Allowed',
+    denied: 'Denied',
+
     eyebrow: 'Administration',
     title: 'Access management',
     description:
@@ -851,6 +862,7 @@ export const enTranslation = {
     meetingCoordinatorDescription:
       'Can approve and coordinate physical-room Meetings. Zoom scheduling still requires Zoom Organizer permission.',
     filters: {
+      taskAssignment: 'Assign tasks',
       all: 'All',
       role: 'Role',
       status: 'Status',
@@ -3586,6 +3598,22 @@ export const enTranslation = {
     },
   },
   tasks: {
+    summaryActions: {
+      edit: 'Edit summary', delete: 'Delete summary',
+      editTitle: 'Edit Completion Summary?', deleteTitle: 'Delete Completion Summary?',
+      editConfirm: 'Save this correction? The previous text remains in the audit history.',
+      deleteConfirm: 'Remove this summary from the list? The original text will remain in the audit history.',
+      saveEdit: 'Save changes', saved: 'Completion Summary updated.', deleted: 'Completion Summary deleted.',
+      failed: 'Could not update the Completion Summary.', edited: 'Edited',
+    },
+    workNoteActions: {
+      edit: 'Edit note', delete: 'Delete note',
+      editTitle: 'Edit Work Note?', deleteTitle: 'Delete Work Note?',
+      editConfirm: 'Confirm changing this note. The previous text will remain in the audit history.',
+      deleteConfirm: 'Remove this note from the Work Notes list? The original will remain in the audit history.',
+      saveEdit: 'Save changes', saved: 'Work Note updated.', deleted: 'Work Note deleted.', failed: 'Could not update the Work Note.',
+      edited: 'Edited', auditHint: 'Notes can be corrected by their author. Changes are retained in the audit history.',
+    },
     proxy: {
       title: 'Task proxy',
       accountability: 'The original assignee remains responsible for this work.',
@@ -3676,6 +3704,7 @@ export const enTranslation = {
       inProgress: 'In Progress',
     },
     assignment: {
+      permissionRequired: 'You do not have permission to assign tasks to other employees. Contact your TaskHub administrator.',
       assignTo: 'Assign to',
       assignSubtask: 'Subtask assignee',
       searchUsers: 'Search by name, user code, or email…',
@@ -3695,7 +3724,7 @@ export const enTranslation = {
       legacySummary: "Previous completion summary",
       newSummaryPlaceholder: "Write a new completion summary…",
       addSummary: "Add summary",
-      summaryImmutableHint: "Each summary is saved with its author and timestamp. Previous entries cannot be edited or deleted.",
+      summaryImmutableHint: 'Authors can edit or remove their own summaries. All changes are kept in the audit history.',
       legacyNote: "Previous work notes",
       newNotePlaceholder: "Write a new work note…",
       addNote: "Add note",
@@ -3913,6 +3942,10 @@ export const enTranslation = {
         'This KPI measures subtask timeliness, so every subtask must have a due date.',
       subtaskTitle: 'Subtask title',
       editSubtask: 'Edit subtask',
+      expandAllSubtasks: 'Expand all',
+      collapseAllSubtasks: 'Collapse all',
+      showSubtask: 'Show subtask details',
+      hideSubtask: 'Hide subtask details',
       subtaskCount_one: '{{count}} subtask',
       subtaskCount_other: '{{count}} subtasks',
       attachmentCount_one: '{{count}} attachment',
@@ -3943,6 +3976,7 @@ export const enTranslation = {
       attachmentRemoved: 'Attachment removed.',
       activity: 'Activity',
       activityFields: {
+        completionSummary: 'Completion Summary',
         title: 'Title',
         description: 'Description',
         priority: 'Priority',
@@ -3961,6 +3995,10 @@ export const enTranslation = {
         COLLAB_COMPLETED: '{{assigneeName}} completed their assignment',
         COLLAB_REOPENED: 'Reopened assignment for {{assigneeName}}',
         COLLAB_NOTE_ADDED: '{{assigneeName}} added Work Notes',
+        COLLAB_NOTE_EDITED: '{{assigneeName}} edited a Work Note',
+        COLLAB_NOTE_DELETED: '{{assigneeName}} deleted a Work Note',
+        SUBTASK_WORK_NOTE_EDITED: 'Subtask Work Note edited',
+        SUBTASK_WORK_NOTE_DELETED: 'Subtask Work Note deleted',
         COLLAB_FILE_ADDED: '{{assigneeName}} uploaded evidence',
         COLLAB_FILE_REMOVED: '{{assigneeName}} removed evidence',
         COLLAB_SUBTASK_COMPLETED: 'Subtask automatically completed',
@@ -3968,6 +4006,8 @@ export const enTranslation = {
         COLLAB_PARENT_STATUS_CHANGED: 'Overall task status recalculated',
         COLLAB_TEAM_MODE_CHANGED: 'Subtask assignment mode changed',
         SUBTASK_WORK_NOTES_UPDATED: 'Subtask Work Notes updated',
+        COMPLETION_SUMMARY_EDITED: 'Completion Summary edited',
+        COMPLETION_SUMMARY_DELETED: 'Completion Summary deleted',
         COMPLETION_SUMMARY_UPDATED: 'Completion Summary updated',
         TASK_SHARED: 'Task shared',
         TASK_SHARE_UPDATED: 'Task sharing permission updated',

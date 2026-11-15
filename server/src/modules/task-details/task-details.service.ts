@@ -2,6 +2,7 @@ import path from "node:path";
 import { cleanUploadedAttachmentFileName } from "../../shared/utils/attachment-filename.js";
 
 import { withTransaction } from "../../database/transaction.js";
+import { assertMayAssignOthers } from "../task-assignments/task-assign-others.permission.js";
 import { sql } from "../../database/sql.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import { getCurrentDateInAppTimeZone } from "../../shared/utils/date.utils.js";
@@ -14,7 +15,7 @@ import { generalTaskAssignmentsRepository } from "../general-task-assignments/ge
 import { reconcileParentCompletion } from "../general-task-assignments/general-task-assignments.completion.js";
 import { notifyGeneralTask, notifyTaskOwnerActivity } from "../general-task-assignments/general-task-assignments.email-events.js";
 import { collaborationRepository } from "../collaboration/collaboration.repository.js";
-import { canViewCollaborativeActivity } from "./task-activity-visibility.js";
+import { canViewCollaborativeActivity, canViewExpectedFinishActivity } from "./task-activity-visibility.js";
 import { mapTask } from "../tasks/tasks.mapper.js";
 import { assertTaskWritable } from "../tasks/tasks.policy.js";
 import { tasksRepository } from "../tasks/tasks.repository.js";
@@ -96,9 +97,12 @@ export const taskDetailsService = {
     const visibleAttachments = externalShare
       ? attachments.filter(item=>item.subtaskId===null) : ownIds ? attachments.filter(item => item.subtaskId === null ||
       (!resolved.collaborationActive && ownIds.has(Number(item.subtaskId)))) : attachments;
-    const collaborativeProxiedScopes=resolved.collaborationActive && isRestricted
-      ? (await collaborationRepository.activeAssignments(taskId)).filter(member=>member.proxyUserId===actorUserId)
-      : [];
+    const activeCollaborativeAssignments = resolved.collaborationActive && isRestricted
+      ? await collaborationRepository.activeAssignments(taskId) : [];
+    const collaborativeProxiedScopes=activeCollaborativeAssignments
+      .filter(member=>member.proxyUserId===actorUserId);
+    const hasOwnCollaborativeMainAssignment=activeCollaborativeAssignments.some(member=>
+      member.subtaskId===null && member.assigneeUserId===actorUserId);
     const proxyPrincipalIds=new Set(collaborativeProxiedScopes.map(member=>member.assigneeUserId));
     const proxyMainPrincipalIds=new Set(collaborativeProxiedScopes
       .filter(member=>member.subtaskId===null).map(member=>member.assigneeUserId));
@@ -106,8 +110,16 @@ export const taskDetailsService = {
       ? activity.filter(item=>['CREATED','STATUS_CHANGED','COLLAB_PARENT_STATUS_CHANGED','SUBTASK_CREATED',
           'SUBTASK_UPDATED','SUBTASK_DELETED'].includes(item.activityType))
       : resolved.collaborationActive && isRestricted
-      ? activity.filter(item => canViewCollaborativeActivity(item,actorUserId,ownIds ?? new Set<number>(),proxyPrincipalIds,proxyMainPrincipalIds))
+      ? activity.filter(item => canViewCollaborativeActivity(item,actorUserId,ownIds ?? new Set<number>(),
+          proxyPrincipalIds,proxyMainPrincipalIds,hasOwnCollaborativeMainAssignment))
       : ownIds ? activity.filter(item => {
+      // Estimate changes are visible only to the affected employee while they
+      // still have the corresponding main-task/subtask assignment.
+      if (item.activityType === "EXPECTED_FINISH_CHANGED") {
+        const hasMainAssignment = resolved.generalAssignment?.assigneeUserId === actorUserId ||
+          resolved.context?.assigneeUserId === actorUserId;
+        return canViewExpectedFinishActivity(item, actorUserId, ownIds, hasMainAssignment);
+      }
       // List/detail/change history about sibling subtasks is never returned to another executor.
       if (item.activityType === "SUBTASKS_REORDERED") return false;
       if (item.activityType === "GENERAL_SUBTASK_ASSIGNED" || item.activityType === "MEETING_ACTION_ITEM_REASSIGNED") return false;
@@ -237,6 +249,16 @@ export const taskDetailsService = {
             : await generalTaskAssignmentsRepository.isEligibleUser(legacyAssignee,transaction))))
         throw new AppError({statusCode:400,code:'SUBTASK_ASSIGNEE_INVALID',
           message:'Individual subtask assignment requires an active eligible user.'});
+
+      if (!access.context && task.kpiInstanceId === null) {
+        // Creating a subtask can implicitly assign the main team or main assignee.
+        const actualAssignees = access.collaborationActive
+          ? (mode === 'CUSTOM' ? selected :
+              (await collaborationRepository.activeAssignments(taskId, transaction))
+                .filter(member => member.subtaskId === null).map(member => member.assigneeUserId))
+          : [legacyAssignee ?? access.generalAssignment?.assigneeUserId ?? actorUserId];
+        await assertMayAssignOthers(actorUserId, actualAssignees, transaction);
+      }
 
       const created = await taskDetailsRepository.createSubtask(
         transaction, ownerUserId, taskId, input.title, dueDate, description, priority,
@@ -747,6 +769,7 @@ export const taskDetailsService = {
     await removeStoredAttachment(record.storageKey);
   },
 };
+
 
 
 

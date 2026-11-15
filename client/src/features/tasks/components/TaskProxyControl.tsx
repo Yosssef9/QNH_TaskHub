@@ -22,7 +22,7 @@ export function TaskProxyControl({taskId,subtaskId=null,principalUserId,actorUse
       <UserRoundCheck className="size-4"/>{t('tasks.proxy.title')}
     </div>
     {canManage ? <>
-      <TaskAssigneePicker value={draft} onChange={setDraft}
+      <TaskAssigneePicker isProxy value={draft} onChange={setDraft}
         disabled={mutation.isPending} excludedUserIds={[principalUserId,ownerUserId].filter((v):v is number=>v!=null)}/>
       <div className="flex items-center justify-between gap-2">
         <span className="text-muted-foreground text-xs">{t('tasks.proxy.accountability')}</span>
@@ -35,3 +35,4 @@ export function TaskProxyControl({taskId,subtaskId=null,principalUserId,actorUse
     </> : <p className="text-sm">{grant?.proxyName}</p>}
   </div>
 }
+

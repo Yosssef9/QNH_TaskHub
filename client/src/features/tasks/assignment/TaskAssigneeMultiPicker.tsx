@@ -1,5 +1,6 @@
 import { Check, ChevronsUpDown, Loader2, Search, UsersRound } from 'lucide-react'
 import { useMemo, useState, type UIEvent } from 'react'
+import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
@@ -9,6 +10,7 @@ import { useMeetingActionItemAssignees } from '@/features/meetings/action-items/
 
 import type { EligibleTaskUser } from './general-assignment.api'
 import { matchesTaskAssigneeSearch } from './task-assignee-search'
+import { useTaskAssignmentPermission } from './use-task-assignment-permission'
 import { useInfiniteEligibleTaskUsers } from './use-general-assignment'
 
 interface Props {
@@ -23,6 +25,8 @@ interface Props {
 /** Reuses the existing backend-filtered user lists and name/code/email matching. */
 export function TaskAssigneeMultiPicker({ value, onChange, meetingId = null, knownUsers = [], onUserPicked, disabled = false }: Props) {
   const { t } = useTranslation()
+  const {canAssignOthers, currentUserId} = useTaskAssignmentPermission()
+  const limited = meetingId === null && !canAssignOthers;
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [remembered, setRemembered] = useState<EligibleTaskUser[]>([])
@@ -44,6 +48,10 @@ export function TaskAssigneeMultiPicker({ value, onChange, meetingId = null, kno
   const allUsers = useMemo(() => new Map([...knownUsers, ...remembered, ...available].map(user => [user.userId, user])),
     [knownUsers, remembered, available])
   function toggle(user: EligibleTaskUser) {
+    if (limited && user.userId !== currentUserId) {
+      toast.error(t('tasks.assignment.permissionRequired'))
+      return
+    }
     onUserPicked?.(user)
     setRemembered(prev => [...prev.filter(item => item.userId !== user.userId), user])
     onChange(value.includes(user.userId) ? value.filter(id => id !== user.userId) : [...value, user.userId])
@@ -57,6 +65,7 @@ export function TaskAssigneeMultiPicker({ value, onChange, meetingId = null, kno
       </Button>
     </PopoverTrigger>
     <PopoverContent align="start" className="w-[min(29rem,calc(100vw-2rem))] space-y-2 p-2">
+      {limited && <p className="text-destructive px-2 text-xs" role="note">{t('tasks.assignment.permissionRequired')}</p>}
       <div className="relative"><Search className="text-muted-foreground absolute top-2.5 start-2.5 size-4" />
         <Input autoFocus className="ps-8" value={search} onChange={event => setSearch(event.target.value)}
           placeholder={t('tasks.assignment.searchUsers')} aria-label={t('tasks.assignment.searchUsers')}/>
@@ -84,5 +93,6 @@ export function TaskAssigneeMultiPicker({ value, onChange, meetingId = null, kno
     </PopoverContent>
   </Popover>
 }
+
 
 

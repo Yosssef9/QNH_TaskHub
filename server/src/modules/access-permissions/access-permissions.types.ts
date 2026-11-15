@@ -1,8 +1,8 @@
-export type AccessModuleCode = "PROCUREMENT" | "KPI_MANAGEMENT";
+export type AccessModuleCode = "PROCUREMENT" | "KPI_MANAGEMENT" | "TASK_MANAGEMENT";
 export type ProcurementEntityCode = "CONTRACTS" | "ITEMS" | "SUPPLIERS" | "PRICE_QUOTES";
 export type KpiWorkCyclesEntityCode = "KPI_WORK_CYCLES";
-export type AccessEntityCode = ProcurementEntityCode | KpiWorkCyclesEntityCode;
-export type AccessPermissionCode = "ACCESS" | "VIEW" | "MANAGE_ATTACHMENTS";
+export type AccessEntityCode = ProcurementEntityCode | KpiWorkCyclesEntityCode | "TASK_ASSIGNMENTS";
+export type AccessPermissionCode = "ACCESS" | "VIEW" | "MANAGE_ATTACHMENTS" | "TASK_ASSIGN_OTHERS";
 
 export interface AccessPermission {
   moduleCode: AccessModuleCode;
@@ -55,4 +55,5 @@ export const PROCUREMENT_ENTITIES: readonly ProcurementEntityCode[] = [
   "SUPPLIERS",
   "PRICE_QUOTES",
 ] as const;
+
 

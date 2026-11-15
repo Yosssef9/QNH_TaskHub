@@ -15,6 +15,9 @@ const { fetchNextPage, infiniteState } = vi.hoisted(() => ({
   fetchNextPage: vi.fn(),
   infiniteState: { hasNextPage: true, fetching: false, error: false },
 }))
+vi.mock('./use-task-assignment-permission', () => ({
+  useTaskAssignmentPermission: () => ({currentUserId: 573, canAssignOthers: true}),
+}))
 vi.mock('./use-general-assignment', () => ({
   useInfiniteEligibleTaskUsers: () => ({
     data: { pages: [{ items: eligibleUsers }] }, isPending: false,
@@ -107,4 +110,5 @@ describe('TaskAssigneePicker identity details and search', () => {
     expect(onChange).toHaveBeenCalledWith(750)
   })
 })
+
 

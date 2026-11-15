@@ -6,8 +6,8 @@ import { formatDateTime } from '@/lib/date-time'
 
 import type { Subtask, TaskActivity } from '../types/task.types'
 
-type ChangedField = 'title' | 'description' | 'priority' | 'startDate' | 'dueDate' | 'agendaItemId' | 'assigneeUserIds' | 'tagIds'
-const AUDIT_FIELDS: readonly ChangedField[] = ['title', 'description', 'priority', 'startDate', 'dueDate', 'agendaItemId', 'assigneeUserIds', 'tagIds']
+type ChangedField = 'title' | 'description' | 'priority' | 'startDate' | 'dueDate' | 'agendaItemId' | 'assigneeUserIds' | 'tagIds' | 'expectedFinishDate' | 'completionSummary'
+const AUDIT_FIELDS: readonly ChangedField[] = ['title', 'description', 'priority', 'startDate', 'dueDate', 'agendaItemId', 'assigneeUserIds', 'tagIds', 'expectedFinishDate', 'completionSummary']
 
 function activityChanges(event: TaskActivity['eventData']): Array<{field: ChangedField; from: string | null; to: string | null}> {
   const entries = event?.changes
@@ -124,4 +124,5 @@ export function TaskActivityTimeline({ activity, subtasks }: {
     </CardContent>
   </Card>
 }
+
 
