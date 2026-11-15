@@ -61,7 +61,7 @@ export interface UpdateAccessInput {
   isActive: boolean;
   procurementAccess: ProcurementAccessState;
   kpiWorkCyclesAccess: boolean;
-  taskAssignOthers?: boolean;
+  taskAssignOthers?: boolean | undefined;
   meetingOrganizeEnabled?: boolean | undefined;
   meetingRoomOrganizeEnabled?: boolean | undefined;
   meetingZoomOrganizeEnabled?: boolean | undefined;

@@ -467,7 +467,7 @@ function SortableSubtaskRow({
         <AnimatePresence initial={false}>
         {expanded ? <motion.div className="overflow-hidden"
           initial={reduceMotion ? false : {height:0,opacity:0}}
-          animate={{height:'auto',opacity:1}} exit={reduceMotion ? undefined : {height:0,opacity:0}}
+          animate={{height:'auto',opacity:1}} exit={reduceMotion ? {} : {height:0,opacity:0}}
           transition={{duration:reduceMotion ? 0 : 0.22,ease:[0.22,1,0.36,1]}}>
         {canAssign ? <div className="border-border/80 bg-muted/25 border-t px-4 py-3 space-y-1.5">
           <label className="text-muted-foreground text-xs font-semibold">{t('tasks.assignment.assignSubtask')}</label>

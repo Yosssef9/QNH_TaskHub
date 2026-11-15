@@ -427,7 +427,7 @@ export function CollaborativeAssignmentsPanel({ taskId, actorId, ownerId, meetin
               <AnimatePresence initial={false}>
               {expanded && <motion.div className="overflow-hidden border-t"
                 initial={reduceMotion ? false : {height:0,opacity:0}} animate={{height:'auto',opacity:1}}
-                exit={reduceMotion ? undefined : {height:0,opacity:0}}
+                exit={reduceMotion ? {} : {height:0,opacity:0}}
                 transition={{duration:reduceMotion ? 0 : 0.22,ease:[0.22,1,0.36,1]}}>
                 <div className="space-y-4 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
